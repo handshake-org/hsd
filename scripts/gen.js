@@ -33,9 +33,8 @@ function createGenesisBlock(options) {
         hash: consensus.NULL_HASH,
         index: 0xffffffff
       },
-      script: Script()
-        .pushInt(486604799)
-        .pushPush(Buffer.from([4]))
+      script: (new Script())
+        .pushInt(0)
         .pushData(flags)
         .compile(),
       sequence: 0xffffffff
@@ -48,13 +47,15 @@ function createGenesisBlock(options) {
   });
 
   const block = new Block({
-    version: options.version,
+    version: 0,
     prevBlock: consensus.NULL_HASH,
     merkleRoot: tx.hash('hex'),
+    witnessRoot: tx.witnessHash('hex'),
+    reservedRoot: consensus.NULL_HASH,
     time: options.time,
     bits: options.bits,
     nonce: options.nonce,
-    height: 0
+    solution: options.solution
   });
 
   block.txs.push(tx);
@@ -63,46 +64,43 @@ function createGenesisBlock(options) {
 }
 
 const main = createGenesisBlock({
-  version: 1,
-  time: 1231006505,
+  time: 1514765688,
   bits: 486604799,
-  nonce: 2083236893
+  nonce: Buffer.alloc(16, 0x00),
+  solution: new Uint32Array(42)
 });
 
 const testnet = createGenesisBlock({
-  version: 1,
-  time: 1296688602,
+  time: 1514765689,
   bits: 486604799,
-  nonce: 414098458
+  nonce: Buffer.alloc(16, 0x00),
+  solution: new Uint32Array(42)
 });
 
 const regtest = createGenesisBlock({
-  version: 1,
-  time: 1296688602,
+  time: 1514765690,
   bits: 545259519,
-  nonce: 2
+  nonce: Buffer.alloc(16, 0x00),
+  solution: new Uint32Array(42)
 });
 
-const segnet3 = createGenesisBlock({
-  version: 1,
-  time: 1452831101,
-  bits: 486604799,
-  nonce: 0
-});
-
-const segnet4 = createGenesisBlock({
-  version: 1,
-  time: 1452831101,
-  bits: 503447551,
-  nonce: 0
-});
-
-const btcd = createGenesisBlock({
-  version: 1,
-  time: 1401292357,
+const simnet = createGenesisBlock({
+  time: 1514765691,
   bits: 545259519,
-  nonce: 2
+  nonce: Buffer.alloc(16, 0x00),
+  solution: new Uint32Array(42)
 });
+
+function format(block) {
+  const str = block.toRaw().toString('hex');
+
+  let out = '';
+
+  for (let i = 0; i < str.length; i += 64)
+    out += `  + '${str.slice(i, i + 64)}'\n`;
+
+  return out;
+}
 
 console.log(main);
 console.log('');
@@ -110,25 +108,21 @@ console.log(testnet);
 console.log('');
 console.log(regtest);
 console.log('');
-console.log(segnet3);
-console.log('');
-console.log(segnet4);
+console.log(simnet);
 console.log('');
 console.log('');
 console.log('main hash: %s', main.rhash());
-console.log('main raw: %s', main.toRaw().toString('hex'));
+console.log('main raw:');
+console.log(format(main));
 console.log('');
 console.log('testnet hash: %s', testnet.rhash());
-console.log('testnet raw: %s', testnet.toRaw().toString('hex'));
+console.log('testnet raw:');
+console.log(format(testnet));
 console.log('');
 console.log('regtest hash: %s', regtest.rhash());
-console.log('regtest raw: %s', regtest.toRaw().toString('hex'));
+console.log('regtest raw:');
+console.log(format(regtest));
 console.log('');
-console.log('segnet3 hash: %s', segnet3.rhash());
-console.log('segnet3 raw: %s', segnet3.toRaw().toString('hex'));
-console.log('');
-console.log('segnet4 hash: %s', segnet4.rhash());
-console.log('segnet4 raw: %s', segnet4.toRaw().toString('hex'));
-console.log('');
-console.log('btcd simnet hash: %s', btcd.rhash());
-console.log('btcd simnet raw: %s', btcd.toRaw().toString('hex'));
+console.log('simnet hash: %s', simnet.rhash());
+console.log('simnet raw:');
+console.log(format(simnet));
