@@ -28,7 +28,7 @@ const tx10 = common.readTX('tx10');
   const end = bench('sigops');
 
   for (let i = 0; i < 100000; i++)
-    tx.getSigopsCost(view);
+    tx.getSigops(view);
 
   end(100000);
 }
