@@ -7,6 +7,15 @@ const Address = require('../lib/primitives/address');
 const Witness = require('../lib/script/witness');
 const util = require('../lib/utils/util');
 
+const secp256k1 = require('bcrypto/lib/secp256k1');
+const hash160 = require('bcrypto/lib/hash160');
+const hex = ''
+  + '0411db93e1dcdb8a016b49840f8c53bc1eb68a382e97b1482ecad7b148a6909a5c'
+  + 'b2e0eaddfb84ccf9744464f82e160bfa9b8b64f9d4c03f999b8643f656b412a3';
+const uncompressed = Buffer.from(hex, 'hex');
+const key = secp256k1.publicKeyConvert(uncompressed, true);
+const keyHash = hash160.digest(key);
+
 function createGenesisBlock(options) {
   let flags = options.flags;
   let addr = options.address;
@@ -20,7 +29,7 @@ function createGenesisBlock(options) {
   }
 
   if (!addr)
-    addr = new Address();
+    addr = Address.fromHash(keyHash, 0);
 
   if (!nonce)
     nonce = Buffer.alloc(16, 0x00);
