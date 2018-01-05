@@ -15,6 +15,8 @@ const hex = ''
 const uncompressed = Buffer.from(hex, 'hex');
 const key = secp256k1.publicKeyConvert(uncompressed, true);
 const keyHash = hash160.digest(key);
+const ZERO_ROOT =
+  '03170a2e7597b7b7e3d84c05391d139a62b157e78786d8c082f29dcf4c111314';
 
 function createGenesisBlock(options) {
   let flags = options.flags;
@@ -59,7 +61,7 @@ function createGenesisBlock(options) {
     prevBlock: consensus.NULL_HASH,
     merkleRoot: tx.hash('hex'),
     witnessRoot: tx.witnessHash('hex'),
-    reservedRoot: consensus.NULL_HASH,
+    trieRoot: ZERO_ROOT,
     time: options.time,
     bits: options.bits,
     nonce: nonce,
@@ -104,8 +106,8 @@ function formatBlock(name, block) {
     '${block.merkleRoot}',
   witnessRoot:
     '${block.witnessRoot}',
-  reservedRoot:
-    '${block.reservedRoot}',
+  trieRoot:
+    '${block.trieRoot}',
   time: ${block.time},
   bits: 0x${util.hex32(block.bits)},
   nonce: Buffer.from('${block.nonce.toString('hex')}', 'hex'),
@@ -137,6 +139,7 @@ function dump(name, block) {
   console.log('');
 }
 
+console.log('');
 dump('main', main);
 dump('testnet', testnet);
 dump('regtest', regtest);
