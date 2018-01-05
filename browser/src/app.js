@@ -215,7 +215,7 @@ function addItem(item, entry) {
   chainState.innerHTML = ''
     + `tx=${node.chain.db.state.tx} `
     + `coin=${node.chain.db.state.coin} `
-    + `value=${Amount.btc(node.chain.db.state.value)}`;
+    + `value=${Amount.coin(node.chain.db.state.value)}`;
 }
 
 function setMouseup(el, obj) {
@@ -258,8 +258,8 @@ async function _formatWallet(wallet) {
 
   const balance = await wallet.getBalance();
 
-  html += `Confirmed Balance: <b>${Amount.btc(balance.confirmed)}</b><br>`;
-  html += `Unconfirmed Balance: <b>${Amount.btc(balance.unconfirmed)}</b><br>`;
+  html += `Confirmed Balance: <b>${Amount.coin(balance.confirmed)}</b><br>`;
+  html += `Unconfirmed Balance: <b>${Amount.coin(balance.unconfirmed)}</b><br>`;
 
   const txs = await wallet.getHistory();
   const det = await wallet.toDetails(txs);

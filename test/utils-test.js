@@ -72,9 +72,9 @@ describe('Utils', function() {
   });
 
   it('should convert satoshi to btc', () => {
-    assert.strictEqual(Amount.btc(5460), '0.0000546');
-    assert.strictEqual(Amount.btc(54678 * 1000000), '546.78');
-    assert.strictEqual(Amount.btc(5460 * 10000000), '546.0');
+    assert.strictEqual(Amount.coin(5460), '0.0000546');
+    assert.strictEqual(Amount.coin(54678 * 1000000), '546.78');
+    assert.strictEqual(Amount.coin(5460 * 10000000), '546.0');
   });
 
   it('should convert btc to satoshi', () => {
