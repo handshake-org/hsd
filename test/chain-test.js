@@ -37,20 +37,13 @@ const chain = new Chain({
 
 const miner = new Miner({
   chain,
-  version: 4,
   workers
 });
 
 const cpu = miner.cpu;
 
 const wallet = new MemWallet({
-  network,
-  witness: false
-});
-
-const witWallet = new MemWallet({
-  network,
-  witness: true
+  network
 });
 
 let tip1 = null;
@@ -124,7 +117,71 @@ describe('Chain', function() {
   });
 
   it('should mine 200 blocks', async () => {
-    for (let i = 0; i < 200; i++) {
+    consensus.COINBASE_MATURITY = 2;
+
+    for (let i = 0; i < 5; i++) {
+      const block = await cpu.mineBlock();
+      assert(block);
+      assert(await chain.add(block));
+    }
+
+    assert.strictEqual(chain.height, 5);
+  });
+
+  it('should open a bid', async () => {
+    const job = await cpu.createJob();
+    const mtx = await wallet.bidName('test', 1000, 2000);
+
+    job.addTX(mtx.toTX(), mtx.view);
+    job.refresh();
+
+    const block = await job.mineAsync();
+
+    console.log(block.txs[1]);
+    assert(await chain.add(block));
+  });
+
+  it('should reveal a bid', async () => {
+    const job = await cpu.createJob();
+    const mtx = await wallet.revealName('test');
+
+    job.addTX(mtx.toTX(), mtx.view);
+    job.refresh();
+
+    const block = await job.mineAsync();
+
+    assert(await chain.add(block));
+  });
+
+  it('should register a name', async () => {
+    const job = await cpu.createJob();
+    const mtx = await wallet.registerName('test', Buffer.from([1,2,3]));
+
+    job.addTX(mtx.toTX(), mtx.view);
+    job.refresh();
+
+    const block = await job.mineAsync();
+
+    console.log(block.toHeaders());
+    assert(await chain.add(block));
+  });
+
+  it('should register again and update merkle trie', async () => {
+    const job = await cpu.createJob();
+    const mtx = await wallet.registerName('test', Buffer.from([1,2,4]));
+
+    job.addTX(mtx.toTX(), mtx.view);
+    job.refresh();
+
+    const block = await job.mineAsync();
+
+    console.log(block.toHeaders());
+    assert(await chain.add(block));
+  });
+
+  return;
+  it('should mine 200 blocks', async () => {
+    for (let i = 0; i < 30; i++) {
       const block = await cpu.mineBlock();
       assert(block);
       assert(await chain.add(block));

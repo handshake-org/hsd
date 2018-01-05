@@ -7,12 +7,15 @@
 'use strict';
 
 const assert = require('assert');
+const random = require('bcrypto/lib/random');
+const rules = require('../../lib/covenants/rules');
 const Network = require('../../lib/protocol/network');
 const MTX = require('../../lib/primitives/mtx');
 const HD = require('../../lib/hd/hd');
 const {BloomFilter} = require('bfilter');
 const KeyRing = require('../../lib/primitives/keyring');
 const Outpoint = require('../../lib/primitives/outpoint');
+const Output = require('../../lib/primitives/output');
 const Coin = require('../../lib/primitives/coin');
 
 class MemWallet {
@@ -30,6 +33,9 @@ class MemWallet {
     this.coins = new Map();
     this.spent = new Map();
     this.paths = new Map();
+    this.auctions = new Map();
+    this.bids = new Map();
+    this.values = new Map();
     this.balance = 0;
     this.txs = 0;
     this.filter = BloomFilter.fromRate(1000000, 0.001, -1);
@@ -140,11 +146,8 @@ class MemWallet {
 
     const ring = new KeyRing({
       network: this.network,
-      privateKey: key.privateKey,
-      witness: this.witness
+      privateKey: key.privateKey
     });
-
-    ring.witness = this.witness;
 
     return ring;
   }
@@ -247,6 +250,7 @@ class MemWallet {
 
   addTX(tx, height) {
     const hash = tx.hash('hex');
+
     let result = false;
 
     if (height == null)
@@ -263,6 +267,18 @@ class MemWallet {
       if (!coin)
         continue;
 
+      const uc = coin.covenant;
+
+      if (uc.type === 2) {
+        const output = tx.outputs[input.link];
+        const {covenant} = output;
+        if (covenant.type === 0) {
+          const name = uc.string(0);
+          this.auctions.delete(name);
+          this.bids.delete(name);
+        }
+      }
+
       result = true;
 
       this.removeCoin(op);
@@ -270,12 +286,63 @@ class MemWallet {
 
     for (let i = 0; i < tx.outputs.length; i++) {
       const output = tx.outputs[i];
+      const {covenant} = output;
       const addr = output.getHash('hex');
 
       if (!addr)
         continue;
 
       const path = this.getPath(addr);
+
+      switch (covenant.type) {
+        case 1: {
+          if (!path)
+            break;
+
+          const name = covenant.string(0);
+
+          if (!this.auctions.has(name))
+            this.auctions.set(name, [new Outpoint(hash, i), 1]);
+
+          break;
+        }
+        case 2: {
+          const name = covenant.string(0);
+          const nonce = covenant.items[1];
+
+          if (!this.auctions.has(name))
+            break;
+
+          if (!this.bids.has(name))
+            this.bids.set(name, new Map());
+
+          const key = Outpoint.toKey(hash, i);
+
+          this.bids.get(name).set(key, output.value);
+
+          if (!path)
+            break;
+
+          // Useful for rescans:
+          if (!this.values.has(name))
+            this.values.set(name, [output.value, nonce]);
+
+          this.auctions.set(name, [new Outpoint(hash, i), 2]);
+
+          break;
+        }
+        case 3: {
+          if (!path)
+            break;
+
+          const name = covenant.string(0);
+          const data = covenant.items[1];
+
+          this.auctions.set(name, [new Outpoint(hash, i), 3]);
+
+          break;
+        }
+      }
 
       if (!path)
         continue;
@@ -298,6 +365,7 @@ class MemWallet {
 
   removeTX(tx, height) {
     const hash = tx.hash('hex');
+
     let result = false;
 
     if (!this.map.has(hash))
@@ -364,6 +432,130 @@ class MemWallet {
     return keys;
   }
 
+  async bidName(name, bid, value, options) {
+    const raw = Buffer.from(name, 'ascii');
+    const nonce = random.randomBytes(32);
+    const blind = rules.blind(bid, nonce);
+
+    if (this.auctions.has(name))
+      return null;
+
+    const output = new Output();
+    output.address = this.createReceive().getAddress();
+    output.value = value;
+    output.covenant.type = 1;
+    output.covenant.items.push(raw);
+    output.covenant.items.push(blind);
+
+    this.values.set(name, [bid, nonce]);
+
+    const mtx = new MTX();
+    mtx.outputs.push(output);
+
+    return this._create(mtx, options);
+  }
+
+  async revealName(name, options) {
+    const auction = this.auctions.get(name);
+    const item = this.values.get(name);
+
+    if (!auction || !item)
+      return null;
+
+    const raw = Buffer.from(name, 'ascii');
+    const [prevout, state] = auction;
+    const [value, nonce] = item;
+
+    if (state !== 1)
+      return null;
+
+    const output = new Output();
+    output.address = this.createReceive().getAddress();
+    output.value = value;
+    output.covenant.type = 2;
+    output.covenant.items.push(raw);
+    output.covenant.items.push(nonce);
+
+    const mtx = new MTX();
+    mtx.outputs.push(output);
+
+    return this._create(mtx, options, prevout);
+  }
+
+  async registerName(name, data, options) {
+    const auction = this.auctions.get(name);
+    const item = this.values.get(name);
+
+    if (!auction || !item)
+      return null;
+
+    const raw = Buffer.from(name, 'ascii');
+    const [prevout, state] = auction;
+    const [value, nonce] = item;
+
+    if (state !== 2 && state !== 3)
+      return null;
+
+    if (state === 2) {
+      if (!this.isWinner(name))
+        return null;
+    }
+
+    const output = new Output();
+    output.address = this.createReceive().getAddress();
+    output.value = value;
+    output.covenant.type = 3;
+    output.covenant.items.push(raw);
+    output.covenant.items.push(data);
+
+    const mtx = new MTX();
+    mtx.outputs.push(output);
+
+    return this._create(mtx, options, prevout);
+  }
+
+  async redeemName(name, options) {
+    const auction = this.auctions.get(name);
+    const item = this.values.get(name);
+
+    if (!auction || !item)
+      return null;
+
+    const [prevout] = auction;
+    const [value, nonce] = item;
+
+    const output = new Output();
+    output.address = this.createReceive().getAddress();
+    output.value = value;
+
+    const mtx = new MTX();
+    mtx.outputs.push(output);
+
+    return this._create(mtx, options);
+  }
+
+  isWinner(name) {
+    const bids = this.bids.get(name);
+
+    if (!bids)
+      return false;
+
+    let best = -1;
+    let winner = null;
+
+    for (const [key, value] of bids) {
+      if (value >= best) {
+        winner = key;
+        best = value;
+      }
+    }
+
+    if (!winner)
+      return false;
+
+    return this.coins.has(winner);
+  }
+
   fund(mtx, options) {
     const coins = this.getCoins();
 
@@ -392,6 +584,24 @@ class MemWallet {
     const keys = this.deriveInputs(mtx);
     mtx.template(keys);
     mtx.sign(keys);
+  }
+
+  async _create(mtx, options) {
+    await this.fund(mtx, options);
+
+    assert(mtx.getFee() <= MTX.Selector.MAX_FEE, 'TX exceeds MAX_FEE.');
+
+    // mtx.sortMembers();
+
+    if (options && options.locktime != null)
+      mtx.setLocktime(options.locktime);
+
+    this.sign(mtx);
+
+    if (!mtx.isSigned())
+      throw new Error('Cannot sign tx.');
+
+    return mtx;
   }
 
   async create(options) {
