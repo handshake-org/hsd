@@ -48,7 +48,7 @@ function createGenesisBlock(options) {
       sequence: 0xffffffff
     }],
     outputs: [{
-      value: 50 * consensus.COIN,
+      value: consensus.BASE_REWARD,
       address: addr
     }],
     locktime: 0
