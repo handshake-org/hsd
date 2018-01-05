@@ -137,7 +137,6 @@ describe('Chain', function() {
 
     const block = await job.mineAsync();
 
-    console.log(block.txs[1]);
     assert(await chain.add(block));
   });
 
@@ -162,7 +161,6 @@ describe('Chain', function() {
 
     const block = await job.mineAsync();
 
-    console.log(block.toHeaders());
     assert(await chain.add(block));
   });
 
@@ -175,7 +173,6 @@ describe('Chain', function() {
 
     const block = await job.mineAsync();
 
-    console.log(block.toHeaders());
     assert(await chain.add(block));
   });
 
