@@ -342,6 +342,29 @@ class MemWallet {
 
           break;
         }
+        case 4: {
+          if (!path)
+            break;
+
+          const name = covenant.string(0);
+
+          // We lost.
+          this.auctions.delete(name);
+          this.bids.delete(name);
+          this.values.delete(name);
+
+          break;
+        }
+        case 5: {
+          const name = covenant.string(0);
+
+          // Someone released it.
+          this.auctions.delete(name);
+          this.bids.delete(name);
+          this.values.delete(name);
+
+          break;
+        }
       }
 
       if (!path)
@@ -387,6 +410,75 @@ class MemWallet {
       const input = tx.inputs[i];
       const op = input.prevout.toKey();
       const coin = this.getUndo(op);
+
+      switch (covenant.type) {
+        case 1: {
+          if (!coin)
+            break;
+
+          const name = covenant.string(0);
+
+          this.auctions.delete(name);
+
+          break;
+        }
+        case 2: {
+          const name = covenant.string(0);
+          const nonce = covenant.items[1];
+
+          if (!this.auctions.has(name))
+            break;
+
+          if (!this.bids.has(name))
+            break;
+
+          const key = Outpoint.toKey(hash, i);
+
+          const bids = this.bids.get(name);
+
+          bids.delete(key);
+
+          if (bids.size === 0)
+            this.bids.delete(name);
+
+          if (!coin)
+            break;
+
+          this.values.delete(name);
+          this.auctions.set(name, [new Outpoint(hash, i), 1]);
+
+          break;
+        }
+        case 3: {
+          if (!coin)
+            break;
+
+          const name = covenant.string(0);
+
+          this.auctions.set(name, [new Outpoint(hash, i), 2]);
+
+          break;
+        }
+        case 4: {
+          if (!coin)
+            break;
+
+          const name = covenant.string(0);
+
+          // We lost.
+          this.auctions.set(name, [new Outpoint(hash, i), 2]);
+
+          break;
+        }
+        case 5: {
+          const name = covenant.string(0);
+
+          // Someone released it.
+          this.auctions.set(name, [new Outpoint(hash, i), 3]);
+
+          break;
+        }
+      }
 
       if (!coin)
         continue;
@@ -479,7 +571,10 @@ class MemWallet {
     const mtx = new MTX();
     mtx.outputs.push(output);
 
-    return this._create(mtx, options, prevout);
+    return this._create(mtx, options, {
+      prevout,
+      link: 0
+    });
   }
 
   async registerName(name, data, options) {
@@ -511,7 +606,10 @@ class MemWallet {
     const mtx = new MTX();
     mtx.outputs.push(output);
 
-    return this._create(mtx, options, prevout);
+    return this._create(mtx, options, {
+      prevout,
+      link: 0
+    });
   }
 
   async redeemName(name, options) {
@@ -531,7 +629,10 @@ class MemWallet {
     const mtx = new MTX();
     mtx.outputs.push(output);
 
-    return this._create(mtx, options);
+    return this._create(mtx, options, {
+      prevout,
+      link: 0
+    });
   }
 
   isWinner(name) {
@@ -556,7 +657,7 @@ class MemWallet {
     return this.coins.has(winner);
   }
 
-  fund(mtx, options) {
+  fund(mtx, options, covenant) {
     const coins = this.getCoins();
 
     if (!options)
@@ -571,7 +672,8 @@ class MemWallet {
       changeAddress: this.getChange(),
       height: -1,
       rate: options.rate,
-      maxFee: options.maxFee
+      maxFee: options.maxFee,
+      covenant
     });
   }
 
@@ -586,8 +688,8 @@ class MemWallet {
     mtx.sign(keys);
   }
 
-  async _create(mtx, options) {
-    await this.fund(mtx, options);
+  async _create(mtx, options, covenant) {
+    await this.fund(mtx, options, covenant);
 
     assert(mtx.getFee() <= MTX.Selector.MAX_FEE, 'TX exceeds MAX_FEE.');
 
