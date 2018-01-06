@@ -557,12 +557,10 @@ class MemWallet {
     output.covenant.items.push(nonce);
 
     const mtx = new MTX();
+    mtx.addOutpoint(prevout);
     mtx.outputs.push(output);
 
-    return this._create(mtx, options, {
-      prevout,
-      link: 0
-    });
+    return this._create(mtx, options);
   }
 
   async registerName(name, data, options) {
@@ -592,12 +590,10 @@ class MemWallet {
     output.covenant.items.push(data);
 
     const mtx = new MTX();
+    mtx.addOutpoint(prevout);
     mtx.outputs.push(output);
 
-    return this._create(mtx, options, {
-      prevout,
-      link: 0
-    });
+    return this._create(mtx, options);
   }
 
   async redeemName(name, options) {
@@ -615,12 +611,10 @@ class MemWallet {
     output.value = value;
 
     const mtx = new MTX();
+    mtx.addOutpoint(prevout);
     mtx.outputs.push(output);
 
-    return this._create(mtx, options, {
-      prevout,
-      link: 0
-    });
+    return this._create(mtx, options);
   }
 
   isWinner(name) {
@@ -645,7 +639,7 @@ class MemWallet {
     return this.coins.has(winner);
   }
 
-  fund(mtx, options, covenant) {
+  fund(mtx, options) {
     const coins = this.getCoins();
 
     if (!options)
@@ -660,8 +654,7 @@ class MemWallet {
       changeAddress: this.getChange(),
       height: -1,
       rate: options.rate,
-      maxFee: options.maxFee,
-      covenant
+      maxFee: options.maxFee
     });
   }
 
@@ -676,12 +669,12 @@ class MemWallet {
     mtx.sign(keys);
   }
 
-  async _create(mtx, options, covenant) {
-    await this.fund(mtx, options, covenant);
+  async _create(mtx, options) {
+    await this.fund(mtx, options);
 
     assert(mtx.getFee() <= MTX.Selector.MAX_FEE, 'TX exceeds MAX_FEE.');
 
-    // mtx.sortMembers();
+    mtx.sortMembers();
 
     if (options && options.locktime != null)
       mtx.setLocktime(options.locktime);
@@ -696,22 +689,7 @@ class MemWallet {
 
   async create(options) {
     const mtx = new MTX(options);
-
-    await this.fund(mtx, options);
-
-    assert(mtx.getFee() <= MTX.Selector.MAX_FEE, 'TX exceeds MAX_FEE.');
-
-    mtx.sortMembers();
-
-    if (options.locktime != null)
-      mtx.setLocktime(options.locktime);
-
-    this.sign(mtx);
-
-    if (!mtx.isSigned())
-      throw new Error('Cannot sign tx.');
-
-    return mtx;
+    return this._create(mtx, options);
   }
 
   async send(options) {
