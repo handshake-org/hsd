@@ -267,18 +267,6 @@ class MemWallet {
       if (!coin)
         continue;
 
-      const uc = coin.covenant;
-
-      if (uc.type === 2) {
-        const output = tx.outputs[input.link];
-        const {covenant} = output;
-        if (covenant.type === 0) {
-          const name = uc.string(0);
-          this.auctions.delete(name);
-          this.bids.delete(name);
-        }
-      }
-
       result = true;
 
       this.removeCoin(op);
