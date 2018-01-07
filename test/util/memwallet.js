@@ -339,7 +339,7 @@ class MemWallet {
           // We lost.
           this.auctions.delete(name);
           this.bids.delete(name);
-          this.values.delete(name);
+          // this.values.delete(name);
 
           break;
         }
@@ -349,7 +349,7 @@ class MemWallet {
           // Someone released it.
           this.auctions.delete(name);
           this.bids.delete(name);
-          this.values.delete(name);
+          // this.values.delete(name);
 
           break;
         }
@@ -594,6 +594,20 @@ class MemWallet {
     mtx.outputs.push(output);
 
     return this._create(mtx, options);
+  }
+
+  async closeAuction(name, data, options) {
+    const auction = this.auctions.get(name);
+    const item = this.values.get(name);
+
+    if (!auction || !item)
+      return null;
+
+    const [prevout, state] = auction;
+    const [value, nonce] = item;
+
+    if (!data)
+      data = Buffer.alloc(0);
   }
 
   async redeemName(name, options) {
