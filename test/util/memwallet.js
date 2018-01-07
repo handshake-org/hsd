@@ -550,7 +550,8 @@ class MemWallet {
       return null;
 
     const output = new Output();
-    output.address = this.createReceive().getAddress();
+    // output.address = this.createReceive().getAddress();
+    output.address = this.getCoin(prevout.toKey()).address;
     output.value = value;
     output.covenant.type = 2;
     output.covenant.items.push(raw);
@@ -583,7 +584,8 @@ class MemWallet {
     }
 
     const output = new Output();
-    output.address = this.createReceive().getAddress();
+    // output.address = this.createReceive().getAddress();
+    output.address = this.getCoin(prevout.toKey()).address;
     output.value = value;
     output.covenant.type = 3;
     output.covenant.items.push(raw);
