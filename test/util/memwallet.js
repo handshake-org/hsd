@@ -324,7 +324,6 @@ class MemWallet {
             break;
 
           const name = covenant.string(0);
-          const data = covenant.items[1];
 
           this.auctions.set(name, [new Outpoint(hash, i), 3]);
 
@@ -383,36 +382,24 @@ class MemWallet {
       return false;
 
     for (let i = 0; i < tx.outputs.length; i++) {
+      const output = tx.outputs[i];
       const op = new Outpoint(hash, i).toKey();
       const coin = this.getCoin(op);
+      const uc = output.covenant;
 
-      if (!coin)
-        continue;
-
-      result = true;
-
-      this.removeCoin(op);
-    }
-
-    for (let i = 0; i < tx.inputs.length; i++) {
-      const input = tx.inputs[i];
-      const op = input.prevout.toKey();
-      const coin = this.getUndo(op);
-
-      switch (covenant.type) {
+      switch (uc.type) {
         case 1: {
           if (!coin)
             break;
 
-          const name = covenant.string(0);
+          const name = uc.string(0);
 
           this.auctions.delete(name);
 
           break;
         }
         case 2: {
-          const name = covenant.string(0);
-          const nonce = covenant.items[1];
+          const name = uc.string(0);
 
           if (!this.auctions.has(name))
             break;
@@ -441,7 +428,7 @@ class MemWallet {
           if (!coin)
             break;
 
-          const name = covenant.string(0);
+          const name = uc.string(0);
 
           this.auctions.set(name, [new Outpoint(hash, i), 2]);
 
@@ -451,7 +438,7 @@ class MemWallet {
           if (!coin)
             break;
 
-          const name = covenant.string(0);
+          const name = uc.string(0);
 
           // We lost.
           this.auctions.set(name, [new Outpoint(hash, i), 2]);
@@ -459,7 +446,7 @@ class MemWallet {
           break;
         }
         case 5: {
-          const name = covenant.string(0);
+          const name = uc.string(0);
 
           // Someone released it.
           this.auctions.set(name, [new Outpoint(hash, i), 3]);
@@ -467,6 +454,19 @@ class MemWallet {
           break;
         }
       }
+
+      if (!coin)
+        continue;
+
+      result = true;
+
+      this.removeCoin(op);
+    }
+
+    for (let i = 0; i < tx.inputs.length; i++) {
+      const input = tx.inputs[i];
+      const op = input.prevout.toKey();
+      const coin = this.getUndo(op);
 
       if (!coin)
         continue;
@@ -572,7 +572,7 @@ class MemWallet {
 
     const raw = Buffer.from(name, 'ascii');
     const [prevout, state] = auction;
-    const [value, nonce] = item;
+    const [value] = item;
 
     if (state !== 2 && state !== 3)
       return null;
@@ -596,19 +596,21 @@ class MemWallet {
     return this._create(mtx, options);
   }
 
-  async closeAuction(name, data, options) {
-    const auction = this.auctions.get(name);
-    const item = this.values.get(name);
-
-    if (!auction || !item)
-      return null;
-
-    const [prevout, state] = auction;
-    const [value, nonce] = item;
-
-    if (!data)
-      data = Buffer.alloc(0);
-  }
+  // async closeAuction(name, data, options) {
+  //   const auction = this.auctions.get(name);
+  //   const item = this.values.get(name);
+  //
+  //   if (!auction || !item)
+  //     return null;
+  //
+  //   const [prevout, state] = auction;
+  //   const [value] = item;
+  //
+  //   if (!data)
+  //     data = Buffer.alloc(0);
+  //
+  //   return null;
+  // }
 
   async redeemName(name, options) {
     const auction = this.auctions.get(name);
@@ -618,7 +620,7 @@ class MemWallet {
       return null;
 
     const [prevout] = auction;
-    const [value, nonce] = item;
+    const [value] = item;
 
     const output = new Output();
     output.address = this.createReceive().getAddress();
