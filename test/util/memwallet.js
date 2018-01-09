@@ -552,16 +552,12 @@ class MemWallet {
     const coin = this.getCoin(prevout.toKey())
     assert(coin);
 
-    const height = Buffer.allocUnsafe(4);
-    height.writeUInt32LE(coin.height, 0, true);
-
     const output = new Output();
     output.address = coin.address;
     output.value = value;
     output.covenant.type = 2;
     output.covenant.items.push(raw);
     output.covenant.items.push(nonce);
-    output.covenant.items.push(height);
 
     const mtx = new MTX();
     mtx.addOutpoint(prevout);
