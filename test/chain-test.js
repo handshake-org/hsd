@@ -130,7 +130,7 @@ describe('Chain', function() {
 
   it('should open a bid', async () => {
     const job = await cpu.createJob();
-    const mtx = await wallet.bidName('test', 1000, 2000);
+    const mtx = await wallet.bidName('abcd', 1000, 2000);
 
     job.addTX(mtx.toTX(), mtx.view);
     job.refresh();
@@ -142,7 +142,7 @@ describe('Chain', function() {
 
   it('should reveal a bid', async () => {
     const job = await cpu.createJob();
-    const mtx = await wallet.revealName('test');
+    const mtx = await wallet.revealName('abcd');
 
     job.addTX(mtx.toTX(), mtx.view);
     job.refresh();
@@ -154,7 +154,7 @@ describe('Chain', function() {
 
   it('should register a name', async () => {
     const job = await cpu.createJob();
-    const mtx = await wallet.registerName('test', Buffer.from([1,2,3]));
+    const mtx = await wallet.registerName('abcd', Buffer.from([1,2,3]));
 
     job.addTX(mtx.toTX(), mtx.view);
     job.refresh();
@@ -166,7 +166,7 @@ describe('Chain', function() {
 
   it('should register again and update merkle trie', async () => {
     const job = await cpu.createJob();
-    const mtx = await wallet.registerName('test', Buffer.from([1,2,4]));
+    const mtx = await wallet.registerName('abcd', Buffer.from([1,2,4]));
 
     job.addTX(mtx.toTX(), mtx.view);
     job.refresh();
