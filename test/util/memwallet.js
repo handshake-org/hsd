@@ -17,6 +17,7 @@ const KeyRing = require('../../lib/primitives/keyring');
 const Outpoint = require('../../lib/primitives/outpoint');
 const Output = require('../../lib/primitives/output');
 const Coin = require('../../lib/primitives/coin');
+const {types} = rules;
 
 class MemWallet {
   constructor(options) {
@@ -283,18 +284,18 @@ class MemWallet {
       const path = this.getPath(addr);
 
       switch (covenant.type) {
-        case 1: {
+        case types.BID: {
           if (!path)
             break;
 
           const name = covenant.string(0);
 
           if (!this.auctions.has(name))
-            this.auctions.set(name, [new Outpoint(hash, i), 1]);
+            this.auctions.set(name, [tx.outpoint(i), types.BID]);
 
           break;
         }
-        case 2: {
+        case types.REVEAL: {
           const name = covenant.string(0);
           const nonce = covenant.items[1];
 
@@ -315,21 +316,11 @@ class MemWallet {
           if (!this.values.has(name))
             this.values.set(name, [output.value, nonce]);
 
-          this.auctions.set(name, [new Outpoint(hash, i), 2]);
+          this.auctions.set(name, [tx.outpoint(i), types.REVEAL]);
 
           break;
         }
-        case 3: {
-          if (!path)
-            break;
-
-          const name = covenant.string(0);
-
-          this.auctions.set(name, [new Outpoint(hash, i), 3]);
-
-          break;
-        }
-        case 4: {
+        case types.REDEEM: {
           if (!path)
             break;
 
@@ -342,7 +333,18 @@ class MemWallet {
 
           break;
         }
-        case 5: {
+        case types.UPDATE:
+        case types.REGISTER: {
+          if (!path)
+            break;
+
+          const name = covenant.string(0);
+
+          this.auctions.set(name, [tx.outpoint(i), covenant.type]);
+
+          break;
+        }
+        case types.REVOKE: {
           const name = covenant.string(0);
 
           // Someone released it.
@@ -523,7 +525,7 @@ class MemWallet {
     const output = new Output();
     output.address = this.createReceive().getAddress();
     output.value = value;
-    output.covenant.type = 1;
+    output.covenant.type = types.BID;
     output.covenant.items.push(raw);
     output.covenant.items.push(blind);
 
@@ -546,16 +548,16 @@ class MemWallet {
     const [prevout, state] = auction;
     const [value, nonce] = item;
 
-    if (state !== 1)
+    if (state !== types.BID)
       return null;
 
-    const coin = this.getCoin(prevout.toKey())
+    const coin = this.getCoin(prevout.toKey());
     assert(coin);
 
     const output = new Output();
     output.address = coin.address;
     output.value = value;
-    output.covenant.type = 2;
+    output.covenant.type = types.REVEAL;
     output.covenant.items.push(raw);
     output.covenant.items.push(nonce);
 
@@ -577,10 +579,13 @@ class MemWallet {
     const [prevout, state] = auction;
     const [value] = item;
 
-    if (state !== 2 && state !== 3)
+    if (state !== types.REVEAL
+        && state !== types.REGISTER
+        && state !== types.UPDATE) {
       return null;
+    }
 
-    if (state === 2) {
+    if (state === types.REVEAL) {
       if (!this.isWinner(name))
         return null;
     }
@@ -591,7 +596,9 @@ class MemWallet {
 
     output.address = coin.address;
     output.value = value;
-    output.covenant.type = 3;
+    output.covenant.type = state === types.REVEAL
+      ? types.REGISTER
+      : types.UPDATE;
     output.covenant.items.push(raw);
     output.covenant.items.push(data);
 
