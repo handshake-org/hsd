@@ -2,7 +2,7 @@
 
 'use strict';
 
-process.title = 'bcoin';
+process.title = 'hsk';
 
 const assert = require('assert');
 const SPVNode = require('../lib/node/spvnode');
