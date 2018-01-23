@@ -284,6 +284,16 @@ class MemWallet {
       const path = this.getPath(addr);
 
       switch (covenant.type) {
+        case types.CLAIM: {
+          if (!path)
+            break;
+
+          const name = covenant.string(0);
+
+          this.auctions.set(name, [tx.outpoint(i), types.REGISTER]);
+
+          break;
+        }
         case types.BID: {
           if (!path)
             break;
