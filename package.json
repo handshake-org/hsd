@@ -1,6 +1,7 @@
 {
   "name": "hsk",
   "version": "0.0.1",
+  "private": true,
   "description": "Cryptocurrency bike-shed",
   "license": "MIT",
   "repository": "git://github.com/handshakecompany/hsk.git",
