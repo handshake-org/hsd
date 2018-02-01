@@ -1,4 +1,4 @@
-HD mnemonics and keys (BIP32, BIP39) for bcoin.
+HD mnemonics and keys (BIP32, BIP39).
 
 Parts of this software were originally based on bitcore-lib:
 

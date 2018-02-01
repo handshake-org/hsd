@@ -22,10 +22,10 @@ module.exports = {
   },
   plugins: [
     new webpack.DefinePlugin({
-      'process.env.BCOIN_NETWORK':
-        str(env.BCOIN_NETWORK || 'main'),
-      'process.env.BCOIN_WORKER_FILE':
-        str(env.BCOIN_WORKER_FILE || '/bcoin-worker.js')
+      'process.env.HSK_NETWORK':
+        str(env.HSK_NETWORK || 'main'),
+      'process.env.HSK_WORKER_FILE':
+        str(env.HSK_WORKER_FILE || '/hsk-worker.js')
     }),
     new UglifyJsPlugin()
   ]

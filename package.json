@@ -1,17 +1,16 @@
 {
-  "name": "handshake",
+  "name": "hsk",
   "version": "0.0.1",
   "description": "Cryptocurrency bike-shed",
   "license": "MIT",
-  "repository": "git://github.com/bcoin-org/handshake.git",
-  "homepage": "https://github.com/bcoin-org/handshake",
+  "repository": "git://github.com/handshakecompany/hsk.git",
+  "homepage": "https://github.com/handshakecompany/hsk",
   "bugs": {
-    "url": "https://github.com/bcoin-org/handshake/issues"
+    "url": "https://github.com/handshakecompany/hsk/issues"
   },
   "author": "Christopher Jeffrey <chjjeffrey@gmail.com>",
   "keywords": [
-    "bcoin",
-    "bitcoin",
+    "hsk",
     "blockchain",
     "cryptocurrency",
     "handshake",
@@ -57,15 +56,15 @@
     "uglifyjs-webpack-plugin": "^1.1.5",
     "webpack": "^3.10.0"
   },
-  "main": "./lib/bcoin.js",
+  "main": "./lib/hsk.js",
   "bin": {
-    "bcoin": "./bin/bcoin",
-    "bcoin-node": "./bin/node",
-    "bcoin-spvnode": "./bin/spvnode"
+    "hsk": "./bin/hsk",
+    "hsk-node": "./bin/node",
+    "hsk-spvnode": "./bin/spvnode"
   },
   "scripts": {
-    "browserify": "browserify -s bcoin lib/bcoin-browser.js | uglifyjs -c > bcoin.js",
-    "clean": "rm -f {browser/,}{bcoin.js,bcoin-worker.js,app.js,worker.js}",
+    "browserify": "browserify -s hsk lib/hsk-browser.js | uglifyjs -c > hsk.js",
+    "clean": "rm -f {browser/,}{hsk.js,hsk-worker.js,app.js,worker.js}",
     "docs": "jsdoc -c jsdoc.json",
     "lint": "eslint $(cat .eslintfiles) || exit 0",
     "lint-file": "eslint",
@@ -83,7 +82,7 @@
     "./lib/hd/wordlist": "./lib/hd/wordlist-browser.js",
     "./lib/workers/child": "./lib/workers/child-browser.js",
     "./lib/workers/parent": "./lib/workers/parent-browser.js",
-    "./lib/bcoin": "./lib/bcoin-browser.js"
+    "./lib/hsk": "./lib/hsk-browser.js"
   },
   "browserify": {
     "transform": [
