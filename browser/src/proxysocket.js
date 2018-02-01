@@ -1,6 +1,6 @@
 /*!
  * proxysocket.js - wsproxy socket for bcoin
- * Copyright (c) 2016-2017, Christopher Jeffrey (MIT License).
+ * Copyright (c) 2017-2018, Christopher Jeffrey (MIT License).
  * https://github.com/bcoin-org/bcoin
  */
 
