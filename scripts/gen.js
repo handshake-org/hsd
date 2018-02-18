@@ -1,11 +1,18 @@
 'use strict';
 
+const assert = require('assert');
+const fs = require('bfile');
+const Path = require('path');
 const consensus = require('../lib/protocol/consensus');
 const TX = require('../lib/primitives/tx');
 const Block = require('../lib/primitives/block');
 const Address = require('../lib/primitives/address');
 const Witness = require('../lib/script/witness');
+const Input = require('../lib/primitives/input');
+const Output = require('../lib/primitives/output');
 const util = require('../lib/utils/util');
+const rules = require('../lib/covenants/rules');
+const {types} = rules;
 
 const secp256k1 = require('bcrypto/lib/secp256k1');
 const hash160 = require('bcrypto/lib/hash160');
@@ -17,6 +24,10 @@ const key = secp256k1.publicKeyConvert(uncompressed, true);
 const keyHash = hash160.digest(key);
 const ZERO_ROOT =
   '03170a2e7597b7b7e3d84c05391d139a62b157e78786d8c082f29dcf4c111314';
+
+const {HSKResource} = require('../lib/covenants/record');
+const root = require('../etc/root.json');
+const names = Object.keys(root).sort();
 
 function createGenesisBlock(options) {
   let flags = options.flags;
@@ -70,8 +81,188 @@ function createGenesisBlock(options) {
 
   block.txs.push(tx);
 
+  const claim = new TX({
+    version: 0,
+    inputs: [{
+      prevout: {
+        hash: tx.hash('hex'),
+        index: 0
+      },
+      witness: new Witness(),
+      sequence: 0xffffffff
+    }],
+    outputs: [{
+      value: consensus.BASE_REWARD,
+      address: addr
+    }],
+    locktime: 0
+  });
+
+  for (const name of names) {
+    const output = new Output();
+    output.value = 0;
+    output.address = addr;
+    output.covenant.type = types.CLAIM;
+    output.covenant.items.push(Buffer.from(name, 'ascii'));
+    claim.outputs.push(output);
+  }
+
+  claim.refresh();
+
+  const register = new TX({
+    version: 0,
+    inputs: [],
+    outputs: [],
+    locktime: 0
+  });
+
+  let i = 1;
+
+  for (const name of names) {
+    const res = HSKResource.fromJSON(root[name]);
+
+    const input = Input.fromOutpoint(claim.outpoint(i));
+    register.inputs.push(input);
+
+    const output = new Output();
+    output.value = 0;
+    output.address = addr;
+    output.covenant.type = types.REGISTER;
+    output.covenant.items.push(Buffer.from(name, 'ascii'));
+    output.covenant.items.push(res.toRaw());
+    register.outputs.push(output);
+
+    i += 1;
+  }
+
+  register.refresh();
+
+  block.txs.push(claim);
+  block.txs.push(register);
+  block.merkleRoot = block.createMerkleRoot('hex');
+  block.witnessRoot = block.createWitnessRoot('hex');
+
   return block;
 }
+
+/*
+const tlds = require('handshake-names/build/tld');
+const record = Buffer.from('00008000', 'hex');
+
+function createGenesisBlock(options) {
+  let flags = options.flags;
+  let addr = options.address;
+  let nonce = options.nonce;
+  let sol = options.solution;
+
+  if (!flags) {
+    flags = Buffer.from(
+      '01/Nov/2017 EFF to ICANN: Don\'t Pick Up the Censor\'s Pen',
+      'ascii');
+  }
+
+  if (!addr)
+    addr = Address.fromHash(keyHash, 0);
+
+  if (!nonce)
+    nonce = Buffer.alloc(16, 0x00);
+
+  if (!sol)
+    sol = new Uint32Array(2);
+
+  const tx = new TX({
+    version: 0,
+    inputs: [{
+      prevout: {
+        hash: consensus.NULL_HASH,
+        index: 0xffffffff
+      },
+      witness: new Witness([flags]),
+      sequence: 0xffffffff
+    }],
+    outputs: [{
+      value: consensus.BASE_REWARD,
+      address: addr
+    }],
+    locktime: 0
+  });
+
+  const block = new Block({
+    version: 0,
+    prevBlock: consensus.NULL_HASH,
+    merkleRoot: tx.hash('hex'),
+    witnessRoot: tx.witnessHash('hex'),
+    trieRoot: ZERO_ROOT,
+    time: options.time,
+    bits: options.bits,
+    nonce: nonce,
+    solution: sol
+  });
+
+  block.txs.push(tx);
+
+  const claim = new TX({
+    version: 0,
+    inputs: [{
+      prevout: {
+        hash: tx.hash('hex'),
+        index: 0
+      },
+      witness: new Witness(),
+      sequence: 0xffffffff
+    }],
+    outputs: [{
+      value: consensus.BASE_REWARD,
+      address: addr
+    }],
+    locktime: 0
+  });
+
+  for (const name of tlds) {
+    const output = new Output();
+    output.value = 0;
+    output.address = addr;
+    output.covenant.type = types.CLAIM;
+    output.covenant.items.push(Buffer.from(name, 'ascii'));
+    claim.outputs.push(output);
+  }
+
+  claim.refresh();
+
+  const register = new TX({
+    version: 0,
+    inputs: [],
+    outputs: [],
+    locktime: 0
+  });
+
+  let i = 1;
+
+  for (const name of tlds) {
+    const input = Input.fromOutpoint(claim.outpoint(i));
+    register.inputs.push(input);
+
+    const output = new Output();
+    output.value = 0;
+    output.address = addr;
+    output.covenant.type = types.REGISTER;
+    output.covenant.items.push(Buffer.from(name, 'ascii'));
+    output.covenant.items.push(record);
+    register.outputs.push(output);
+
+    i += 1;
+  }
+
+  register.refresh();
+
+  block.txs.push(claim);
+  block.txs.push(register);
+  block.merkleRoot = block.createMerkleRoot('hex');
+  block.witnessRoot = block.createWitnessRoot('hex');
+
+  return block;
+}
+*/
 
 const main = createGenesisBlock({
   time: 1514765688,
@@ -116,33 +307,29 @@ function formatBlock(name, block) {
 };`;
 }
 
-function formatRaw(name, block) {
-  const str = block.toRaw().toString('hex');
-
-  let out = `${name}.genesisBlock = ''\n`;
-
-  for (let i = 0; i < str.length; i += 64)
-    out += `  + '${str.slice(i, i + 64)}'\n`;
-
-  out = out.slice(0, -1) + ';';
-
-  return out;
+function toHex(block) {
+  return block.toRaw().toString('hex');
 }
 
 function dump(name, block) {
   const blk = formatBlock(name, block);
-  const raw = formatRaw(name, block);
 
   console.log(blk);
-  console.log('');
-  console.log(raw);
   console.log('');
 }
 
 console.log('');
+
 dump('main', main);
 dump('testnet', testnet);
 dump('regtest', regtest);
 dump('simnet', simnet);
 
-console.log(JSON.stringify(testnet.toJSON(), null, 2));
+const file = Path.resolve(__dirname, '..', 'lib', 'protocol', 'genesis.json');
+
+fs.writeFileSync(file, JSON.stringify({
+  main: toHex(main),
+  testnet: toHex(testnet),
+  regtest: toHex(regtest),
+  simnet: toHex(simnet)
+}, null, 2));
