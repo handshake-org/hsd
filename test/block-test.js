@@ -53,8 +53,6 @@ describe('Block', function() {
 
     assert.strictEqual(tree.matches.length, 2);
     assert.strictEqual(block.hash('hex'),
-      '8cc72c02a958de5a8b35a23bb7e3bced8bf840cc0a4e1c820000000000000000');
-    assert.strictEqual(block.rhash(),
       '0000000000000000821c4e0acc40f88bedbce3b73ba2358b5ade58a9022cc78c');
     assert.strictEqual(
       tree.matches[0].toString('hex'),
@@ -95,8 +93,6 @@ describe('Block', function() {
     const [block1] = block300025.getBlock();
     const block2 = Block.fromJSON(block1.toJSON());
     assert.strictEqual(block2.hash('hex'),
-      '8cc72c02a958de5a8b35a23bb7e3bced8bf840cc0a4e1c820000000000000000');
-    assert.strictEqual(block2.rhash(),
       '0000000000000000821c4e0acc40f88bedbce3b73ba2358b5ade58a9022cc78c');
     assert.strictEqual(block2.merkleRoot, block2.createMerkleRoot('hex'));
   });

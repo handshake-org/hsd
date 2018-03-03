@@ -201,8 +201,8 @@ function addItem(item, entry) {
   }
 
   const el = create(''
-    + `<a style="display:block;" href="#${item.rhash()}">`
-    + `${item.rhash()} (${height} - ${kb(item.getSize())})`
+    + `<a style="display:block;" href="#${item.hash('hex')}">`
+    + `${item.hash('hex')} (${height} - ${kb(item.getSize())})`
     + '</a>'
   );
 

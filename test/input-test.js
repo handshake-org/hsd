@@ -236,7 +236,7 @@ describe('Input', function() {
         const inputs = test.inputs.map((prevout, i) => {
           const input = Input.fromOptions({
             prevout: {
-              hash: util.revHex(prevout.txId),
+              hash: prevout.txId,
               index: prevout.vout
             }
           });

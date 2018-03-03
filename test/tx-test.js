@@ -66,7 +66,7 @@ function parseTXTest(data) {
   const view = new CoinView();
 
   for (const [txid, index, str, amount] of coins) {
-    const hash = util.revHex(txid);
+    const hash = txid;
     const script = Script.fromString(str);
     const value = parseInt(amount || '0', 10);
 
@@ -103,7 +103,7 @@ function parseSighashTest(data) {
   const tx = TX.fromRaw(txHex, 'hex');
   const script = Script.fromRaw(scriptHex, 'hex');
 
-  const expected = util.revHex(hash);
+  const expected = hash;
 
   let hex = type & 3;
 

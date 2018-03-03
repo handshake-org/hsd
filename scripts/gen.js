@@ -3,7 +3,10 @@
 const assert = require('assert');
 const fs = require('bfile');
 const Path = require('path');
+const secp256k1 = require('bcrypto/lib/secp256k1');
+const hash160 = require('bcrypto/lib/hash160');
 const consensus = require('../lib/protocol/consensus');
+const Network = require('../lib/protocol/network');
 const TX = require('../lib/primitives/tx');
 const Block = require('../lib/primitives/block');
 const Address = require('../lib/primitives/address');
@@ -12,28 +15,32 @@ const Input = require('../lib/primitives/input');
 const Output = require('../lib/primitives/output');
 const util = require('../lib/utils/util');
 const rules = require('../lib/covenants/rules');
+const {HSKResource} = require('../lib/covenants/record');
+const root = require('../etc/root.json');
 const {types} = rules;
 
-const secp256k1 = require('bcrypto/lib/secp256k1');
-const hash160 = require('bcrypto/lib/hash160');
 const hex = ''
   + '0411db93e1dcdb8a016b49840f8c53bc1eb68a382e97b1482ecad7b148a6909a5c'
   + 'b2e0eaddfb84ccf9744464f82e160bfa9b8b64f9d4c03f999b8643f656b412a3';
+
 const uncompressed = Buffer.from(hex, 'hex');
 const key = secp256k1.publicKeyConvert(uncompressed, true);
 const keyHash = hash160.digest(key);
+
 const ZERO_ROOT =
   '03170a2e7597b7b7e3d84c05391d139a62b157e78786d8c082f29dcf4c111314';
 
-const {HSKResource} = require('../lib/covenants/record');
-const root = require('../etc/root.json');
+const satoshi = Address.fromHash(keyHash, 0);
+const investors = Address.fromHash(keyHash, 0);
+const foundation = Address.fromHash(keyHash, 0);
+const creators = Address.fromHash(keyHash, 0);
+const airdrop = Address.fromHash(keyHash, 0);
+
 const names = Object.keys(root).sort();
 
 function createGenesisBlock(options) {
   let flags = options.flags;
-  let addr = options.address;
   let nonce = options.nonce;
-  let sol = options.solution;
 
   if (!flags) {
     flags = Buffer.from(
@@ -41,14 +48,8 @@ function createGenesisBlock(options) {
       'ascii');
   }
 
-  if (!addr)
-    addr = Address.fromHash(keyHash, 0);
-
   if (!nonce)
-    nonce = Buffer.alloc(16, 0x00);
-
-  if (!sol)
-    sol = new Uint32Array(2);
+    nonce = Buffer.alloc(consensus.NONCE_SIZE, 0x00);
 
   const tx = new TX({
     version: 0,
@@ -60,10 +61,28 @@ function createGenesisBlock(options) {
       witness: new Witness([flags]),
       sequence: 0xffffffff
     }],
-    outputs: [{
-      value: consensus.BASE_REWARD,
-      address: addr
-    }],
+    outputs: [
+      {
+        value: consensus.GENESIS_REWARD,
+        address: satoshi
+      },
+      {
+        value: consensus.MAX_INVESTORS,
+        address: investors
+      },
+      {
+        value: consensus.MAX_FOUNDATION,
+        address: foundation
+      },
+      {
+        value: consensus.MAX_CREATORS,
+        address: creators
+      },
+      {
+        value: consensus.MAX_AIRDROP,
+        address: airdrop
+      }
+    ],
     locktime: 0
   });
 
@@ -76,7 +95,7 @@ function createGenesisBlock(options) {
     time: options.time,
     bits: options.bits,
     nonce: nonce,
-    solution: sol
+    solution: options.solution
   });
 
   block.txs.push(tx);
@@ -92,8 +111,8 @@ function createGenesisBlock(options) {
       sequence: 0xffffffff
     }],
     outputs: [{
-      value: consensus.BASE_REWARD,
-      address: addr
+      value: consensus.GENESIS_REWARD,
+      address: satoshi
     }],
     locktime: 0
   });
@@ -101,7 +120,7 @@ function createGenesisBlock(options) {
   for (const name of names) {
     const output = new Output();
     output.value = 0;
-    output.address = addr;
+    output.address = foundation;
     output.covenant.type = types.CLAIM;
     output.covenant.items.push(Buffer.from(name, 'ascii'));
     claim.outputs.push(output);
@@ -126,7 +145,7 @@ function createGenesisBlock(options) {
 
     const output = new Output();
     output.value = 0;
-    output.address = addr;
+    output.address = foundation;
     output.covenant.type = types.REGISTER;
     output.covenant.items.push(Buffer.from(name, 'ascii'));
     output.covenant.items.push(res.toRaw());
@@ -145,150 +164,31 @@ function createGenesisBlock(options) {
   return block;
 }
 
-/*
-const tlds = require('handshake-names/build/tld');
-const record = Buffer.from('00008000', 'hex');
-
-function createGenesisBlock(options) {
-  let flags = options.flags;
-  let addr = options.address;
-  let nonce = options.nonce;
-  let sol = options.solution;
-
-  if (!flags) {
-    flags = Buffer.from(
-      '01/Nov/2017 EFF to ICANN: Don\'t Pick Up the Censor\'s Pen',
-      'ascii');
-  }
-
-  if (!addr)
-    addr = Address.fromHash(keyHash, 0);
-
-  if (!nonce)
-    nonce = Buffer.alloc(16, 0x00);
-
-  if (!sol)
-    sol = new Uint32Array(2);
-
-  const tx = new TX({
-    version: 0,
-    inputs: [{
-      prevout: {
-        hash: consensus.NULL_HASH,
-        index: 0xffffffff
-      },
-      witness: new Witness([flags]),
-      sequence: 0xffffffff
-    }],
-    outputs: [{
-      value: consensus.BASE_REWARD,
-      address: addr
-    }],
-    locktime: 0
-  });
-
-  const block = new Block({
-    version: 0,
-    prevBlock: consensus.NULL_HASH,
-    merkleRoot: tx.hash('hex'),
-    witnessRoot: tx.witnessHash('hex'),
-    trieRoot: ZERO_ROOT,
-    time: options.time,
-    bits: options.bits,
-    nonce: nonce,
-    solution: sol
-  });
-
-  block.txs.push(tx);
-
-  const claim = new TX({
-    version: 0,
-    inputs: [{
-      prevout: {
-        hash: tx.hash('hex'),
-        index: 0
-      },
-      witness: new Witness(),
-      sequence: 0xffffffff
-    }],
-    outputs: [{
-      value: consensus.BASE_REWARD,
-      address: addr
-    }],
-    locktime: 0
-  });
-
-  for (const name of tlds) {
-    const output = new Output();
-    output.value = 0;
-    output.address = addr;
-    output.covenant.type = types.CLAIM;
-    output.covenant.items.push(Buffer.from(name, 'ascii'));
-    claim.outputs.push(output);
-  }
-
-  claim.refresh();
-
-  const register = new TX({
-    version: 0,
-    inputs: [],
-    outputs: [],
-    locktime: 0
-  });
-
-  let i = 1;
-
-  for (const name of tlds) {
-    const input = Input.fromOutpoint(claim.outpoint(i));
-    register.inputs.push(input);
-
-    const output = new Output();
-    output.value = 0;
-    output.address = addr;
-    output.covenant.type = types.REGISTER;
-    output.covenant.items.push(Buffer.from(name, 'ascii'));
-    output.covenant.items.push(record);
-    register.outputs.push(output);
-
-    i += 1;
-  }
-
-  register.refresh();
-
-  block.txs.push(claim);
-  block.txs.push(register);
-  block.merkleRoot = block.createMerkleRoot('hex');
-  block.witnessRoot = block.createWitnessRoot('hex');
-
-  return block;
-}
-*/
-
 const main = createGenesisBlock({
   time: 1514765688,
-  bits: 0x207fffff,
-  solution: new Uint32Array(42)
+  bits: Network.get('main').pow.bits,
+  solution: new Uint32Array(Network.get('main').cuckoo.size)
 });
 
 const testnet = createGenesisBlock({
   time: 1514765689,
-  bits: 0x207fffff,
-  solution: new Uint32Array(18)
+  bits: Network.get('testnet').pow.bits,
+  solution: new Uint32Array(Network.get('testnet').cuckoo.size)
 });
 
 const regtest = createGenesisBlock({
   time: 1514765690,
-  bits: 0x207fffff,
-  solution: new Uint32Array(18)
+  bits: Network.get('regtest').pow.bits,
+  solution: new Uint32Array(Network.get('regtest').cuckoo.size)
 });
 
 const simnet = createGenesisBlock({
   time: 1514765691,
-  bits: 0x207fffff,
-  solution: new Uint32Array(18)
+  bits: Network.get('simnet').pow.bits,
+  solution: new Uint32Array(Network.get('simnet').cuckoo.size)
 });
 
-function formatBlock(name, block) {
+function formatJS(name, block) {
   return `${name}.genesis = {
   version: ${block.version},
   hash: '${block.hash('hex')}',
@@ -307,15 +207,31 @@ function formatBlock(name, block) {
 };`;
 }
 
-function toHex(block) {
-  return block.toRaw().toString('hex');
+function formatC(name, block) {
+  const hdr = block.toHead().toString('hex');
+  const chunks = [];
+
+  for (let i = 0; i < hdr.length; i += 26)
+    chunks.push(`  "${hdr.slice(i, i + 26)}"`);
+
+  const hex = chunks.join('\n');
+  const data = hex.replace(/([a-f0-9]{2})/g, '\\x$1');
+
+  return `static const uint8_t HSK_GENESIS[] /* ${name} */ = ""\n${data};`;
 }
 
 function dump(name, block) {
-  const blk = formatBlock(name, block);
+  const js = formatJS(name, block);
+  const c = formatC(name, block);
 
-  console.log(blk);
+  console.log(js);
   console.log('');
+  console.log(c);
+  console.log('');
+}
+
+function toHex(block) {
+  return block.toRaw().toString('hex');
 }
 
 console.log('');

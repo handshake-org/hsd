@@ -485,7 +485,7 @@ describe('Node', function() {
         vbavailable: {},
         vbrequired: 0,
         height: 437,
-        previousblockhash: node.chain.tip.rhash(),
+        previousblockhash: node.chain.tip.hash,
         target:
           '7fffff0000000000000000000000000000000000000000000000000000000000',
         bits: '207fffff',
@@ -497,7 +497,7 @@ describe('Node', function() {
         sigoplimit: 80000,
         sizelimit: 4000000,
         weightlimit: 4000000,
-        longpollid: node.chain.tip.rhash() + '00000000',
+        longpollid: node.chain.tip.hash + '00000000',
         submitold: false,
         coinbaseaux: { flags: '6d696e65642062792062636f696e' },
         coinbasevalue: 1250000000,

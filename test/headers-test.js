@@ -30,7 +30,7 @@ describe('Headers', function() {
       '6fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000');
     assert.strictEqual(headers.merkleRoot,
       '982051fd1e4ba744bbbe680e1fee14677ba1a3c3540bf7b1cdb606e857233e0e');
-    assert.strictEqual(headers.rhash(),
+    assert.strictEqual(headers.hash('hex'),
       '00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048');
 
     assert(headers.verifyBody());
@@ -49,7 +49,7 @@ describe('Headers', function() {
       '6fe28c0ab6f1b372c1a6a246ae63f74f931e8365e15a089c68d6190000000000');
     assert.strictEqual(headers.merkleRoot,
       '982051fd1e4ba744bbbe680e1fee14677ba1a3c3540bf7b1cdb606e857233e0e');
-    assert.strictEqual(headers.rhash(),
+    assert.strictEqual(headers.hash('hex'),
       '00000000839a8e6886ab5951d76f411475428afc90947ee320161bbf18eb6048');
 
     assert(headers.verifyBody());
