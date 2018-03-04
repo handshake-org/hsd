@@ -33,6 +33,7 @@ const ZERO_ROOT =
 const satoshi = Address.fromHash(keyHash, 0);
 const investors = Address.fromHash(keyHash, 0);
 const foundation = Address.fromHash(keyHash, 0);
+const foundationCold = Address.fromHash(keyHash, 0);
 const creators = Address.fromHash(keyHash, 0);
 const airdrop = Address.fromHash(keyHash, 0);
 
@@ -146,10 +147,18 @@ function createGenesisBlock(options) {
     const output = new Output();
     output.value = 0;
     output.address = foundation;
-    output.covenant.type = types.REGISTER;
+    output.covenant.type = types.UPDATE;
     output.covenant.items.push(Buffer.from(name, 'ascii'));
     output.covenant.items.push(res.toRaw());
+
+    const revoke = new Output();
+    revoke.value = 0;
+    revoke.address = foundationCold;
+    revoke.covenant.type = types.REVOKE;
+    revoke.covenant.items.push(Buffer.from(name, 'ascii'));
+
     register.outputs.push(output);
+    register.outputs.push(revoke);
 
     i += 1;
   }
