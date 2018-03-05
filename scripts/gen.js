@@ -1,6 +1,5 @@
 'use strict';
 
-const assert = require('assert');
 const fs = require('bfile');
 const Path = require('path');
 const secp256k1 = require('bcrypto/lib/secp256k1');
@@ -32,8 +31,8 @@ const ZERO_ROOT =
 
 const satoshi = Address.fromHash(keyHash, 0);
 const investors = Address.fromHash(keyHash, 0);
+const foundationHot = Address.fromHash(keyHash, 0);
 const foundation = Address.fromHash(keyHash, 0);
-const foundationCold = Address.fromHash(keyHash, 0);
 const creators = Address.fromHash(keyHash, 0);
 const airdrop = Address.fromHash(keyHash, 0);
 
@@ -101,7 +100,7 @@ function createGenesisBlock(options) {
 
   block.txs.push(tx);
 
-  const claim = new TX({
+  const claimer = new TX({
     version: 0,
     inputs: [{
       prevout: {
@@ -119,17 +118,22 @@ function createGenesisBlock(options) {
   });
 
   for (const name of names) {
-    const output = new Output();
-    output.value = 0;
-    output.address = foundation;
-    output.covenant.type = types.CLAIM;
-    output.covenant.items.push(Buffer.from(name, 'ascii'));
-    claim.outputs.push(output);
+    const claim = new Output();
+    claim.value = 0;
+    claim.address = foundationHot;
+    claim.covenant.type = types.CLAIM;
+    claim.covenant.items.push(Buffer.from(name, 'ascii'));
+    claimer.outputs.push(claim);
+
+    const dust = new Output();
+    dust.value = 0;
+    dust.address = foundationHot;
+    claimer.outputs.push(dust);
   }
 
-  claim.refresh();
+  claimer.refresh();
 
-  const register = new TX({
+  const updater = new TX({
     version: 0,
     inputs: [],
     outputs: [],
@@ -141,32 +145,39 @@ function createGenesisBlock(options) {
   for (const name of names) {
     const res = HSKResource.fromJSON(root[name]);
 
-    const input = Input.fromOutpoint(claim.outpoint(i));
-    register.inputs.push(input);
+    const claimPrev = claimer.outpoint(i);
+    const dustPrev = claimer.outpoint(i + 1);
 
-    const output = new Output();
-    output.value = 0;
-    output.address = foundation;
-    output.covenant.type = types.UPDATE;
-    output.covenant.items.push(Buffer.from(name, 'ascii'));
-    output.covenant.items.push(res.toRaw());
+    const claim = Input.fromOutpoint(claimPrev);
+    const dust = Input.fromOutpoint(dustPrev);
+
+    const update = new Output();
+    update.value = 0;
+    update.address = foundationHot;
+    update.covenant.type = types.UPDATE;
+    update.covenant.items.push(Buffer.from(name, 'ascii'));
+    update.covenant.items.push(res.toRaw());
 
     const revoke = new Output();
     revoke.value = 0;
-    revoke.address = foundationCold;
+    revoke.address = foundation;
     revoke.covenant.type = types.REVOKE;
     revoke.covenant.items.push(Buffer.from(name, 'ascii'));
 
-    register.outputs.push(output);
-    register.outputs.push(revoke);
+    updater.inputs.push(claim);
+    updater.inputs.push(dust);
 
-    i += 1;
+    updater.outputs.push(update);
+    updater.outputs.push(revoke);
+
+    i += 2;
   }
 
-  register.refresh();
+  updater.refresh();
 
-  block.txs.push(claim);
-  block.txs.push(register);
+  block.txs.push(claimer);
+  block.txs.push(updater);
+
   block.merkleRoot = block.createMerkleRoot('hex');
   block.witnessRoot = block.createWitnessRoot('hex');
 

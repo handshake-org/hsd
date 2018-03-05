@@ -7,7 +7,6 @@ const {inspect} = require('util');
 const {encoding} = require('bufio');
 const assert = require('./util/assert');
 const random = require('bcrypto/lib/random');
-const util = require('../lib/utils/util');
 const consensus = require('../lib/protocol/consensus');
 const TX = require('../lib/primitives/tx');
 const Output = require('../lib/primitives/output');
