@@ -158,17 +158,17 @@ function createGenesisBlock(options) {
     update.covenant.items.push(Buffer.from(name, 'ascii'));
     update.covenant.items.push(res.toRaw());
 
-    const revoke = new Output();
-    revoke.value = 0;
-    revoke.address = foundation;
-    revoke.covenant.type = types.REVOKE;
-    revoke.covenant.items.push(Buffer.from(name, 'ascii'));
+    const cold = new Output();
+    cold.value = 0;
+    cold.address = foundation;
+    cold.covenant.type = types.COLD;
+    cold.covenant.items.push(Buffer.from(name, 'ascii'));
 
     updater.inputs.push(claim);
     updater.inputs.push(dust);
 
     updater.outputs.push(update);
-    updater.outputs.push(revoke);
+    updater.outputs.push(cold);
 
     i += 2;
   }
