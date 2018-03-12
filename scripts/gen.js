@@ -12,7 +12,7 @@ const Input = require('../lib/primitives/input');
 const Output = require('../lib/primitives/output');
 const util = require('../lib/utils/util');
 const rules = require('../lib/covenants/rules');
-const {HSKResource} = require('../lib/covenants/record');
+const Resource = require('../lib/dns/resource');
 const root = require('../etc/root.json');
 const {EMPTY_ROOT} = require('../lib/trie/common');
 const {types} = rules;
@@ -141,7 +141,7 @@ function createGenesisBlock(options) {
 
   for (const name of names) {
     const rawName = Buffer.from(name, 'ascii');
-    const res = HSKResource.fromJSON(root[name]);
+    const res = Resource.fromJSON(root[name]);
 
     const claimPrev = claimer.outpoint(i);
     const dustPrev = claimer.outpoint(i + 1);

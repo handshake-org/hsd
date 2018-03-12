@@ -9,7 +9,6 @@ examples/
 lib/
 migrate/
 scripts/
-test/
 webpack/
 webpack.browser.js
 webpack.compat.js
