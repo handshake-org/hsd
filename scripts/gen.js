@@ -1,7 +1,8 @@
 'use strict';
 
-const fs = require('bfile');
+const assert = require('assert');
 const Path = require('path');
+const fs = require('bfile');
 const consensus = require('../lib/protocol/consensus');
 const Network = require('../lib/protocol/network');
 const TX = require('../lib/primitives/tx');
@@ -140,8 +141,34 @@ function createGenesisBlock(options) {
   let i = 1;
 
   for (const name of names) {
+    const data = root[name];
+    assert(data.ttl);
+    assert(data.ds);
+    assert(data.auth);
+
+    const json = {
+      ttl: data.ttl,
+      ds: data.ds,
+      ns: []
+    };
+
+    for (const auth of data.auth) {
+      assert(auth.name);
+      assert(auth.inet4 || auth.inet6);
+
+      const ips = [];
+
+      if (auth.inet4)
+        ips.push(auth.inet4);
+
+      if (auth.inet6)
+        ips.push(auth.inet6);
+
+      json.ns.push(`${auth.name}@${ips.join(',')}`);
+    }
+
     const rawName = Buffer.from(name, 'ascii');
-    const res = Resource.fromJSON(root[name]);
+    const res = Resource.fromJSON(json);
 
     const claimPrev = claimer.outpoint(i);
     const dustPrev = claimer.outpoint(i + 1);
