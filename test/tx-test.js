@@ -644,7 +644,7 @@ describe('TX', function() {
     const pub = key.publicKey;
 
     const redeem = Script.fromMultisig(1, 2, [pub, pub]);
-    const output = Script.fromScripthash(redeem.hash160());
+    const output = Address.fromScripthash(redeem.blake256());
 
     const input = new Script([
       Opcode.fromInt(0),
@@ -727,7 +727,7 @@ describe('TX', function() {
     const pub = key.publicKey;
 
     const redeem = Script.fromMultisig(1, 2, [pub, pub]);
-    const output = Script.fromProgram(0, redeem.sha256());
+    const output = Script.fromProgram(0, redeem.blake256());
 
     const input = new Script();
 
@@ -751,7 +751,7 @@ describe('TX', function() {
     const pub = key.publicKey;
 
     const wscript = Script.fromMultisig(1, 2, [pub, pub]);
-    const redeem = Script.fromProgram(0, wscript.sha256());
+    const redeem = Script.fromProgram(0, wscript.blake256());
     const output = Script.fromScripthash(redeem.hash160());
 
     const input = new Script([

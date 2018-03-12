@@ -2,8 +2,6 @@
 
 const fs = require('bfile');
 const Path = require('path');
-const secp256k1 = require('bcrypto/lib/secp256k1');
-const hash160 = require('bcrypto/lib/hash160');
 const consensus = require('../lib/protocol/consensus');
 const Network = require('../lib/protocol/network');
 const TX = require('../lib/primitives/tx');

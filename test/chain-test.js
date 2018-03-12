@@ -853,7 +853,7 @@ describe('Chain', function() {
 
     redeem.compile();
 
-    const script = Script.fromScripthash(redeem.hash160());
+    const addr = Address.fromScripthash(redeem.blake256());
 
     for (let i = 0; i < 111; i++) {
       const block = await cpu.mineBlock();
@@ -864,7 +864,7 @@ describe('Chain', function() {
 
       for (let j = 0; j < Math.min(100, val); j++) {
         const output = new Output();
-        output.script = script.clone();
+        output.address = addr;
         output.value = 1;
 
         cb.outputs.push(output);
