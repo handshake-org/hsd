@@ -1,4 +1,4 @@
-# HSK
+# HSKD
 
 **HSK** is an implementation of the Handshake Protocol.
 

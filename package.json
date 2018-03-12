@@ -1,13 +1,13 @@
 {
-  "name": "hsk",
+  "name": "hskd",
   "version": "0.0.1",
   "private": true,
   "description": "Cryptocurrency bike-shed",
   "license": "MIT",
-  "repository": "git://github.com/handshakecompany/hsk.git",
-  "homepage": "https://github.com/handshakecompany/hsk",
+  "repository": "git://github.com/handshakecompany/hskd.git",
+  "homepage": "https://github.com/handshakecompany/hskd",
   "bugs": {
-    "url": "https://github.com/handshakecompany/hsk/issues"
+    "url": "https://github.com/handshakecompany/hskd/issues"
   },
   "author": "Christopher Jeffrey <chjjeffrey@gmail.com>",
   "keywords": [
@@ -22,7 +22,6 @@
   },
   "dependencies": {
     "bcfg": "~0.0.1",
-    "bclient": "~0.0.1",
     "bcrypto": "~0.1.0",
     "bdb": "~0.0.2",
     "bdns": "~0.0.1",
@@ -41,6 +40,7 @@
     "bupnp": "~0.0.1",
     "bval": "~0.0.1",
     "bweb": "~0.0.1",
+    "hsk-client": "~0.0.1",
     "n64": "~0.1.0"
   },
   "devDependencies": {
@@ -57,15 +57,15 @@
     "uglifyjs-webpack-plugin": "^1.1.5",
     "webpack": "^3.10.0"
   },
-  "main": "./lib/hsk.js",
+  "main": "./lib/hskd.js",
   "bin": {
-    "hsk": "./bin/hsk",
-    "hsk-node": "./bin/node",
-    "hsk-spvnode": "./bin/spvnode"
+    "hskd": "./bin/hskd",
+    "hskd-node": "./bin/node",
+    "hskd-spvnode": "./bin/spvnode"
   },
   "scripts": {
-    "browserify": "browserify -s hsk lib/hsk-browser.js | uglifyjs -c > hsk.js",
-    "clean": "rm -f {browser/,}{hsk.js,hsk-worker.js,app.js,worker.js}",
+    "browserify": "browserify -s hskd lib/hskd-browser.js | uglifyjs -c > hskd.js",
+    "clean": "rm -f {browser/,}{hskd.js,hskd-worker.js,app.js,worker.js}",
     "docs": "jsdoc -c jsdoc.json",
     "lint": "eslint $(cat .eslintfiles) || exit 0",
     "lint-file": "eslint",
@@ -83,7 +83,7 @@
     "./lib/hd/wordlist": "./lib/hd/wordlist-browser.js",
     "./lib/workers/child": "./lib/workers/child-browser.js",
     "./lib/workers/parent": "./lib/workers/parent-browser.js",
-    "./lib/hsk": "./lib/hsk-browser.js"
+    "./lib/hskd": "./lib/hskd-browser.js"
   },
   "browserify": {
     "transform": [

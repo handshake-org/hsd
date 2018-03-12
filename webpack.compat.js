@@ -9,11 +9,11 @@ const env = process.env;
 module.exports = {
   target: 'web',
   entry: {
-    'hsk': './lib/hsk',
-    'hsk-worker': './lib/workers/worker'
+    'hskd': './lib/hskd',
+    'hskd-worker': './lib/workers/worker'
   },
   output: {
-    library: 'hsk',
+    library: 'hskd',
     libraryTarget: 'umd',
     path: Path.join(__dirname, 'browser'),
     filename: '[name].js'
@@ -30,10 +30,10 @@ module.exports = {
   },
   plugins: [
     new webpack.DefinePlugin({
-      'process.env.HSK_NETWORK':
-        str(env.HSK_NETWORK || 'main'),
-      'process.env.HSK_WORKER_FILE':
-        str(env.HSK_WORKER_FILE || '/hsk-worker.js')
+      'process.env.HSKD_NETWORK':
+        str(env.HSKD_NETWORK || 'main'),
+      'process.env.HSKD_WORKER_FILE':
+        str(env.HSKD_WORKER_FILE || '/hskd-worker.js')
     }),
     new UglifyJsPlugin()
   ]

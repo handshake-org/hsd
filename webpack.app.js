@@ -22,10 +22,10 @@ module.exports = {
   },
   plugins: [
     new webpack.DefinePlugin({
-      'process.env.HSK_NETWORK':
-        str(env.HSK_NETWORK || 'main'),
-      'process.env.HSK_WORKER_FILE':
-        str(env.HSK_WORKER_FILE || '/hsk-worker.js')
+      'process.env.HSKD_NETWORK':
+        str(env.HSKD_NETWORK || 'main'),
+      'process.env.HSKD_WORKER_FILE':
+        str(env.HSKD_WORKER_FILE || '/hskd-worker.js')
     }),
     new UglifyJsPlugin()
   ]
