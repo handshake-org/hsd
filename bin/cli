@@ -8,7 +8,7 @@ console.error('%s%s',
 
 if (process.argv.length > 2 && process.argv[2] === 'wallet') {
   process.argv.splice(2, 1); // Evil hack.
-  require('bclient/bin/bwallet-cli');
+  require('hsk-client/bin/hwallet-cli');
 } else {
-  require('bclient/bin/bcoin-cli');
+  require('hsk-client/bin/hsk-cli');
 }
