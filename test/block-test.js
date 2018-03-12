@@ -9,6 +9,7 @@ const {BloomFilter} = require('bfilter');
 const Block = require('../lib/primitives/block');
 const MerkleBlock = require('../lib/primitives/merkleblock');
 const consensus = require('../lib/protocol/consensus');
+const Network = require('../lib/protocol/network');
 const Script = require('../lib/script/script');
 const bip152 = require('../lib/net/bip152');
 const CompactBlock = bip152.CompactBlock;
@@ -133,7 +134,7 @@ describe('Block', function() {
       const tx = block.txs[i];
 
       assert(tx.isSane());
-      assert(tx.verifyInputs(view, height));
+      assert(tx.verifyInputs(view, height, Network.get('main')));
       assert(tx.verify(view, flags));
       assert(!tx.hasWitness());
 

@@ -16,25 +16,22 @@ const util = require('../lib/utils/util');
 const rules = require('../lib/covenants/rules');
 const {HSKResource} = require('../lib/covenants/record');
 const root = require('../etc/root.json');
+const {EMPTY_ROOT} = require('../lib/trie/common');
 const {types} = rules;
 
-const hex = ''
-  + '0411db93e1dcdb8a016b49840f8c53bc1eb68a382e97b1482ecad7b148a6909a5c'
-  + 'b2e0eaddfb84ccf9744464f82e160bfa9b8b64f9d4c03f999b8643f656b412a3';
+const networks = {
+  main: Network.get('main'),
+  testnet: Network.get('testnet'),
+  regtest: Network.get('regtest'),
+  simnet: Network.get('simnet')
+};
 
-const uncompressed = Buffer.from(hex, 'hex');
-const key = secp256k1.publicKeyConvert(uncompressed, true);
-const keyHash = hash160.digest(key);
-
-const ZERO_ROOT =
-  '03170a2e7597b7b7e3d84c05391d139a62b157e78786d8c082f29dcf4c111314';
-
-const satoshi = Address.fromHash(keyHash, 0);
-const investors = Address.fromHash(keyHash, 0);
-const foundationHot = Address.fromHash(keyHash, 0);
-const foundation = Address.fromHash(keyHash, 0);
-const creators = Address.fromHash(keyHash, 0);
-const airdrop = Address.fromHash(keyHash, 0);
+const genesis = Address.fromHash(consensus.GENESIS_KEY, 0);
+const investors = Address.fromHash(consensus.INVESTORS_KEY, 0);
+const foundationHot = Address.fromHash(consensus.FOUNDATION_HOT, 0);
+const foundation = Address.fromHash(consensus.FOUNDATION_KEY, 0);
+const creators = Address.fromHash(consensus.CREATORS_KEY, 0);
+const airdrop = Address.fromHash(consensus.AIRDROP_KEY, 0);
 
 const names = Object.keys(root).sort();
 
@@ -44,7 +41,7 @@ function createGenesisBlock(options) {
 
   if (!flags) {
     flags = Buffer.from(
-      '01/Nov/2017 EFF to ICANN: Don\'t Pick Up the Censor\'s Pen',
+      `01/Nov/2017 EFF to ICANN: Don't Pick Up the Censor's Pen`,
       'ascii');
   }
 
@@ -64,7 +61,7 @@ function createGenesisBlock(options) {
     outputs: [
       {
         value: consensus.GENESIS_REWARD,
-        address: satoshi
+        address: genesis
       },
       {
         value: consensus.MAX_INVESTORS,
@@ -91,7 +88,7 @@ function createGenesisBlock(options) {
     prevBlock: consensus.NULL_HASH,
     merkleRoot: tx.hash('hex'),
     witnessRoot: tx.witnessHash('hex'),
-    trieRoot: ZERO_ROOT,
+    trieRoot: EMPTY_ROOT.toString('hex'),
     time: options.time,
     bits: options.bits,
     nonce: nonce,
@@ -112,17 +109,19 @@ function createGenesisBlock(options) {
     }],
     outputs: [{
       value: consensus.GENESIS_REWARD,
-      address: satoshi
+      address: genesis
     }],
     locktime: 0
   });
 
   for (const name of names) {
+    const rawName = Buffer.from(name, 'ascii');
+
     const claim = new Output();
     claim.value = 0;
     claim.address = foundationHot;
     claim.covenant.type = types.CLAIM;
-    claim.covenant.items.push(Buffer.from(name, 'ascii'));
+    claim.covenant.items.push(rawName);
     claimer.outputs.push(claim);
 
     const dust = new Output();
@@ -143,6 +142,7 @@ function createGenesisBlock(options) {
   let i = 1;
 
   for (const name of names) {
+    const rawName = Buffer.from(name, 'ascii');
     const res = HSKResource.fromJSON(root[name]);
 
     const claimPrev = claimer.outpoint(i);
@@ -154,15 +154,16 @@ function createGenesisBlock(options) {
     const update = new Output();
     update.value = 0;
     update.address = foundationHot;
-    update.covenant.type = types.UPDATE;
-    update.covenant.items.push(Buffer.from(name, 'ascii'));
+    update.covenant.type = types.REGISTER;
+    update.covenant.items.push(rawName);
     update.covenant.items.push(res.toRaw());
+    update.covenant.items.push(consensus.ZERO_HASH);
 
     const cold = new Output();
     cold.value = 0;
     cold.address = foundation;
     cold.covenant.type = types.COLD;
-    cold.covenant.items.push(Buffer.from(name, 'ascii'));
+    cold.covenant.items.push(rawName);
 
     updater.inputs.push(claim);
     updater.inputs.push(dust);
@@ -184,52 +185,74 @@ function createGenesisBlock(options) {
   return block;
 }
 
-const main = createGenesisBlock({
-  time: 1514765688,
-  bits: Network.get('main').pow.bits,
-  solution: new Uint32Array(Network.get('main').cuckoo.size)
-});
-
-const testnet = createGenesisBlock({
-  time: 1514765689,
-  bits: Network.get('testnet').pow.bits,
-  solution: new Uint32Array(Network.get('testnet').cuckoo.size)
-});
-
-const regtest = createGenesisBlock({
-  time: 1514765690,
-  bits: Network.get('regtest').pow.bits,
-  solution: new Uint32Array(Network.get('regtest').cuckoo.size)
-});
-
-const simnet = createGenesisBlock({
-  time: 1514765691,
-  bits: Network.get('simnet').pow.bits,
-  solution: new Uint32Array(Network.get('simnet').cuckoo.size)
-});
+const blocks = {
+  main: createGenesisBlock({
+    time: 1514765688,
+    bits: networks.main.pow.bits,
+    solution: new Uint32Array(networks.main.cuckoo.size)
+  }),
+  testnet: createGenesisBlock({
+    time: 1514765689,
+    bits: networks.testnet.pow.bits,
+    solution: new Uint32Array(networks.testnet.cuckoo.size)
+  }),
+  regtest: createGenesisBlock({
+    time: 1514765690,
+    bits: networks.regtest.pow.bits,
+    solution: new Uint32Array(networks.regtest.cuckoo.size)
+  }),
+  simnet: createGenesisBlock({
+    time: 1514765691,
+    bits: networks.simnet.pow.bits,
+    solution: new Uint32Array(networks.simnet.cuckoo.size)
+  })
+};
 
 function formatJS(name, block) {
-  return `${name}.genesis = {
-  version: ${block.version},
-  hash: '${block.hash('hex')}',
-  prevBlock: '${block.prevBlock}',
-  merkleRoot:
-    '${block.merkleRoot}',
-  witnessRoot:
-    '${block.witnessRoot}',
-  trieRoot:
-    '${block.trieRoot}',
-  time: ${block.time},
-  bits: 0x${util.hex32(block.bits)},
-  nonce: Buffer.from('${block.nonce.toString('hex')}', 'hex'),
-  solution: new Uint32Array(${block.solution.size()}),
-  height: 0
-};`;
+  const sol = block.solution.toArray();
+
+  let out = '';
+  out += `genesis.${name} = {\n`;
+  out += `  version: ${block.version},\n`;
+  out += `  hash: '${block.hash('hex')}',\n`;
+  out += `  prevBlock: '${block.prevBlock}',\n`;
+  out += `  merkleRoot:\n`;
+  out += `    '${block.merkleRoot}',\n`;
+  out += `  witnessRoot:\n`;
+  out += `    '${block.witnessRoot}',\n`;
+  out += `  trieRoot:\n`;
+  out += `    '${block.trieRoot}',\n`;
+  out += `  time: ${block.time},\n`;
+  out += `  bits: 0x${util.hex32(block.bits)},\n`;
+  out += `  nonce: Buffer.from('${block.nonce.toString('hex')}', 'hex'),\n`;
+  out += `  solution: new Uint32Array([\n`;
+
+  for (let i = 0; i < sol.length; i++)
+    out += `    0x${util.hex32(sol[i])},\n`;
+
+  out = out.slice(0, -2) + '\n';
+
+  out += `  ]),\n`;
+  out += `  height: 0\n`;
+  out += `};`;
+
+  return out;
+}
+
+function formatData(name, block) {
+  const hex = block.toRaw().toString('base64');
+  const chunks = [`genesis.${name}Data = Buffer.from(\``];
+
+  for (let i = 0; i < hex.length; i += 50)
+    chunks.push(`  ${hex.slice(i, i + 50)}`);
+
+  return chunks.join('\n') + '`, \'base64\');';
 }
 
 function formatC(name, block) {
   const hdr = block.toHead().toString('hex');
-  const chunks = [];
+  const upper = name.toUpperCase();
+  const chunks = [`static const uint8_t HSK_GENESIS_${upper}[] = ""`];
 
   for (let i = 0; i < hdr.length; i += 26)
     chunks.push(`  "${hdr.slice(i, i + 26)}"`);
@@ -237,35 +260,84 @@ function formatC(name, block) {
   const hex = chunks.join('\n');
   const data = hex.replace(/([a-f0-9]{2})/g, '\\x$1');
 
-  return `static const uint8_t HSK_GENESIS[] /* ${name} */ = ""\n${data};`;
+  return `${data};`;
 }
 
-function dump(name, block) {
-  const js = formatJS(name, block);
-  const c = formatC(name, block);
+const code = [
+  '// Autogenerated, do not edit.',
+  '',
+  `'use strict';`,
+  '',
+  `const data = require('./genesis-data.json');`,
+  'const genesis = exports;',
+  ''
+];
 
-  console.log(js);
-  console.log('');
-  console.log(c);
-  console.log('');
+for (const name of Object.keys(blocks)) {
+  const upper = name[0].toUpperCase() + name.substring(1);
+  const block = blocks[name];
+  code.push('/*');
+  code.push(` * ${upper}`);
+  code.push(' */');
+  code.push('');
+  code.push(formatJS(name, block));
+  code.push('');
+  code.push(`genesis.${name}Data = Buffer.from(data.${name}, 'base64');`);
+  code.push('');
 }
 
-function toHex(block) {
-  return block.toRaw().toString('hex');
+const json = JSON.stringify({
+  main: blocks.main.toRaw().toString('base64'),
+  testnet: blocks.testnet.toRaw().toString('base64'),
+  regtest: blocks.regtest.toRaw().toString('base64'),
+  simnet: blocks.simnet.toRaw().toString('base64')
+}, null, 2);
+
+const ccode = [
+  '#ifndef _HSK_GENESIS_H',
+  '#define _HSK_GENESIS_H',
+  ''
+];
+
+for (const name of Object.keys(blocks)) {
+  const upper = name[0].toUpperCase() + name.substring(1);
+  const block = blocks[name];
+  ccode.push('/*');
+  ccode.push(` * ${upper}`);
+  ccode.push(' */');
+  ccode.push('');
+  ccode.push(formatC(name, block));
+  ccode.push('');
 }
 
-console.log('');
+ccode.push('#endif');
+ccode.push('');
 
-dump('main', main);
-dump('testnet', testnet);
-dump('regtest', regtest);
-dump('simnet', simnet);
+const file = Path.resolve(
+  __dirname,
+  '..',
+  'lib',
+  'protocol',
+  'genesis.js'
+);
 
-const file = Path.resolve(__dirname, '..', 'lib', 'protocol', 'genesis.json');
+fs.writeFileSync(file, code.join('\n'));
 
-fs.writeFileSync(file, JSON.stringify({
-  main: toHex(main),
-  testnet: toHex(testnet),
-  regtest: toHex(regtest),
-  simnet: toHex(simnet)
-}, null, 2));
+const jfile = Path.resolve(
+  __dirname,
+  '..',
+  'lib',
+  'protocol',
+  'genesis-data.json'
+);
+
+fs.writeFileSync(jfile, json);
+
+const cfile = Path.resolve(
+  __dirname,
+  '..',
+  'etc',
+  'genesis.h'
+);
+
+fs.writeFileSync(cfile, ccode.join('\n'));

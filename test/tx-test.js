@@ -8,6 +8,7 @@ const {encoding} = require('bufio');
 const assert = require('./util/assert');
 const random = require('bcrypto/lib/random');
 const consensus = require('../lib/protocol/consensus');
+const Network = require('../lib/protocol/network');
 const TX = require('../lib/primitives/tx');
 const Output = require('../lib/primitives/output');
 const Outpoint = require('../lib/primitives/outpoint');
@@ -352,7 +353,7 @@ describe('TX', function() {
       locktime: 0
     });
     assert.ok(tx.isSane());
-    assert.ok(!tx.verifyInputs(view, 0));
+    assert.ok(!tx.verifyInputs(view, 0, Network.get('main')));
   });
 
   it('should handle 51 bit coin values', () => {
@@ -367,7 +368,7 @@ describe('TX', function() {
       locktime: 0
     });
     assert.ok(tx.isSane());
-    assert.ok(tx.verifyInputs(view, 0));
+    assert.ok(tx.verifyInputs(view, 0, Network.get('main')));
   });
 
   it('should fail on >51 bit output values', () => {
@@ -382,7 +383,7 @@ describe('TX', function() {
       locktime: 0
     });
     assert.ok(!tx.isSane());
-    assert.ok(!tx.verifyInputs(view, 0));
+    assert.ok(!tx.verifyInputs(view, 0, Network.get('main')));
   });
 
   it('should handle 51 bit output values', () => {
@@ -397,7 +398,7 @@ describe('TX', function() {
       locktime: 0
     });
     assert.ok(tx.isSane());
-    assert.ok(tx.verifyInputs(view, 0));
+    assert.ok(tx.verifyInputs(view, 0, Network.get('main')));
   });
 
   it('should fail on >51 bit fees', () => {
@@ -412,7 +413,7 @@ describe('TX', function() {
       locktime: 0
     });
     assert.ok(tx.isSane());
-    assert.ok(!tx.verifyInputs(view, 0));
+    assert.ok(!tx.verifyInputs(view, 0, Network.get('main')));
   });
 
   it('should fail on >51 bit values from multiple', () => {
@@ -431,7 +432,7 @@ describe('TX', function() {
       locktime: 0
     });
     assert.ok(tx.isSane());
-    assert.ok(!tx.verifyInputs(view, 0));
+    assert.ok(!tx.verifyInputs(view, 0, Network.get('main')));
   });
 
   it('should fail on >51 bit output values from multiple', () => {
@@ -456,7 +457,7 @@ describe('TX', function() {
       locktime: 0
     });
     assert.ok(!tx.isSane());
-    assert.ok(!tx.verifyInputs(view, 0));
+    assert.ok(!tx.verifyInputs(view, 0, Network.get('main')));
   });
 
   it('should fail on >51 bit fees from multiple', () => {
@@ -475,7 +476,7 @@ describe('TX', function() {
       locktime: 0
     });
     assert.ok(tx.isSane());
-    assert.ok(!tx.verifyInputs(view, 0));
+    assert.ok(!tx.verifyInputs(view, 0, Network.get('main')));
   });
 
   it('should fail to parse >53 bit values', () => {
@@ -518,7 +519,7 @@ describe('TX', function() {
       locktime: 0
     });
     assert.ok(tx.isSane());
-    assert.ok(!tx.verifyInputs(view, 0));
+    assert.ok(!tx.verifyInputs(view, 0, Network.get('main')));
   });
 
   it('should fail on 53 bit output values', () => {
@@ -533,7 +534,7 @@ describe('TX', function() {
       locktime: 0
     });
     assert.ok(!tx.isSane());
-    assert.ok(!tx.verifyInputs(view, 0));
+    assert.ok(!tx.verifyInputs(view, 0, Network.get('main')));
   });
 
   it('should fail on 53 bit fees', () => {
@@ -548,7 +549,7 @@ describe('TX', function() {
       locktime: 0
     });
     assert.ok(tx.isSane());
-    assert.ok(!tx.verifyInputs(view, 0));
+    assert.ok(!tx.verifyInputs(view, 0, Network.get('main')));
   });
 
   for (const value of [MAX_SAFE_ADDITION, MAX_SAFE_INTEGER]) {
@@ -568,7 +569,7 @@ describe('TX', function() {
         locktime: 0
       });
       assert.ok(tx.isSane());
-      assert.ok(!tx.verifyInputs(view, 0));
+      assert.ok(!tx.verifyInputs(view, 0, Network.get('main')));
     });
 
     it('should fail on >53 bit output values from multiple', () => {
@@ -593,7 +594,7 @@ describe('TX', function() {
         locktime: 0
       });
       assert.ok(!tx.isSane());
-      assert.ok(!tx.verifyInputs(view, 0));
+      assert.ok(!tx.verifyInputs(view, 0, Network.get('main')));
     });
 
     it('should fail on >53 bit fees from multiple', () => {
@@ -612,7 +613,7 @@ describe('TX', function() {
         locktime: 0
       });
       assert.ok(tx.isSane());
-      assert.ok(!tx.verifyInputs(view, 0));
+      assert.ok(!tx.verifyInputs(view, 0, Network.get('main')));
     });
   }
 
