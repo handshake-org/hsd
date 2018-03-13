@@ -15,7 +15,7 @@ const util = require('../lib/utils/util');
 const rules = require('../lib/covenants/rules');
 const Resource = require('../lib/dns/resource');
 const root = require('../etc/root.json');
-const {EMPTY_ROOT} = require('../lib/trie/common');
+const {EMPTY_ROOT} = require('btrie/lib/common');
 const {types} = rules;
 
 const networks = {
