@@ -224,9 +224,7 @@ describe('HTTP', function() {
       sigoplimit: 80000,
       sizelimit: 1000000,
       weightlimit: 4000000,
-      longpollid:
-        '1fea0bdd8cafb197115d4668d23de608dab647525d182a0ac4ede612b7dc933d'
-        + '00000000',
+      longpollid: node.chain.tip.hash + '00000000',
       submitold: false,
       coinbaseaux: { flags: '6d696e65642062792068736b64' },
       coinbasevalue: 500000000,

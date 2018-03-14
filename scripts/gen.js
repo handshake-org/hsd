@@ -27,16 +27,16 @@ const networks = {
   simnet: Network.get('simnet')
 };
 
-const genesis = Address.fromHash(consensus.GENESIS_KEY, 0);
-const investors = Address.fromHash(consensus.INVESTORS_KEY, 0);
-const foundationHot = Address.fromHash(consensus.FOUNDATION_HOT, 0);
-const foundation = Address.fromHash(consensus.FOUNDATION_KEY, 0);
-const creators = Address.fromHash(consensus.CREATORS_KEY, 0);
-const airdrop = Address.fromHash(consensus.AIRDROP_KEY, 0);
-
 const names = Object.keys(root).sort();
 
 function createGenesisBlock(options) {
+  const genesis = Address.fromHash(consensus.GENESIS_KEY, 0);
+  const investors = Address.fromHash(options.keys.investors, 0);
+  const foundation = Address.fromHash(options.keys.foundation, 0);
+  const claimant = Address.fromHash(options.keys.claimant, 0);
+  const creators = Address.fromHash(options.keys.creators, 0);
+  const airdrop = Address.fromHash(options.keys.airdrop, 0);
+
   let flags = options.flags;
   let nonce = options.nonce;
 
@@ -120,14 +120,14 @@ function createGenesisBlock(options) {
 
     const claim = new Output();
     claim.value = 0;
-    claim.address = foundationHot;
+    claim.address = claimant;
     claim.covenant.type = types.CLAIM;
     claim.covenant.items.push(rawName);
     claimer.outputs.push(claim);
 
     const dust = new Output();
     dust.value = 0;
-    dust.address = foundationHot;
+    dust.address = claimant;
     claimer.outputs.push(dust);
   }
 
@@ -154,6 +154,13 @@ function createGenesisBlock(options) {
       ns: []
     };
 
+    // Experimenting with glue.
+    // Note: Is this worth it?
+    // Unbound doesn't seem to care
+    // about our special "pointer"
+    // names, but BIND seems to
+    // like valid glue records
+    // better.
     for (const auth of data.auth) {
       assert(auth.name);
       assert(auth.inet4 || auth.inet6);
@@ -180,7 +187,7 @@ function createGenesisBlock(options) {
 
     const update = new Output();
     update.value = 0;
-    update.address = foundationHot;
+    update.address = claimant;
     update.covenant.type = types.REGISTER;
     update.covenant.items.push(rawName);
     update.covenant.items.push(res.toRaw());
@@ -216,22 +223,26 @@ const blocks = {
   main: createGenesisBlock({
     time: 1514765688,
     bits: networks.main.pow.bits,
-    solution: new Uint32Array(networks.main.cuckoo.size)
+    solution: new Uint32Array(networks.main.cuckoo.size),
+    keys: networks.main.keys
   }),
   testnet: createGenesisBlock({
     time: 1514765689,
     bits: networks.testnet.pow.bits,
-    solution: new Uint32Array(networks.testnet.cuckoo.size)
+    solution: new Uint32Array(networks.testnet.cuckoo.size),
+    keys: networks.testnet.keys
   }),
   regtest: createGenesisBlock({
     time: 1514765690,
     bits: networks.regtest.pow.bits,
-    solution: new Uint32Array(networks.regtest.cuckoo.size)
+    solution: new Uint32Array(networks.regtest.cuckoo.size),
+    keys: networks.regtest.keys
   }),
   simnet: createGenesisBlock({
     time: 1514765691,
     bits: networks.simnet.pow.bits,
-    solution: new Uint32Array(networks.simnet.cuckoo.size)
+    solution: new Uint32Array(networks.simnet.cuckoo.size),
+    keys: networks.simnet.keys
   })
 };
 
