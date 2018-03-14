@@ -3,13 +3,10 @@ bin/cli
 bin/node
 bin/spvnode
 bin/wallet
-browser/server.js
-browser/wsproxy.js
-examples/
+browser/
 lib/
-migrate/
 scripts/
-webpack/
+test/
 webpack.browser.js
 webpack.compat.js
 webpack.node.js
