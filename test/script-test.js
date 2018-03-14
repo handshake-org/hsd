@@ -4,6 +4,7 @@
 'use strict';
 
 const assert = require('./util/assert');
+const Address = require('../lib/primitives/address');
 const Script = require('../lib/script/script');
 const Witness = require('../lib/script/witness');
 const Stack = require('../lib/script/stack');
@@ -11,6 +12,7 @@ const Opcode = require('../lib/script/opcode');
 const TX = require('../lib/primitives/tx');
 const consensus = require('../lib/protocol/consensus');
 const {fromFloat} = require('../lib/utils/fixed');
+const {opcodes} = Script;
 
 const scripts = require('./data/script-tests.json');
 
@@ -25,28 +27,12 @@ function isSuccess(stack) {
 }
 
 function parseScriptTest(data) {
-  const witArr = Array.isArray(data[0]) ? data.shift() : [];
-  const inpHex = data[0];
-  const outHex = data[1];
-  const names = data[2] || 'NONE';
-  const expected = data[3];
-  let comments = data[4];
-
-  if (!comments)
-    comments = outHex.slice(0, 60);
-
-  comments += ` (${expected})`;
-
-  let value = 0;
-  if (witArr.length > 0)
-    value = fromFloat(witArr.pop(), 8);
-
-  const witness = Witness.fromString(witArr);
-  const input = Script.fromString(inpHex);
-  const output = Script.fromString(outHex);
+  const script = Script.fromString(data.script);
+  const witness = Witness.fromJSON(data.witness);
 
   let flags = 0;
-  for (const name of names.split(',')) {
+
+  for (const name of data.flags) {
     const flag = Script.flags[`VERIFY_${name}`];
 
     if (flag == null)
@@ -55,31 +41,22 @@ function parseScriptTest(data) {
     flags |= flag;
   }
 
+  witness.items.push(script.toRaw());
+
   return {
+    comments: data.comments || data.script.substring(0, 60),
+    script: script,
+    address: Address.fromScript(script),
+    value: data.value,
     witness: witness,
-    input: input,
-    output: output,
-    value: value,
+    locktime: data.locktime,
+    sequence: data.sequence,
     flags: flags,
-    expected: expected,
-    comments: comments
+    result: data.result
   };
 }
 
 describe('Script', function() {
-  it('should recognize a P2SH output', () => {
-    const hex = 'a91419a7d869032368fd1f1e26e5e73a4ad0e474960e87';
-    const decoded = Script.fromRaw(hex, 'hex');
-    assert(decoded.isScripthash());
-  });
-
-  it('should recognize a Null Data output', () => {
-    const hex = '6a28590c080112220a1b353930632e6f7267282a5f'
-      + '5e294f7665726c6179404f7261636c65103b1a010c';
-    const decoded = Script.fromRaw(hex, 'hex');
-    assert(decoded.isNulldata());
-  });
-
   it('should handle if statements correctly', () => {
     {
       const input = new Script([
@@ -269,79 +246,73 @@ describe('Script', function() {
   });
 
   for (const data of scripts) {
-    if (data.length === 1)
-      continue;
+    const {
+      comments,
+      script,
+      address,
+      value,
+      witness,
+      locktime,
+      sequence,
+      flags,
+      result
+    } = parseScriptTest(data);
 
-    const test = parseScriptTest(data);
-    const {witness, input, output} = test;
-    const {value, flags} = test;
-    const {expected, comments} = test;
-
-    for (const noCache of [false, true]) {
-      const suffix = noCache ? 'without cache' : 'with cache';
-
-      it(`should handle script test ${suffix}:${comments}`, () => {
-        // Funding transaction.
-        const prev = new TX({
-          version: 1,
-          inputs: [{
-            prevout: {
-              hash: consensus.NULL_HASH,
-              index: 0xffffffff
-            },
-            script: [
-              Opcode.fromInt(0),
-              Opcode.fromInt(0)
-            ],
-            witness: [],
-            sequence: 0xffffffff
-          }],
-          outputs: [{
-            script: output,
-            value: value
-          }],
-          locktime: 0
-        });
-
-        // Spending transaction.
-        const tx = new TX({
-          version: 1,
-          inputs: [{
-            prevout: {
-              hash: prev.hash('hex'),
-              index: 0
-            },
-            script: input,
-            witness: witness,
-            sequence: 0xffffffff
-          }],
-          outputs: [{
-            script: [],
-            value: value
-          }],
-          locktime: 0
-        });
-
-        if (noCache) {
-          prev.refresh();
-          tx.refresh();
-        }
-
-        let err;
-        try {
-          Script.verify(input, witness, output, tx, 0, value, flags);
-        } catch (e) {
-          err = e;
-        }
-
-        if (expected !== 'OK') {
-          assert.typeOf(err, 'error');
-          assert.strictEqual(err.code, expected);
-          return;
-        }
-
-        assert.ifError(err);
+    it(`should handle script test: ${comments}`, () => {
+      // Funding transaction.
+      const prev = new TX({
+        version: 1,
+        inputs: [{
+          prevout: {
+            hash: consensus.NULL_HASH,
+            index: 0xffffffff
+          },
+          witness: [
+            Buffer.alloc(1),
+            Buffer.alloc(1)
+          ],
+          sequence: 0xffffffff
+        }],
+        outputs: [{
+          address,
+          value
+        }],
+        locktime: 0
       });
-    }
+
+      // Spending transaction.
+      const tx = new TX({
+        version: 1,
+        inputs: [{
+          prevout: {
+            hash: prev.hash('hex'),
+            index: 0
+          },
+          witness: witness,
+          sequence: sequence
+        }],
+        outputs: [{
+          address: new Address(),
+          value: value
+        }],
+        locktime: locktime
+      });
+
+      let err = null;
+
+      try {
+        Script.verify(witness, address, tx, 0, value, flags);
+      } catch (e) {
+        err = e;
+      }
+
+      if (result !== 'OK') {
+        assert.typeOf(err, 'error');
+        assert.strictEqual(err.code, result);
+        return;
+      }
+
+      assert.ifError(err);
+    });
   }
 });

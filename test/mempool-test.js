@@ -4,6 +4,7 @@
 'use strict';
 
 const assert = require('./util/assert');
+const blake2b = require('bcrypto/lib/blake2b');
 const random = require('bcrypto/lib/random');
 const MempoolEntry = require('../lib/mempool/mempoolentry');
 const Mempool = require('../lib/mempool/mempool');
@@ -41,17 +42,17 @@ const wallet = new MemWallet();
 
 let cachedTX = null;
 
-function dummyInput(script, hash) {
+function dummyInput(addr, hash) {
   const coin = new Coin();
   coin.height = 0;
   coin.value = 0;
-  coin.script = script;
+  coin.address = addr;
   coin.hash = hash;
   coin.index = 0;
 
   const fund = new MTX();
   fund.addCoin(coin);
-  fund.addOutput(script, 70000);
+  fund.addOutput(addr, 70000);
 
   const [tx, view] = fund.commit();
 
@@ -69,23 +70,23 @@ describe('Mempool', function() {
     await workers.open();
     await chain.open();
     await mempool.open();
-    chain.state.flags |= Script.flags.VERIFY_WITNESS;
   });
 
   it('should handle incoming orphans and TXs', async () => {
     const key = KeyRing.generate();
+    const addr = key.getAddress();
 
     const t1 = new MTX();
     t1.addOutput(wallet.getAddress(), 50000);
     t1.addOutput(wallet.getAddress(), 10000);
 
-    const script = Script.fromPubkey(key.publicKey);
+    const script = Script.fromPubkeyhash(key.getHash());
 
-    t1.addCoin(dummyInput(script, ONE_HASH.toString('hex')));
+    t1.addCoin(dummyInput(addr, ONE_HASH.toString('hex')));
 
-    const sig = t1.signature(0, script, 70000, key.privateKey, ALL, 0);
+    const sig = t1.signature(0, script, 70000, key.privateKey, ALL);
 
-    t1.inputs[0].script = Script.fromItems([sig]);
+    t1.inputs[0].witness = Witness.fromItems([sig, key.publicKey]);
 
     // balance: 51000
     wallet.sign(t1);
@@ -131,8 +132,8 @@ describe('Mempool', function() {
 
     // Fake signature
     const input = fake.inputs[0];
-    input.script.setData(0, Buffer.alloc(73, 0x00));
-    input.script.compile();
+    input.witness.setData(0, Buffer.alloc(65, 0x00));
+    input.witness.compile();
     // balance: 11000
 
     {
@@ -179,21 +180,22 @@ describe('Mempool', function() {
 
   it('should handle locktime', async () => {
     const key = KeyRing.generate();
+    const addr = key.getAddress();
 
     const tx = new MTX();
     tx.addOutput(wallet.getAddress(), 50000);
     tx.addOutput(wallet.getAddress(), 10000);
 
-    const prev = Script.fromPubkey(key.publicKey);
+    const prev = Script.fromPubkeyhash(key.getHash());
     const prevHash = random.randomBytes(32).toString('hex');
 
-    tx.addCoin(dummyInput(prev, prevHash));
+    tx.addCoin(dummyInput(addr, prevHash));
     tx.setLocktime(200);
 
     chain.tip.height = 200;
 
-    const sig = tx.signature(0, prev, 70000, key.privateKey, ALL, 0);
-    tx.inputs[0].script = Script.fromItems([sig]);
+    const sig = tx.signature(0, prev, 70000, key.privateKey, ALL);
+    tx.inputs[0].witness = Witness.fromItems([sig, key.publicKey]);
 
     await mempool.addTX(tx.toTX());
     chain.tip.height = 0;
@@ -201,20 +203,21 @@ describe('Mempool', function() {
 
   it('should handle invalid locktime', async () => {
     const key = KeyRing.generate();
+    const addr = key.getAddress();
 
     const tx = new MTX();
     tx.addOutput(wallet.getAddress(), 50000);
     tx.addOutput(wallet.getAddress(), 10000);
 
-    const prev = Script.fromPubkey(key.publicKey);
+    const prev = Script.fromPubkeyhash(key.getHash());
     const prevHash = random.randomBytes(32).toString('hex');
 
-    tx.addCoin(dummyInput(prev, prevHash));
+    tx.addCoin(dummyInput(addr, prevHash));
     tx.setLocktime(200);
     chain.tip.height = 200 - 1;
 
-    const sig = tx.signature(0, prev, 70000, key.privateKey, ALL, 0);
-    tx.inputs[0].script = Script.fromItems([sig]);
+    const sig = tx.signature(0, prev, 70000, key.privateKey, ALL);
+    tx.inputs[0].witness = Witness.fromItems([sig, key.publicKey]);
 
     let err;
     try {
@@ -230,21 +233,19 @@ describe('Mempool', function() {
 
   it('should not cache a malleated wtx with mutated sig', async () => {
     const key = KeyRing.generate();
-
-    key.witness = true;
+    const addr = key.getAddress();
 
     const tx = new MTX();
     tx.addOutput(wallet.getAddress(), 50000);
     tx.addOutput(wallet.getAddress(), 10000);
 
-    const prev = Script.fromProgram(0, key.getKeyHash());
     const prevHash = random.randomBytes(32).toString('hex');
 
-    tx.addCoin(dummyInput(prev, prevHash));
+    tx.addCoin(dummyInput(addr, prevHash));
 
     const prevs = Script.fromPubkeyhash(key.getKeyHash());
 
-    const sig = tx.signature(0, prevs, 70000, key.privateKey, ALL, 1);
+    const sig = tx.signature(0, prevs, 70000, key.privateKey, ALL);
     sig[sig.length - 1] = 0;
 
     tx.inputs[0].witness = new Witness([sig, key.publicKey]);
@@ -260,21 +261,17 @@ describe('Mempool', function() {
     assert(!mempool.hasReject(tx.hash()));
   });
 
-  it('should not cache a malleated tx with unnecessary witness', async () => {
+  it('should not cache non-malleated tx without sig', async () => {
     const key = KeyRing.generate();
+    const addr = key.getAddress();
 
     const tx = new MTX();
     tx.addOutput(wallet.getAddress(), 50000);
     tx.addOutput(wallet.getAddress(), 10000);
 
-    const prev = Script.fromPubkey(key.publicKey);
     const prevHash = random.randomBytes(32).toString('hex');
 
-    tx.addCoin(dummyInput(prev, prevHash));
-
-    const sig = tx.signature(0, prev, 70000, key.privateKey, ALL, 0);
-    tx.inputs[0].script = Script.fromItems([sig]);
-    tx.inputs[0].witness.push(Buffer.alloc(0));
+    tx.addCoin(dummyInput(addr, prevHash));
 
     let err;
     try {
@@ -285,56 +282,6 @@ describe('Mempool', function() {
 
     assert(err);
     assert(!mempool.hasReject(tx.hash()));
-  });
-
-  it('should not cache a malleated wtx with wit removed', async () => {
-    const key = KeyRing.generate();
-
-    key.witness = true;
-
-    const tx = new MTX();
-    tx.addOutput(wallet.getAddress(), 50000);
-    tx.addOutput(wallet.getAddress(), 10000);
-
-    const prev = Script.fromProgram(0, key.getKeyHash());
-    const prevHash = random.randomBytes(32).toString('hex');
-
-    tx.addCoin(dummyInput(prev, prevHash));
-
-    let err;
-    try {
-      await mempool.addTX(tx.toTX());
-    } catch (e) {
-      err = e;
-    }
-
-    assert(err);
-    assert(err.malleated);
-    assert(!mempool.hasReject(tx.hash()));
-  });
-
-  it('should cache non-malleated tx without sig', async () => {
-    const key = KeyRing.generate();
-
-    const tx = new MTX();
-    tx.addOutput(wallet.getAddress(), 50000);
-    tx.addOutput(wallet.getAddress(), 10000);
-
-    const prev = Script.fromPubkey(key.publicKey);
-    const prevHash = random.randomBytes(32).toString('hex');
-
-    tx.addCoin(dummyInput(prev, prevHash));
-
-    let err;
-    try {
-      await mempool.addTX(tx.toTX());
-    } catch (e) {
-      err = e;
-    }
-
-    assert(err);
-    assert(!err.malleated);
-    assert(mempool.hasReject(tx.hash()));
 
     cachedTX = tx;
   });
@@ -344,7 +291,7 @@ describe('Mempool', function() {
     tx.addOutpoint(new Outpoint());
     tx.addOutput(wallet.getAddress(), 50000);
 
-    assert(mempool.hasReject(cachedTX.hash()));
+    assert(!mempool.hasReject(cachedTX.hash()));
 
     await mempool.addBlock({ height: 1 }, [tx.toTX()]);
 

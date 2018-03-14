@@ -1,3 +1,5 @@
+/* eslint quotes: "off" */
+
 'use strict';
 
 const assert = require('assert');
@@ -262,16 +264,6 @@ function formatJS(name, block) {
   out += `};`;
 
   return out;
-}
-
-function formatData(name, block) {
-  const hex = block.toRaw().toString('base64');
-  const chunks = [`genesis.${name}Data = Buffer.from(\``];
-
-  for (let i = 0; i < hex.length; i += 50)
-    chunks.push(`  ${hex.slice(i, i + 50)}`);
-
-  return chunks.join('\n') + '`, \'base64\');';
 }
 
 function formatC(name, block) {

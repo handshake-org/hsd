@@ -15,9 +15,6 @@ const packets = require('../lib/net/packets');
 const common = require('./util/common');
 const network = Network.get('main');
 
-const tx8 = common.readTX('tx8');
-const tx9 = common.readTX('tx9');
-
 describe('Protocol', function() {
   const pkg = require('../lib/pkg');
   const agent = `/${pkg.name}:${pkg.version}/`;
@@ -29,11 +26,11 @@ describe('Protocol', function() {
     framer = new Framer();
   });
 
-  function packetTest(cmd, payload, test) {
-    it(`should encode/decode ${cmd}`, (cb) => {
+  function packetTest(type, payload, test) {
+    it(`should encode/decode ${packets.typesByVal[type]}`, (cb) => {
       parser.once('packet', (packet) => {
         try {
-          assert.strictEqual(packet.cmd, cmd);
+          assert.strictEqual(packet.type, type);
           test(packet);
         } catch (e) {
           cb(e);
@@ -41,7 +38,7 @@ describe('Protocol', function() {
         }
         cb();
       });
-      const raw = framer.packet(cmd, payload.toRaw());
+      const raw = framer.packet(type, payload.toRaw());
       parser.feed(raw);
     });
   }
@@ -51,14 +48,13 @@ describe('Protocol', function() {
     services: 1,
     time: network.now(),
     remote: new NetAddress(),
-    local: new NetAddress(),
     nonce: Buffer.allocUnsafe(8),
     agent: agent,
     height: 0,
     noRelay: false
   });
 
-  packetTest('version', v1, (payload) => {
+  packetTest(packets.types.VERSION, v1, (payload) => {
     assert.strictEqual(payload.version, 300);
     assert.strictEqual(payload.agent, agent);
     assert.strictEqual(payload.height, 0);
@@ -70,21 +66,20 @@ describe('Protocol', function() {
     services: 1,
     time: network.now(),
     remote: new NetAddress(),
-    local: new NetAddress(),
     nonce: Buffer.allocUnsafe(8),
     agent: agent,
     height: 10,
     noRelay: true
   });
 
-  packetTest('version', v2, (payload) => {
+  packetTest(packets.types.VERSION, v2, (payload) => {
     assert.strictEqual(payload.version, 300);
     assert.strictEqual(payload.agent, agent);
     assert.strictEqual(payload.height, 10);
     assert.strictEqual(payload.noRelay, true);
   });
 
-  packetTest('verack', new packets.VerackPacket(), (payload) => {
+  packetTest(packets.types.VERACK, new packets.VerackPacket(), (payload) => {
   });
 
   const hosts = [
@@ -102,7 +97,7 @@ describe('Protocol', function() {
     })
   ];
 
-  packetTest('addr', new packets.AddrPacket(hosts), (payload) => {
+  packetTest(packets.types.ADDR, new packets.AddrPacket(hosts), (payload) => {
     assert.typeOf(payload.items, 'array');
     assert.strictEqual(payload.items.length, 2);
 
@@ -115,16 +110,5 @@ describe('Protocol', function() {
     assert.strictEqual(payload.items[1].services, 1);
     assert.strictEqual(payload.items[1].host, hosts[1].host);
     assert.strictEqual(payload.items[1].port, hosts[1].port);
-  });
-
-  it('should include the raw data of only one transaction', () => {
-    const [tx1] = tx8.getTX();
-    const [tx2] = tx9.getTX();
-    const raw = Buffer.concat([tx1.toRaw(), tx2.toRaw()]);
-
-    const tx = TX.fromRaw(raw);
-    tx.refresh();
-
-    assert.bufferEqual(tx.toRaw(), tx1.toRaw());
   });
 });

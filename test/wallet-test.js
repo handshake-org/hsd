@@ -5,8 +5,9 @@
 
 const assert = require('./util/assert');
 const consensus = require('../lib/protocol/consensus');
+const Network = require('../lib/protocol/network');
 const util = require('../lib/utils/util');
-const hash256 = require('bcrypto/lib/hash256');
+const blake2b = require('bcrypto/lib/blake2b');
 const random = require('bcrypto/lib/random');
 const WalletDB = require('../lib/wallet/walletdb');
 const WorkerPool = require('../lib/workers/workerpool');
@@ -26,6 +27,7 @@ const KEY2 = 'xprv9s21ZrQH143K3mqiSThzPtWAabQ22Pjp3uSNnZ53A5bQ4udp'
   + 'faKekc2m4AChLYH1XDzANhrSdxHYWUeTWjYJwFwWFyHkTMnMeAcW4JyRCZa';
 
 const enabled = true;
+const network = Network.get('main');
 const workers = new WorkerPool({ enabled });
 const wdb = new WalletDB({ workers });
 
@@ -50,9 +52,9 @@ function nextBlock(wdb) {
 }
 
 function fakeBlock(height) {
-  const prev = hash256.digest(fromU32((height - 1) >>> 0));
-  const hash = hash256.digest(fromU32(height >>> 0));
-  const root = hash256.digest(fromU32((height | 0x80000000) >>> 0));
+  const prev = blake2b.digest(fromU32((height - 1) >>> 0));
+  const hash = blake2b.digest(fromU32(height >>> 0));
+  const root = blake2b.digest(fromU32((height | 0x80000000) >>> 0));
 
   return {
     hash: hash.toString('hex'),
@@ -70,166 +72,11 @@ function dummyInput() {
   return Input.fromOutpoint(new Outpoint(hash, 0));
 }
 
-async function testP2PKH(witness, nesting) {
-  const flags = Script.flags.STANDARD_VERIFY_FLAGS;
-  const receiveAddress = nesting ? 'nestedAddress' : 'receiveAddress';
-  const type = witness ? Address.types.WITNESS : Address.types.PUBKEYHASH;
-  const wallet = await wdb.create({ witness });
-
-  const waddr = await wallet.receiveAddress();
-  const addr = Address.fromString(waddr.toString(wdb.network), wdb.network);
-
-  assert.strictEqual(addr.type, type);
-  assert.strictEqual(addr.type, waddr.type);
-
-  const src = new MTX();
-  src.addInput(dummyInput());
-  src.addOutput(await wallet[receiveAddress](), 5460 * 2);
-  src.addOutput(new Address(), 2 * 5460);
-
-  const mtx = new MTX();
-  mtx.addTX(src, 0);
-  mtx.addOutput(await wallet.receiveAddress(), 5460);
-
-  await wallet.sign(mtx);
-
-  const [tx, view] = mtx.commit();
-
-  assert(tx.verify(view, flags));
-}
-
-async function testP2SH(witness, nesting) {
-  const flags = Script.flags.STANDARD_VERIFY_FLAGS;
-  const receiveAddress = nesting ? 'nestedAddress' : 'receiveAddress';
-  const receiveDepth = nesting ? 'nestedDepth' : 'receiveDepth';
-  const vector = witness ? 'witness' : 'script';
-
-  // Create 3 2-of-3 wallets with our pubkeys as "shared keys"
-  const options = {
-    witness,
-    type: 'multisig',
-    m: 2,
-    n: 3
-  };
-
-  const alice = await wdb.create(options);
-  const bob = await wdb.create(options);
-  const carol = await wdb.create(options);
-  const recipient = await wdb.create();
-
-  await alice.addSharedKey(0, await bob.accountKey(0));
-  await alice.addSharedKey(0, await carol.accountKey(0));
-
-  await bob.addSharedKey(0, await alice.accountKey(0));
-  await bob.addSharedKey(0, await carol.accountKey(0));
-
-  await carol.addSharedKey(0, await alice.accountKey(0));
-  await carol.addSharedKey(0, await bob.accountKey(0));
-
-  // Our p2sh address
-  const addr1 = await alice[receiveAddress]();
-
-  if (witness) {
-    const type = nesting ? Address.types.SCRIPTHASH : Address.types.WITNESS;
-    assert.strictEqual(addr1.type, type);
-  } else {
-    assert.strictEqual(addr1.type, Address.types.SCRIPTHASH);
-  }
-
-  assert((await alice[receiveAddress]()).equals(addr1));
-  assert((await bob[receiveAddress]()).equals(addr1));
-  assert((await carol[receiveAddress]()).equals(addr1));
-
-  const nestedAddr1 = await alice.nestedAddress();
-
-  if (witness) {
-    assert(nestedAddr1);
-    assert((await alice.nestedAddress()).equals(nestedAddr1));
-    assert((await bob.nestedAddress()).equals(nestedAddr1));
-    assert((await carol.nestedAddress()).equals(nestedAddr1));
-  }
-
-  {
-    // Add a shared unspent transaction to our wallets
-    const fund = new MTX();
-    fund.addInput(dummyInput());
-    fund.addOutput(nesting ? nestedAddr1 : addr1, 5460 * 10);
-
-    // Simulate a confirmation
-    assert.strictEqual(await alice[receiveDepth](), 1);
-
-    await wdb.addBlock(nextBlock(wdb), [fund.toTX()]);
-
-    assert.strictEqual(await alice[receiveDepth](), 2);
-    assert.strictEqual(await alice.changeDepth(), 1);
-  }
-
-  const addr2 = await alice[receiveAddress]();
-  assert(!addr2.equals(addr1));
-
-  assert((await alice[receiveAddress]()).equals(addr2));
-  assert((await bob[receiveAddress]()).equals(addr2));
-  assert((await carol[receiveAddress]()).equals(addr2));
-
-  // Create a tx requiring 2 signatures
-  const send = new MTX();
-
-  send.addOutput(await recipient.receiveAddress(), 5460);
-
-  assert(!send.verify(flags));
-
-  await alice.fund(send, {
-    rate: 10000,
-    round: true
-  });
-
-  await alice.sign(send);
-
-  assert(!send.verify(flags));
-
-  await bob.sign(send);
-
-  const [tx, view] = send.commit();
-  assert(tx.verify(view, flags));
-
-  assert.strictEqual(await alice.changeDepth(), 1);
-
-  const change = await alice.changeAddress();
-
-  assert((await alice.changeAddress()).equals(change));
-  assert((await bob.changeAddress()).equals(change));
-  assert((await carol.changeAddress()).equals(change));
-
-  // Simulate a confirmation
-  {
-    await wdb.addBlock(nextBlock(wdb), [tx]);
-
-    assert.strictEqual(await alice[receiveDepth](), 2);
-    assert.strictEqual(await alice.changeDepth(), 2);
-
-    assert((await alice[receiveAddress]()).equals(addr2));
-    assert(!(await alice.changeAddress()).equals(change));
-  }
-
-  const change2 = await alice.changeAddress();
-
-  assert((await alice.changeAddress()).equals(change2));
-  assert((await bob.changeAddress()).equals(change2));
-  assert((await carol.changeAddress()).equals(change2));
-
-  const input = tx.inputs[0];
-  input[vector].setData(2, Buffer.alloc(73, 0x00));
-  input[vector].compile();
-
-  assert(!tx.verify(view, flags));
-  assert.strictEqual(tx.getFee(view), 10000);
-}
-
 describe('Wallet', function() {
   this.timeout(5000);
 
   it('should open walletdb', async () => {
-    consensus.COINBASE_MATURITY = 0;
+    network.coinbaseMaturity = 1;
     await wdb.open();
   });
 
@@ -245,16 +92,6 @@ describe('Wallet', function() {
     assert(addr2.equals(addr1));
   });
 
-  it('should validate existing address', () => {
-    assert(Address.fromString('1KQ1wMNwXHUYj1nV2xzsRcKUH8gVFpTFUc', 'main'));
-  });
-
-  it('should fail to validate invalid address', () => {
-    assert.throws(() => {
-      Address.fromString('1KQ1wMNwXHUYj1nv2xzsRcKUH8gVFpTFUc', 'main');
-    });
-  });
-
   it('should create and get wallet', async () => {
     const wallet1 = await wdb.create();
     const wallet2 = await wdb.get(wallet1.id);
@@ -262,50 +99,29 @@ describe('Wallet', function() {
   });
 
   it('should sign/verify p2pkh tx', async () => {
-    await testP2PKH(false, false);
-  });
+    const flags = Script.flags.STANDARD_VERIFY_FLAGS;
+    const wallet = await wdb.create();
 
-  it('should sign/verify p2wpkh tx', async () => {
-    await testP2PKH(true, false);
-  });
+    const waddr = await wallet.receiveAddress();
+    const addr = Address.fromString(waddr.toString(wdb.network), wdb.network);
 
-  it('should sign/verify p2wpkh tx w/ nested bullshit', async () => {
-    await testP2PKH(true, true);
-  });
+    assert.strictEqual(addr.version, 0);
+    assert.strictEqual(addr.version, waddr.version);
 
-  it('should multisign/verify TX', async () => {
-    const wallet = await wdb.create({
-      type: 'multisig',
-      m: 1,
-      n: 2
-    });
-
-    const xpriv = HD.PrivateKey.generate();
-    const key = xpriv.deriveAccount(44, 0, 0).toPublic();
-
-    await wallet.addSharedKey(0, key);
-
-    const script = Script.fromMultisig(1, 2, [
-      (await wallet.receiveKey()).publicKey,
-      key.derivePath('m/0/0').publicKey
-    ]);
-
-    // Input transaction (bare 1-of-2 multisig)
     const src = new MTX();
     src.addInput(dummyInput());
-    src.addOutput(script, 5460 * 2);
-    src.addOutput(new Address(), 5460 * 2);
+    src.addOutput(await wallet.receiveAddress(), 5460 * 2);
+    src.addOutput(new Address(), 2 * 5460);
 
-    const tx = new MTX();
-    tx.addTX(src, 0);
-    tx.addOutput(await wallet.receiveAddress(), 5460);
+    const mtx = new MTX();
+    mtx.addTX(src, 0);
+    mtx.addOutput(await wallet.receiveAddress(), 5460);
 
-    const maxSize = await tx.estimateSize();
+    await wallet.sign(mtx);
 
-    await wallet.sign(tx);
+    const [tx, view] = mtx.commit();
 
-    assert(tx.toRaw().length <= maxSize);
-    assert(tx.verify());
+    assert(tx.verify(view, flags));
   });
 
   it('should handle missed txs', async () => {
@@ -703,14 +519,14 @@ describe('Wallet', function() {
     assert.strictEqual(t2.getInputValue(v2), 16380);
 
     // Should now have a change output:
-    assert.strictEqual(t2.getOutputValue(), 11130);
+    assert.strictEqual(t2.getOutputValue(), 13660);
 
-    assert.strictEqual(t2.getFee(v2), 5250);
+    assert.strictEqual(t2.getFee(v2), 2720);
 
-    assert.strictEqual(t2.getWeight(), 2084);
-    assert.strictEqual(t2.getBaseSize(), 521);
-    assert.strictEqual(t2.getSize(), 521);
-    assert.strictEqual(t2.getVirtualSize(), 521);
+    assert.strictEqual(t2.getWeight(), 1079);
+    assert.strictEqual(t2.getBaseSize(), 194);
+    assert.strictEqual(t2.getSize(), 497);
+    assert.strictEqual(t2.getVirtualSize(), 270);
 
     let balance = null;
     bob.once('balance', (b) => {
@@ -793,15 +609,112 @@ describe('Wallet', function() {
   });
 
   it('should verify 2-of-3 p2sh tx', async () => {
-    await testP2SH(false, false);
-  });
+    const flags = Script.flags.STANDARD_VERIFY_FLAGS;
 
-  it('should verify 2-of-3 p2wsh tx', async () => {
-    await testP2SH(true, false);
-  });
+    // Create 3 2-of-3 wallets with our pubkeys as "shared keys"
+    const options = {
+      type: 'multisig',
+      m: 2,
+      n: 3
+    };
 
-  it('should verify 2-of-3 p2wsh tx w/ nested bullshit', async () => {
-    await testP2SH(true, true);
+    const alice = await wdb.create(options);
+    const bob = await wdb.create(options);
+    const carol = await wdb.create(options);
+    const recipient = await wdb.create();
+
+    await alice.addSharedKey(0, await bob.accountKey(0));
+    await alice.addSharedKey(0, await carol.accountKey(0));
+
+    await bob.addSharedKey(0, await alice.accountKey(0));
+    await bob.addSharedKey(0, await carol.accountKey(0));
+
+    await carol.addSharedKey(0, await alice.accountKey(0));
+    await carol.addSharedKey(0, await bob.accountKey(0));
+
+    // Our p2sh address
+    const addr1 = await alice.receiveAddress();
+
+    assert.strictEqual(addr1.version, 0);
+
+    assert((await alice.receiveAddress()).equals(addr1));
+    assert((await bob.receiveAddress()).equals(addr1));
+    assert((await carol.receiveAddress()).equals(addr1));
+
+    {
+      // Add a shared unspent transaction to our wallets
+      const fund = new MTX();
+      fund.addInput(dummyInput());
+      fund.addOutput(addr1, 5460 * 10);
+
+      // Simulate a confirmation
+      assert.strictEqual(await alice.receiveDepth(), 1);
+
+      await wdb.addBlock(nextBlock(wdb), [fund.toTX()]);
+
+      assert.strictEqual(await alice.receiveDepth(), 2);
+      assert.strictEqual(await alice.changeDepth(), 1);
+    }
+
+    const addr2 = await alice.receiveAddress();
+    assert(!addr2.equals(addr1));
+
+    assert((await alice.receiveAddress()).equals(addr2));
+    assert((await bob.receiveAddress()).equals(addr2));
+    assert((await carol.receiveAddress()).equals(addr2));
+
+    // Create a tx requiring 2 signatures
+    const send = new MTX();
+
+    send.addOutput(await recipient.receiveAddress(), 5460);
+
+    assert(!send.verify(flags));
+
+    await alice.fund(send, {
+      rate: 10000,
+      round: true
+    });
+
+    await alice.sign(send);
+
+    assert(!send.verify(flags));
+
+    await bob.sign(send);
+
+    const [tx, view] = send.commit();
+    assert(tx.verify(view, flags));
+
+    assert.strictEqual(await alice.changeDepth(), 1);
+
+    const change = await alice.changeAddress();
+
+    assert((await alice.changeAddress()).equals(change));
+    assert((await bob.changeAddress()).equals(change));
+    assert((await carol.changeAddress()).equals(change));
+
+    // Simulate a confirmation
+    {
+      await wdb.addBlock(nextBlock(wdb), [tx]);
+
+      assert.strictEqual(await alice.receiveDepth(), 2);
+      assert.strictEqual(await alice.changeDepth(), 2);
+
+      assert((await alice.receiveAddress()).equals(addr2));
+      assert(!(await alice.changeAddress()).equals(change));
+    }
+
+    const change2 = await alice.changeAddress();
+
+    assert((await alice.changeAddress()).equals(change2));
+    assert((await bob.changeAddress()).equals(change2));
+    assert((await carol.changeAddress()).equals(change2));
+
+    const input = tx.inputs[0];
+    input.witness.setData(2, Buffer.alloc(65, 0x00));
+    input.witness.compile();
+
+    assert(!tx.verify(view, flags));
+    assert.strictEqual(tx.getFee(view), 10000);
   });
 
   it('should fill tx with account 1', async () => {
@@ -1508,6 +1421,6 @@ describe('Wallet', function() {
   });
 
   it('should cleanup', () => {
-    consensus.COINBASE_MATURITY = 100;
+    network.coinbaseMaturity = 2;
   });
 });

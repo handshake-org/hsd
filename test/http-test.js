@@ -23,7 +23,7 @@ const node = new FullNode({
   plugins: [require('../lib/wallet/plugin')]
 });
 
-const {NodeClient, WalletClient} = require('bclient');
+const {NodeClient, WalletClient} = require('hsk-client');
 
 const nclient = new NodeClient({
   port: network.rpcPort,
@@ -46,7 +46,6 @@ describe('HTTP', function() {
   this.timeout(15000);
 
   it('should open node', async () => {
-    consensus.COINBASE_MATURITY = 0;
     await node.open();
     await nclient.open();
     await wclient.open();
@@ -108,7 +107,6 @@ describe('HTTP', function() {
 
     assert(receive);
     assert.strictEqual(receive.name, 'default');
-    assert.strictEqual(receive.type, 'pubkeyhash');
     assert.strictEqual(receive.branch, 0);
     assert(balance);
     assert.strictEqual(balance.confirmed, 0);
@@ -142,7 +140,7 @@ describe('HTTP', function() {
     value += tx.outputs[0].value;
     value += tx.outputs[1].value;
 
-    assert.strictEqual(value, 48190);
+    assert.strictEqual(value, 49060);
 
     hash = tx.hash;
   });
@@ -162,7 +160,7 @@ describe('HTTP', function() {
 
   it('should get balance', async () => {
     const balance = await wallet.getBalance();
-    assert.strictEqual(balance.unconfirmed, 199570);
+    assert.strictEqual(balance.unconfirmed, 200440);
   });
 
   it('should execute an rpc call', async () => {
@@ -204,29 +202,34 @@ describe('HTTP', function() {
     assert.deepStrictEqual(json, {
       capabilities: ['proposal'],
       mutable: ['time', 'transactions', 'prevblock'],
-      version: 536870912,
+      version: 0,
       rules: [],
       vbavailable: {},
       vbrequired: 0,
       height: 1,
-      previousblockhash:
-        '0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206',
+      previousblockhash: network.genesis.hash,
+      merkleroot: json.merkleroot,
+      trieroot: network.genesis.trieRoot,
       target:
         '7fffff0000000000000000000000000000000000000000000000000000000000',
+      cuckoo: { bits: 8, size: 4, ease: 50 },
       bits: '207fffff',
-      noncerange: '00000000ffffffff',
+      noncerange: ''
+        + '0000000000000000000000000000000000000000'
+        + 'ffffffffffffffffffffffffffffffffffffffff',
       curtime: json.curtime,
-      mintime: 1296688603,
+      mintime: 1514765691,
       maxtime: json.maxtime,
       expires: json.expires,
-      sigoplimit: 20000,
+      sigoplimit: 80000,
       sizelimit: 1000000,
+      weightlimit: 4000000,
       longpollid:
-        '0f9188f13cb7b2c71f2a335e3a4fc328bf5beb436012afca590b1a11466e2206'
+        '1fea0bdd8cafb197115d4668d23de608dab647525d182a0ac4ede612b7dc933d'
         + '00000000',
       submitold: false,
-      coinbaseaux: { flags: '6d696e65642062792062636f696e' },
-      coinbasevalue: 5000000000,
+      coinbaseaux: { flags: '6d696e65642062792068736b64' },
+      coinbasevalue: 500000000,
       transactions: []
     });
   });
@@ -249,14 +252,12 @@ describe('HTTP', function() {
     assert.deepStrictEqual(json, {
       isvalid: true,
       address: addr.toString(node.network),
-      scriptPubKey: Script.fromAddress(addr).toRaw().toString('hex'),
       ismine: false,
       iswatchonly: false
     });
   });
 
   it('should cleanup', async () => {
-    consensus.COINBASE_MATURITY = 100;
     await wallet.close();
     await nclient.close();
     await node.close();

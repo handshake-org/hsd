@@ -13,23 +13,23 @@ describe('Consensus', function() {
     let total = 0;
 
     for (;;) {
-      const reward = consensus.getReward(height, 210000);
-      assert(reward <= consensus.COIN * 50);
+      const reward = consensus.getReward(height, 680000);
+      assert(reward <= consensus.COIN * 500);
       total += reward;
       if (reward === 0)
         break;
       height++;
     }
 
-    assert.strictEqual(height, 6930000);
-    assert.strictEqual(total, 2099999997690000);
+    assert.strictEqual(height, 19720000);
+    assert.strictEqual(total, 679999991160000);
   });
 
   it('should verify proof-of-work', () => {
     const bits = 0x1900896c;
 
     const hash = Buffer.from(
-      '672b3f1bb11a994267ea4171069ba0aa4448a840f38e8f340000000000000000',
+      '0000000000000000348f8ef340a84844aaa09b067141ea6742991ab11b3f2b67',
       'hex'
     );
 
@@ -60,7 +60,7 @@ describe('Consensus', function() {
   it('should check version bit', () => {
     assert(consensus.hasBit(0x20000001, 0));
     assert(!consensus.hasBit(0x20000000, 0));
-    assert(!consensus.hasBit(0x10000001, 0));
+    assert(consensus.hasBit(0x10000001, 0));
     assert(consensus.hasBit(0x20000003, 1));
     assert(consensus.hasBit(0x20000003, 0));
   });

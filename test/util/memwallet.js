@@ -691,7 +691,7 @@ class MemWallet {
       hardFee: options.hardFee,
       subtractFee: options.subtractFee,
       changeAddress: this.getChange(),
-      coinbaseMaturity: 25,
+      coinbaseMaturity: this.network.coinbaseMaturity,
       height: -1,
       rate: options.rate,
       maxFee: options.maxFee
