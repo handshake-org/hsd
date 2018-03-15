@@ -5,7 +5,6 @@
 
 const Headers = require('../lib/primitives/headers');
 const assert = require('./util/assert');
-const common = require('./util/common');
 
 describe('Headers', function() {
   it('should match headers size', () => {

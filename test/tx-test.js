@@ -3,7 +3,6 @@
 
 'use strict';
 
-const {inspect} = require('util');
 const {encoding} = require('bufio');
 const assert = require('./util/assert');
 const random = require('bcrypto/lib/random');
@@ -15,11 +14,9 @@ const Output = require('../lib/primitives/output');
 const Outpoint = require('../lib/primitives/outpoint');
 const Script = require('../lib/script/script');
 const Witness = require('../lib/script/witness');
-const Opcode = require('../lib/script/opcode');
 const Input = require('../lib/primitives/input');
 const CoinView = require('../lib/coins/coinview');
 const KeyRing = require('../lib/primitives/keyring');
-const common = require('./util/common');
 
 const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER;
 const MAX_SAFE_ADDITION = 0xfffffffffffff;

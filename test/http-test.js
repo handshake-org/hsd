@@ -6,7 +6,6 @@
 const assert = require('./util/assert');
 const consensus = require('../lib/protocol/consensus');
 const Address = require('../lib/primitives/address');
-const Script = require('../lib/script/script');
 const Outpoint = require('../lib/primitives/outpoint');
 const MTX = require('../lib/primitives/mtx');
 const FullNode = require('../lib/node/fullnode');

@@ -17,6 +17,7 @@ const KeyRing = require('../../lib/primitives/keyring');
 const Outpoint = require('../../lib/primitives/outpoint');
 const Output = require('../../lib/primitives/output');
 const Coin = require('../../lib/primitives/coin');
+const consensus = require('../../lib/protocol/consensus');
 const {types} = rules;
 
 class MemWallet {
@@ -34,9 +35,13 @@ class MemWallet {
     this.coins = new Map();
     this.spent = new Map();
     this.paths = new Map();
+
+    this.chain = [];
     this.auctions = new Map();
     this.bids = new Map();
+    this.reveals = new Map();
     this.values = new Map();
+
     this.balance = 0;
     this.txs = 0;
     this.filter = BloomFilter.fromRate(1000000, 0.001, -1);
@@ -240,6 +245,7 @@ class MemWallet {
       const tx = txs[i];
       this.addTX(tx, entry.height);
     }
+    this.chain.push(entry.hash);
   }
 
   removeBlock(entry, txs) {
@@ -247,6 +253,25 @@ class MemWallet {
       const tx = txs[i];
       this.removeTX(tx, entry.height);
     }
+    this.chain.pop();
+  }
+
+  addBid(bb) {
+    if (!this.bids.has(bb.name))
+      this.bids.set(bb.name, new Map());
+
+    this.bids.get(bb.name).set(bb.prevout.toKey(), bb);
+  }
+
+  addReveal(brv) {
+    if (!this.reveals.has(brv.name))
+      this.reveals.set(brv.name, new Map());
+
+    this.reveals.get(brv.name).set(brv.prevout.toKey(), brv);
+  }
+
+  addValue(blind, bv) {
+    this.values.set(blind.toString('hex'), bv);
   }
 
   addTX(tx, height) {
@@ -282,6 +307,7 @@ class MemWallet {
         continue;
 
       const path = this.getPath(addr);
+      const outpoint = tx.outpoint(i);
 
       switch (covenant.type) {
         case types.CLAIM: {
@@ -290,7 +316,15 @@ class MemWallet {
 
           const name = covenant.string(0);
 
-          this.auctions.set(name, [tx.outpoint(i), types.REGISTER]);
+          if (!this.auction.has(name)) {
+            const auction = new Auction();
+            auction.name = name;
+            auction.owner = outpoint;
+            auction.state = types.CLAIM;
+            auction.height = height;
+
+            this.auctions.set(name, auction);
+          }
 
           break;
         }
@@ -300,33 +334,52 @@ class MemWallet {
 
           const name = covenant.string(0);
 
-          if (!this.auctions.has(name))
-            this.auctions.set(name, [tx.outpoint(i), types.BID]);
+          if (!this.auctions.has(name)) {
+            const auction = new Auction();
+            auction.name = name;
+            auction.owner = outpoint;
+            auction.state = types.BID;
+            auction.height = height;
+
+            this.auctions.set(name, auction);
+          }
+
+          const bb = new BlindBid();
+          bb.name = name;
+          bb.prevout = outpoint;
+          bb.lockup = output.value;
+          bb.blind = covenant.items[1];
+          this.addBid(bb);
 
           break;
         }
         case types.REVEAL: {
           const name = covenant.string(0);
-          const nonce = covenant.items[1];
+          const auction = this.auctions.get(name);
 
-          if (!this.auctions.has(name))
+          if (!auction)
             break;
 
-          if (!this.bids.has(name))
-            this.bids.set(name, new Map());
+          const brv = new BidReveal();
+          brv.name = name;
+          brv.prevout = outpoint;
+          brv.value = output.value;
+          brv.height = height;
+          brv.own = path ? true : false;
 
-          const key = Outpoint.toKey(hash, i);
+          this.addReveal(brv);
 
-          this.bids.get(name).set(key, output.value);
+          if (path) {
+            // Useful for rescans:
+            // const nonce = covenant.items[1];
+            // const bv = new BlindValue();
+            // bv.value = output.value;
+            // bv.nonce = nonce;
+            // this.addValue(blind, bv);
 
-          if (!path)
-            break;
-
-          // Useful for rescans:
-          if (!this.values.has(name))
-            this.values.set(name, [output.value, nonce]);
-
-          this.auctions.set(name, [tx.outpoint(i), types.REVEAL]);
+            auction.outpoint = outpoint;
+            auction.state = types.REVEAL;
+          }
 
           break;
         }
@@ -335,32 +388,78 @@ class MemWallet {
             break;
 
           const name = covenant.string(0);
+          const auction = this.auctions.get(name);
+
+          if (!auction)
+            break;
 
           // We lost.
-          this.auctions.delete(name);
-          this.bids.delete(name);
-          // this.values.delete(name);
+          auction.state = types.REVOKE;
 
           break;
         }
-        case types.UPDATE:
         case types.REGISTER: {
           if (!path)
             break;
 
           const name = covenant.string(0);
+          const auction = this.auctions.get(name);
 
-          this.auctions.set(name, [tx.outpoint(i), covenant.type]);
+          if (!auction)
+            break;
+
+          auction.state = types.UPDATE;
+          auction.owner = tx.outpoint(i);
+          auction.cold = tx.outpoint(i + 1);
+          auction.data = covenant.items[1];
+
+          break;
+        }
+        case types.COLD: {
+          break;
+        }
+        case types.UPDATE: {
+          if (!path)
+            break;
+
+          const name = covenant.string(0);
+          const auction = this.auctions.get(name);
+
+          if (!auction)
+            break;
+
+          auction.owner = tx.outpoint(i);
+
+          if (covenant.items[1].length > 0)
+            auction.data = covenant.items[1];
+
+          break;
+        }
+        case types.TRANSFER: {
+          const name = covenant.string(0);
+          const auction = this.auctions.get(name);
+
+          if (!auction)
+            break;
+
+          auction.state = types.TRANSFER;
+          auction.owner = tx.outpoint(i);
+          auction.cold = tx.outpoint(i + 1);
 
           break;
         }
         case types.REVOKE: {
+          if (!path)
+            break;
+
           const name = covenant.string(0);
+          const auction = this.auctions.get(name);
+
+          if (!auction)
+            break;
 
           // Someone released it.
-          this.auctions.delete(name);
-          this.bids.delete(name);
-          // this.values.delete(name);
+          auction.state = types.REVOKE;
 
           break;
         }
@@ -394,78 +493,8 @@ class MemWallet {
       return false;
 
     for (let i = 0; i < tx.outputs.length; i++) {
-      const output = tx.outputs[i];
       const op = new Outpoint(hash, i).toKey();
       const coin = this.getCoin(op);
-      const uc = output.covenant;
-
-      switch (uc.type) {
-        case 1: {
-          if (!coin)
-            break;
-
-          const name = uc.string(0);
-
-          this.auctions.delete(name);
-
-          break;
-        }
-        case 2: {
-          const name = uc.string(0);
-
-          if (!this.auctions.has(name))
-            break;
-
-          if (!this.bids.has(name))
-            break;
-
-          const key = Outpoint.toKey(hash, i);
-
-          const bids = this.bids.get(name);
-
-          bids.delete(key);
-
-          if (bids.size === 0)
-            this.bids.delete(name);
-
-          if (!coin)
-            break;
-
-          this.values.delete(name);
-          this.auctions.set(name, [new Outpoint(hash, i), 1]);
-
-          break;
-        }
-        case 3: {
-          if (!coin)
-            break;
-
-          const name = uc.string(0);
-
-          this.auctions.set(name, [new Outpoint(hash, i), 2]);
-
-          break;
-        }
-        case 4: {
-          if (!coin)
-            break;
-
-          const name = uc.string(0);
-
-          // We lost.
-          this.auctions.set(name, [new Outpoint(hash, i), 2]);
-
-          break;
-        }
-        case 5: {
-          const name = uc.string(0);
-
-          // Someone released it.
-          this.auctions.set(name, [new Outpoint(hash, i), 3]);
-
-          break;
-        }
-      }
 
       if (!coin)
         continue;
@@ -524,7 +553,7 @@ class MemWallet {
     return keys;
   }
 
-  async bidName(name, bid, value, options) {
+  async createBid(name, bid, value, options) {
     const raw = Buffer.from(name, 'ascii');
     const nonce = random.randomBytes(32);
     const blind = rules.blind(bid, nonce);
@@ -539,7 +568,10 @@ class MemWallet {
     output.covenant.items.push(raw);
     output.covenant.items.push(blind);
 
-    this.values.set(name, [bid, nonce]);
+    const bv = new BlindValue();
+    bv.value = bid;
+    bv.nonce = nonce;
+    this.addValue(blind, bv);
 
     const mtx = new MTX();
     mtx.outputs.push(output);
@@ -547,135 +579,200 @@ class MemWallet {
     return this._create(mtx, options);
   }
 
-  async revealName(name, options) {
+  async createReveal(name, options) {
     const auction = this.auctions.get(name);
-    const item = this.values.get(name);
 
-    if (!auction || !item)
+    if (!auction)
       return null;
 
     const raw = Buffer.from(name, 'ascii');
-    const [prevout, state] = auction;
-    const [value, nonce] = item;
 
-    if (state !== types.BID)
+    if (auction.state !== types.BID)
       return null;
 
-    const coin = this.getCoin(prevout.toKey());
-    assert(coin);
+    const bids = this.bids.get(name);
+
+    if (!bids || bids.size === 0)
+      return null;
+
+    const mtx = new MTX();
+
+    for (const bb of bids.values()) {
+      const coin = this.getCoin(bb.prevout.toKey());
+      assert(coin);
+
+      // XXX Put on blindbid object?
+      const blind = coin.covenant.items[1];
+
+      const bv = this.values.get(blind.toString('hex'));
+      assert(bv);
+
+      const output = new Output();
+      output.address = coin.address;
+      output.value = bv.value;
+      output.covenant.type = types.REVEAL;
+      output.covenant.items.push(raw);
+      output.covenant.items.push(bv.nonce);
+
+      mtx.addOutpoint(bb.prevout);
+      mtx.outputs.push(output);
+    }
+
+    return this._create(mtx, options);
+  }
+
+  async createRegister(name, data, options) {
+    const auction = this.auctions.get(name);
+
+    if (!auction)
+      return null;
+
+    if (auction.state !== types.REVEAL)
+      return null;
+
+    const [value, winner] = this.getWinningReveal(name);
+
+    const coin = this.getCoin(winner.toKey());
+
+    if (!coin)
+      return null;
+
+    const raw = Buffer.from(name, 'ascii');
 
     const output = new Output();
     output.address = coin.address;
     output.value = value;
-    output.covenant.type = types.REVEAL;
+    output.covenant.type = types.REGISTER;
     output.covenant.items.push(raw);
-    output.covenant.items.push(nonce);
+    output.covenant.items.push(data);
+    output.covenant.items.push(this.getRenewalBlock());
+
+    const cold = new Output();
+    cold.address = coin.address;
+    cold.value = 0;
+    cold.covenant.type = types.COLD;
+    cold.covenant.items.push(raw);
 
     const mtx = new MTX();
-    mtx.addOutpoint(prevout);
+    mtx.addOutpoint(winner);
     mtx.outputs.push(output);
+    mtx.outputs.push(cold);
 
     return this._create(mtx, options);
   }
 
-  async registerName(name, data, options) {
+  async createUpdate(name, data, options) {
     const auction = this.auctions.get(name);
-    const item = this.values.get(name);
 
-    if (!auction || !item)
+    if (!auction)
       return null;
+
+    if (auction.state === types.REVEAL)
+      return this.createRegister(name, data, options);
+
+    if (auction.state !== types.REGISTER
+        && auction.state !== types.UPDATE) {
+      return null;
+    }
 
     const raw = Buffer.from(name, 'ascii');
-    const [prevout, state] = auction;
-    const [value] = item;
-
-    if (state !== types.REVEAL
-        && state !== types.REGISTER
-        && state !== types.UPDATE) {
-      return null;
-    }
-
-    if (state === types.REVEAL) {
-      if (!this.isWinner(name))
-        return null;
-    }
 
     const output = new Output();
-    const coin = this.getCoin(prevout.toKey());
+    const coin = this.getCoin(auction.owner.toKey());
     assert(coin);
 
     output.address = coin.address;
-    output.value = value;
-    output.covenant.type = state === types.REVEAL
-      ? types.REGISTER
-      : types.UPDATE;
+    output.value = coin.value;
+    output.covenant.type = types.UPDATE;
     output.covenant.items.push(raw);
     output.covenant.items.push(data);
 
     const mtx = new MTX();
-    mtx.addOutpoint(prevout);
+    mtx.addOutpoint(auction.owner);
     mtx.outputs.push(output);
 
     return this._create(mtx, options);
   }
 
-  // async closeAuction(name, data, options) {
-  //   const auction = this.auctions.get(name);
-  //   const item = this.values.get(name);
-  //
-  //   if (!auction || !item)
-  //     return null;
-  //
-  //   const [prevout, state] = auction;
-  //   const [value] = item;
-  //
-  //   if (!data)
-  //     data = Buffer.alloc(0);
-  //
-  //   return null;
-  // }
-
-  async redeemName(name, options) {
+  async createRedeem(name, options) {
     const auction = this.auctions.get(name);
-    const item = this.values.get(name);
 
-    if (!auction || !item)
+    if (!auction)
       return null;
 
-    const [prevout] = auction;
-    const [value] = item;
+    const raw = Buffer.from(name, 'ascii');
 
-    const output = new Output();
-    output.address = this.createReceive().getAddress();
-    output.value = value;
+    if (auction.state !== types.BID)
+      return null;
+
+    const reveals = this.reveals.get(name);
+
+    if (!reveals || reveals.size === 0)
+      return null;
+
+    const [, winner] = this.getWinningReveal(name);
 
     const mtx = new MTX();
-    mtx.addOutpoint(prevout);
-    mtx.outputs.push(output);
+
+    for (const brv of reveals.values()) {
+      if (!brv.own)
+        continue;
+
+      if (brv.prevout.equals(winner))
+        continue;
+
+      const coin = this.getCoin(brv.prevout.toKey());
+      assert(coin);
+
+      const output = new Output();
+      output.address = coin.address;
+      output.value = coin.value;
+      output.covenant.type = types.REDEEM;
+      output.covenant.items.push(raw);
+
+      mtx.addOutpoint(brv.prevout);
+      mtx.outputs.push(output);
+    }
 
     return this._create(mtx, options);
   }
 
-  isWinner(name) {
-    const bids = this.bids.get(name);
+  getWinningReveal(name) {
+    const reveals = this.reveals.get(name);
 
-    if (!bids)
+    if (!reveals)
       return false;
 
-    let best = -1;
+    let highest = -1;
+    let value = -1;
     let winner = null;
 
-    for (const [key, value] of bids) {
-      if (value >= best) {
-        winner = key;
-        best = value;
+    for (const brv of reveals.values()) {
+      if (brv.value > highest) {
+        value = highest;
+        winner = brv.prevout;
+        highest = brv.value;
+      } else if (brv.value > value) {
+        value = brv.value;
       }
     }
 
     if (!winner)
-      return false;
+      throw new Error('Could not find winner.');
 
-    return this.coins.has(winner);
+    if (value === -1)
+      value = highest;
+
+    return [value, winner];
+  }
+
+  getRenewalBlock() {
+    let height = this.chain.length - this.network.names.renewalMaturity * 2;
+
+    if (height < 0)
+      height = 0;
+
+    return Buffer.from(this.chain[height], 'hex');
   }
 
   fund(mtx, options) {
@@ -744,6 +841,43 @@ class Path {
     this.hash = hash;
     this.branch = branch;
     this.index = index;
+  }
+}
+
+class Auction {
+  constructor() {
+    this.name = '';
+    this.owner = new Outpoint();
+    this.cold = new Outpoint();
+    this.state = 0;
+    this.height = -1;
+    this.data = Buffer.alloc(0);
+  }
+}
+
+class BlindBid {
+  constructor() {
+    this.name = '';
+    this.prevout = new Outpoint();
+    this.lockup = 0;
+    this.blind = consensus.ZERO_HASH;
+  }
+}
+
+class BlindValue {
+  constructor() {
+    this.value = 0;
+    this.nonce = consensus.ZERO_HASH;
+  }
+}
+
+class BidReveal {
+  constructor() {
+    this.name = '';
+    this.prevout = new Outpoint();
+    this.value = 0;
+    this.height = -1;
+    this.own = false;
   }
 }
 

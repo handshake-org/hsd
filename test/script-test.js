@@ -11,8 +11,6 @@ const Stack = require('../lib/script/stack');
 const Opcode = require('../lib/script/opcode');
 const TX = require('../lib/primitives/tx');
 const consensus = require('../lib/protocol/consensus');
-const {fromFloat} = require('../lib/utils/fixed');
-const {opcodes} = Script;
 
 const scripts = require('./data/script-tests.json');
 
@@ -248,7 +246,6 @@ describe('Script', function() {
   for (const data of scripts) {
     const {
       comments,
-      script,
       address,
       value,
       witness,

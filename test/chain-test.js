@@ -121,68 +121,6 @@ describe('Chain', function() {
     miner.addAddress(wallet.getReceive());
   });
 
-/*
-  it('should mine 200 blocks', async () => {
-    for (let i = 0; i < 5; i++) {
-      const block = await cpu.mineBlock();
-      assert(block);
-      assert(await chain.add(block));
-    }
-
-    assert.strictEqual(chain.height, 5);
-  });
-
-  it('should open a bid', async () => {
-    const job = await cpu.createJob();
-    const mtx = await wallet.bidName('abcd', 1000, 2000);
-
-    job.addTX(mtx.toTX(), mtx.view);
-    job.refresh();
-
-    const block = await job.mineAsync();
-
-    assert(await chain.add(block));
-  });
-
-  it('should reveal a bid', async () => {
-    const job = await cpu.createJob();
-    const mtx = await wallet.revealName('abcd');
-
-    job.addTX(mtx.toTX(), mtx.view);
-    job.refresh();
-
-    const block = await job.mineAsync();
-
-    assert(await chain.add(block));
-  });
-
-  it('should register a name', async () => {
-    const job = await cpu.createJob();
-    const mtx = await wallet.registerName('abcd', Buffer.from([1,2,3]));
-
-    job.addTX(mtx.toTX(), mtx.view);
-    job.refresh();
-
-    const block = await job.mineAsync();
-
-    assert(await chain.add(block));
-  });
-
-  it('should register again and update merkle trie', async () => {
-    const job = await cpu.createJob();
-    const mtx = await wallet.registerName('abcd', Buffer.from([1,2,4]));
-
-    job.addTX(mtx.toTX(), mtx.view);
-    job.refresh();
-
-    const block = await job.mineAsync();
-
-    assert(await chain.add(block));
-  });
-
-  return;
-*/
-
   it('should mine 200 blocks', async () => {
     for (let i = 0; i < 200; i++) {
       const block = await cpu.mineBlock();

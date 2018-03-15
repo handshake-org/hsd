@@ -5,7 +5,6 @@
 
 const assert = require('./util/assert');
 const Address = require('../lib/primitives/address');
-const Script = require('../lib/script/script');
 
 describe('Address', function() {
   it('should match mainnet p2pkh address', () => {
