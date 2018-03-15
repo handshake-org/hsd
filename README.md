@@ -5,10 +5,10 @@
 ## Install
 
 ```
-$ git clone git://github.com/handshakecompany/hsk.git
+$ git clone git@github.com/handshakecompany/hsk.git
 $ cd hsk
 $ npm install
-$ ./bin/hsk
+$ ./bin/hskd
 ```
 
 See the [Beginner's Guide][guide] for more in-depth installation instructions.
