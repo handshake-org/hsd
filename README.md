@@ -5,8 +5,8 @@
 ## Install
 
 ```
-$ git clone git@github.com/handshakecompany/hsk.git
-$ cd hsk
+$ git clone git@github.com:handshakecompany/hskd.git
+$ cd hskd
 $ npm install
 $ ./bin/hskd
 ```
