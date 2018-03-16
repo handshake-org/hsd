@@ -53,10 +53,15 @@ describe('Auction', function() {
 
   describe('Vickrey Auction', function() {
     const node = createNode();
-    const {chain, miner, cpu} = node;
+    const orig = createNode();
+    const comp = createNode();
+
+    const {chain, competitor, miner, cpu} = node;
 
     const winner = node.wallet();
     const runnerup = node.wallet();
+
+    let snapshot = null;
 
     it('should open chain and miner', async () => {
       await chain.open();
@@ -159,6 +164,104 @@ describe('Auction', function() {
         assert(block);
         assert(await chain.add(block));
       }
+
+      snapshot = {
+        trieRoot: chain.tip.trieRoot,
+        auction: await chain.cdb.getAuctionByName('abcd')
+      };
+    });
+
+    it('should open other nodes', async () => {
+      await orig.chain.open();
+      await orig.miner.open();
+      await comp.chain.open();
+      await comp.miner.open();
+    });
+
+    it('should clone the chain', async () => {
+      for (let i = 1; i <= chain.height; i++) {
+        const block = await chain.getBlock(i);
+        assert(block);
+        assert(await orig.chain.add(block));
+      }
+    });
+
+    it('should mine a competing chain', async () => {
+      while (comp.chain.tip.chainwork.lte(chain.tip.chainwork)) {
+        const block = await comp.cpu.mineBlock();
+        assert(block);
+        assert(await comp.chain.add(block));
+      }
+    });
+
+    it('should reorg the auction', async () => {
+      let reorgd = false;
+
+      chain.once('reorganize', () => reorgd = true);
+
+/*
+      chain.on('disconnect', async () => {
+        const auction = await chain.cdb.getAuctionByName('abcd');
+        if (auction)
+          console.log(auction.format(chain.height, network));
+      });
+*/
+
+      for (let i = 1; i <= comp.chain.height; i++) {
+        assert(!reorgd);
+        const block = await comp.chain.getBlock(i);
+        assert(block);
+        assert(await chain.add(block));
+      }
+
+      assert(reorgd);
+
+      const auction = await chain.cdb.getAuctionByName('abcd');
+      assert(!auction);
+    });
+
+    it('should reorg back to the correct state', async () => {
+      let reorgd = false;
+
+      chain.once('reorganize', () => reorgd = true);
+
+/*
+      chain.on('connect', async () => {
+        const auction = await chain.cdb.getAuctionByName('abcd');
+        if (auction)
+          console.log(auction.format(chain.height, network));
+      });
+*/
+
+      while (!reorgd) {
+        const block = await orig.cpu.mineBlock();
+        assert(block);
+        assert(await orig.chain.add(block));
+        assert(await chain.add(block));
+      }
+    });
+
+    it('should close other nodes', async () => {
+      await orig.miner.close();
+      await orig.chain.close();
+      await comp.miner.close();
+      await comp.chain.close();
+    });
+
+    it('should mine 10 blocks', async () => {
+      for (let i = 0; i < 10; i++) {
+        const block = await cpu.mineBlock();
+        assert(block);
+        assert(await chain.add(block));
+      }
+    });
+
+    it('should have the same DB state', async () => {
+      const auction = await chain.cdb.getAuctionByName('abcd');
+      assert(auction);
+
+      assert.deepStrictEqual(auction, snapshot.auction);
+      assert.strictEqual(chain.tip.trieRoot, snapshot.trieRoot);
     });
 
     it('should cleanup', async () => {
