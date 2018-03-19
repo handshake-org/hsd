@@ -83,10 +83,10 @@ describe('Auction', function() {
     });
 
     it('should open a bid', async () => {
-      const job = await cpu.createJob();
       const mtx1 = await winner.createBid('abcd', 1000, 2000);
       const mtx2 = await runnerup.createBid('abcd', 500, 2000);
 
+      const job = await cpu.createJob();
       job.addTX(mtx1.toTX(), mtx1.view);
       job.addTX(mtx2.toTX(), mtx2.view);
       job.refresh();
@@ -105,10 +105,10 @@ describe('Auction', function() {
     });
 
     it('should reveal a bid', async () => {
-      const job = await cpu.createJob();
       const mtx1 = await winner.createReveal('abcd');
       const mtx2 = await runnerup.createReveal('abcd');
 
+      const job = await cpu.createJob();
       job.addTX(mtx1.toTX(), mtx1.view);
       job.addTX(mtx2.toTX(), mtx2.view);
       job.refresh();
@@ -127,9 +127,9 @@ describe('Auction', function() {
     });
 
     it('should register a name', async () => {
-      const job = await cpu.createJob();
       const mtx = await winner.createRegister('abcd', Buffer.from([1,2,3]));
 
+      const job = await cpu.createJob();
       job.addTX(mtx.toTX(), mtx.view);
       job.refresh();
 
@@ -147,9 +147,21 @@ describe('Auction', function() {
     });
 
     it('should register again and update trie', async () => {
-      const job = await cpu.createJob();
       const mtx = await winner.createUpdate('abcd', Buffer.from([1,2,4]));
 
+      const job = await cpu.createJob();
+      job.addTX(mtx.toTX(), mtx.view);
+      job.refresh();
+
+      const block = await job.mineAsync();
+
+      assert(await chain.add(block));
+    });
+
+    it('should redeem', async () => {
+      const mtx = await runnerup.createRedeem('abcd');
+
+      const job = await cpu.createJob();
       job.addTX(mtx.toTX(), mtx.view);
       job.refresh();
 

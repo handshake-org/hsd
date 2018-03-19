@@ -558,9 +558,6 @@ class MemWallet {
     const nonce = random.randomBytes(32);
     const blind = rules.blind(bid, nonce);
 
-    if (this.auctions.has(name))
-      return null;
-
     const output = new Output();
     output.address = this.createReceive().getAddress();
     output.value = value;
@@ -583,17 +580,17 @@ class MemWallet {
     const auction = this.auctions.get(name);
 
     if (!auction)
-      return null;
+      throw new Error('No auction found.');
 
     const raw = Buffer.from(name, 'ascii');
 
     if (auction.state !== types.BID)
-      return null;
+      throw new Error('Bad auction state.');
 
     const bids = this.bids.get(name);
 
     if (!bids || bids.size === 0)
-      return null;
+      throw new Error('No bids found.');
 
     const mtx = new MTX();
 
@@ -625,10 +622,10 @@ class MemWallet {
     const auction = this.auctions.get(name);
 
     if (!auction)
-      return null;
+      throw new Error('No auction found.');
 
     if (auction.state !== types.REVEAL)
-      return null;
+      throw new Error('Bad auction state.');
 
     const [value, winner] = this.getWinningReveal(name);
 
@@ -665,14 +662,14 @@ class MemWallet {
     const auction = this.auctions.get(name);
 
     if (!auction)
-      return null;
+      throw new Error('No auction found.');
 
     if (auction.state === types.REVEAL)
       return this.createRegister(name, data, options);
 
     if (auction.state !== types.REGISTER
         && auction.state !== types.UPDATE) {
-      return null;
+      throw new Error('Bad auction state.');
     }
 
     const raw = Buffer.from(name, 'ascii');
@@ -698,17 +695,17 @@ class MemWallet {
     const auction = this.auctions.get(name);
 
     if (!auction)
-      return null;
+      throw new Error('No auction found.');
 
     const raw = Buffer.from(name, 'ascii');
 
-    if (auction.state !== types.BID)
-      return null;
+    if (auction.state !== types.REVEAL)
+      throw new Error('Bad auction state.');
 
     const reveals = this.reveals.get(name);
 
     if (!reveals || reveals.size === 0)
-      return null;
+      throw new Error('No reveals found.');
 
     const [, winner] = this.getWinningReveal(name);
 
@@ -734,6 +731,9 @@ class MemWallet {
       mtx.outputs.push(output);
     }
 
+    if (mtx.outputs.length === 0)
+      throw new Error('No suitable reveals found.');
+
     return this._create(mtx, options);
   }
 
@@ -741,7 +741,7 @@ class MemWallet {
     const reveals = this.reveals.get(name);
 
     if (!reveals)
-      return false;
+      throw new Error('Could not find winner.');
 
     let highest = -1;
     let value = -1;
