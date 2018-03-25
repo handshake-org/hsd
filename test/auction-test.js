@@ -1,5 +1,6 @@
 /* eslint-env mocha */
 /* eslint prefer-arrow-callback: "off" */
+/* eslint no-return-assign: "off" */
 
 'use strict';
 
@@ -56,7 +57,7 @@ describe('Auction', function() {
     const orig = createNode();
     const comp = createNode();
 
-    const {chain, competitor, miner, cpu} = node;
+    const {chain, miner, cpu} = node;
 
     const winner = node.wallet();
     const runnerup = node.wallet();
