@@ -116,7 +116,7 @@ function createGenesisBlock(options) {
   });
 
   for (const name of names) {
-    const rawName = Buffer.from(name, 'ascii');
+    const rawName = Buffer.from(name.slice(0, -1), 'ascii');
 
     const claim = new Output();
     claim.value = 0;
@@ -141,37 +141,15 @@ function createGenesisBlock(options) {
     const data = root[name];
     assert(data.ttl);
     assert(data.ds);
-    assert(data.auth);
+    assert(data.glue);
 
     const json = {
       ttl: data.ttl,
       ds: data.ds,
-      ns: []
+      ns: data.glue
     };
 
-    // Experimenting with glue.
-    // Note: Is this worth it?
-    // Unbound doesn't seem to care
-    // about our special "pointer"
-    // names, but BIND seems to
-    // like valid glue records
-    // better.
-    for (const auth of data.auth) {
-      assert(auth.name);
-      assert(auth.inet4 || auth.inet6);
-
-      const ips = [];
-
-      if (auth.inet4)
-        ips.push(auth.inet4);
-
-      if (auth.inet6)
-        ips.push(auth.inet6);
-
-      json.ns.push(`${auth.name}@${ips.join(',')}`);
-    }
-
-    const rawName = Buffer.from(name, 'ascii');
+    const rawName = Buffer.from(name.slice(0, -1), 'ascii');
     const res = Resource.fromJSON(json);
 
     const prev = claimer.outpoint(i + 1);
