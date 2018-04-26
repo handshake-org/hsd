@@ -410,12 +410,8 @@ class MemWallet {
 
           auction.state = types.UPDATE;
           auction.owner = tx.outpoint(i);
-          auction.cold = tx.outpoint(i + 1);
           auction.data = covenant.items[1];
 
-          break;
-        }
-        case types.COLD: {
           break;
         }
         case types.UPDATE: {
@@ -444,7 +440,6 @@ class MemWallet {
 
           auction.state = types.TRANSFER;
           auction.owner = tx.outpoint(i);
-          auction.cold = tx.outpoint(i + 1);
 
           break;
         }
@@ -644,16 +639,9 @@ class MemWallet {
     output.covenant.items.push(data);
     output.covenant.items.push(this.getRenewalBlock());
 
-    const cold = new Output();
-    cold.address = coin.address;
-    cold.value = 0;
-    cold.covenant.type = types.COLD;
-    cold.covenant.items.push(raw);
-
     const mtx = new MTX();
     mtx.addOutpoint(winner);
     mtx.outputs.push(output);
-    mtx.outputs.push(cold);
 
     return this._create(mtx, options);
   }
@@ -848,7 +836,6 @@ class Auction {
   constructor() {
     this.name = '';
     this.owner = new Outpoint();
-    this.cold = new Outpoint();
     this.state = 0;
     this.height = -1;
     this.data = Buffer.alloc(0);

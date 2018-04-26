@@ -124,25 +124,20 @@ function createGenesisBlock(options) {
     claim.covenant.type = types.CLAIM;
     claim.covenant.items.push(rawName);
     claimer.outputs.push(claim);
-
-    const dust = new Output();
-    dust.value = 0;
-    dust.address = claimant;
-    claimer.outputs.push(dust);
   }
 
   claimer.refresh();
 
-  const updater = new TX({
+  const registry = new TX({
     version: 0,
     inputs: [],
     outputs: [],
     locktime: 0
   });
 
-  let i = 1;
+  for (let i = 0; i < names.length; i++) {
+    const name = names[i];
 
-  for (const name of names) {
     const data = root[name];
     assert(data.ttl);
     assert(data.ds);
@@ -179,11 +174,8 @@ function createGenesisBlock(options) {
     const rawName = Buffer.from(name, 'ascii');
     const res = Resource.fromJSON(json);
 
-    const claimPrev = claimer.outpoint(i);
-    const dustPrev = claimer.outpoint(i + 1);
-
-    const claim = Input.fromOutpoint(claimPrev);
-    const dust = Input.fromOutpoint(dustPrev);
+    const prev = claimer.outpoint(i + 1);
+    const claim = Input.fromOutpoint(prev);
 
     const update = new Output();
     update.value = 0;
@@ -193,25 +185,14 @@ function createGenesisBlock(options) {
     update.covenant.items.push(res.toRaw());
     update.covenant.items.push(consensus.ZERO_HASH);
 
-    const cold = new Output();
-    cold.value = 0;
-    cold.address = foundation;
-    cold.covenant.type = types.COLD;
-    cold.covenant.items.push(rawName);
-
-    updater.inputs.push(claim);
-    updater.inputs.push(dust);
-
-    updater.outputs.push(update);
-    updater.outputs.push(cold);
-
-    i += 2;
+    registry.inputs.push(claim);
+    registry.outputs.push(update);
   }
 
-  updater.refresh();
+  registry.refresh();
 
   block.txs.push(claimer);
-  block.txs.push(updater);
+  block.txs.push(registry);
 
   block.merkleRoot = block.createMerkleRoot('hex');
   block.witnessRoot = block.createWitnessRoot('hex');
