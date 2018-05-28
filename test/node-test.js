@@ -73,7 +73,7 @@ async function mineCSV(fund) {
   const spend = new MTX();
 
   spend.addOutput({
-    address: Address.fromHash(csvScript.blake256()),
+    address: Address.fromHash(csvScript.sha3()),
     value: 10 * consensus.COIN
   });
 
@@ -437,7 +437,7 @@ describe('Node', function() {
         height: node.chain.tip.height + 1,
         previousblockhash: node.chain.tip.hash,
         merkleroot: json.result.merkleroot,
-        trieroot: node.chain.tip.trieRoot,
+        treeroot: node.chain.tip.treeRoot,
         target:
           '7fffff0000000000000000000000000000000000000000000000000000000000',
         cuckoo: { bits: 8, size: 4, ease: 50 },

@@ -20,6 +20,9 @@ const Coin = require('../../lib/primitives/coin');
 const consensus = require('../../lib/protocol/consensus');
 const {types} = rules;
 
+const EMPTY = Buffer.alloc(0);
+const ZERO_HASH160 = Buffer.alloc(20, 0x00);
+
 class MemWallet {
   constructor(options) {
     this.network = Network.primary;
@@ -257,17 +260,21 @@ class MemWallet {
   }
 
   addBid(bb) {
-    if (!this.bids.has(bb.name))
-      this.bids.set(bb.name, new Map());
+    const key = bb.nameHash.toString('hex');
 
-    this.bids.get(bb.name).set(bb.prevout.toKey(), bb);
+    if (!this.bids.has(key))
+      this.bids.set(key, new Map());
+
+    this.bids.get(key).set(bb.prevout.toKey(), bb);
   }
 
   addReveal(brv) {
-    if (!this.reveals.has(brv.name))
-      this.reveals.set(brv.name, new Map());
+    const key = brv.nameHash.toString('hex');
 
-    this.reveals.get(brv.name).set(brv.prevout.toKey(), brv);
+    if (!this.reveals.has(key))
+      this.reveals.set(key, new Map());
+
+    this.reveals.get(key).set(brv.prevout.toKey(), brv);
   }
 
   addValue(blind, bv) {
@@ -314,16 +321,19 @@ class MemWallet {
           if (!path)
             break;
 
-          const name = covenant.string(0);
+          const nameHash = covenant.items[0];
+          const key = nameHash.toString('hex');
+          const name = covenant.items[1];
 
-          if (!this.auction.has(name)) {
+          if (!this.auction.has(key)) {
             const auction = new Auction();
             auction.name = name;
+            auction.nameHash = nameHash;
             auction.owner = outpoint;
             auction.state = types.CLAIM;
             auction.height = height;
 
-            this.auctions.set(name, auction);
+            this.auctions.set(key, auction);
           }
 
           break;
@@ -332,36 +342,42 @@ class MemWallet {
           if (!path)
             break;
 
-          const name = covenant.string(0);
+          const nameHash = covenant.items[0];
+          const key = nameHash.toString('hex');
+          const name = covenant.items[1];
 
-          if (!this.auctions.has(name)) {
+          if (!this.auctions.has(key)) {
             const auction = new Auction();
             auction.name = name;
+            auction.nameHash = nameHash;
             auction.owner = outpoint;
             auction.state = types.BID;
             auction.height = height;
 
-            this.auctions.set(name, auction);
+            this.auctions.set(key, auction);
           }
 
           const bb = new BlindBid();
           bb.name = name;
+          bb.nameHash = nameHash;
           bb.prevout = outpoint;
           bb.lockup = output.value;
-          bb.blind = covenant.items[1];
+          bb.blind = covenant.items[2];
           this.addBid(bb);
 
           break;
         }
         case types.REVEAL: {
-          const name = covenant.string(0);
-          const auction = this.auctions.get(name);
+          const nameHash = covenant.items[0];
+          const key = nameHash.toString('hex');
+          const auction = this.auctions.get(key);
 
           if (!auction)
             break;
 
           const brv = new BidReveal();
-          brv.name = name;
+          brv.name = auction.name;
+          brv.nameHash = nameHash;
           brv.prevout = outpoint;
           brv.value = output.value;
           brv.height = height;
@@ -387,8 +403,9 @@ class MemWallet {
           if (!path)
             break;
 
-          const name = covenant.string(0);
-          const auction = this.auctions.get(name);
+          const nameHash = covenant.items[0];
+          const key = nameHash.toString('hex');
+          const auction = this.auctions.get(key);
 
           if (!auction)
             break;
@@ -402,8 +419,9 @@ class MemWallet {
           if (!path)
             break;
 
-          const name = covenant.string(0);
-          const auction = this.auctions.get(name);
+          const nameHash = covenant.items[0];
+          const key = nameHash.toString('hex');
+          const auction = this.auctions.get(key);
 
           if (!auction)
             break;
@@ -418,8 +436,9 @@ class MemWallet {
           if (!path)
             break;
 
-          const name = covenant.string(0);
-          const auction = this.auctions.get(name);
+          const nameHash = covenant.items[0];
+          const key = nameHash.toString('hex');
+          const auction = this.auctions.get(key);
 
           if (!auction)
             break;
@@ -432,8 +451,9 @@ class MemWallet {
           break;
         }
         case types.TRANSFER: {
-          const name = covenant.string(0);
-          const auction = this.auctions.get(name);
+          const nameHash = covenant.items[0];
+          const key = nameHash.toString('hex');
+          const auction = this.auctions.get(key);
 
           if (!auction)
             break;
@@ -447,8 +467,9 @@ class MemWallet {
           if (!path)
             break;
 
-          const name = covenant.string(0);
-          const auction = this.auctions.get(name);
+          const nameHash = covenant.items[0];
+          const key = nameHash.toString('hex');
+          const auction = this.auctions.get(key);
 
           if (!auction)
             break;
@@ -549,7 +570,8 @@ class MemWallet {
   }
 
   async createBid(name, bid, value, options) {
-    const raw = Buffer.from(name, 'ascii');
+    const rawName = Buffer.from(name, 'ascii');
+    const nameHash = rules.hashName(rawName);
     const nonce = random.randomBytes(32);
     const blind = rules.blind(bid, nonce);
 
@@ -557,7 +579,8 @@ class MemWallet {
     output.address = this.createReceive().getAddress();
     output.value = value;
     output.covenant.type = types.BID;
-    output.covenant.items.push(raw);
+    output.covenant.items.push(nameHash);
+    output.covenant.items.push(rawName);
     output.covenant.items.push(blind);
 
     const bv = new BlindValue();
@@ -572,17 +595,18 @@ class MemWallet {
   }
 
   async createReveal(name, options) {
-    const auction = this.auctions.get(name);
+    const rawName = Buffer.from(name, 'ascii');
+    const nameHash = rules.hashName(rawName);
+    const key = nameHash.toString('hex');
+    const auction = this.auctions.get(key);
 
     if (!auction)
       throw new Error('No auction found.');
 
-    const raw = Buffer.from(name, 'ascii');
-
     if (auction.state !== types.BID)
       throw new Error('Bad auction state.');
 
-    const bids = this.bids.get(name);
+    const bids = this.bids.get(key);
 
     if (!bids || bids.size === 0)
       throw new Error('No bids found.');
@@ -594,7 +618,7 @@ class MemWallet {
       assert(coin);
 
       // XXX Put on blindbid object?
-      const blind = coin.covenant.items[1];
+      const blind = coin.covenant.items[2];
 
       const bv = this.values.get(blind.toString('hex'));
       assert(bv);
@@ -603,7 +627,7 @@ class MemWallet {
       output.address = coin.address;
       output.value = bv.value;
       output.covenant.type = types.REVEAL;
-      output.covenant.items.push(raw);
+      output.covenant.items.push(nameHash);
       output.covenant.items.push(bv.nonce);
 
       mtx.addOutpoint(bb.prevout);
@@ -614,7 +638,10 @@ class MemWallet {
   }
 
   async createRegister(name, data, options) {
-    const auction = this.auctions.get(name);
+    const rawName = Buffer.from(name, 'ascii');
+    const nameHash = rules.hashName(rawName);
+    const key = nameHash.toString('hex');
+    const auction = this.auctions.get(key);
 
     if (!auction)
       throw new Error('No auction found.');
@@ -622,20 +649,18 @@ class MemWallet {
     if (auction.state !== types.REVEAL)
       throw new Error('Bad auction state.');
 
-    const [value, winner] = this.getWinningReveal(name);
+    const [value, winner] = this.getWinningReveal(nameHash);
 
     const coin = this.getCoin(winner.toKey());
 
     if (!coin)
       return null;
 
-    const raw = Buffer.from(name, 'ascii');
-
     const output = new Output();
     output.address = coin.address;
     output.value = value;
     output.covenant.type = types.REGISTER;
-    output.covenant.items.push(raw);
+    output.covenant.items.push(nameHash);
     output.covenant.items.push(data);
     output.covenant.items.push(this.getRenewalBlock());
 
@@ -647,7 +672,10 @@ class MemWallet {
   }
 
   async createUpdate(name, data, options) {
-    const auction = this.auctions.get(name);
+    const rawName = Buffer.from(name, 'ascii');
+    const nameHash = rules.hashName(rawName);
+    const key = nameHash.toString('hex');
+    const auction = this.auctions.get(key);
 
     if (!auction)
       throw new Error('No auction found.');
@@ -660,8 +688,6 @@ class MemWallet {
       throw new Error('Bad auction state.');
     }
 
-    const raw = Buffer.from(name, 'ascii');
-
     const output = new Output();
     const coin = this.getCoin(auction.owner.toKey());
     assert(coin);
@@ -669,7 +695,7 @@ class MemWallet {
     output.address = coin.address;
     output.value = coin.value;
     output.covenant.type = types.UPDATE;
-    output.covenant.items.push(raw);
+    output.covenant.items.push(nameHash);
     output.covenant.items.push(data);
 
     const mtx = new MTX();
@@ -680,22 +706,23 @@ class MemWallet {
   }
 
   async createRedeem(name, options) {
-    const auction = this.auctions.get(name);
+    const rawName = Buffer.from(name, 'ascii');
+    const nameHash = rules.hashName(rawName);
+    const key = nameHash.toString('hex');
+    const auction = this.auctions.get(key);
 
     if (!auction)
       throw new Error('No auction found.');
 
-    const raw = Buffer.from(name, 'ascii');
-
     if (auction.state !== types.REVEAL)
       throw new Error('Bad auction state.');
 
-    const reveals = this.reveals.get(name);
+    const reveals = this.reveals.get(key);
 
     if (!reveals || reveals.size === 0)
       throw new Error('No reveals found.');
 
-    const [, winner] = this.getWinningReveal(name);
+    const [, winner] = this.getWinningReveal(nameHash);
 
     const mtx = new MTX();
 
@@ -713,7 +740,7 @@ class MemWallet {
       output.address = coin.address;
       output.value = coin.value;
       output.covenant.type = types.REDEEM;
-      output.covenant.items.push(raw);
+      output.covenant.items.push(nameHash);
 
       mtx.addOutpoint(brv.prevout);
       mtx.outputs.push(output);
@@ -725,8 +752,9 @@ class MemWallet {
     return this._create(mtx, options);
   }
 
-  getWinningReveal(name) {
-    const reveals = this.reveals.get(name);
+  getWinningReveal(nameHash) {
+    const key = nameHash.toString('hex');
+    const reveals = this.reveals.get(key);
 
     if (!reveals)
       throw new Error('Could not find winner.');
@@ -834,7 +862,8 @@ class Path {
 
 class Auction {
   constructor() {
-    this.name = '';
+    this.name = EMPTY;
+    this.nameHash = ZERO_HASH160;
     this.owner = new Outpoint();
     this.state = 0;
     this.height = -1;
@@ -844,7 +873,8 @@ class Auction {
 
 class BlindBid {
   constructor() {
-    this.name = '';
+    this.name = EMPTY;
+    this.nameHash = ZERO_HASH160;
     this.prevout = new Outpoint();
     this.lockup = 0;
     this.blind = consensus.ZERO_HASH;
@@ -860,7 +890,8 @@ class BlindValue {
 
 class BidReveal {
   constructor() {
-    this.name = '';
+    this.name = EMPTY;
+    this.nameHash = ZERO_HASH160;
     this.prevout = new Outpoint();
     this.value = 0;
     this.height = -1;

@@ -83,7 +83,7 @@ async function mineCSV(fund) {
   const spend = new MTX();
 
   spend.addOutput({
-    address: Address.fromHash(csvScript.blake256()),
+    address: Address.fromHash(csvScript.sha3()),
     value: 10000
   });
 
@@ -367,7 +367,7 @@ describe('Chain', function() {
     const spend = new MTX();
 
     spend.addOutput({
-      address: Address.fromHash(csvScript2.blake256()),
+      address: Address.fromHash(csvScript2.sha3()),
       value: 10000
     });
 
@@ -390,7 +390,7 @@ describe('Chain', function() {
     const spend = new MTX();
 
     spend.addOutput({
-      address: Address.fromHash(csvScript.blake256()),
+      address: Address.fromHash(csvScript.sha3()),
       value: 1 * 1e8
     });
 
@@ -422,7 +422,7 @@ describe('Chain', function() {
     const spend = new MTX();
 
     spend.addOutput({
-      address: Address.fromHash(csvScript2.blake256()),
+      address: Address.fromHash(csvScript2.sha3()),
       value: 1 * 1e8
     });
 
@@ -682,7 +682,7 @@ describe('Chain', function() {
 
     redeem.compile();
 
-    const addr = Address.fromScripthash(redeem.blake256());
+    const addr = Address.fromScripthash(redeem.sha3());
 
     for (let i = 0; i < 111; i++) {
       const block = await cpu.mineBlock();

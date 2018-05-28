@@ -208,7 +208,7 @@ describe('HTTP', function() {
       height: 1,
       previousblockhash: network.genesis.hash,
       merkleroot: json.merkleroot,
-      trieroot: network.genesis.trieRoot,
+      treeroot: network.genesis.treeRoot,
       target:
         '7fffff0000000000000000000000000000000000000000000000000000000000',
       cuckoo: { bits: 8, size: 4, ease: 50 },

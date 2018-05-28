@@ -84,8 +84,9 @@ describe('Auction', function() {
     });
 
     it('should open a bid', async () => {
-      const mtx1 = await winner.createBid('abcd', 1000, 2000);
-      const mtx2 = await runnerup.createBid('abcd', 500, 2000);
+      // water & fire have a quick rollout.
+      const mtx1 = await winner.createBid('water', 1000, 2000);
+      const mtx2 = await runnerup.createBid('water', 500, 2000);
 
       const job = await cpu.createJob();
       job.addTX(mtx1.toTX(), mtx1.view);
@@ -106,8 +107,8 @@ describe('Auction', function() {
     });
 
     it('should reveal a bid', async () => {
-      const mtx1 = await winner.createReveal('abcd');
-      const mtx2 = await runnerup.createReveal('abcd');
+      const mtx1 = await winner.createReveal('water');
+      const mtx2 = await runnerup.createReveal('water');
 
       const job = await cpu.createJob();
       job.addTX(mtx1.toTX(), mtx1.view);
@@ -128,7 +129,7 @@ describe('Auction', function() {
     });
 
     it('should register a name', async () => {
-      const mtx = await winner.createRegister('abcd', Buffer.from([1,2,3]));
+      const mtx = await winner.createRegister('water', Buffer.from([1,2,3]));
 
       const job = await cpu.createJob();
       job.addTX(mtx.toTX(), mtx.view);
@@ -147,8 +148,8 @@ describe('Auction', function() {
       }
     });
 
-    it('should register again and update trie', async () => {
-      const mtx = await winner.createUpdate('abcd', Buffer.from([1,2,4]));
+    it('should register again and update tree', async () => {
+      const mtx = await winner.createUpdate('water', Buffer.from([1,2,4]));
 
       const job = await cpu.createJob();
       job.addTX(mtx.toTX(), mtx.view);
@@ -160,7 +161,7 @@ describe('Auction', function() {
     });
 
     it('should redeem', async () => {
-      const mtx = await runnerup.createRedeem('abcd');
+      const mtx = await runnerup.createRedeem('water');
 
       const job = await cpu.createJob();
       job.addTX(mtx.toTX(), mtx.view);
@@ -179,8 +180,8 @@ describe('Auction', function() {
       }
 
       snapshot = {
-        trieRoot: chain.tip.trieRoot,
-        auction: await chain.cdb.getAuctionByName('abcd')
+        treeRoot: chain.tip.treeRoot,
+        auction: await chain.cdb.getAuctionByName('water')
       };
     });
 
@@ -214,7 +215,7 @@ describe('Auction', function() {
 
 /*
       chain.on('disconnect', async () => {
-        const auction = await chain.cdb.getAuctionByName('abcd');
+        const auction = await chain.cdb.getAuctionByName('water');
         if (auction)
           console.log(auction.format(chain.height, network));
       });
@@ -229,7 +230,7 @@ describe('Auction', function() {
 
       assert(reorgd);
 
-      const auction = await chain.cdb.getAuctionByName('abcd');
+      const auction = await chain.cdb.getAuctionByName('water');
       assert(!auction);
     });
 
@@ -240,7 +241,7 @@ describe('Auction', function() {
 
 /*
       chain.on('connect', async () => {
-        const auction = await chain.cdb.getAuctionByName('abcd');
+        const auction = await chain.cdb.getAuctionByName('water');
         if (auction)
           console.log(auction.format(chain.height, network));
       });
@@ -270,11 +271,11 @@ describe('Auction', function() {
     });
 
     it('should have the same DB state', async () => {
-      const auction = await chain.cdb.getAuctionByName('abcd');
+      const auction = await chain.cdb.getAuctionByName('water');
       assert(auction);
 
       assert.deepStrictEqual(auction, snapshot.auction);
-      assert.strictEqual(chain.tip.trieRoot, snapshot.trieRoot);
+      assert.strictEqual(chain.tip.treeRoot, snapshot.treeRoot);
     });
 
     it('should cleanup', async () => {

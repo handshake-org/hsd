@@ -17,7 +17,6 @@ const util = require('../lib/utils/util');
 const rules = require('../lib/covenants/rules');
 const Resource = require('../lib/dns/resource');
 const root = require('../etc/root.json');
-const {EMPTY_ROOT} = require('btrie/lib/common');
 const {types} = rules;
 
 const networks = {
@@ -89,7 +88,7 @@ function createGenesisBlock(options) {
     prevBlock: consensus.NULL_HASH,
     merkleRoot: tx.hash('hex'),
     witnessRoot: tx.witnessHash('hex'),
-    trieRoot: EMPTY_ROOT.toString('hex'),
+    treeRoot: consensus.NULL_HASH,
     time: options.time,
     bits: options.bits,
     nonce: nonce,
@@ -117,11 +116,13 @@ function createGenesisBlock(options) {
 
   for (const name of names) {
     const rawName = Buffer.from(name.slice(0, -1), 'ascii');
+    const nameHash = rules.hashName(rawName);
 
     const claim = new Output();
     claim.value = 0;
     claim.address = claimant;
     claim.covenant.type = types.CLAIM;
+    claim.covenant.items.push(nameHash);
     claim.covenant.items.push(rawName);
     claimer.outputs.push(claim);
   }
@@ -150,6 +151,7 @@ function createGenesisBlock(options) {
     };
 
     const rawName = Buffer.from(name.slice(0, -1), 'ascii');
+    const nameHash = rules.hashName(rawName);
     const res = Resource.fromJSON(json);
 
     const prev = claimer.outpoint(i + 1);
@@ -159,7 +161,7 @@ function createGenesisBlock(options) {
     update.value = 0;
     update.address = claimant;
     update.covenant.type = types.REGISTER;
-    update.covenant.items.push(rawName);
+    update.covenant.items.push(nameHash);
     update.covenant.items.push(res.toRaw());
     update.covenant.items.push(consensus.ZERO_HASH);
 
@@ -217,8 +219,8 @@ function formatJS(name, block) {
   out += `    '${block.merkleRoot}',\n`;
   out += `  witnessRoot:\n`;
   out += `    '${block.witnessRoot}',\n`;
-  out += `  trieRoot:\n`;
-  out += `    '${block.trieRoot}',\n`;
+  out += `  treeRoot:\n`;
+  out += `    '${block.treeRoot}',\n`;
   out += `  time: ${block.time},\n`;
   out += `  bits: 0x${util.hex32(block.bits)},\n`;
   out += `  nonce: Buffer.from('${block.nonce.toString('hex')}', 'hex'),\n`;
