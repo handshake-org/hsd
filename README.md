@@ -41,7 +41,7 @@ all code is your original work. `</legalese>`
 
 See LICENSE for more info.
 
-[guide]: https://github.com/handshake-org/hsk/blob/master/docs/Beginner's-Guide.md
+[guide]: https://github.com/handshake-org/hskd/blob/master/docs/Beginner's-Guide.md
 [freenode]: https://freenode.net/
 [irc]: irc://irc.freenode.net/handshake
-[changelog]: https://github.com/handshake-org/hsk/blob/master/CHANGELOG.md
+[changelog]: https://github.com/handshake-org/hskd/blob/master/CHANGELOG.md
