@@ -1,6 +1,6 @@
 # HSKD
 
-**HSK** is an implementation of the Handshake Protocol.
+**HSKD** is an implementation of the Handshake Protocol.
 
 ## Install
 
@@ -25,8 +25,8 @@ Join us on [freenode][freenode] in the [#handshake][irc] channel.
 
 ## Disclaimer
 
-HSK does not guarantee you against theft or lost funds due to bugs, mishaps, or
-your own incompetence. You and you alone are responsible for securing your
+HSKD does not guarantee you against theft or lost funds due to bugs, mishaps,
+or your own incompetence. You and you alone are responsible for securing your
 money.
 
 ## Contribution and License Agreement
