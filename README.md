@@ -1,6 +1,6 @@
 # HSKD
 
-**HSKD** is an implementation of the Handshake Protocol.
+**HSKD** is an implementation of the [Handshake][handshake] Protocol.
 
 ## Install
 
@@ -41,6 +41,7 @@ all code is your original work. `</legalese>`
 
 See LICENSE for more info.
 
+[handshake]: https://handshake.org/
 [guide]: https://github.com/handshake-org/hskd/blob/master/docs/Beginner's-Guide.md
 [freenode]: https://freenode.net/
 [irc]: irc://irc.freenode.net/handshake
