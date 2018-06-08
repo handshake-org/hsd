@@ -1,7 +1,7 @@
 /*!
  * memwallet.js - in-memory wallet object for hsk
  * Copyright (c) 2014-2016, Christopher Jeffrey (MIT License).
- * https://github.com/handshakecompany/handshake
+ * https://github.com/handshake-org/hskd
  */
 
 'use strict';

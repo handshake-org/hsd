@@ -4,10 +4,10 @@
   "private": true,
   "description": "Cryptocurrency bike-shed",
   "license": "MIT",
-  "repository": "git://github.com/handshakecompany/hskd.git",
-  "homepage": "https://github.com/handshakecompany/hskd",
+  "repository": "git://github.com/handshake-org/hskd.git",
+  "homepage": "https://github.com/handshake-org/hskd",
   "bugs": {
-    "url": "https://github.com/handshakecompany/hskd/issues"
+    "url": "https://github.com/handshake-org/hskd/issues"
   },
   "author": "Christopher Jeffrey <chjjeffrey@gmail.com>",
   "keywords": [

@@ -5,10 +5,10 @@
 ## Install
 
 ```
-$ git clone git://github.com/handshakecompany/hsk.git
-$ cd hsk
+$ git clone git://github.com/handshake-org/hskd.git
+$ cd hskd
 $ npm install
-$ ./bin/hsk
+$ ./bin/hskd
 ```
 
 See the [Beginner's Guide][guide] for more in-depth installation instructions.
@@ -41,7 +41,7 @@ all code is your original work. `</legalese>`
 
 See LICENSE for more info.
 
-[guide]: https://github.com/handshakecompany/hsk/blob/master/docs/Beginner's-Guide.md
+[guide]: https://github.com/handshake-org/hsk/blob/master/docs/Beginner's-Guide.md
 [freenode]: https://freenode.net/
 [irc]: irc://irc.freenode.net/handshake
-[changelog]: https://github.com/handshakecompany/hsk/blob/master/CHANGELOG.md
+[changelog]: https://github.com/handshake-org/hsk/blob/master/CHANGELOG.md
