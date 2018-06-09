@@ -11,6 +11,11 @@ const Miner = require('../lib/mining/miner');
 const MemWallet = require('./util/memwallet');
 const Network = require('../lib/protocol/network');
 
+// abc, 1abc - 6
+// 2abce - 5
+// 3abcd - 4
+const NAME1 = '3abcd';
+
 const network = Network.get('regtest');
 
 const workers = new WorkerPool({
@@ -84,9 +89,8 @@ describe('Auction', function() {
     });
 
     it('should open a bid', async () => {
-      // water & fire have a quick rollout.
-      const mtx1 = await winner.createBid('water', 1000, 2000);
-      const mtx2 = await runnerup.createBid('water', 500, 2000);
+      const mtx1 = await winner.createBid(NAME1, 1000, 2000);
+      const mtx2 = await runnerup.createBid(NAME1, 500, 2000);
 
       const job = await cpu.createJob();
       job.addTX(mtx1.toTX(), mtx1.view);
@@ -107,8 +111,8 @@ describe('Auction', function() {
     });
 
     it('should reveal a bid', async () => {
-      const mtx1 = await winner.createReveal('water');
-      const mtx2 = await runnerup.createReveal('water');
+      const mtx1 = await winner.createReveal(NAME1);
+      const mtx2 = await runnerup.createReveal(NAME1);
 
       const job = await cpu.createJob();
       job.addTX(mtx1.toTX(), mtx1.view);
@@ -129,7 +133,7 @@ describe('Auction', function() {
     });
 
     it('should register a name', async () => {
-      const mtx = await winner.createRegister('water', Buffer.from([1,2,3]));
+      const mtx = await winner.createRegister(NAME1, Buffer.from([1,2,3]));
 
       const job = await cpu.createJob();
       job.addTX(mtx.toTX(), mtx.view);
@@ -149,7 +153,7 @@ describe('Auction', function() {
     });
 
     it('should register again and update tree', async () => {
-      const mtx = await winner.createUpdate('water', Buffer.from([1,2,4]));
+      const mtx = await winner.createUpdate(NAME1, Buffer.from([1,2,4]));
 
       const job = await cpu.createJob();
       job.addTX(mtx.toTX(), mtx.view);
@@ -161,7 +165,7 @@ describe('Auction', function() {
     });
 
     it('should redeem', async () => {
-      const mtx = await runnerup.createRedeem('water');
+      const mtx = await runnerup.createRedeem(NAME1);
 
       const job = await cpu.createJob();
       job.addTX(mtx.toTX(), mtx.view);
@@ -181,7 +185,7 @@ describe('Auction', function() {
 
       snapshot = {
         treeRoot: chain.tip.treeRoot,
-        auction: await chain.cdb.getAuctionByName('water')
+        auction: await chain.cdb.getAuctionByName(NAME1)
       };
     });
 
@@ -215,7 +219,7 @@ describe('Auction', function() {
 
 /*
       chain.on('disconnect', async () => {
-        const auction = await chain.cdb.getAuctionByName('water');
+        const auction = await chain.cdb.getAuctionByName(NAME1);
         if (auction)
           console.log(auction.format(chain.height, network));
       });
@@ -230,7 +234,7 @@ describe('Auction', function() {
 
       assert(reorgd);
 
-      const auction = await chain.cdb.getAuctionByName('water');
+      const auction = await chain.cdb.getAuctionByName(NAME1);
       assert(!auction);
     });
 
@@ -241,7 +245,7 @@ describe('Auction', function() {
 
 /*
       chain.on('connect', async () => {
-        const auction = await chain.cdb.getAuctionByName('water');
+        const auction = await chain.cdb.getAuctionByName(NAME1);
         if (auction)
           console.log(auction.format(chain.height, network));
       });
@@ -271,7 +275,7 @@ describe('Auction', function() {
     });
 
     it('should have the same DB state', async () => {
-      const auction = await chain.cdb.getAuctionByName('water');
+      const auction = await chain.cdb.getAuctionByName(NAME1);
       assert(auction);
 
       assert.deepStrictEqual(auction, snapshot.auction);

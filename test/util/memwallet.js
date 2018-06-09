@@ -21,7 +21,6 @@ const consensus = require('../../lib/protocol/consensus');
 const {types} = rules;
 
 const EMPTY = Buffer.alloc(0);
-const ZERO_HASH160 = Buffer.alloc(20, 0x00);
 
 class MemWallet {
   constructor(options) {
@@ -863,7 +862,7 @@ class Path {
 class Auction {
   constructor() {
     this.name = EMPTY;
-    this.nameHash = ZERO_HASH160;
+    this.nameHash = consensus.ZERO_HASH;
     this.owner = new Outpoint();
     this.state = 0;
     this.height = -1;
@@ -874,7 +873,7 @@ class Auction {
 class BlindBid {
   constructor() {
     this.name = EMPTY;
-    this.nameHash = ZERO_HASH160;
+    this.nameHash = consensus.ZERO_HASH;
     this.prevout = new Outpoint();
     this.lockup = 0;
     this.blind = consensus.ZERO_HASH;
@@ -891,7 +890,7 @@ class BlindValue {
 class BidReveal {
   constructor() {
     this.name = EMPTY;
-    this.nameHash = ZERO_HASH160;
+    this.nameHash = consensus.ZERO_HASH;
     this.prevout = new Outpoint();
     this.value = 0;
     this.height = -1;
