@@ -2,11 +2,12 @@
 
 'use strict';
 
-process.title = 'hsk';
+process.title = 'hskd';
 
 if (process.argv.indexOf('--help') !== -1
     || process.argv.indexOf('-h') !== -1) {
-  console.error('See the bcoin wiki at: https://github.com/bcoin-org/bcoin/wiki.');
+  console.error('See the hskd wiki at:');
+  console.error('https://github.com/handshake-org/hskd/wiki.');
   process.exit(1);
   throw new Error('Could not exit.');
 }
