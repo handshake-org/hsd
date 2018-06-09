@@ -138,7 +138,7 @@ describe('Node', function() {
   });
 
   it('should have correct chain value', () => {
-    assert.strictEqual(chain.db.state.value, 1360006008840000);
+    assert.strictEqual(chain.db.state.value, 1360012004420000);
     // assert.strictEqual(chain.db.state.coin, 1569);
     assert.strictEqual(chain.db.state.tx, 23);
   });
@@ -147,8 +147,8 @@ describe('Node', function() {
     await new Promise(r => setTimeout(r, 100));
 
     const balance = await wallet.getBalance();
-    assert.strictEqual(balance.unconfirmed, 5500 * consensus.COIN);
-    assert.strictEqual(balance.confirmed, 5500 * consensus.COIN);
+    assert.strictEqual(balance.unconfirmed, 11000 * consensus.COIN);
+    assert.strictEqual(balance.confirmed, 11000 * consensus.COIN);
   });
 
   it('should handle a reorg', async () => {
@@ -175,7 +175,7 @@ describe('Node', function() {
   });
 
   it('should have correct chain value', () => {
-    assert.strictEqual(chain.db.state.value, 1360006508840000);
+    assert.strictEqual(chain.db.state.value, 1360013004420000);
     // assert.strictEqual(chain.db.state.coin, 1570);
     assert.strictEqual(chain.db.state.tx, 24);
   });
@@ -184,8 +184,8 @@ describe('Node', function() {
     await new Promise(r => setTimeout(r, 100));
 
     const balance = await wallet.getBalance();
-    assert.strictEqual(balance.unconfirmed, 11000 * consensus.COIN);
-    assert.strictEqual(balance.confirmed, 6000 * consensus.COIN);
+    assert.strictEqual(balance.unconfirmed, 22000 * consensus.COIN);
+    assert.strictEqual(balance.confirmed, 12000 * consensus.COIN);
   });
 
   it('should check main chain', async () => {
@@ -239,7 +239,7 @@ describe('Node', function() {
   });
 
   it('should have correct chain value', () => {
-    assert.strictEqual(chain.db.state.value, 1360007008840000);
+    assert.strictEqual(chain.db.state.value, 1360014004420000);
     // assert.strictEqual(chain.db.state.coin, 1572);
     assert.strictEqual(chain.db.state.tx, 26);
   });
@@ -263,8 +263,8 @@ describe('Node', function() {
     await new Promise(r => setTimeout(r, 100));
 
     const balance = await wallet.getBalance();
-    assert.strictEqual(balance.unconfirmed, 12500 * consensus.COIN);
-    assert.strictEqual(balance.confirmed, 7500 * consensus.COIN);
+    assert.strictEqual(balance.unconfirmed, 25000 * consensus.COIN);
+    assert.strictEqual(balance.confirmed, 15000 * consensus.COIN);
 
     assert((await wallet.receiveDepth()) >= 7);
     assert((await wallet.changeDepth()) >= 6);
@@ -406,7 +406,7 @@ describe('Node', function() {
 
   it('should rescan for transactions', async () => {
     await wdb.rescan(0);
-    assert.strictEqual((await wallet.getBalance()).confirmed, 9480000000);
+    assert.strictEqual((await wallet.getBalance()).confirmed, 18980000000);
   });
 
   it('should reset miner mempool', async () => {
@@ -438,6 +438,7 @@ describe('Node', function() {
         previousblockhash: node.chain.tip.hash,
         merkleroot: json.result.merkleroot,
         treeroot: node.chain.tip.treeRoot,
+        reservedroot: consensus.NULL_HASH,
         target:
           '7fffff0000000000000000000000000000000000000000000000000000000000',
         cuckoo: { bits: 8, size: 4, ease: 50 },
@@ -456,7 +457,7 @@ describe('Node', function() {
         submitold: false,
         coinbaseaux: { flags: '6d696e65642062792068736b64' },
         coinbasetxn: undefined,
-        coinbasevalue: 500000000,
+        coinbasevalue: 1000000000,
         transactions: []
       },
       error: null,
@@ -595,7 +596,7 @@ describe('Node', function() {
     // XXX
     // assert.strictEqual(result.transactions[0].hash, tx1.txid());
     // assert.strictEqual(result.transactions[1].hash, tx2.txid());
-    assert.strictEqual(result.coinbasevalue, 500 * consensus.COIN + fees);
+    assert.strictEqual(result.coinbasevalue, 1000 * consensus.COIN + fees);
   });
 
   it('should get raw transaction', async () => {
@@ -651,7 +652,7 @@ describe('Node', function() {
     // XXX
     // assert.strictEqual(result.transactions[0].hash, tx2.txid());
     // assert.strictEqual(result.transactions[1].hash, tx1.txid());
-    assert.strictEqual(result.coinbasevalue, 500 * consensus.COIN + fees);
+    assert.strictEqual(result.coinbasevalue, 1000 * consensus.COIN + fees);
   });
 
   it('should cleanup', async () => {

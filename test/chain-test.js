@@ -171,13 +171,13 @@ describe('Chain', function() {
   });
 
   it('should have correct chain value', () => {
-    assert.strictEqual(chain.db.state.value, 1360105508840000);
+    assert.strictEqual(chain.db.state.value, 1360211004420000);
     // assert.strictEqual(chain.db.state.coin, 1749);
     assert.strictEqual(chain.db.state.tx, 223);
   });
 
   it('should have correct wallet balance', async () => {
-    assert.strictEqual(wallet.balance, 105000000000);
+    assert.strictEqual(wallet.balance, 210000000000);
   });
 
   it('should handle a reorg', async () => {
@@ -203,13 +203,13 @@ describe('Chain', function() {
   });
 
   it('should have correct chain value', () => {
-    assert.strictEqual(chain.db.state.value, 1360106008840000);
+    assert.strictEqual(chain.db.state.value, 1360212004420000);
     // assert.strictEqual(chain.db.state.coin, 1750);
     assert.strictEqual(chain.db.state.tx, 224);
   });
 
   it('should have correct wallet balance', async () => {
-    assert.strictEqual(wallet.balance, 105500000000);
+    assert.strictEqual(wallet.balance, 211000000000);
   });
 
   it('should check main chain', async () => {
@@ -283,7 +283,7 @@ describe('Chain', function() {
   });
 
   it('should have correct chain value', () => {
-    assert.strictEqual(chain.db.state.value, 1360107008840000);
+    assert.strictEqual(chain.db.state.value, 1360214004420000);
     // assert.strictEqual(chain.db.state.coin, 1753);
     assert.strictEqual(chain.db.state.tx, 227);
   });
@@ -322,7 +322,7 @@ describe('Chain', function() {
   });
 
   it('should have correct wallet balance', async () => {
-    assert.strictEqual(wallet.balance, 107000000000);
+    assert.strictEqual(wallet.balance, 214000000000);
     assert.strictEqual(wallet.receiveDepth, 15);
     assert.strictEqual(wallet.changeDepth, 14);
     assert.strictEqual(wallet.txs, 226);
@@ -438,7 +438,7 @@ describe('Chain', function() {
   });
 
   it('should have correct wallet balance', async () => {
-    assert.strictEqual(wallet.balance, 108999980000);
+    assert.strictEqual(wallet.balance, 217999980000);
   });
 
   it('should fail to connect bad bits', async () => {

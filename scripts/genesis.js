@@ -89,6 +89,7 @@ function createGenesisBlock(options) {
     merkleRoot: tx.hash('hex'),
     witnessRoot: tx.witnessHash('hex'),
     treeRoot: consensus.NULL_HASH,
+    reservedRoot: consensus.NULL_HASH,
     time: options.time,
     bits: options.bits,
     nonce: nonce,
@@ -221,6 +222,8 @@ function formatJS(name, block) {
   out += `    '${block.witnessRoot}',\n`;
   out += `  treeRoot:\n`;
   out += `    '${block.treeRoot}',\n`;
+  out += `  reservedRoot:\n`;
+  out += `    '${block.reservedRoot}',\n`;
   out += `  time: ${block.time},\n`;
   out += `  bits: 0x${util.hex32(block.bits)},\n`;
   out += `  nonce: Buffer.from('${block.nonce.toString('hex')}', 'hex'),\n`;

@@ -209,6 +209,7 @@ describe('HTTP', function() {
       previousblockhash: network.genesis.hash,
       merkleroot: json.merkleroot,
       treeroot: network.genesis.treeRoot,
+      reservedroot: consensus.NULL_HASH,
       target:
         '7fffff0000000000000000000000000000000000000000000000000000000000',
       cuckoo: { bits: 8, size: 4, ease: 50 },
@@ -226,7 +227,7 @@ describe('HTTP', function() {
       longpollid: node.chain.tip.hash + '00000000',
       submitold: false,
       coinbaseaux: { flags: '6d696e65642062792068736b64' },
-      coinbasevalue: 500000000,
+      coinbasevalue: 1000000000,
       transactions: []
     });
   });
