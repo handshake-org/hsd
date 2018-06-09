@@ -20,9 +20,7 @@ if (process.argv.indexOf('--version') !== -1
   throw new Error('Could not exit.');
 }
 
-const assert = require('assert');
 const SPVNode = require('../lib/node/spvnode');
-const Outpoint = require('../lib/primitives/outpoint');
 
 const node = new SPVNode({
   config: true,
