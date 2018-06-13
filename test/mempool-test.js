@@ -16,6 +16,7 @@ const Address = require('../lib/primitives/address');
 const Outpoint = require('../lib/primitives/outpoint');
 const Script = require('../lib/script/script');
 const Witness = require('../lib/script/witness');
+const CoinView = require('../lib/coins/coinview');
 const MemWallet = require('./util/memwallet');
 const ALL = Script.hashType.ALL;
 
@@ -292,7 +293,7 @@ describe('Mempool', function() {
 
     assert(!mempool.hasReject(cachedTX.hash()));
 
-    await mempool.addBlock({ height: 1 }, [tx.toTX()]);
+    await mempool.addBlock({ height: 1 }, [tx.toTX()], new CoinView());
 
     assert(!mempool.hasReject(cachedTX.hash()));
   });
