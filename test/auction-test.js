@@ -10,13 +10,10 @@ const WorkerPool = require('../lib/workers/workerpool');
 const Miner = require('../lib/mining/miner');
 const MemWallet = require('./util/memwallet');
 const Network = require('../lib/protocol/network');
-
-// abc, 1abc - 6
-// 2abce - 5
-// 3abcd - 4
-const NAME1 = '3abcd';
+const rules = require('../lib/covenants/rules');
 
 const network = Network.get('regtest');
+const NAME1 = rules.grindName(20, network);
 
 const workers = new WorkerPool({
   enabled: true
