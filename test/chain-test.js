@@ -15,6 +15,7 @@ const MTX = require('../lib/primitives/mtx');
 const MemWallet = require('./util/memwallet');
 const Network = require('../lib/protocol/network');
 const Output = require('../lib/primitives/output');
+const MerkleBlock = require('../lib/primitives/merkleblock');
 const common = require('../lib/blockchain/common');
 const Opcode = require('../lib/script/opcode');
 const opcodes = Script.opcodes;
@@ -580,8 +581,9 @@ describe('Chain', function() {
     const start = chain.height - 2000;
     const end = chain.height - 200;
     const job = await cpu.createJob();
+    const prove = [];
 
-    for (let i = start; i <= end; i++) {
+    for (let i = start; i <= end - 1; i++) {
       const block = await chain.getBlock(i);
       const cb = block.txs[0];
 
@@ -593,12 +595,29 @@ describe('Chain', function() {
 
       wallet.sign(mtx);
 
+      if (i & 1)
+        prove.push(mtx.witnessHash('hex'));
+
       job.pushTX(mtx.toTX());
     }
 
     job.refresh();
 
-    assert.strictEqual(await mineBlock(job), 'OK');
+    const block = await job.mineAsync();
+    const entry = await chain.add(block);
+    assert(entry);
+
+    assert(block.txs.length & 1);
+
+    const merkle = MerkleBlock.fromHashes(block, prove);
+    assert(merkle.verify());
+
+    const tree = merkle.getTree();
+    assert.strictEqual(tree.matches.length, prove.length);
+    assert.strictEqual(tree.map.size, prove.length);
+
+    for (const hash of prove)
+      assert(tree.map.has(hash));
   });
 
   it('should fail to connect bad amount', async () => {
