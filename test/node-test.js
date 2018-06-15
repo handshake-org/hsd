@@ -436,7 +436,6 @@ describe('Node', function() {
         vbrequired: 0,
         height: node.chain.tip.height + 1,
         previousblockhash: node.chain.tip.hash,
-        merkleroot: json.result.merkleroot,
         treeroot: node.chain.tip.treeRoot,
         reservedroot: consensus.NULL_HASH,
         target:

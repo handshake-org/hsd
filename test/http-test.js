@@ -207,7 +207,6 @@ describe('HTTP', function() {
       vbrequired: 0,
       height: 1,
       previousblockhash: network.genesis.hash,
-      merkleroot: json.merkleroot,
       treeroot: network.genesis.treeRoot,
       reservedroot: consensus.NULL_HASH,
       target:

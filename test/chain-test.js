@@ -485,17 +485,16 @@ describe('Chain', function() {
     const input = tx.inputs[0];
     input.witness.set(0, Buffer.alloc(1001));
     block.refresh(true);
-    assert.strictEqual(await addBlock(block), 'bad-witness-merkle-match');
+    assert.strictEqual(await addBlock(block), 'bad-txnmrklroot');
   });
 
   it('should fail to connect bad witness commitment', async () => {
     const flags = common.flags.DEFAULT_FLAGS & ~common.flags.VERIFY_POW;
     const block = await cpu.mineBlock();
 
-    block.witnessRoot = block.witnessRoot.slice(0, -2) + '00';
+    block.merkleRoot = block.merkleRoot.slice(0, -2) + '00';
 
-    assert.strictEqual(await addBlock(block, flags),
-      'bad-witness-merkle-match');
+    assert.strictEqual(await addBlock(block, flags), 'bad-txnmrklroot');
   });
 
   it('should mine 2000 blocks', async () => {
@@ -720,7 +719,6 @@ describe('Chain', function() {
 
       block.refresh(true);
       block.merkleRoot = block.createMerkleRoot('hex');
-      block.witnessRoot = block.createWitnessRoot('hex');
 
       assert(await chain.add(block, flags));
     }

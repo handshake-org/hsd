@@ -86,8 +86,7 @@ function createGenesisBlock(options) {
   const block = new Block({
     version: 0,
     prevBlock: consensus.NULL_HASH,
-    merkleRoot: tx.hash('hex'),
-    witnessRoot: tx.witnessHash('hex'),
+    merkleRoot: tx.witnessHash('hex'),
     treeRoot: consensus.NULL_HASH,
     reservedRoot: consensus.NULL_HASH,
     time: options.time,
@@ -176,7 +175,6 @@ function createGenesisBlock(options) {
   block.txs.push(registry);
 
   block.merkleRoot = block.createMerkleRoot('hex');
-  block.witnessRoot = block.createWitnessRoot('hex');
 
   return block;
 }
@@ -218,8 +216,6 @@ function formatJS(name, block) {
   out += `  prevBlock: '${block.prevBlock}',\n`;
   out += `  merkleRoot:\n`;
   out += `    '${block.merkleRoot}',\n`;
-  out += `  witnessRoot:\n`;
-  out += `    '${block.witnessRoot}',\n`;
   out += `  treeRoot:\n`;
   out += `    '${block.treeRoot}',\n`;
   out += `  reservedRoot:\n`;
