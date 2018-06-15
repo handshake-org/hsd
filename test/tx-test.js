@@ -241,7 +241,7 @@ describe('TX', function() {
     });
 
     let raw = tx.toRaw();
-    assert.strictEqual(encoding.readU64(raw, 47), 0xdeadbeef);
+    assert.strictEqual(encoding.readU64(raw, 46), 0xdeadbeef);
     raw[54] = 0x7f;
 
     assert.throws(() => TX.fromRaw(raw));
@@ -250,7 +250,7 @@ describe('TX', function() {
     tx.refresh();
 
     raw = tx.toRaw();
-    assert.strictEqual(encoding.readU64(raw, 47), 0x00);
+    assert.strictEqual(encoding.readU64(raw, 46), 0x00);
     raw[54] = 0x80;
     assert.throws(() => TX.fromRaw(raw));
   });

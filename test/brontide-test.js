@@ -57,11 +57,11 @@ describe('Brontide', function() {
       + '228dc68b1c466263b47fdf31e560e139ba');
 
     assert.strictEqual(
-      initiator.sendCipher.secretKey.toString('hex'),
+      initiator.sendCipher.key.toString('hex'),
       '969ab31b4d288cedf6218839b27a3e2140827047f2c0f01bf5c04435d43511a9');
 
     assert.strictEqual(
-      initiator.recvCipher.secretKey.toString('hex'),
+      initiator.recvCipher.key.toString('hex'),
       'bb9020b8965f4df047e07f955f3c4b88418984aadc5cdb35096b9ea8fa5c3442');
   });
 
@@ -97,11 +97,11 @@ describe('Brontide', function() {
     responder.recvActThree(Buffer.from(actThree, 'hex'));
 
     assert.strictEqual(
-      responder.recvCipher.secretKey.toString('hex'),
+      responder.recvCipher.key.toString('hex'),
       '969ab31b4d288cedf6218839b27a3e2140827047f2c0f01bf5c04435d43511a9');
 
     assert.strictEqual(
-      responder.sendCipher.secretKey.toString('hex'),
+      responder.sendCipher.key.toString('hex'),
       'bb9020b8965f4df047e07f955f3c4b88418984aadc5cdb35096b9ea8fa5c3442');
   });
 
