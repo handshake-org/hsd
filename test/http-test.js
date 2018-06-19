@@ -211,7 +211,7 @@ describe('HTTP', function() {
       reservedroot: consensus.NULL_HASH,
       target:
         '7fffff0000000000000000000000000000000000000000000000000000000000',
-      cuckoo: { bits: 8, size: 4, ease: 50 },
+      cuckoo: { bits: 8, size: 4, perc: 50 },
       bits: '207fffff',
       noncerange: ''
         + '0000000000000000000000000000000000000000'

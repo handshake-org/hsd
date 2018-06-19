@@ -49,6 +49,7 @@ const node = new FullNode({
   memory: false,
   workers: true,
   listen: true,
+  network: 'testnet',
   loader: require
 });
 
