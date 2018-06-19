@@ -717,34 +717,18 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 261,
+        "keyTag": 22173,
         "algorithm": 7,
         "digestType": 1,
-        "digest": "073076f0e1e201406f262e9cb12f9db26a4b74f8",
+        "digest": "1d51c9dab4b5f610488c0b2afa1bbef888ff8cf8",
         "algName": "RSASHA1-NSEC3-SHA1",
         "hashName": "SHA1"
       },
       {
-        "keyTag": 261,
+        "keyTag": 22173,
         "algorithm": 7,
         "digestType": 2,
-        "digest": "9050240abe07aa22ca9e5b7dc4a7e55e0d5eb24ca477cd3c7a10dc71a623bd90",
-        "algName": "RSASHA1-NSEC3-SHA1",
-        "hashName": "SHA256"
-      },
-      {
-        "keyTag": 27408,
-        "algorithm": 7,
-        "digestType": 1,
-        "digest": "6e68577901102cbeed2e63c29a277c8f8feae2c8",
-        "algName": "RSASHA1-NSEC3-SHA1",
-        "hashName": "SHA1"
-      },
-      {
-        "keyTag": 27408,
-        "algorithm": 7,
-        "digestType": 2,
-        "digest": "38889d1b65bc76fb77c1df5e228cc3b6bff9fce600d80da34c84ba9d8a1ba471",
+        "digest": "262fa0a5f8caa4572b006a10857a5d2a3c97537dbcb62d22acae1d1206991664",
         "algName": "RSASHA1-NSEC3-SHA1",
         "hashName": "SHA256"
       }
@@ -827,14 +811,6 @@
   "ads.": {
     "ttl": 86400,
     "ds": [
-      {
-        "keyTag": 38329,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "9647a5abe9de885ee5c6d09bf0eb8080d9a71a7777e4bc394b2a9ad78b26711f",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
       {
         "keyTag": 45211,
         "algorithm": 8,
@@ -2109,22 +2085,19 @@
       }
     ],
     "ns": [
-      "193.176.144.14",
-      "2a00:d78:0:102:193:176:144:14",
+      "194.0.28.4",
+      "2001:678:2c:0:194:0:28:4",
       "194.146.106.134",
       "2001:67c:1010:34::53",
       "194.0.25.26",
       "2001:678:20::26",
-      "194.0.28.4",
-      "2001:678:2c:0:194:0:28:4",
       "192.5.4.1",
       "2001:500:2e::1"
     ],
     "glue": [
-      "ns1.nic.amsterdam.@193.176.144.14,2a00:d78:0:102:193:176:144:14",
+      "ns1.nic.amsterdam.@194.0.28.4,2001:678:2c:0:194:0:28:4",
       "ns2.nic.amsterdam.@194.146.106.134,2001:67c:1010:34::53",
       "ns3.nic.amsterdam.@194.0.25.26,2001:678:20::26",
-      "ns5.nic.amsterdam.@194.0.28.4,2001:678:2c:0:194:0:28:4",
       "sns-pb.isc.org.@192.5.4.1,2001:500:2e::1"
     ]
   },
@@ -2195,14 +2168,6 @@
         "algorithm": 8,
         "digestType": 2,
         "digest": "9d8e83dd4629ddae1597428c5352eb7b9cecb4854548d960ac8d7112d24c7f08",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
-      {
-        "keyTag": 11284,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "65d02cca4cc3d2fc69fe9b88a9c6c5d9a201e749c57c4daf5134b2f0faece7ee",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -2389,14 +2354,6 @@
         "algorithm": 8,
         "digestType": 2,
         "digest": "3a5cc8a31e02c94aba6461912fabb7e9f5e34957bb6114a55a864d96aec31836",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
-      {
-        "keyTag": 41971,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "858feee8930855598db109c9705955edf494fa641ed1cdd07a95c13357e9fd19",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -3330,6 +3287,38 @@
         "digest": "473b7ebbdf1a8c8e09d34b7dd71ba8f405aa9238d0236c3e2b5413bd1ecdaa36",
         "algName": "RSASHA1",
         "hashName": "SHA256"
+      },
+      {
+        "keyTag": 20191,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "bb72622c591c9f739af49c13eedb7f2796cbc8fb",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 20191,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "775c07f584233b85606ac3874441c97ad1af7f144d3e9f0fd779f1e064e49316",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 49027,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "f2611084038a67137a2a8ef584402bad64ee365d",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 49027,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "5679b4abdcc3a065fe7fdddcf8ad1d7ebe22323d758abc315ab4d4d8b49cf684",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
       }
     ],
     "ns": [
@@ -3447,6 +3436,38 @@
   "auto.": {
     "ttl": 86400,
     "ds": [
+      {
+        "keyTag": 11008,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "672945eed07f5a43569c427f1941d298cac59cb9",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 11008,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "b8f16c5d7575ca069575d63b7ad4bb66af436c3bc83e736abab7a8ae89979fe2",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 12796,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "b91d65fb021fd6f68a8bf94d1f07436f133d6043",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 12796,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "478bdf9d17c3d08b8eac59b810562878b5a7193862136fd9401b0a869d5fb4c7",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
       {
         "keyTag": 64844,
         "algorithm": 5,
@@ -3567,27 +3588,21 @@
       }
     ],
     "ns": [
-      "193.176.144.13",
-      "2a00:d78:0:102:193:176:144:13",
-      "213.154.241.88",
-      "2001:7b8:606::88",
-      "194.171.17.13",
-      "2001:610:0:800d::13",
-      "95.142.99.215",
-      "2a00:1188:5::215",
       "194.0.28.2",
       "2001:678:2c:0:194:0:28:2",
+      "194.0.25.25",
+      "2001:678:20::25",
       "201.229.0.26",
-      "201.229.0.27"
+      "201.229.0.27",
+      "192.5.4.1",
+      "2001:500:2e::1"
     ],
     "glue": [
-      "ns1.dns.aw.@193.176.144.13,2a00:d78:0:102:193:176:144:13",
-      "ns2.dns.aw.@213.154.241.88,2001:7b8:606::88",
-      "ns3.dns.aw.@194.171.17.13,2001:610:0:800d::13",
-      "ns4.dns.aw.@95.142.99.215,2a00:1188:5::215",
-      "ns5.dns.aw.@194.0.28.2,2001:678:2c:0:194:0:28:2",
+      "ns1.dns.aw.@194.0.28.2,2001:678:2c:0:194:0:28:2",
+      "ns3.dns.aw.@194.0.25.25,2001:678:20::25",
       "aw01.setarnet.aw.@201.229.0.26",
-      "aw02.setarnet.aw.@201.229.0.27"
+      "aw02.setarnet.aw.@201.229.0.27",
+      "sns-pb.isc.org.@192.5.4.1,2001:500:2e::1"
     ]
   },
   "aws.": {
@@ -4917,29 +4932,39 @@
         "digest": "0178cf851507e3d7c970cc8c52b1ea3ef07246d9399190b6b5c1f7089077a6c7",
         "algName": "RSASHA256",
         "hashName": "SHA256"
+      },
+      {
+        "keyTag": 41279,
+        "algorithm": 8,
+        "digestType": 1,
+        "digest": "851e9d6345c1644a71ff4402e818bbef841971b2",
+        "algName": "RSASHA256",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 41279,
+        "algorithm": 8,
+        "digestType": 2,
+        "digest": "d0c266b147e9fa7122215ccca36b23d43407bd2f03b2e3b6e917d350b31aa5fd",
+        "algName": "RSASHA256",
+        "hashName": "SHA256"
       }
     ],
     "ns": [
-      "156.154.144.24",
-      "2610:a1:1071::18",
-      "156.154.145.24",
-      "2610:a1:1072::18",
-      "156.154.159.24",
-      "2610:a1:1073::18",
-      "156.154.156.24",
-      "2610:a1:1074::18",
-      "156.154.157.24",
-      "2610:a1:1075::18",
-      "156.154.158.24",
-      "2610:a1:1076::18"
+      "194.169.218.109",
+      "2001:67c:13cc::1:109",
+      "185.24.64.109",
+      "2a04:2b00:13cc::1:109",
+      "212.18.248.109",
+      "2a04:2b00:13ee::109",
+      "212.18.249.109",
+      "2a04:2b00:13ff::109"
     ],
     "glue": [
-      "ns1.dns.nic.best.@156.154.144.24,2610:a1:1071::18",
-      "ns2.dns.nic.best.@156.154.145.24,2610:a1:1072::18",
-      "ns3.dns.nic.best.@156.154.159.24,2610:a1:1073::18",
-      "ns4.dns.nic.best.@156.154.156.24,2610:a1:1074::18",
-      "ns5.dns.nic.best.@156.154.157.24,2610:a1:1075::18",
-      "ns6.dns.nic.best.@156.154.158.24,2610:a1:1076::18"
+      "a.nic.best.@194.169.218.109,2001:67c:13cc::1:109",
+      "b.nic.best.@185.24.64.109,2a04:2b00:13cc::1:109",
+      "c.nic.best.@212.18.248.109,2a04:2b00:13ee::109",
+      "d.nic.best.@212.18.249.109,2a04:2b00:13ff::109"
     ]
   },
   "bestbuy.": {
@@ -5515,6 +5540,38 @@
     "ttl": 86400,
     "ds": [
       {
+        "keyTag": 27304,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "159c2ed13b308d26511429be90fe81d4a045e73c",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 27304,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "7dfb43f9bce4ac4f7512d0c4b6f2b6e1102845801dc6115267f2001180f7e0c5",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 37939,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "9fb25f79d4bcd0b5b418ffb52bcee1725bbc5a4d",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 37939,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "9c45e33b0715fe2feae8a1e4faf73559d773770980ddfbb01c8307b48adc0588",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
         "keyTag": 59063,
         "algorithm": 5,
         "digestType": 1,
@@ -6053,7 +6110,8 @@
       "2001:12f8:4::10",
       "200.229.248.10",
       "2001:12f8:1::10",
-      "200.219.159.10"
+      "200.219.159.10",
+      "2001:12f8:c::10"
     ],
     "glue": [
       "a.dns.br.@200.160.0.10,2001:12ff::10",
@@ -6061,7 +6119,7 @@
       "c.dns.br.@200.192.233.10",
       "d.dns.br.@200.219.154.10,2001:12f8:4::10",
       "e.dns.br.@200.229.248.10,2001:12f8:1::10",
-      "f.dns.br.@200.219.159.10"
+      "f.dns.br.@200.219.159.10,2001:12f8:c::10"
     ]
   },
   "bond.": {
@@ -6104,14 +6162,6 @@
   "boo.": {
     "ttl": 86400,
     "ds": [
-      {
-        "keyTag": 29770,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "7d6cde77cea735c92c868110cdec52012b7f001ec4e936b9139baac9b6fb6209",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
       {
         "keyTag": 42175,
         "algorithm": 8,
@@ -6514,7 +6564,8 @@
       "2001:12f8:4::10",
       "200.229.248.10",
       "2001:12f8:1::10",
-      "200.219.159.10"
+      "200.219.159.10",
+      "2001:12f8:c::10"
     ],
     "glue": [
       "a.dns.br.@200.160.0.10,2001:12ff::10",
@@ -6522,7 +6573,7 @@
       "c.dns.br.@200.192.233.10",
       "d.dns.br.@200.219.154.10,2001:12f8:4::10",
       "e.dns.br.@200.229.248.10,2001:12f8:1::10",
-      "f.dns.br.@200.219.159.10"
+      "f.dns.br.@200.219.159.10,2001:12f8:c::10"
     ]
   },
   "bradesco.": {
@@ -7259,14 +7310,6 @@
         "digest": "ddbf5e517a30d3b7fd41ff386843aa8ff6ef77961120e5fca794c0072cd63b9d",
         "algName": "RSASHA256",
         "hashName": "SHA256"
-      },
-      {
-        "keyTag": 40612,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "eea3d9378ce22027966adeb8330b3afd3f2ed80be4909572d7ce1bb3b3f9176d",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
       }
     ],
     "ns": [
@@ -7394,14 +7437,6 @@
         "algorithm": 8,
         "digestType": 2,
         "digest": "5d5349186bbcc0b98dcc5662af9140ffe0b36f982043e2888043ba80665b08e3",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
-      {
-        "keyTag": 40162,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "f1f2d557d25176a0e4f42ccfa896cdf2c80ac91a5bb026337d0b665c36d1df19",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -7688,10 +7723,10 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 3289,
+        "keyTag": 65201,
         "algorithm": 8,
         "digestType": 2,
-        "digest": "a1918807db979facfe5ff50d117c8409010c6c9de5c68171ce8609039b00e462",
+        "digest": "600ebe753da33c38ad812c071895ae5619bc56d729bf80fa7122e375a2337372",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -7816,6 +7851,22 @@
     "ttl": 86400,
     "ds": [
       {
+        "keyTag": 14236,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "949a3158db82ebc73fa34adaa6b6088ca1ca7459",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 14236,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "a35069c1e396b842c2bcbeb250c72e33c41ffdb0b053074d35a47c5b3e99791a",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
         "keyTag": 22307,
         "algorithm": 5,
         "digestType": 1,
@@ -7828,6 +7879,22 @@
         "algorithm": 5,
         "digestType": 2,
         "digest": "ef40b9a2a119f93103931db003be4ef9b2c97437da26f4ea519555499a71b64e",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 64561,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "26020ee1bebe558d91ed45b54890b8c9fceb1940",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 64561,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "d89c304c66e6377aa7825c3a1a348de1eae69d6fa75902a6f927f903e2b91e58",
         "algName": "RSASHA1",
         "hashName": "SHA256"
       }
@@ -8063,6 +8130,38 @@
         "algorithm": 5,
         "digestType": 2,
         "digest": "2cd1cfb06c838fece514d8008ef5f3fc1d34e7df15d2e736107483c6779b7e7f",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 56833,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "d4b203dfbbfc040bb67d7aa786aaecd124f7a8e0",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 56833,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "5ad7a5c1fa890745f1746767c20fdc1e2d6f1cbb5e461a40de94576bed7682fa",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 63859,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "c9b86daf14ff397e5d4184cd789910557192966c",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 63859,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "a97786af2cfdade46c31f66a7e10ea8c29f0432bee33d5cb305f0d36322c76cf",
         "algName": "RSASHA1",
         "hashName": "SHA256"
       }
@@ -8770,6 +8869,22 @@
     "ttl": 86400,
     "ds": [
       {
+        "keyTag": 20929,
+        "algorithm": 8,
+        "digestType": 1,
+        "digest": "bf13ed10ce2850f7c686261f06da97a0e5eb78a6",
+        "algName": "RSASHA256",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 20929,
+        "algorithm": 8,
+        "digestType": 2,
+        "digest": "dce04f950578106c1c5f8386db709467091c961227606f0a761c7a0e10e2ddc7",
+        "algName": "RSASHA256",
+        "hashName": "SHA256"
+      },
+      {
         "keyTag": 47971,
         "algorithm": 8,
         "digestType": 1,
@@ -8803,26 +8918,20 @@
       }
     ],
     "ns": [
-      "156.154.144.37",
-      "2610:a1:1071::25",
-      "156.154.145.37",
-      "2610:a1:1072::25",
-      "156.154.159.37",
-      "2610:a1:1073::25",
-      "156.154.156.37",
-      "2610:a1:1074::25",
-      "156.154.157.37",
-      "2610:a1:1075::25",
-      "156.154.158.37",
-      "2610:a1:1076::25"
+      "194.169.218.78",
+      "2001:67c:13cc::1:78",
+      "185.24.64.78",
+      "2a04:2b00:13cc::1:78",
+      "212.18.248.78",
+      "2a04:2b00:13ee::78",
+      "212.18.249.78",
+      "2a04:2b00:13ff::78"
     ],
     "glue": [
-      "ns1.dns.nic.ceo.@156.154.144.37,2610:a1:1071::25",
-      "ns2.dns.nic.ceo.@156.154.145.37,2610:a1:1072::25",
-      "ns3.dns.nic.ceo.@156.154.159.37,2610:a1:1073::25",
-      "ns4.dns.nic.ceo.@156.154.156.37,2610:a1:1074::25",
-      "ns5.dns.nic.ceo.@156.154.157.37,2610:a1:1075::25",
-      "ns6.dns.nic.ceo.@156.154.158.37,2610:a1:1076::25"
+      "a.nic.ceo.@194.169.218.78,2001:67c:13cc::1:78",
+      "b.nic.ceo.@185.24.64.78,2a04:2b00:13cc::1:78",
+      "c.nic.ceo.@212.18.248.78,2a04:2b00:13ee::78",
+      "d.nic.ceo.@212.18.249.78,2a04:2b00:13ff::78"
     ]
   },
   "cern.": {
@@ -9035,14 +9144,6 @@
         "digest": "ad6600649ad83f822ceea5731ea43cb0c560636908219fe59bc5b0d0e5757840",
         "algName": "RSASHA256",
         "hashName": "SHA256"
-      },
-      {
-        "keyTag": 53299,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "2f0b7a9128883ebc5cc63537f9569b5d3417d582b8c261a5bc47c6c80955d8c4",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
       }
     ],
     "ns": [
@@ -9063,6 +9164,35 @@
       "ns-tld3.charlestonroadregistry.com.@216.239.36.105,2001:4860:4802:36::69",
       "ns-tld4.charlestonroadregistry.com.@216.239.38.105,2001:4860:4802:38::69",
       "ns-tld5.charlestonroadregistry.com.@216.239.60.105,2001:4860:4805::69"
+    ]
+  },
+  "charity.": {
+    "ttl": 86400,
+    "ds": [
+      {
+        "keyTag": 1267,
+        "algorithm": 8,
+        "digestType": 2,
+        "digest": "f0f4a7ccfe3aadb8ec7bb2a757aa5e54fbbf8d69934dd6f0cce277d22216352b",
+        "algName": "RSASHA256",
+        "hashName": "SHA256"
+      }
+    ],
+    "ns": [
+      "37.209.194.7",
+      "2001:dcd:2::7",
+      "37.209.192.7",
+      "2001:dcd:1::7",
+      "37.209.198.7",
+      "2001:dcd:4::7",
+      "37.209.196.7",
+      "2001:dcd:3::7"
+    ],
+    "glue": [
+      "demand.beta.aridns.net.au.@37.209.194.7,2001:dcd:2::7",
+      "demand.alpha.aridns.net.au.@37.209.192.7,2001:dcd:1::7",
+      "demand.delta.aridns.net.au.@37.209.198.7,2001:dcd:4::7",
+      "demand.gamma.aridns.net.au.@37.209.196.7,2001:dcd:3::7"
     ]
   },
   "chase.": {
@@ -9261,6 +9391,22 @@
     "ttl": 86400,
     "ds": [
       {
+        "keyTag": 2827,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "45a7ab7ffc9aed55e130deebc6a12a007052c326",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 2827,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "b359c6393c81c5c19e651290ce278f6d9e6b73b625e2809ea4fa7cee67df4a3e",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
         "keyTag": 20642,
         "algorithm": 5,
         "digestType": 1,
@@ -9273,6 +9419,22 @@
         "algorithm": 5,
         "digestType": 2,
         "digest": "358dc846f2a706039dc1644e97bd17c0864fe7258b4dbbea813761326e1107c5",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 51184,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "b14c7aa2999b35f27382961870cb8e480a1f5f0b",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 51184,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "1a80057885de5c3e07689cd77e954733a4b21658c65bee06f69b8f8e5f47170d",
         "algName": "RSASHA1",
         "hashName": "SHA256"
       }
@@ -9296,14 +9458,6 @@
   "chrome.": {
     "ttl": 86400,
     "ds": [
-      {
-        "keyTag": 22159,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "975587893be254d95515ba6213bcc80bf03d6b8976050644ce653eef82e8d0e5",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
       {
         "keyTag": 56911,
         "algorithm": 8,
@@ -9947,6 +10101,38 @@
         "digest": "3a5785619714eac2c06cc0c232125d5d20b6ac051991860600f679145caed153",
         "algName": "RSASHA1",
         "hashName": "SHA256"
+      },
+      {
+        "keyTag": 48691,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "07694698ccca4614d3a4525328cd87db8f472876",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 48691,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "ef8a4181c8a59804c863e88f4a036f829e84271156f498cf652caceb2d9d338a",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 56869,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "9b42bf19b4483d6ec25fca370546313067e015fd",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 56869,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "6f386c18096edf298b38fd453e54c8277adaa85127cbb011e33ec71ac797c0cc",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
       }
     ],
     "ns": [
@@ -10469,6 +10655,14 @@
     "ttl": 86400,
     "ds": [
       {
+        "keyTag": 47152,
+        "algorithm": 10,
+        "digestType": 2,
+        "digest": "1172b9dba9c51b6cbcce1be2646081226b7da32ad84061e389ad2ce6ad80fa23",
+        "algName": "RSASHA512",
+        "hashName": "SHA256"
+      },
+      {
         "keyTag": 59932,
         "algorithm": 10,
         "digestType": 2,
@@ -10478,20 +10672,20 @@
       }
     ],
     "ns": [
-      "195.253.64.11",
-      "2a01:5b0:4::b",
-      "195.253.64.12",
-      "2a01:5b0:4::c",
-      "195.253.65.11",
-      "2a01:5b0:5::b",
-      "195.253.65.12",
-      "2a01:5b0:5::c"
+      "91.195.198.153",
+      "2a01:190:15ec:a000::153",
+      "194.58.192.33",
+      "2a01:3f1:33::53",
+      "194.58.198.33",
+      "2a01:3f1:3033::53",
+      "185.42.137.99",
+      "2a01:3f0:400::33"
     ],
     "glue": [
-      "anycast9.irondns.net.@195.253.64.11,2a01:5b0:4::b",
-      "anycast10.irondns.net.@195.253.64.12,2a01:5b0:4::c",
-      "anycast23.irondns.net.@195.253.65.11,2a01:5b0:5::b",
-      "anycast24.irondns.net.@195.253.65.12,2a01:5b0:5::c"
+      "ns1.ryce-rsp.com.@91.195.198.153,2a01:190:15ec:a000::153",
+      "nsa.netnod.se.@194.58.192.33,2a01:3f1:33::53",
+      "nsp.netnod.se.@194.58.198.33,2a01:3f1:3033::53",
+      "nsu.netnod.se.@185.42.137.99,2a01:3f0:400::33"
     ]
   },
   "com.": {
@@ -11835,25 +12029,27 @@
     "ns": [
       "194.42.1.50",
       "194.42.1.55",
-      "194.42.20.50",
+      "202.12.31.53",
+      "2001:dd8:12::53",
       "204.70.57.242",
-      "202.12.28.140",
-      "2001:dc0:1:0:4777::140",
       "204.61.216.44",
       "2001:500:14:6044:ad::1",
       "194.42.29.1",
       "139.91.191.3",
-      "2001:648:2c30::191:3"
+      "2001:648:2c30::191:3",
+      "194.42.29.16",
+      "194.42.20.31"
     ],
     "glue": [
       "ns1.ucy.ac.cy.@194.42.1.50",
       "ns2.ucy.ac.cy.@194.42.1.55",
-      "ns3.ucy.ac.cy.@194.42.20.50",
+      "ns4.apnic.net.@202.12.31.53,2001:dd8:12::53",
       "ns02.savvis.net.@204.70.57.242",
-      "sec3.apnic.net.@202.12.28.140,2001:dc0:1:0:4777::140",
       "cy-ns.anycast.pch.net.@204.61.216.44,2001:500:14:6044:ad::1",
       "cynic.dns.cy.@194.42.29.1",
-      "estia.ics.forth.gr.@139.91.191.3,2001:648:2c30::191:3"
+      "estia.ics.forth.gr.@139.91.191.3,2001:648:2c30::191:3",
+      "cynic4.dns.cy.@194.42.29.16",
+      "cynic6.dns.cy.@194.42.20.31"
     ]
   },
   "cymru.": {
@@ -11935,11 +12131,11 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 54576,
-        "algorithm": 10,
+        "keyTag": 20237,
+        "algorithm": 13,
         "digestType": 2,
-        "digest": "397e50c85ede9cde33f363a9e66fd1b216d788f8dd438a57a423a386869c8f06",
-        "algName": "RSASHA512",
+        "digest": "cff0f3ecdbc529c1f0031ba1840bfb835853b9209ed1e508fff48451d7b778e2",
+        "algName": "ECDSAP256SHA256",
         "hashName": "SHA256"
       }
     ],
@@ -12005,14 +12201,6 @@
         "algorithm": 8,
         "digestType": 2,
         "digest": "e0ca4bc0fd88a68e2a90402fd62da9f321940b79f5d1e01ba1141d2b5301d8f5",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
-      {
-        "keyTag": 27130,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "7bebceb707b685152ebb0ef54243dd98f85c77dd45cdc2aae27c4de72a1ea398",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -12211,10 +12399,10 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 8491,
+        "keyTag": 29492,
         "algorithm": 8,
         "digestType": 2,
-        "digest": "d63ae8cbc6f559c6d78867219f51814f9d32345df0e0f6da7c06b3e950087800",
+        "digest": "2ebf863738ef45f2a8307262351b961180e1fd53dbc917357ef4c0c9fc40c6a3",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -12278,14 +12466,6 @@
   "dclk.": {
     "ttl": 86400,
     "ds": [
-      {
-        "keyTag": 4045,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "0dd05ffb53a9ff64ad438931adbce6aa7dbc69ec7582f2a2b5ebe78016c95662",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
       {
         "keyTag": 44237,
         "algorithm": 8,
@@ -12946,14 +13126,6 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 48244,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "f4bc1d5af5312020720eab33f587f726fb44bba77e44ed16c80c7c10eb591941",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
-      {
         "keyTag": 60074,
         "algorithm": 8,
         "digestType": 2,
@@ -13075,6 +13247,38 @@
   "diet.": {
     "ttl": 86400,
     "ds": [
+      {
+        "keyTag": 2464,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "58ab5506cd049ddd784c487957d5d87c44e238b0",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 2464,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "a2624874743790cb52066e9b50b06ebf915dc80355e2f9c10094295de2addfb7",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 11962,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "5d42445c9c0aa2c65f6b9e23f90b3d5c30c4a256",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 11962,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "a3d113a8af70bc8b9d35fc555a0ec7474482383fc4f73ca605f0ec498288fdc9",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
       {
         "keyTag": 65092,
         "algorithm": 5,
@@ -13480,6 +13684,8 @@
     "ttl": 172800,
     "ds": [],
     "ns": [
+      "200.0.68.10",
+      "2801:14:a000::10",
       "200.16.91.228",
       "2001:13e0:85d0:101::228",
       "200.16.91.226",
@@ -13489,17 +13695,21 @@
       "149.20.61.87",
       "2001:4f8:3:3d:2e0:81ff:fe46:41f2",
       "200.33.111.1",
+      "204.61.216.124",
+      "2001:500:14:6124:ad::1",
       "128.223.32.35",
       "2001:468:d01:20::80df:2023",
       "192.5.4.1",
       "2001:500:2e::1"
     ],
     "glue": [
+      "a.lactld.org.@200.0.68.10,2801:14:a000::10",
       "ns.nic.do.@200.16.91.228,2001:13e0:85d0:101::228",
       "ns1.nic.do.@200.16.91.226,2001:13e0:85d0:101::226",
       "ns2.nic.do.@200.16.90.162,2001:13e0:5d0:101::162",
       "ns3.nic.do.@149.20.61.87,2001:4f8:3:3d:2e0:81ff:fe46:41f2",
       "ns3.nic.mx.@200.33.111.1",
+      "ns4.nic.do.@204.61.216.124,2001:500:14:6124:ad::1",
       "phloem.uoregon.edu.@128.223.32.35,2001:468:d01:20::80df:2023",
       "sns-pb.isc.org.@192.5.4.1,2001:500:2e::1"
     ]
@@ -13507,14 +13717,6 @@
   "docs.": {
     "ttl": 86400,
     "ds": [
-      {
-        "keyTag": 23434,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "87b0bb891b4184baae4835b0d5b1cca9f606824e127b31cd0d5b90e5120a2272",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
       {
         "keyTag": 47287,
         "algorithm": 8,
@@ -13820,14 +14022,6 @@
   "drive.": {
     "ttl": 86400,
     "ds": [
-      {
-        "keyTag": 10210,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "0010484761e19db606d19523d9b165c7452b5483c8e59b846997d24ad72ea2a6",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
       {
         "keyTag": 32974,
         "algorithm": 8,
@@ -14302,14 +14496,6 @@
   "eat.": {
     "ttl": 86400,
     "ds": [
-      {
-        "keyTag": 16486,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "a1ec5f0606b362832f9b1e485343e59aef0a7564e4b9c54f28ae42b221793248",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
       {
         "keyTag": 36982,
         "algorithm": 8,
@@ -14826,10 +15012,10 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 47896,
+        "keyTag": 39736,
         "algorithm": 8,
         "digestType": 2,
-        "digest": "738f21ed4a619dc41f31375a1905227787634a3ef7ad0e3e2d45131b5dc7e841",
+        "digest": "e3f47a7db58a6c33f7ee93198b00f5f34279dee21be60747863f79b7e34c616f",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -15029,14 +15215,6 @@
         "algorithm": 8,
         "digestType": 2,
         "digest": "9a963ead34a5139ed1f5e24fb422202cb704038ae15b670287bb31a040055322",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
-      {
-        "keyTag": 42124,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "59e3b764b9c5416b32a204a5d0f29b21dac1d16c6ff8a3190826aa8f2f428a37",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -16405,7 +16583,8 @@
       "2001:12f8:4::10",
       "200.229.248.10",
       "2001:12f8:1::10",
-      "200.219.159.10"
+      "200.219.159.10",
+      "2001:12f8:c::10"
     ],
     "glue": [
       "a.dns.br.@200.160.0.10,2001:12ff::10",
@@ -16413,7 +16592,7 @@
       "c.dns.br.@200.192.233.10",
       "d.dns.br.@200.219.154.10,2001:12f8:4::10",
       "e.dns.br.@200.229.248.10,2001:12f8:1::10",
-      "f.dns.br.@200.219.159.10"
+      "f.dns.br.@200.219.159.10,2001:12f8:c::10"
     ]
   },
   "finance.": {
@@ -16984,6 +17163,38 @@
     "ttl": 86400,
     "ds": [
       {
+        "keyTag": 44614,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "16e65148cd02d28c72be03ec2ad4f0b7b8ea156d",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 44614,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "e504240ff007eaa0829d9cf47f27fdd2b8c4c03e113c9d163fa0766d6716609d",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 53083,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "ff6d6ba7638e7d8010867c4334d20eed0d8f0d0d",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 53083,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "9f8bf09b0d588d739d4f88d9e2ab870c3ee1368ec69089ea744353ca27b49c21",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
         "keyTag": 58987,
         "algorithm": 5,
         "digestType": 1,
@@ -17019,14 +17230,6 @@
   "fly.": {
     "ttl": 86400,
     "ds": [
-      {
-        "keyTag": 37336,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "8509d7830105803bd96110e0db4cbaabb7289022a13baee7623b74bd56421683",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
       {
         "keyTag": 65399,
         "algorithm": 8,
@@ -17118,14 +17321,6 @@
   "foo.": {
     "ttl": 86400,
     "ds": [
-      {
-        "keyTag": 340,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "d8530a3d9f789a7ea9a61df5e9c6b1106956cbf31c5528a27d747ae955a3f305",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
       {
         "keyTag": 59840,
         "algorithm": 8,
@@ -17689,6 +17884,14 @@
         "algorithm": 8,
         "digestType": 2,
         "digest": "28a56d69ea7f1d02a3a5452f5301c46341605c630dc0aa1b6b731d7b0517cee4",
+        "algName": "RSASHA256",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 10474,
+        "algorithm": 8,
+        "digestType": 2,
+        "digest": "24e7c4016ddf988172a375fb491541050980b3905ba31cb72d8deb7f51696deb",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       },
@@ -18260,6 +18463,22 @@
     "ttl": 86400,
     "ds": [
       {
+        "keyTag": 4126,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "0bfd20235875e18ee7d8b0fad0a9f566d296cb09",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 4126,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "f69be762d422754930ee00176f377ab6a7ff074a48b2076a6f0cee711d97001d",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
         "keyTag": 13193,
         "algorithm": 5,
         "digestType": 1,
@@ -18272,6 +18491,22 @@
         "algorithm": 5,
         "digestType": 2,
         "digest": "26da606404e52fac52305226892b013963d73ee61b062545eab36d2bc13b8544",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 39133,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "fb1f7e5d4d62aa9f930b77a9494bb3b04d84340a",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 39133,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "eca12999e650c648feabab0aa1870d10d6e9f6316fa609b126c98477f964c6a4",
         "algName": "RSASHA1",
         "hashName": "SHA256"
       }
@@ -18444,14 +18679,6 @@
         "digest": "ceddb0629de967eeceae6b9831ddcb0fd30ed800e46d6a69bf15759c2a239d90",
         "algName": "RSASHA256",
         "hashName": "SHA256"
-      },
-      {
-        "keyTag": 55651,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "f2c1319d29d6a1dcc33608332bd76d15af013acb3037592987b5a510c0067d8f",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
       }
     ],
     "ns": [
@@ -18504,10 +18731,10 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 36700,
+        "keyTag": 51082,
         "algorithm": 8,
         "digestType": 1,
-        "digest": "4597d62d20ddcf0d082d7e9efcbcd8163fa63ac9",
+        "digest": "0bcd14f8566a49f2ed28c3b9e4f95c11f4e622e1",
         "algName": "RSASHA256",
         "hashName": "SHA1"
       },
@@ -18822,6 +19049,38 @@
     "ttl": 86400,
     "ds": [
       {
+        "keyTag": 24568,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "a8c9923475db76c4b7a2c2447f73f2b2faf7b746",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 24568,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "9b28ca3f3d8bab1cce2c16a67e9020c29c4e4aa68528be79c526f424c8f32e90",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 34837,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "26f54a3e8b98d027161b46d44a1be9033f7e7dcf",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 34837,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "6f8b25afc1aacd4c42663272d1d35ace9870e508f92796adfaf28a1712796d9c",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
         "keyTag": 42194,
         "algorithm": 5,
         "digestType": 1,
@@ -19069,14 +19328,6 @@
         "digest": "254367c4fa9fae6e0675ee721943c4cd97371553c9669e4bc424b00cff86e6aa",
         "algName": "RSASHA256",
         "hashName": "SHA256"
-      },
-      {
-        "keyTag": 52627,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "f4c8b29e7e3ff284028e5bd3348de7440f79253a4ceb2f4d2aa34927995acd16",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
       }
     ],
     "ns": [
@@ -19157,7 +19408,8 @@
       "2001:12f8:4::10",
       "200.229.248.10",
       "2001:12f8:1::10",
-      "200.219.159.10"
+      "200.219.159.10",
+      "2001:12f8:c::10"
     ],
     "glue": [
       "a.dns.br.@200.160.0.10,2001:12ff::10",
@@ -19165,7 +19417,7 @@
       "c.dns.br.@200.192.233.10",
       "d.dns.br.@200.219.154.10,2001:12f8:4::10",
       "e.dns.br.@200.229.248.10,2001:12f8:1::10",
-      "f.dns.br.@200.219.159.10"
+      "f.dns.br.@200.219.159.10,2001:12f8:c::10"
     ]
   },
   "gm.": {
@@ -19191,14 +19443,6 @@
         "algorithm": 8,
         "digestType": 2,
         "digest": "bffd3d45856e1cb03607f334362ce795e0c8f9f75b7010357699c72ff2dce648",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
-      {
-        "keyTag": 42016,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "5a4715a5fcf219e5a31e167506c2b1fd68fddd1015a5f5bc04a322f062daf497",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -19582,14 +19826,6 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 94,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "09a4d75df21077733fa84a35199525a9471cecb2ebb481851a2a90a8450ed2f8",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
-      {
         "keyTag": 8029,
         "algorithm": 8,
         "digestType": 2,
@@ -19626,14 +19862,6 @@
         "algorithm": 8,
         "digestType": 2,
         "digest": "80f8b78d23107153578bad3800e9543500474e5c30c29698b40a3db23ed9da9f",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
-      {
-        "keyTag": 34531,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "0f8937f75bd5d2fc0392f83f7f63af7f0802ffda37150c0d0b0b44fa07d83d89",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -20289,14 +20517,6 @@
         "digest": "10c4028323a5529518c24d007431e7878192ced09c8ab2b6657adc624e8b8c16",
         "algName": "RSASHA256",
         "hashName": "SHA256"
-      },
-      {
-        "keyTag": 11866,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "ad2d486c4a211f797d3d62d8ddcafbd79a9c2f6a7a8774ce47ee4e5f4034a9fc",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
       }
     ],
     "ns": [
@@ -20359,6 +20579,38 @@
   "guitars.": {
     "ttl": 86400,
     "ds": [
+      {
+        "keyTag": 892,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "e421d29a8d62e53665069dd9b99e04a86f4fe8e3",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 892,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "aa980f135eb29c27887f8dfcdd0bab90dccf0740ef3f11fb3256b8a6a8c7fbf2",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 39502,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "6186e2c33fb4719080be060e131e9339bf9cfa39",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 39502,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "742844ec01d87eceec0d34b7de1d39e376c697c73d36d90c9d5fad65625b624f",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
       {
         "keyTag": 62849,
         "algorithm": 5,
@@ -20461,20 +20713,14 @@
     "ns": [
       "185.17.236.93",
       "2a03:dd40:3::93",
-      "185.17.236.111",
-      "2a03:dd40:3::111",
       "204.61.216.34",
       "2001:500:14:6034:ad::1",
-      "128.223.32.35",
-      "2001:468:d01:20::80df:2023",
       "192.5.4.1",
       "2001:500:2e::1"
     ],
     "glue": [
       "ns.cocca.fr.@185.17.236.93,2a03:dd40:3::93",
-      "ns.coccaregistry.org.@185.17.236.111,2a03:dd40:3::111",
       "gy-ns.anycast.pch.net.@204.61.216.34,2001:500:14:6034:ad::1",
-      "phloem.uoregon.edu.@128.223.32.35,2001:468:d01:20::80df:2023",
       "sns-pb.isc.org.@192.5.4.1,2001:500:2e::1"
     ]
   },
@@ -20544,14 +20790,6 @@
   "hangout.": {
     "ttl": 86400,
     "ds": [
-      {
-        "keyTag": 9115,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "de31c2b43e2661601fde4c4f62149efe84ba9944b7c3a2bc02f4900a7a95139b",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
       {
         "keyTag": 12985,
         "algorithm": 8,
@@ -20865,6 +21103,38 @@
         "digest": "ee393e0add9a1a919a95b426b0950ea98c73be7592cdec7fe4d5d4580ff6a597",
         "algName": "RSASHA1",
         "hashName": "SHA256"
+      },
+      {
+        "keyTag": 27664,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "eead9101b0c5b8b13aa4a039bf3e61f1b1e7dd1c",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 27664,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "535ca4dad27de5276f13ae259bd3cb854c8792ef2ea01f1cc54e667fe68bf8fc",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 48061,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "b6821a94fb091bdc7e748a57c701057e9f8ea434",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 48061,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "68c3ade1e64a18c7d6c86cd8c888b0b950b84b463dd89a1719c7e9520f674774",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
       }
     ],
     "ns": [
@@ -20928,14 +21198,6 @@
         "algorithm": 8,
         "digestType": 2,
         "digest": "dc704ba2007a9f1f254659a40fc55762434b742f3919b6f31fdc53b8301657be",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
-      {
-        "keyTag": 59980,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "e0df04f94fae694c74ff49c9aa099dfa6099330c5627b544ccfc5d383e5d8ac6",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -21030,6 +21292,22 @@
     "ttl": 86400,
     "ds": [
       {
+        "keyTag": 4318,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "a3e154bb335869278313ab56c6a7abbbcc543d06",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 4318,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "84b5fae6c70901ac831720cef3388e2b169b9521799df03e9b762c812fe1cb04",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
         "keyTag": 18467,
         "algorithm": 5,
         "digestType": 1,
@@ -21042,6 +21320,22 @@
         "algorithm": 5,
         "digestType": 2,
         "digest": "8f9e5682083362d4b911589fd9352315a6b09ebb0d15b38598435baa26f3161e",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 42352,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "88dfd84f659b93b368db22621912417df4b5bee5",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 42352,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "5943d3bc7da8882971bd32b19abcb563cc7bff51f60702daa43257c84a7d78da",
         "algName": "RSASHA1",
         "hashName": "SHA256"
       }
@@ -21586,10 +21880,10 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 43039,
+        "keyTag": 1720,
         "algorithm": 8,
         "digestType": 2,
-        "digest": "d123be9b5ba943d7f1323e95cdf5d8ff5b92db825ccb735f91ac0e06a45a00fb",
+        "digest": "e99de850d466563aa916d949b16139535e72bb1725b31f5d53205a9e3b7b4f01",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -21789,6 +22083,38 @@
         "algorithm": 5,
         "digestType": 2,
         "digest": "58e6c42cfdaccf62cd0cefcaac20b87928a7da7fdd2950c274d5740023cf3e6e",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 27751,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "9a72cab4a4cd51469dfc9e1dac8b1476d4b5c66c",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 27751,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "cf9f7fa35f5dce998a5757081f6e790df501f8b8fb58d0f9d8c4c645761a39db",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 51544,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "eb0e1f6128e4b7ed6c0c0560f9a3ebc8e5100c33",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 51544,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "8fe6bf96895d8504f0989c4dbc3741df17b7672d5aa64107bd624089b5d3d403",
         "algName": "RSASHA1",
         "hashName": "SHA256"
       }
@@ -22060,14 +22386,6 @@
         "algorithm": 8,
         "digestType": 2,
         "digest": "cf18dc0907a9d2f0d260c7c4a958ef62312bc64b2832002330a35dbc9ff59075",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
-      {
-        "keyTag": 58849,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "2cbbdfeb4b2d4b9a3b0d4925776a587fba3633c65a1ea5db78c1b2e1943a11ad",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -22541,21 +22859,23 @@
       }
     ],
     "ns": [
-      "202.155.30.227",
-      "2001:e00:1800::2",
       "103.19.179.179",
+      "2402:ee80:b::b",
       "103.19.178.178",
+      "2402:ee80:c::c",
+      "45.126.57.57",
+      "2402:ee80:d::d",
       "103.19.177.177",
       "2001:df5:4000:4::4",
-      "202.12.28.140",
-      "2001:dc0:1:0:4777::140"
+      "202.12.31.53",
+      "2001:dd8:12::53"
     ],
     "glue": [
-      "a.dns.id.@202.155.30.227,2001:e00:1800::2",
-      "b.dns.id.@103.19.179.179",
-      "c.dns.id.@103.19.178.178",
+      "b.dns.id.@103.19.179.179,2402:ee80:b::b",
+      "c.dns.id.@103.19.178.178,2402:ee80:c::c",
+      "d.dns.id.@45.126.57.57,2402:ee80:d::d",
       "e.dns.id.@103.19.177.177,2001:df5:4000:4::4",
-      "sec3.apnic.net.@202.12.28.140,2001:dc0:1:0:4777::140"
+      "ns4.apnic.net.@202.12.31.53,2001:dd8:12::53"
     ]
   },
   "ie.": {
@@ -23110,14 +23430,6 @@
         "algorithm": 8,
         "digestType": 2,
         "digest": "f7b48a11530565ead3cc6ccdcce9841b6a65a707ea8cc20a4d81f9aeb7656a91",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
-      {
-        "keyTag": 56236,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "8eeb5b6c01d3b65a348908f998165f0a4eb6298a231ec83830a81f1bc2b42417",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -24983,6 +25295,38 @@
     "ttl": 86400,
     "ds": [
       {
+        "keyTag": 20797,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "a5ebcaf9f525ae2f33f5018d7967567b61789eb9",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 20797,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "55789b935e93c3247273bfa6c5ac78479317f73f2955b38b480edac852806731",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 47062,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "b4fb5cb337512b092e75e7e37e2912f31a294fff",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 47062,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "972404483d7387f7b95e385a7f737c8c368a32f16e01c74e93d6707e04130461",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
         "keyTag": 49006,
         "algorithm": 5,
         "digestType": 1,
@@ -25629,23 +25973,31 @@
         "digest": "72629095cbd39549967ddc7685372e9bb38b25f0412c6df8f90cf09128e92627",
         "algName": "RSASHA512",
         "hashName": "SHA256"
+      },
+      {
+        "keyTag": 29499,
+        "algorithm": 10,
+        "digestType": 2,
+        "digest": "9c4c26235413a4a3531ada11078a235e2f11c4245a4546f38baaa0ddbbcf2662",
+        "algName": "RSASHA512",
+        "hashName": "SHA256"
       }
     ],
     "ns": [
-      "195.253.64.11",
-      "2a01:5b0:4::b",
-      "195.253.64.12",
-      "2a01:5b0:4::c",
-      "195.253.65.11",
-      "2a01:5b0:5::b",
-      "195.253.65.12",
-      "2a01:5b0:5::c"
+      "91.195.198.153",
+      "2a01:190:15ec:a000::153",
+      "194.58.192.33",
+      "2a01:3f1:33::53",
+      "194.58.198.33",
+      "2a01:3f1:3033::53",
+      "185.42.137.99",
+      "2a01:3f0:400::33"
     ],
     "glue": [
-      "anycast9.irondns.net.@195.253.64.11,2a01:5b0:4::b",
-      "anycast10.irondns.net.@195.253.64.12,2a01:5b0:4::c",
-      "anycast23.irondns.net.@195.253.65.11,2a01:5b0:5::b",
-      "anycast24.irondns.net.@195.253.65.12,2a01:5b0:5::c"
+      "ns1.ryce-rsp.com.@91.195.198.153,2a01:190:15ec:a000::153",
+      "nsa.netnod.se.@194.58.192.33,2a01:3f1:33::53",
+      "nsp.netnod.se.@194.58.198.33,2a01:3f1:3033::53",
+      "nsu.netnod.se.@185.42.137.99,2a01:3f0:400::33"
     ]
   },
   "komatsu.": {
@@ -25861,6 +26213,7 @@
       "61.74.75.1",
       "203.248.246.220",
       "203.83.159.1",
+      "2001:dcc:4::1",
       "202.30.124.100",
       "2001:dcc:5::100",
       "218.38.181.90",
@@ -25870,7 +26223,7 @@
     "glue": [
       "b.dns.kr.@61.74.75.1",
       "c.dns.kr.@203.248.246.220",
-      "d.dns.kr.@203.83.159.1",
+      "d.dns.kr.@203.83.159.1,2001:dcc:4::1",
       "e.dns.kr.@202.30.124.100,2001:dcc:5::100",
       "f.dns.kr.@218.38.181.90",
       "g.dns.kr.@202.31.190.1,2001:dc5:a::1"
@@ -25917,6 +26270,22 @@
     "ttl": 86400,
     "ds": [
       {
+        "keyTag": 7366,
+        "algorithm": 8,
+        "digestType": 1,
+        "digest": "938e9ee09f411e400dd96657494c3fb5c90ee3b0",
+        "algName": "RSASHA256",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 7366,
+        "algorithm": 8,
+        "digestType": 2,
+        "digest": "46bb5d35906260d79f26c5639b8a1fe47061c329973204d07222808035cd11bf",
+        "algName": "RSASHA256",
+        "hashName": "SHA256"
+      },
+      {
         "keyTag": 11480,
         "algorithm": 8,
         "digestType": 1,
@@ -25950,26 +26319,20 @@
       }
     ],
     "ns": [
-      "156.154.144.99",
-      "2610:a1:1071::63",
-      "156.154.145.99",
-      "2610:a1:1072::63",
-      "156.154.159.99",
-      "2610:a1:1073::63",
-      "156.154.156.99",
-      "2610:a1:1074::63",
-      "156.154.157.99",
-      "2610:a1:1075::63",
-      "156.154.158.99",
-      "2610:a1:1076::63"
+      "194.169.218.79",
+      "2001:67c:13cc::1:79",
+      "185.24.64.79",
+      "2a04:2b00:13cc::1:79",
+      "212.18.248.79",
+      "2a04:2b00:13ee::79",
+      "212.18.249.79",
+      "2a04:2b00:13ff::79"
     ],
     "glue": [
-      "ns1.dns.nic.kred.@156.154.144.99,2610:a1:1071::63",
-      "ns2.dns.nic.kred.@156.154.145.99,2610:a1:1072::63",
-      "ns3.dns.nic.kred.@156.154.159.99,2610:a1:1073::63",
-      "ns4.dns.nic.kred.@156.154.156.99,2610:a1:1074::63",
-      "ns5.dns.nic.kred.@156.154.157.99,2610:a1:1075::63",
-      "ns6.dns.nic.kred.@156.154.158.99,2610:a1:1076::63"
+      "a.nic.kred.@194.169.218.79,2001:67c:13cc::1:79",
+      "b.nic.kred.@185.24.64.79,2a04:2b00:13cc::1:79",
+      "c.nic.kred.@212.18.248.79,2a04:2b00:13ee::79",
+      "d.nic.kred.@212.18.249.79,2a04:2b00:13ff::79"
     ]
   },
   "kuokgroup.": {
@@ -26040,6 +26403,38 @@
         "algorithm": 5,
         "digestType": 2,
         "digest": "7e3c406a1ff89436fcc8899a0a86f8798d3eaab33018502f58f8328125b371f1",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 34129,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "3d290f560a3ea7f4a6b77197654a974d3552156b",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 34129,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "f486ada5c0d9d116be0ea60581f7dde048cb2e37d228801bc72f1b697972865e",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 58174,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "907b467602b4dfc50c3243b7ce1d3e773a1882e2",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 58174,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "627aa8ea8da2d3e569bed1e5b81349ca9a04c571990a764e1a5823db6f5db509",
         "algName": "RSASHA1",
         "hashName": "SHA256"
       }
@@ -26984,10 +27379,10 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 31181,
+        "keyTag": 12977,
         "algorithm": 8,
         "digestType": 2,
-        "digest": "edd432b3962bbdaa46a2e199506b015449a15e057ba2ddd221543a063cd5a5f8",
+        "digest": "24f748bb3d6d7f2a30517a9bf6fe74991b2ef35a375c11f27071e73873b9314f",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -27628,6 +28023,38 @@
         "digest": "22f61a68a2f1bfe7a3b8a71de8db12bac9a51d98d8d1f44c1717396e395c180b",
         "algName": "RSASHA1",
         "hashName": "SHA256"
+      },
+      {
+        "keyTag": 33631,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "3b75b8fa70d02dd2318b92dbaf7c19e97227cbd3",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 33631,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "98c5361e319c349c3135070138a0a8b34d5ca3cffe87b3d27294e313e696f101",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 51802,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "4f1558597aec14f10d869f5f43d4905cdf6189df",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 51802,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "2d24b7df7efcb55786172f5927d12f15fbb5905ec98c9fab2525a9015119df29",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
       }
     ],
     "ns": [
@@ -27745,10 +28172,10 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 44867,
+        "keyTag": 61715,
         "algorithm": 8,
         "digestType": 2,
-        "digest": "7d5d58b44e1246ae9fd9f45ab8577bcb964708ebe2ab9282029db939dd14c64f",
+        "digest": "58b2ed7e35fb325167016268846ab5890edf6aaa53d1d1a7a63b873f4adca32a",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -28084,6 +28511,38 @@
   "lol.": {
     "ttl": 86400,
     "ds": [
+      {
+        "keyTag": 14131,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "a80aa63c99464101bad5a82079d748f602a4a79f",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 14131,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "4564b365617a6bcf1c53c04dd101339729f556c2837ad8ab095cff78cff1f97a",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 15019,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "4f3c98c4c13b1657cfa5d90d945ef26008fdff32",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 15019,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "24cea2aa8a26053d2da0301850748f74e217a52a1b1941e86963a32c5991e9bb",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
       {
         "keyTag": 15269,
         "algorithm": 5,
@@ -29024,14 +29483,6 @@
         "digest": "2b0dbafc4eafa98fbed02adb2ff33c9af7666f2f9910a141573f511397393a4b",
         "algName": "RSASHA256",
         "hashName": "SHA256"
-      },
-      {
-        "keyTag": 28990,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "eb93dbf783b8021c3bdfe43ca32a900a992c625ce4a5b5484101ca76c3e79c2d",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
       }
     ],
     "ns": [
@@ -29572,14 +30023,6 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 32695,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "c83d1648a5db728f67067546a63476d4283dd344845ce10c9e67e7d510375a7e",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
-      {
         "keyTag": 56669,
         "algorithm": 8,
         "digestType": 2,
@@ -29653,14 +30096,6 @@
         "algorithm": 8,
         "digestType": 2,
         "digest": "58b9e8925215859c971bd949c9dbd299900c9d017211fb30282a3be9d8e7abf8",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
-      {
-        "keyTag": 63349,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "2acf65542c702162f5253040f20cfec08fbf24091e735dcace4005e55cbb6cf9",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -29786,59 +30221,6 @@
       "b.nic.menu.@37.209.194.10,2001:dcd:2::10",
       "c.nic.menu.@37.209.196.10,2001:dcd:3::10",
       "d.nic.menu.@37.209.198.10,2001:dcd:4::10"
-    ]
-  },
-  "meo.": {
-    "ttl": 86400,
-    "ds": [
-      {
-        "keyTag": 3051,
-        "algorithm": 7,
-        "digestType": 1,
-        "digest": "e0f8d604156c17c058c88b93b7b8e17bbfde5502",
-        "algName": "RSASHA1-NSEC3-SHA1",
-        "hashName": "SHA1"
-      },
-      {
-        "keyTag": 3051,
-        "algorithm": 7,
-        "digestType": 2,
-        "digest": "7ba5b1b2fab793ab2ae5e6a8dd6ac5e6ba9f7f9625f412267ff88a37c4c47b06",
-        "algName": "RSASHA1-NSEC3-SHA1",
-        "hashName": "SHA256"
-      },
-      {
-        "keyTag": 50506,
-        "algorithm": 7,
-        "digestType": 1,
-        "digest": "af891ef50a1a56da496c395cdbbaa4e5ab66bce6",
-        "algName": "RSASHA1-NSEC3-SHA1",
-        "hashName": "SHA1"
-      },
-      {
-        "keyTag": 50506,
-        "algorithm": 7,
-        "digestType": 2,
-        "digest": "b98d0ff1253771d8be09aa22f770cfa556426099dc4b022d762d29bad6fbc8e9",
-        "algName": "RSASHA1-NSEC3-SHA1",
-        "hashName": "SHA256"
-      }
-    ],
-    "ns": [
-      "194.169.218.94",
-      "2001:67c:13cc::1:94",
-      "185.24.64.94",
-      "2a04:2b00:13cc::1:94",
-      "212.18.248.94",
-      "2a04:2b00:13ee::94",
-      "212.18.249.94",
-      "2a04:2b00:13ff::94"
-    ],
-    "glue": [
-      "a.nic.meo.@194.169.218.94,2001:67c:13cc::1:94",
-      "b.nic.meo.@185.24.64.94,2a04:2b00:13cc::1:94",
-      "c.nic.meo.@212.18.248.94,2a04:2b00:13ee::94",
-      "d.nic.meo.@212.18.249.94,2a04:2b00:13ff::94"
     ]
   },
   "merckmsd.": {
@@ -30777,6 +31159,22 @@
     "ttl": 86400,
     "ds": [
       {
+        "keyTag": 28162,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "2ab25d06f73e977ee5ced0fcf5ea4ed6ee50d269",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 28162,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "4b2b701367d0b74f52c9684e9b8921659045039452d135a55d128687c729fbf5",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
         "keyTag": 32996,
         "algorithm": 5,
         "digestType": 1,
@@ -30789,6 +31187,22 @@
         "algorithm": 5,
         "digestType": 2,
         "digest": "9799bb694e98ba59b1c29e6d1a3ca3581b7d0aebcd72c51536f1e5629d2979a4",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 41626,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "2744d01ec89a56e70f5b6c3171c39739e46afb3c",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 41626,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "7e3fd3d91571d30ceb82a33021657552e235f436d998a605611a0712b21aa1dc",
         "algName": "RSASHA1",
         "hashName": "SHA256"
       }
@@ -31156,14 +31570,6 @@
         "algorithm": 8,
         "digestType": 2,
         "digest": "bbd1727de09ae643c1348d9637a31192116da5444852af3c1c5541e8998fb78b",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
-      {
-        "keyTag": 60826,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "a8865bf13cbe0de7c7d85829d66bfaae8216ee8541c619a706e620b98d7fb9b1",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -31594,6 +32000,14 @@
         "digest": "abaf8a1892846d468f929e0c65763165caaa81b4d14bcb0fe3f767e74894782b",
         "algName": "RSASHA256",
         "hashName": "SHA256"
+      },
+      {
+        "keyTag": 39767,
+        "algorithm": 8,
+        "digestType": 2,
+        "digest": "119bec891bf9cfa5c53d2d95c3340f204cd2f647d624b31cb8d3df6cfd49281d",
+        "algName": "RSASHA256",
+        "hashName": "SHA256"
       }
     ],
     "ns": [
@@ -31619,6 +32033,22 @@
     "ttl": 86400,
     "ds": [
       {
+        "keyTag": 174,
+        "algorithm": 8,
+        "digestType": 1,
+        "digest": "e61eff1caf6f896d87538f1dc56db81060a41d6a",
+        "algName": "RSASHA256",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 174,
+        "algorithm": 8,
+        "digestType": 2,
+        "digest": "fb9e2f10f50a09e3614a9e6a2c76c1ae7554711e5242b7f516a8078d86ed87b9",
+        "algName": "RSASHA256",
+        "hashName": "SHA256"
+      },
+      {
         "keyTag": 25992,
         "algorithm": 8,
         "digestType": 1,
@@ -31635,18 +32065,18 @@
         "hashName": "SHA256"
       },
       {
-        "keyTag": 53678,
+        "keyTag": 63366,
         "algorithm": 8,
         "digestType": 1,
-        "digest": "afba5896869050bdf77a40714d7937f4c4310eb6",
+        "digest": "ca2a7a9cd3ac789d43027a5ab4e0b5cd8eaba319",
         "algName": "RSASHA256",
         "hashName": "SHA1"
       },
       {
-        "keyTag": 53678,
+        "keyTag": 63366,
         "algorithm": 8,
         "digestType": 2,
-        "digest": "7748f4282b2b0f32eed669778a41f8130e5485c9bbec85fbe238cffa274fd705",
+        "digest": "978e934feb98472b650a98d3ada4352058bae529a2b709982c86c0447d3a0f28",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -31825,20 +32255,20 @@
       }
     ],
     "ns": [
-      "192.82.135.30",
-      "2001:500:128::30",
-      "192.82.136.30",
-      "2001:500:129::30",
-      "192.82.137.30",
-      "2001:500:12a::30",
-      "192.82.138.30",
-      "2001:500:12b::30"
+      "192.42.173.30",
+      "2001:500:120::30",
+      "192.42.174.30",
+      "2001:500:121::30",
+      "192.42.175.30",
+      "2001:500:122::30",
+      "192.42.176.30",
+      "2001:500:123::30"
     ],
     "glue": [
-      "an1.nstld.com.@192.82.135.30,2001:500:128::30",
-      "an2.nstld.com.@192.82.136.30,2001:500:129::30",
-      "an3.nstld.com.@192.82.137.30,2001:500:12a::30",
-      "an4.nstld.com.@192.82.138.30,2001:500:12b::30"
+      "ac1.nstld.com.@192.42.173.30,2001:500:120::30",
+      "ac2.nstld.com.@192.42.174.30,2001:500:121::30",
+      "ac3.nstld.com.@192.42.175.30,2001:500:122::30",
+      "ac4.nstld.com.@192.42.176.30,2001:500:123::30"
     ]
   },
   "nationwide.": {
@@ -32336,14 +32766,6 @@
         "digest": "e03b5113926012d4d23705257017f61b0154976b32947ad983f3693b8477653f",
         "algName": "RSASHA256",
         "hashName": "SHA256"
-      },
-      {
-        "keyTag": 33154,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "b17cc5371e5f2932aea375017f1db6f1a23cc513c2bdb93e73c0762e13d71f99",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
       }
     ],
     "ns": [
@@ -32501,14 +32923,6 @@
   "nexus.": {
     "ttl": 86400,
     "ds": [
-      {
-        "keyTag": 1006,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "8aeee53dcb31d830c88f2fa6f341b8038f2022b74d78beeb1be619c9f41c3d3f",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
       {
         "keyTag": 30644,
         "algorithm": 8,
@@ -32688,10 +33102,10 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 60511,
+        "keyTag": 49991,
         "algorithm": 8,
         "digestType": 2,
-        "digest": "876c7212823fe12ddd15e4209f0a0551ab349027658d8f77f46dca49959c7cf8",
+        "digest": "ae38958a211580ec1f9a134819aeeb38f8d86a007cf2a34ee30511eaa0f3668d",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -32957,28 +33371,19 @@
       }
     ],
     "ns": [
-      "193.176.144.5",
-      "2a00:d78:0:102:193:176:144:5",
-      "194.146.106.42",
-      "2001:67c:1010:10::53",
-      "194.171.17.10",
-      "2001:610:0:800d::10",
-      "95.142.99.212",
-      "2a00:1188:5::212",
       "194.0.28.53",
       "2001:678:2c:0:194:0:28:53",
-      "192.93.0.4",
-      "2001:660:3005:1::1:2",
+      "194.146.106.42",
+      "2001:67c:1010:10::53",
+      "194.0.25.24",
+      "2001:678:20::24",
       "192.5.4.1",
       "2001:500:2e::1"
     ],
     "glue": [
-      "ns1.dns.nl.@193.176.144.5,2a00:d78:0:102:193:176:144:5",
+      "ns1.dns.nl.@194.0.28.53,2001:678:2c:0:194:0:28:53",
       "ns2.dns.nl.@194.146.106.42,2001:67c:1010:10::53",
-      "ns3.dns.nl.@194.171.17.10,2001:610:0:800d::10",
-      "ns4.dns.nl.@95.142.99.212,2a00:1188:5::212",
-      "ns5.dns.nl.@194.0.28.53,2001:678:2c:0:194:0:28:53",
-      "ns-nl.nic.fr.@192.93.0.4,2001:660:3005:1::1:2",
+      "ns3.dns.nl.@194.0.25.24,2001:678:20::24",
       "sns-pb.isc.org.@192.5.4.1,2001:500:2e::1"
     ]
   },
@@ -33513,6 +33918,22 @@
     "ttl": 86400,
     "ds": [
       {
+        "keyTag": 39119,
+        "algorithm": 8,
+        "digestType": 1,
+        "digest": "c193af6b4e75927073e17adf55e18748b8649607",
+        "algName": "RSASHA256",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 39119,
+        "algorithm": 8,
+        "digestType": 2,
+        "digest": "c4900f733c9ca25209c371ea2de2789230b0d9e7781d3984f99017afe4539c3f",
+        "algName": "RSASHA256",
+        "hashName": "SHA256"
+      },
+      {
         "keyTag": 44171,
         "algorithm": 8,
         "digestType": 1,
@@ -33525,22 +33946,6 @@
         "algorithm": 8,
         "digestType": 2,
         "digest": "9b8c5e51c9a8dd7254b54fa36b3a624a9ee84eb0bacabdf9db059d82570cb1bd",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
-      {
-        "keyTag": 46034,
-        "algorithm": 8,
-        "digestType": 1,
-        "digest": "316ab5861714bd58905c68b988b2b7c87cb78c4a",
-        "algName": "RSASHA256",
-        "hashName": "SHA1"
-      },
-      {
-        "keyTag": 46034,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "02c64093d011629ef821494c5d918b8151b1b81fd008e175954f887119feb5b1",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -34627,14 +35032,6 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 43870,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "65920de31a250c8afb37cccc38dcee825611566856f975c8417b80a147e537a3",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
-      {
         "keyTag": 64712,
         "algorithm": 8,
         "digestType": 2,
@@ -34667,10 +35064,10 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 59521,
+        "keyTag": 35714,
         "algorithm": 8,
         "digestType": 2,
-        "digest": "717c246c9686700234f687111285f9a6087d7853bea8048032c97822911de22a",
+        "digest": "50665c85642ab83f2e6e454034a9e151caf3ab3d1470fa6b44121aa5a58247db",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -34754,18 +35151,18 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 29639,
+        "keyTag": 16996,
         "algorithm": 8,
         "digestType": 2,
-        "digest": "b714d5f0c4b2a353d83332893935a8666982a871c0103bca787895fbfcc7b143",
+        "digest": "00f50d34779e521849dcc5d3b71ba10d003e4a790f1a68c32d60d08700404740",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       },
       {
-        "keyTag": 58579,
+        "keyTag": 29639,
         "algorithm": 8,
         "digestType": 2,
-        "digest": "3afcaba4d510b8b933b2e33737e180c3fc33ace1a5a61b44e449d501bcecd1af",
+        "digest": "b714d5f0c4b2a353d83332893935a8666982a871c0103bca787895fbfcc7b143",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -35345,14 +35742,6 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 34957,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "3e40ff4f32fd06cabe17d0ba3fcfe68b5ebcbc1af22a1e0b399002dd2b86d465",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
-      {
         "keyTag": 38734,
         "algorithm": 8,
         "digestType": 2,
@@ -35471,6 +35860,38 @@
         "algorithm": 5,
         "digestType": 2,
         "digest": "80adec219929825ce490e0b9caac5cad806fc8ad4c4e0d48017f62f5408d6ff5",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 25561,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "58408e4ada0f34c4e9e5a594a1d1d1d0c263a1ca",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 25561,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "7c024f0832997289b954f9fe59d7d66c7a14f91f1e7cad603184d7e109af7a54",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 37609,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "1e37e1d3978b148eaf23c10358c94bd6ce3eab4a",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 37609,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "4af9273545cf29c084824b693dc59c2863b70f0a948d2e443efbbb38aac30c3a",
         "algName": "RSASHA1",
         "hashName": "SHA256"
       }
@@ -35665,6 +36086,22 @@
     "ttl": 86400,
     "ds": [
       {
+        "keyTag": 7408,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "79f063399b4c13ca29ea8f68ff98d9d4eff59b59",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 7408,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "02f6c4ff7037230837665a072a51779019771c19626e233465a9cab5eb69cee1",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
         "keyTag": 22037,
         "algorithm": 5,
         "digestType": 1,
@@ -35677,6 +36114,22 @@
         "algorithm": 5,
         "digestType": 2,
         "digest": "faa0d15e50168840e97aaa27e7d6f010ece0c3bdcfd7f26827da1b062aad9291",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 46651,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "5a09c2c9b674b46ae6a49255de9fecb7d999467b",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 46651,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "5ddc0142062a06775e6df86a868a0262c740a484ff29fc22aec48116d6fd5860",
         "algName": "RSASHA1",
         "hashName": "SHA256"
       }
@@ -36119,14 +36572,6 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 10837,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "3d65987255e6b08ee98327f1f5dc5a13ebab097712fbb8781bedf63ef304516c",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
-      {
         "keyTag": 25081,
         "algorithm": 8,
         "digestType": 2,
@@ -36431,19 +36876,16 @@
       }
     ],
     "ns": [
-      "193.176.144.16",
-      "2a00:d78:0:102:193:176:144:16",
-      "194.0.25.27",
-      "2001:678:20::27",
       "194.0.28.5",
       "2001:678:2c:0:194:0:28:5",
+      "194.0.25.27",
+      "2001:678:20::27",
       "192.5.4.1",
       "2001:500:2e::1"
     ],
     "glue": [
-      "ns1.nic.politie.@193.176.144.16,2a00:d78:0:102:193:176:144:16",
+      "ns1.nic.politie.@194.0.28.5,2001:678:2c:0:194:0:28:5",
       "ns3.nic.politie.@194.0.25.27,2001:678:20::27",
-      "ns5.nic.politie.@194.0.28.5,2001:678:2c:0:194:0:28:5",
       "sns-pb.isc.org.@192.5.4.1,2001:500:2e::1"
     ]
   },
@@ -36565,7 +37007,9 @@
       "199.254.61.17",
       "2001:500:27::17",
       "199.254.62.17",
-      "2001:500:28::17"
+      "2001:500:28::17",
+      "194.0.11.111",
+      "2001:678:e:111::53"
     ],
     "glue": [
       "a0.pr.afilias-nst.info.@199.254.59.17,2001:500:25::17",
@@ -36573,7 +37017,8 @@
       "b0.pr.afilias-nst.org.@199.254.60.17,2001:500:26::17",
       "b2.pr.afilias-nst.org.@199.249.124.17,2001:500:4c::17",
       "c0.pr.afilias-nst.info.@199.254.61.17,2001:500:27::17",
-      "d0.pr.afilias-nst.org.@199.254.62.17,2001:500:28::17"
+      "d0.pr.afilias-nst.org.@199.254.62.17,2001:500:28::17",
+      "pr-dns.denic.de.@194.0.11.111,2001:678:e:111::53"
     ]
   },
   "pramerica.": {
@@ -36837,14 +37282,6 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 14794,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "1bc63bcabf8b7622517b6c5a34eb072203014b21417da683cf2f2faaa1265098",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
-      {
         "keyTag": 21494,
         "algorithm": 8,
         "digestType": 2,
@@ -36913,14 +37350,6 @@
   "prof.": {
     "ttl": 86400,
     "ds": [
-      {
-        "keyTag": 6604,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "3cdae96a5c0b8f26662f0e6cb1a3632a03694a81987ed25ede7602d438fee0bd",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
       {
         "keyTag": 23977,
         "algorithm": 8,
@@ -37064,6 +37493,38 @@
   "property.": {
     "ttl": 86400,
     "ds": [
+      {
+        "keyTag": 10693,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "2f6be68ce8f84c3bac32409f7bf0391716c0bd19",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 10693,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "d6fb00f2b20cec1fc4be95d56435164b8c071e748faf2c1189fed730b2020631",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 18823,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "5ff19a5dc78c8e80118b5d40b813ea0cb669edec",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 18823,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "c110fdb8bd7f15f016ab9ea662e5982a1cf974be8cebb473e4f875763982bc36",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
       {
         "keyTag": 28787,
         "algorithm": 5,
@@ -37280,18 +37741,18 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 18303,
+        "keyTag": 40995,
         "algorithm": 7,
         "digestType": 1,
-        "digest": "d071d44bf9ddf70449c5a6c37cadeb3eb3683c74",
+        "digest": "43dedceeba41380680784aa531819a6ed8172b6d",
         "algName": "RSASHA1-NSEC3-SHA1",
         "hashName": "SHA1"
       },
       {
-        "keyTag": 18303,
+        "keyTag": 40995,
         "algorithm": 7,
         "digestType": 2,
-        "digest": "b8174233b52988d1a3517c9ef970df7df4900b3b211bbf5a931c4fa06c907f6a",
+        "digest": "abf415ed56e88c5f05434bbf62cdd90b574d6445a37ae5cc9b84638ab5b9e656",
         "algName": "RSASHA1-NSEC3-SHA1",
         "hashName": "SHA256"
       }
@@ -38815,10 +39276,10 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 4831,
+        "keyTag": 9199,
         "algorithm": 8,
         "digestType": 2,
-        "digest": "6393a3fc9e1c019d5f07c8ee6e32365924f7b6405db36ede4a5d5e75acb52954",
+        "digest": "954de73ce0f8bdef2086a7225047d637639112570d551884fa841a78744b7eb0",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -38926,7 +39387,8 @@
       "2001:12f8:4::10",
       "200.229.248.10",
       "2001:12f8:1::10",
-      "200.219.159.10"
+      "200.219.159.10",
+      "2001:12f8:c::10"
     ],
     "glue": [
       "a.dns.br.@200.160.0.10,2001:12ff::10",
@@ -38934,7 +39396,7 @@
       "c.dns.br.@200.192.233.10",
       "d.dns.br.@200.219.154.10,2001:12f8:4::10",
       "e.dns.br.@200.229.248.10,2001:12f8:1::10",
-      "f.dns.br.@200.219.159.10"
+      "f.dns.br.@200.219.159.10,2001:12f8:c::10"
     ]
   },
   "rip.": {
@@ -39015,10 +39477,10 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 35861,
+        "keyTag": 19267,
         "algorithm": 8,
         "digestType": 2,
-        "digest": "54d82f598b17efb0743a6cdb0b37399547fa646bcdadf2c1c1f7900f4ae887ea",
+        "digest": "499357e3cc1449108f1e2bb70a1b952d140871a50e41138786eb51a2316468ea",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -39312,14 +39774,6 @@
         "digest": "a34484076595033b18742005866b79f5c56fecec5a667494e3b179621b44ee4a",
         "algName": "RSASHA256",
         "hashName": "SHA256"
-      },
-      {
-        "keyTag": 9904,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "2ce0f1076c83e50dfd058382cbb42163105014a964ee32f23efe7aa2732dbbe9",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
       }
     ],
     "ns": [
@@ -39481,9 +39935,8 @@
     "ttl": 172800,
     "ds": [],
     "ns": [
-      "41.74.173.250",
+      "196.49.7.188",
       "41.138.85.98",
-      "196.49.7.178",
       "204.61.216.91",
       "2001:500:14:6091:ad::1",
       "77.72.229.254",
@@ -39492,9 +39945,8 @@
       "2001:43f8:120::28"
     ],
     "glue": [
-      "ns1.ricta.org.rw.@41.74.173.250",
+      "ns1.ricta.org.rw.@196.49.7.188",
       "ns3.ricta.org.rw.@41.138.85.98",
-      "ns4.ricta.org.rw.@196.49.7.178",
       "pch.ricta.org.rw.@204.61.216.91,2001:500:14:6091:ad::1",
       "fork.sth.dnsnode.net.@77.72.229.254,2a01:3f0:0:306::53",
       "ns-rw.afrinic.net.@196.216.168.28,2001:43f8:120::28"
@@ -39533,10 +39985,10 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 41254,
+        "keyTag": 43744,
         "algorithm": 8,
         "digestType": 2,
-        "digest": "4966d4680185ea921b3e017d88a6f02d6b44d9f25064db2e2d3c3dec34d2a099",
+        "digest": "5582b9e7d73ab685908d1ba1a8a6da4193653718842e3df886dc3d3ac9f7fb3b",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -40045,59 +40497,6 @@
       "anycast10.irondns.net.@195.253.64.12,2a01:5b0:4::c",
       "anycast23.irondns.net.@195.253.65.11,2a01:5b0:5::b",
       "anycast24.irondns.net.@195.253.65.12,2a01:5b0:5::c"
-    ]
-  },
-  "sapo.": {
-    "ttl": 86400,
-    "ds": [
-      {
-        "keyTag": 8934,
-        "algorithm": 7,
-        "digestType": 1,
-        "digest": "6ba876673946a16a304832a3760f3c2f624709f1",
-        "algName": "RSASHA1-NSEC3-SHA1",
-        "hashName": "SHA1"
-      },
-      {
-        "keyTag": 8934,
-        "algorithm": 7,
-        "digestType": 2,
-        "digest": "c843cbe3d178a465d9b614aa803a5ece399ffafa88da813d674e12c18d490218",
-        "algName": "RSASHA1-NSEC3-SHA1",
-        "hashName": "SHA256"
-      },
-      {
-        "keyTag": 26226,
-        "algorithm": 7,
-        "digestType": 1,
-        "digest": "754a35176361eb52a8086928fc9177450cafa578",
-        "algName": "RSASHA1-NSEC3-SHA1",
-        "hashName": "SHA1"
-      },
-      {
-        "keyTag": 26226,
-        "algorithm": 7,
-        "digestType": 2,
-        "digest": "00ed425ea5bb96443eabd2af194a93bfbe3ecdd5a7b3c2a4a8e11df714ee3944",
-        "algName": "RSASHA1-NSEC3-SHA1",
-        "hashName": "SHA256"
-      }
-    ],
-    "ns": [
-      "194.169.218.98",
-      "2001:67c:13cc::1:98",
-      "185.24.64.98",
-      "2a04:2b00:13cc::1:98",
-      "212.18.248.98",
-      "2a04:2b00:13ee::98",
-      "212.18.249.98",
-      "2a04:2b00:13ff::98"
-    ],
-    "glue": [
-      "a.nic.sapo.@194.169.218.98,2001:67c:13cc::1:98",
-      "b.nic.sapo.@185.24.64.98,2a04:2b00:13cc::1:98",
-      "c.nic.sapo.@212.18.248.98,2a04:2b00:13ee::98",
-      "d.nic.sapo.@212.18.249.98,2a04:2b00:13ff::98"
     ]
   },
   "sarl.": {
@@ -40963,14 +41362,6 @@
         "digest": "afaec406996df5555fc4365c07c7c74de82fe7cf5264fc5fad9d1ab948f3da28",
         "algName": "RSASHA256",
         "hashName": "SHA256"
-      },
-      {
-        "keyTag": 39799,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "26e951870910633c23282a6d761f15e9d5969c149ec3e90ff34e611a1df53b30",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
       }
     ],
     "ns": [
@@ -41414,6 +41805,38 @@
     "ttl": 86400,
     "ds": [
       {
+        "keyTag": 3097,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "e237119fa574704694c0228bf83f7275f2bc045b",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 3097,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "b4e8db053b1a84feaf5a0db4f8626d3bd764a080340bb39c4ba68d80e35fe5f0",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 40039,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "308965bb0a872eaa226e656d0cbc877f38da0aa8",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 40039,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "96b989de091d7af97790184c91261723586b1c42745a95d26fa751f836209909",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
         "keyTag": 60556,
         "algorithm": 5,
         "digestType": 1,
@@ -41503,10 +41926,10 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 23191,
+        "keyTag": 34234,
         "algorithm": 8,
         "digestType": 2,
-        "digest": "3ad7eabb00925daf56078e258f4a4b56294ed719734d1af93341f2d977746e21",
+        "digest": "feacaa03afe4d8842da3af03c94aedf104d99acb5729572b1f202ab1744681e1",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -41514,8 +41937,8 @@
     "ns": [
       "137.189.6.21",
       "2405:3000:3:6::15",
-      "202.12.28.140",
-      "2001:dc0:1:0:4777::140",
+      "202.12.31.53",
+      "2001:dd8:12::53",
       "194.0.11.106",
       "2001:678:e:106::53",
       "204.61.216.57",
@@ -41523,7 +41946,7 @@
     ],
     "glue": [
       "ns2.cuhk.edu.hk.@137.189.6.21,2405:3000:3:6::15",
-      "sec3.apnic.net.@202.12.28.140,2001:dc0:1:0:4777::140",
+      "ns4.apnic.net.@202.12.31.53,2001:dd8:12::53",
       "dsany.sgnic.sg.@194.0.11.106,2001:678:e:106::53",
       "sg-ns.anycast.pch.net.@204.61.216.57,2001:500:14:6057:ad::1"
     ]
@@ -42250,9 +42673,7 @@
       "212.18.248.16",
       "2a04:2b00:13ee::16",
       "212.18.249.16",
-      "2a04:2b00:13ff::16",
-      "192.5.4.1",
-      "2001:500:2e::1"
+      "2a04:2b00:13ff::16"
     ],
     "glue": [
       "a.tld.sk.@194.0.45.1,2001:678:70::1",
@@ -42261,8 +42682,7 @@
       "e.tld.sk.@194.169.218.16,2001:67c:13cc::1:16",
       "f.tld.sk.@185.24.64.16,2a04:2b00:13cc::1:16",
       "g.tld.sk.@212.18.248.16,2a04:2b00:13ee::16",
-      "h.tld.sk.@212.18.249.16,2a04:2b00:13ff::16",
-      "sns-pb.isc.org.@192.5.4.1,2001:500:2e::1"
+      "h.tld.sk.@212.18.249.16,2a04:2b00:13ff::16"
     ]
   },
   "ski.": {
@@ -42586,10 +43006,10 @@
         "hashName": "SHA256"
       },
       {
-        "keyTag": 32482,
+        "keyTag": 42844,
         "algorithm": 8,
         "digestType": 2,
-        "digest": "7553c96a8b702f64c80477c1be7b3d9dcff833a3c08f39ca6a18c6dbff840576",
+        "digest": "51ecb2a1b9a93e42b3cefdb344f02584434661c4986f0a53b97f7d23134f4c15",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -42607,7 +43027,7 @@
       "ns.ucad.sn.@196.1.95.1",
       "sn.cctld.authdns.ripe.net.@193.0.9.111,2001:67c:e0::111",
       "ns1.sonatel.sn.@213.154.64.11",
-      "ns3.nic.fr.@192.134.0.49,2001:660:3006:1::1:1",
+      "ns-sn.nic.fr.@192.134.0.49,2001:660:3006:1::1:1",
       "censvrns0001.ird.fr.@91.203.32.147"
     ]
   },
@@ -43000,14 +43420,6 @@
         "algorithm": 8,
         "digestType": 2,
         "digest": "2c8fd7c33b59f39069aae096b65ed29b10bbe11de874833fe20fc54a64815d2f",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
-      {
-        "keyTag": 38734,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "f7539f6618fb237e3a10b6801f935d3aa20c1bf11cd02ed585dd572a6fa9fba0",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -43971,10 +44383,10 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 21521,
+        "keyTag": 44216,
         "algorithm": 8,
         "digestType": 2,
-        "digest": "f6ece0003432d13a631d0b281da59681f354241bbe6524b9b622990b6bb105fe",
+        "digest": "fc6e60b557f040cb777483d2bf140264ba7fc6df1187cb51c985f36fee5972e5",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -44914,6 +45326,22 @@
     "ttl": 86400,
     "ds": [
       {
+        "keyTag": 757,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "6f5f6561a98b5084e76276ba5a26b6febd096203",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 757,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "686ba075d23a5d1eeb55ec0ae80926c3bbb0c14c511801702e9c28df6a7e2e79",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
         "keyTag": 5393,
         "algorithm": 5,
         "digestType": 1,
@@ -44926,6 +45354,22 @@
         "algorithm": 5,
         "digestType": 2,
         "digest": "73bb10f1ceaa45e7896f1a38f8af5dd7c08c26432bf52c7f47141364f842acd2",
+        "algName": "RSASHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 59236,
+        "algorithm": 5,
+        "digestType": 1,
+        "digest": "8e94a42c317346e3cff2fcbc5283365a65c361d0",
+        "algName": "RSASHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 59236,
+        "algorithm": 5,
+        "digestType": 2,
+        "digest": "db06369f0539502d011a91903fa52e8666b3d453045f01badf91dedd3067a591",
         "algName": "RSASHA1",
         "hashName": "SHA256"
       }
@@ -47888,7 +48332,8 @@
       "2001:12f8:4::10",
       "200.229.248.10",
       "2001:12f8:1::10",
-      "200.219.159.10"
+      "200.219.159.10",
+      "2001:12f8:c::10"
     ],
     "glue": [
       "a.dns.br.@200.160.0.10,2001:12ff::10",
@@ -47896,7 +48341,7 @@
       "c.dns.br.@200.192.233.10",
       "d.dns.br.@200.219.154.10,2001:12f8:4::10",
       "e.dns.br.@200.229.248.10,2001:12f8:1::10",
-      "f.dns.br.@200.219.159.10"
+      "f.dns.br.@200.219.159.10,2001:12f8:c::10"
     ]
   },
   "ups.": {
@@ -48159,8 +48604,41 @@
     ]
   },
   "vc.": {
-    "ttl": 172800,
-    "ds": [],
+    "ttl": 86400,
+    "ds": [
+      {
+        "keyTag": 31338,
+        "algorithm": 7,
+        "digestType": 1,
+        "digest": "e075b7b5aeacfb81b93e348c18af51c34cd3ea5d",
+        "algName": "RSASHA1-NSEC3-SHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 31338,
+        "algorithm": 7,
+        "digestType": 2,
+        "digest": "3f91762173655f80a5a62cdb317ce27f8d2ae508317535bcbbe45c8df3692115",
+        "algName": "RSASHA1-NSEC3-SHA1",
+        "hashName": "SHA256"
+      },
+      {
+        "keyTag": 36820,
+        "algorithm": 7,
+        "digestType": 1,
+        "digest": "5871026da2bc184c8fbb99eec885644559b470bd",
+        "algName": "RSASHA1-NSEC3-SHA1",
+        "hashName": "SHA1"
+      },
+      {
+        "keyTag": 36820,
+        "algorithm": 7,
+        "digestType": 2,
+        "digest": "36ca5d2db63d23fa957eab4529a4951c2a487188a039c9b7624e1690298b8316",
+        "algName": "RSASHA1-NSEC3-SHA1",
+        "hashName": "SHA256"
+      }
+    ],
     "ns": [
       "199.254.59.1",
       "2001:500:25::1",
@@ -51353,20 +51831,13 @@
         "digest": "a1c0a1b101f2b31da2dd995bd0994a6c1e9e34e325fa007e2ea8721dfc4c6cb4",
         "algName": "RSASHA1-NSEC3-SHA1",
         "hashName": "SHA256"
-      },
-      {
-        "keyTag": 56335,
-        "algorithm": 7,
-        "digestType": 2,
-        "digest": "ed307dc0902f1130adbcb1b6fba7c16f76927bd3e33d80fed23daefeff2604c8",
-        "algName": "RSASHA1-NSEC3-SHA1",
-        "hashName": "SHA256"
       }
     ],
     "ns": [
       "61.74.75.1",
       "203.248.246.220",
       "203.83.159.1",
+      "2001:dcc:4::1",
       "202.30.124.100",
       "2001:dcc:5::100",
       "218.38.181.90",
@@ -51376,7 +51847,7 @@
     "glue": [
       "b.dns.kr.@61.74.75.1",
       "c.dns.kr.@203.248.246.220",
-      "d.dns.kr.@203.83.159.1",
+      "d.dns.kr.@203.83.159.1,2001:dcc:4::1",
       "e.dns.kr.@202.30.124.100,2001:dcc:5::100",
       "f.dns.kr.@218.38.181.90",
       "g.dns.kr.@202.31.190.1,2001:dc5:a::1"
@@ -52552,10 +53023,10 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 15226,
+        "keyTag": 11866,
         "algorithm": 8,
         "digestType": 2,
-        "digest": "8d5f2e015ab70852ab5d0f38bd34241fe57b9880988a21cb12e9d1a4b7c15794",
+        "digest": "99e8287957f8a7960825d232ad961aacd6f7a66e546fd39231afb713c11bbfb6",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -52563,8 +53034,8 @@
     "ns": [
       "137.189.6.21",
       "2405:3000:3:6::15",
-      "202.12.28.140",
-      "2001:dc0:1:0:4777::140",
+      "202.12.31.53",
+      "2001:dd8:12::53",
       "194.0.11.106",
       "2001:678:e:106::53",
       "204.61.216.57",
@@ -52572,7 +53043,7 @@
     ],
     "glue": [
       "ns2.cuhk.edu.hk.@137.189.6.21,2405:3000:3:6::15",
-      "sec3.apnic.net.@202.12.28.140,2001:dc0:1:0:4777::140",
+      "ns4.apnic.net.@202.12.31.53,2001:dd8:12::53",
       "dsany.sgnic.sg.@194.0.11.106,2001:678:e:106::53",
       "sg-ns.anycast.pch.net.@204.61.216.57,2001:500:14:6057:ad::1"
     ]
@@ -52684,10 +53155,10 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 26344,
+        "keyTag": 32821,
         "algorithm": 8,
         "digestType": 2,
-        "digest": "0e69939692ca5c37c62c294c9d2a9b17b976c81acd9c80b9b86b53664e0aa6fa",
+        "digest": "48d646c45e69a3a7fcefcb0390d1895ea12226fccbf7e11ed3cb44c1e1c6bca9",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -53154,14 +53625,6 @@
         "algorithm": 8,
         "digestType": 2,
         "digest": "aaacfe5efe147ef640dba9107a36f9e43bc2b3f736a538a680cd1c01aafe41fb",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
-      {
-        "keyTag": 59086,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "917a8aedc23bffecb7292dab3e99e1180c3a13ed128da3d8dd7705b926251770",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -55239,6 +55702,14 @@
     "ttl": 86400,
     "ds": [
       {
+        "keyTag": 27565,
+        "algorithm": 8,
+        "digestType": 2,
+        "digest": "cb10ead52dc0ab87619f0add9400977114e8ae84fbcc3c3a3c84674bd1c3d7a0",
+        "algName": "RSASHA256",
+        "hashName": "SHA256"
+      },
+      {
         "keyTag": 38734,
         "algorithm": 8,
         "digestType": 1,
@@ -55272,26 +55743,18 @@
       }
     ],
     "ns": [
-      "156.154.169.74",
-      "2610:a1:1071::1:4a",
-      "156.154.170.74",
-      "2610:a1:1072::1:4a",
-      "156.154.171.74",
-      "2610:a1:1073::1:4a",
-      "156.154.172.74",
-      "2610:a1:1074::1:4a",
-      "156.154.173.74",
-      "2610:a1:1075::1:4a",
-      "156.154.174.74",
-      "2610:a1:1076::1:4a"
+      "103.61.60.1",
+      "2402:7d80::1",
+      "103.61.61.1",
+      "2402:7d80:8888::1",
+      "103.61.62.1",
+      "103.61.63.1"
     ],
     "glue": [
-      "ns1.dns.nic.xn--nyqy26a.@156.154.169.74,2610:a1:1071::1:4a",
-      "ns2.dns.nic.xn--nyqy26a.@156.154.170.74,2610:a1:1072::1:4a",
-      "ns3.dns.nic.xn--nyqy26a.@156.154.171.74,2610:a1:1073::1:4a",
-      "ns4.dns.nic.xn--nyqy26a.@156.154.172.74,2610:a1:1074::1:4a",
-      "ns5.dns.nic.xn--nyqy26a.@156.154.173.74,2610:a1:1075::1:4a",
-      "ns6.dns.nic.xn--nyqy26a.@156.154.174.74,2610:a1:1076::1:4a"
+      "ns1.teleinfo.cn.@103.61.60.1,2402:7d80::1",
+      "ns2.teleinfoo.com.@103.61.61.1,2402:7d80:8888::1",
+      "ns3.teleinfo.cn.@103.61.62.1",
+      "ns4.teleinfoo.com.@103.61.63.1"
     ]
   },
   "xn--o3cw4h.": {
@@ -55571,14 +56034,6 @@
         "digest": "2ec8c0789b0f4ddb281709a6b6d8ebe6259c0c30251f26f9759f29c6b93b7df3",
         "algName": "RSASHA256",
         "hashName": "SHA256"
-      },
-      {
-        "keyTag": 58657,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "d20992ee7bf38ecb78d395858b245382c8f07e42921bd0bdf8cfc93ac7730b12",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
       }
     ],
     "ns": [
@@ -55604,14 +56059,6 @@
   "xn--qcka1pmc.": {
     "ttl": 86400,
     "ds": [
-      {
-        "keyTag": 61297,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "7a8708504c43fc4ff89b2f37a011aad1f822fb1c9c11ccf2f9cb091d9170b219",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
       {
         "keyTag": 65200,
         "algorithm": 8,
@@ -55690,29 +56137,29 @@
         "digest": "0cab870792e42b0ef02ebcef64c3a4fe22d1be9ef91dd64004473741347a11f4",
         "algName": "RSASHA256",
         "hashName": "SHA256"
+      },
+      {
+        "keyTag": 27565,
+        "algorithm": 8,
+        "digestType": 2,
+        "digest": "b53c43c6b3f1146cc9969545c292fae4823d43b81da05141646f837451e92375",
+        "algName": "RSASHA256",
+        "hashName": "SHA256"
       }
     ],
     "ns": [
-      "156.154.144.191",
-      "2610:a1:1071::bf",
-      "156.154.145.191",
-      "2610:a1:1072::bf",
-      "156.154.159.191",
-      "2610:a1:1073::bf",
-      "156.154.156.191",
-      "2610:a1:1074::bf",
-      "156.154.157.191",
-      "2610:a1:1075::bf",
-      "156.154.158.191",
-      "2610:a1:1076::bf"
+      "103.61.60.1",
+      "2402:7d80::1",
+      "103.61.61.1",
+      "2402:7d80:8888::1",
+      "103.61.62.1",
+      "103.61.63.1"
     ],
     "glue": [
-      "ns1.dns.nic.xn--rhqv96g.@156.154.144.191,2610:a1:1071::bf",
-      "ns2.dns.nic.xn--rhqv96g.@156.154.145.191,2610:a1:1072::bf",
-      "ns3.dns.nic.xn--rhqv96g.@156.154.159.191,2610:a1:1073::bf",
-      "ns4.dns.nic.xn--rhqv96g.@156.154.156.191,2610:a1:1074::bf",
-      "ns5.dns.nic.xn--rhqv96g.@156.154.157.191,2610:a1:1075::bf",
-      "ns6.dns.nic.xn--rhqv96g.@156.154.158.191,2610:a1:1076::bf"
+      "ns1.teleinfo.cn.@103.61.60.1,2402:7d80::1",
+      "ns2.teleinfoo.com.@103.61.61.1,2402:7d80:8888::1",
+      "ns3.teleinfo.cn.@103.61.62.1",
+      "ns4.teleinfoo.com.@103.61.63.1"
     ]
   },
   "xn--rovu88b.": {
@@ -56414,10 +56861,10 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 52219,
+        "keyTag": 1571,
         "algorithm": 8,
         "digestType": 2,
-        "digest": "99ede89cda825be2b6743c36f7acf5e95fdf63ce76cd372eb6d1c5a49b006b41",
+        "digest": "9cc25aff594c63ebb4ae0fa6a24e6d4b4f2641bcfee5ab91e2c3bb233cbce22d",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -56425,8 +56872,8 @@
     "ns": [
       "137.189.6.21",
       "2405:3000:3:6::15",
-      "202.12.28.140",
-      "2001:dc0:1:0:4777::140",
+      "202.12.31.53",
+      "2001:dd8:12::53",
       "194.0.11.106",
       "2001:678:e:106::53",
       "204.61.216.57",
@@ -56434,7 +56881,7 @@
     ],
     "glue": [
       "ns2.cuhk.edu.hk.@137.189.6.21,2405:3000:3:6::15",
-      "sec3.apnic.net.@202.12.28.140,2001:dc0:1:0:4777::140",
+      "ns4.apnic.net.@202.12.31.53,2001:dd8:12::53",
       "dsany.sgnic.sg.@194.0.11.106,2001:678:e:106::53",
       "sg-ns.anycast.pch.net.@204.61.216.57,2001:500:14:6057:ad::1"
     ]
@@ -56898,10 +57345,10 @@
     "ttl": 86400,
     "ds": [
       {
-        "keyTag": 9121,
+        "keyTag": 42466,
         "algorithm": 8,
         "digestType": 2,
-        "digest": "47b31ddec9f0236d1acf3d61557200b9cf8f2e528cd1a59b8c837842d5f02a87",
+        "digest": "8bf64d685239bb601dc857cdde6cca7252dce90dc814d600c899ad00a4124784",
         "algName": "RSASHA256",
         "hashName": "SHA256"
       }
@@ -56984,14 +57431,6 @@
   "youtube.": {
     "ttl": 86400,
     "ds": [
-      {
-        "keyTag": 21505,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "8df0d0fa27e6453a8c04e05f132e0914613e44d4ee666326692a5fe26cfe2d54",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
       {
         "keyTag": 63811,
         "algorithm": 8,
@@ -57290,14 +57729,6 @@
   "zip.": {
     "ttl": 86400,
     "ds": [
-      {
-        "keyTag": 29509,
-        "algorithm": 8,
-        "digestType": 2,
-        "digest": "6f4e4122ac3849600593be36272c95044c496f9ed19d88d441d7e4aae31c392c",
-        "algName": "RSASHA256",
-        "hashName": "SHA256"
-      },
       {
         "keyTag": 37525,
         "algorithm": 8,
