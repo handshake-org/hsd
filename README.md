@@ -39,12 +39,12 @@ Current public DNS servers:
 
 Example:
 
-``` js
+``` bash
 $ dig @173.255.248.12 google.com A +short
 172.217.0.46
 ```
 
-``` js
+``` bash
 $ dig @66.175.217.103 com NS
 ...
 ;; AUTHORITY SECTION:
