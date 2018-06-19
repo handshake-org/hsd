@@ -59,6 +59,11 @@ if (!node.config.bool('no-wallet') && !node.has('walletdb')) {
   node.use(plugin);
 }
 
+if (node.config.str('network') === 'main') {
+  console.error('Mainnet not yet active.');
+  process.exit(1);
+}
+
 process.on('unhandledRejection', (err, promise) => {
   throw err;
 });
