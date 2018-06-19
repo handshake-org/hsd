@@ -144,8 +144,8 @@ describe('Chain', function() {
         }]
       });
 
-      job1.addTX(mtx.toTX(), mtx.view);
-      job2.addTX(mtx.toTX(), mtx.view);
+      assert(job1.addTX(mtx.toTX(), mtx.view));
+      assert(job2.addTX(mtx.toTX(), mtx.view));
 
       job1.refresh();
       job2.refresh();
@@ -244,7 +244,7 @@ describe('Chain', function() {
     {
       const job = await cpu.createJob();
 
-      job.addTX(mtx.toTX(), mtx.view);
+      assert(job.addTX(mtx.toTX(), mtx.view));
       job.refresh();
 
       const block = await job.mineAsync();
@@ -258,7 +258,7 @@ describe('Chain', function() {
       assert(mtx.outputs.length > 1);
       mtx.outputs.pop();
 
-      job.addTX(mtx.toTX(), mtx.view);
+      assert(job.addTX(mtx.toTX(), mtx.view));
       job.refresh();
 
       assert.strictEqual(await mineBlock(job),
@@ -277,7 +277,7 @@ describe('Chain', function() {
     wallet.sign(mtx);
 
     const job = await cpu.createJob();
-    job.addTX(mtx.toTX(), mtx.view);
+    assert(job.addTX(mtx.toTX(), mtx.view));
     job.refresh();
 
     assert.strictEqual(await mineBlock(job), 'bad-txns-inputs-missingorspent');
@@ -308,7 +308,7 @@ describe('Chain', function() {
     });
 
     const job = await cpu.createJob();
-    job.addTX(mtx.toTX(), mtx.view);
+    assert(job.addTX(mtx.toTX(), mtx.view));
     job.refresh();
 
     const block = await job.mineAsync();
@@ -378,7 +378,7 @@ describe('Chain', function() {
 
     const job = await cpu.createJob();
 
-    job.addTX(spend.toTX(), spend.view);
+    assert(job.addTX(spend.toTX(), spend.view));
     job.refresh();
 
     const block = await job.mineAsync();
