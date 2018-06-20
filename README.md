@@ -130,9 +130,9 @@ We can continue monitoring the status, now with the wallet's version of
 getnameinfo:
 
 ``` bash
-$ hwallet-cli getnameinfo handshake
+$ hwallet-cli rpc getnameinfo handshake
 # To see other bids and reveals
-$ hwallet-cli getauctioninfo handshake
+$ hwallet-cli rpc getauctioninfo handshake
 ```
 
 If we end up losing, we can redeem our money from the covenant with
@@ -141,7 +141,7 @@ If we end up losing, we can redeem our money from the covenant with
 If we won, we can now register and update the name using `sendupdate`.
 
 ``` bash
-$ hwallet-cli sendupdate handshake \
+$ hwallet-cli rpc sendupdate handshake \
   '{"ttl":3600,"ns":["ns1.myserver.net.@1.2.3.4"]}'
 ```
 
@@ -150,7 +150,7 @@ Note that the `ns` field's `domain@ip` format symbolizes glue.
 Expiration on testnet is around 30 days, so be sure to send a renewal soon!
 
 ``` bash
-$ hwallet-cli sendrenewal handshake
+$ hwallet-cli rpc sendrenewal handshake
 ```
 
 ### RPC Calls
