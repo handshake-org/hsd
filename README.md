@@ -222,3 +222,4 @@ See LICENSE for more info.
 [hnsd]: https://github.com/handshake-org/hnsd
 [hsk-miner]: https://github.com/handshake-org/hsk-miner
 [hsk-client]: https://github.com/handshake-org/hsk-client
+[urkel]: https://github.com/handshake-org/urkel
