@@ -115,6 +115,7 @@ conceal our true bid.
 
 ``` bash
 # Send a bid of 5 coins, with a lockup value of 10 coins.
+# These units are in HNS (1 HNS = 1,000,000 dollarydoos).
 $ hwallet-cli rpc sendbid handshake 5 10
 ```
 
