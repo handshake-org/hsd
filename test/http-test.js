@@ -227,6 +227,7 @@ describe('HTTP', function() {
       submitold: false,
       coinbaseaux: { flags: '6d696e65642062792068736b64' },
       coinbasevalue: 1000000000,
+      claims: [],
       transactions: []
     });
   });

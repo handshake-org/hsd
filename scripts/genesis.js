@@ -2,7 +2,6 @@
 
 'use strict';
 
-const assert = require('assert');
 const Path = require('path');
 const fs = require('bfile');
 const consensus = require('../lib/protocol/consensus');
@@ -11,13 +10,8 @@ const TX = require('../lib/primitives/tx');
 const Block = require('../lib/primitives/block');
 const Address = require('../lib/primitives/address');
 const Witness = require('../lib/script/witness');
-const Input = require('../lib/primitives/input');
-const Output = require('../lib/primitives/output');
 const util = require('../lib/utils/util');
-const rules = require('../lib/covenants/rules');
-const Resource = require('../lib/dns/resource');
-const root = require('../etc/root.json');
-const {types} = rules;
+const reserved = require('../lib/covenants/reserved');
 
 const networks = {
   main: Network.get('main'),
@@ -26,13 +20,9 @@ const networks = {
   simnet: Network.get('simnet')
 };
 
-const names = Object.keys(root).sort();
-
 function createGenesisBlock(options) {
   const genesis = Address.fromHash(consensus.GENESIS_KEY, 0);
   const investors = Address.fromHash(options.keys.investors, 0);
-  const foundation = Address.fromHash(options.keys.foundation, 0);
-  const claimant = Address.fromHash(options.keys.claimant, 0);
   const creators = Address.fromHash(options.keys.creators, 0);
   const airdrop = Address.fromHash(options.keys.airdrop, 0);
 
@@ -68,10 +58,6 @@ function createGenesisBlock(options) {
         address: investors
       },
       {
-        value: consensus.MAX_FOUNDATION,
-        address: foundation
-      },
-      {
         value: consensus.MAX_CREATORS,
         address: creators
       },
@@ -83,10 +69,12 @@ function createGenesisBlock(options) {
     locktime: 0
   });
 
+  tx.refresh();
+
   const block = new Block({
     version: 0,
     prevBlock: consensus.NULL_HASH,
-    merkleRoot: tx.witnessHash('hex'),
+    merkleRoot: consensus.NULL_HASH,
     treeRoot: consensus.NULL_HASH,
     reservedRoot: consensus.NULL_HASH,
     time: options.time,
@@ -96,83 +84,6 @@ function createGenesisBlock(options) {
   });
 
   block.txs.push(tx);
-
-  const claimer = new TX({
-    version: 0,
-    inputs: [{
-      prevout: {
-        hash: tx.hash('hex'),
-        index: 0
-      },
-      witness: new Witness(),
-      sequence: 0xffffffff
-    }],
-    outputs: [{
-      value: consensus.GENESIS_REWARD,
-      address: genesis
-    }],
-    locktime: 0
-  });
-
-  for (const name of names) {
-    const rawName = Buffer.from(name.slice(0, -1), 'ascii');
-    const nameHash = rules.hashName(rawName);
-
-    const claim = new Output();
-    claim.value = 0;
-    claim.address = claimant;
-    claim.covenant.type = types.CLAIM;
-    claim.covenant.items.push(nameHash);
-    claim.covenant.items.push(rawName);
-    claimer.outputs.push(claim);
-  }
-
-  claimer.refresh();
-
-  const registry = new TX({
-    version: 0,
-    inputs: [],
-    outputs: [],
-    locktime: 0
-  });
-
-  for (let i = 0; i < names.length; i++) {
-    const name = names[i];
-
-    const data = root[name];
-    assert(data.ttl);
-    assert(data.ds);
-    assert(data.glue);
-
-    const json = {
-      ttl: data.ttl,
-      ds: data.ds,
-      ns: data.glue
-    };
-
-    const rawName = Buffer.from(name.slice(0, -1), 'ascii');
-    const nameHash = rules.hashName(rawName);
-    const res = Resource.fromJSON(json);
-
-    const prev = claimer.outpoint(i + 1);
-    const claim = Input.fromOutpoint(prev);
-
-    const update = new Output();
-    update.value = 0;
-    update.address = claimant;
-    update.covenant.type = types.REGISTER;
-    update.covenant.items.push(nameHash);
-    update.covenant.items.push(res.toRaw());
-    update.covenant.items.push(consensus.ZERO_HASH);
-
-    registry.inputs.push(claim);
-    registry.outputs.push(update);
-  }
-
-  registry.refresh();
-
-  block.txs.push(claimer);
-  block.txs.push(registry);
 
   block.merkleRoot = block.createMerkleRoot('hex');
 
@@ -301,6 +212,30 @@ for (const name of Object.keys(blocks)) {
 ccode.push('#endif');
 ccode.push('');
 
+const tcode = [
+  '#ifndef _HSK_TLD_H',
+  '#define _HSK_TLD_H',
+  '',
+  'static const char *HSK_TLD[] = {'
+];
+
+let tsize = 0;
+
+for (const [tld, item] of reserved) {
+  if (item.root) {
+    tcode.push(`  "${tld}",`);
+    tsize += 1;
+  }
+}
+
+tcode.push('  NULL');
+tcode.push('};');
+tcode.push('');
+tcode.push(`#define HSK_TLD_SIZE ${tsize}`);
+tcode.push('');
+tcode.push('#endif');
+tcode.push('');
+
 const file = Path.resolve(
   __dirname,
   '..',
@@ -329,3 +264,12 @@ const cfile = Path.resolve(
 );
 
 fs.writeFileSync(cfile, ccode.join('\n'));
+
+const tfile = Path.resolve(
+  __dirname,
+  '..',
+  'etc',
+  'tld.h'
+);
+
+fs.writeFileSync(tfile, tcode.join('\n'));

@@ -174,7 +174,7 @@ describe('Chain', function() {
   it('should have correct chain value', () => {
     assert.strictEqual(chain.db.state.value, 1360211004420000);
     // assert.strictEqual(chain.db.state.coin, 1749);
-    assert.strictEqual(chain.db.state.tx, 223);
+    assert.strictEqual(chain.db.state.tx, 221);
   });
 
   it('should have correct wallet balance', async () => {
@@ -206,7 +206,7 @@ describe('Chain', function() {
   it('should have correct chain value', () => {
     assert.strictEqual(chain.db.state.value, 1360212004420000);
     // assert.strictEqual(chain.db.state.coin, 1750);
-    assert.strictEqual(chain.db.state.tx, 224);
+    assert.strictEqual(chain.db.state.tx, 222);
   });
 
   it('should have correct wallet balance', async () => {
@@ -286,7 +286,7 @@ describe('Chain', function() {
   it('should have correct chain value', () => {
     assert.strictEqual(chain.db.state.value, 1360214004420000);
     // assert.strictEqual(chain.db.state.coin, 1753);
-    assert.strictEqual(chain.db.state.tx, 227);
+    assert.strictEqual(chain.db.state.tx, 225);
   });
 
   it('should get coin', async () => {

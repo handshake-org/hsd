@@ -140,7 +140,7 @@ describe('Node', function() {
   it('should have correct chain value', () => {
     assert.strictEqual(chain.db.state.value, 1360012004420000);
     // assert.strictEqual(chain.db.state.coin, 1569);
-    assert.strictEqual(chain.db.state.tx, 23);
+    assert.strictEqual(chain.db.state.tx, 21);
   });
 
   it('should have correct balance', async () => {
@@ -177,7 +177,7 @@ describe('Node', function() {
   it('should have correct chain value', () => {
     assert.strictEqual(chain.db.state.value, 1360013004420000);
     // assert.strictEqual(chain.db.state.coin, 1570);
-    assert.strictEqual(chain.db.state.tx, 24);
+    assert.strictEqual(chain.db.state.tx, 22);
   });
 
   it('should have correct balance', async () => {
@@ -241,7 +241,7 @@ describe('Node', function() {
   it('should have correct chain value', () => {
     assert.strictEqual(chain.db.state.value, 1360014004420000);
     // assert.strictEqual(chain.db.state.coin, 1572);
-    assert.strictEqual(chain.db.state.tx, 26);
+    assert.strictEqual(chain.db.state.tx, 24);
   });
 
   it('should get coin', async () => {
@@ -457,6 +457,7 @@ describe('Node', function() {
         coinbaseaux: { flags: '6d696e65642062792068736b64' },
         coinbasetxn: undefined,
         coinbasevalue: 1000000000,
+        claims: [],
         transactions: []
       },
       error: null,
