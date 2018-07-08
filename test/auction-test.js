@@ -284,4 +284,51 @@ describe('Auction', function() {
       await chain.close();
     });
   });
+
+  describe('Claim', function() {
+    const node = createNode();
+    const orig = createNode();
+    const comp = createNode();
+
+    const {chain, miner, cpu} = node;
+
+    const winner = node.wallet();
+    const runnerup = node.wallet();
+
+    let snapshot = null;
+
+    it('should open chain and miner', async () => {
+      await chain.open();
+      await miner.open();
+    });
+
+    it('should add addrs to miner', async () => {
+      miner.addresses.length = 0;
+      miner.addAddress(winner.getReceive());
+      miner.addAddress(runnerup.getReceive());
+    });
+
+    it('should mine 20 blocks', async () => {
+      for (let i = 0; i < 20; i++) {
+        const block = await cpu.mineBlock();
+        assert(block);
+        assert(await chain.add(block));
+      }
+    });
+
+    it('should open a claim', async () => {
+      const job = await cpu.createJob();
+      job.pushClaim(claim, network);
+      job.refresh();
+
+      const block = await job.mineAsync();
+
+      assert(await chain.add(block));
+    });
+
+    it('should cleanup', async () => {
+      await miner.close();
+      await chain.close();
+    });
+  });
 });

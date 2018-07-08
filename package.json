@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "bcfg": "~0.1.0",
-    "bcrypto": "~0.3.6",
+    "bcrypto": "~0.3.7",
     "bcuckoo": "~0.3.3",
     "bdb": "~0.2.0",
     "bdns": "~0.1.0",
@@ -47,7 +47,7 @@
     "bupnp": "~0.2.1",
     "bval": "~0.1.0",
     "bweb": "~0.1.0",
-    "hsk-client": "git://github.com/handshake-org/hsk-client.git",
+    "hsk-client": "~0.0.0",
     "mrmr": "~0.1.0",
     "n64": "~0.2.0",
     "urkel": "~0.2.0"
