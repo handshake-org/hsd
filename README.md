@@ -120,7 +120,7 @@ $ hwallet-cli rpc sendbid handshake 5 10
 ```
 
 After the appropriate amount of time has passed, (1 day in the case of
-testnet), we should reveal our bid (note, revealing early is allowed!).
+testnet), we should reveal our bid.
 
 ``` bash
 # Reveal our bid for handshake

@@ -11,12 +11,13 @@ const Miner = require('../lib/mining/miner');
 const MemWallet = require('./util/memwallet');
 const Network = require('../lib/protocol/network');
 const rules = require('../lib/covenants/rules');
+const ownership = require('../lib/covenants/ownership');
 
 const network = Network.get('regtest');
 const NAME1 = rules.grindName(20, network);
 
 const workers = new WorkerPool({
-  enabled: true
+  enabled: false
 });
 
 function createNode() {
@@ -132,6 +133,11 @@ describe('Auction', function() {
     it('should register a name', async () => {
       const mtx = await winner.createRegister(NAME1, Buffer.from([1,2,3]));
 
+      assert(mtx.outputs.length > 0);
+
+      // Should pay the second highest bid.
+      assert.strictEqual(mtx.outputs[0].value, 500);
+
       const job = await cpu.createJob();
       job.addTX(mtx.toTX(), mtx.view);
       job.refresh();
@@ -214,13 +220,11 @@ describe('Auction', function() {
 
       chain.once('reorganize', () => reorgd = true);
 
-/*
-      chain.on('disconnect', async () => {
-        const auction = await chain.cdb.getAuctionByName(NAME1);
-        if (auction)
-          console.log(auction.format(chain.height, network));
-      });
-*/
+      // chain.on('disconnect', async () => {
+      //   const auction = await chain.cdb.getAuctionByName(NAME1);
+      //   if (auction)
+      //     console.log(auction.format(chain.height, network));
+      // });
 
       for (let i = 1; i <= comp.chain.height; i++) {
         assert(!reorgd);
@@ -240,13 +244,11 @@ describe('Auction', function() {
 
       chain.once('reorganize', () => reorgd = true);
 
-/*
-      chain.on('connect', async () => {
-        const auction = await chain.cdb.getAuctionByName(NAME1);
-        if (auction)
-          console.log(auction.format(chain.height, network));
-      });
-*/
+      // chain.on('connect', async () => {
+      //   const auction = await chain.cdb.getAuctionByName(NAME1);
+      //   if (auction)
+      //     console.log(auction.format(chain.height, network));
+      // });
 
       while (!reorgd) {
         const block = await orig.cpu.mineBlock();
@@ -287,15 +289,10 @@ describe('Auction', function() {
 
   describe('Claim', function() {
     const node = createNode();
-    const orig = createNode();
-    const comp = createNode();
-
     const {chain, miner, cpu} = node;
 
-    const winner = node.wallet();
-    const runnerup = node.wallet();
-
-    let snapshot = null;
+    const wallet = node.wallet();
+    const recip = node.wallet();
 
     it('should open chain and miner', async () => {
       await chain.open();
@@ -304,8 +301,7 @@ describe('Auction', function() {
 
     it('should add addrs to miner', async () => {
       miner.addresses.length = 0;
-      miner.addAddress(winner.getReceive());
-      miner.addAddress(runnerup.getReceive());
+      miner.addAddress(wallet.getReceive());
     });
 
     it('should mine 20 blocks', async () => {
@@ -316,9 +312,247 @@ describe('Auction', function() {
       }
     });
 
-    it('should open a claim', async () => {
+    it('should reject a fraudulent claim', async () => {
+      const claim = await wallet.fakeClaim('cloudflare');
+
       const job = await cpu.createJob();
       job.pushClaim(claim, network);
+      job.refresh();
+
+      const block = await job.mineAsync();
+
+      let err = null;
+
+      try {
+        await chain.add(block);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.reason, 'mandatory-script-verify-flag-failed');
+    });
+
+    it('should open a claim for cloudflare.com', async () => {
+      const claim = await wallet.fakeClaim('cloudflare');
+
+      const job = await cpu.createJob();
+      job.pushClaim(claim, network);
+      job.refresh();
+
+      const block = await job.mineAsync();
+
+      try {
+        ownership.ignore = true;
+        assert(await chain.add(block));
+      } finally {
+        ownership.ignore = false;
+      }
+    });
+
+    it('should open a TLD claim for .fr', async () => {
+      const claim = await wallet.fakeClaim('fr');
+
+      const job = await cpu.createJob();
+      job.pushClaim(claim, network);
+      job.refresh();
+
+      const block = await job.mineAsync();
+
+      try {
+        ownership.ignore = true;
+        assert(await chain.add(block));
+      } finally {
+        ownership.ignore = false;
+      }
+    });
+
+    it('should open a TLD claim for .nl', async () => {
+      const claim = await wallet.fakeClaim('nl');
+
+      const job = await cpu.createJob();
+      job.pushClaim(claim, network);
+      job.refresh();
+
+      const block = await job.mineAsync();
+
+      try {
+        ownership.ignore = true;
+        assert(await chain.add(block));
+      } finally {
+        ownership.ignore = false;
+      }
+    });
+
+    it('should open a TLD claim for .af', async () => {
+      const claim = await wallet.fakeClaim('af');
+
+      const job = await cpu.createJob();
+      job.pushClaim(claim, network);
+      job.refresh();
+
+      const block = await job.mineAsync();
+
+      try {
+        ownership.ignore = true;
+        assert(await chain.add(block));
+      } finally {
+        ownership.ignore = false;
+      }
+    });
+
+    it('should open an i18n-ized TLD claim', async () => {
+      const claim = await wallet.fakeClaim('xn--ogbpf8fl');
+
+      const job = await cpu.createJob();
+      job.pushClaim(claim, network);
+      job.refresh();
+
+      const block = await job.mineAsync();
+
+      assert(block.txs.length > 0);
+      assert(block.txs[0].outputs.length === 2);
+      assert(block.txs[0].outputs[1].value === 0);
+
+      try {
+        ownership.ignore = true;
+        assert(await chain.add(block));
+      } finally {
+        ownership.ignore = false;
+      }
+    });
+
+    it('should mine 20 blocks', async () => {
+      for (let i = 0; i < 20; i++) {
+        const block = await cpu.mineBlock();
+        assert(block);
+        assert(await chain.add(block));
+      }
+    });
+
+    it('should register a claimed name', async () => {
+      const mtx = await wallet.createRegister('cloudflare', Buffer.from([1,2]));
+
+      const job = await cpu.createJob();
+      job.addTX(mtx.toTX(), mtx.view);
+      job.refresh();
+
+      const block = await job.mineAsync();
+
+      assert(await chain.add(block));
+    });
+
+    it('should mine 140 blocks', async () => {
+      for (let i = 0; i < 140; i++) {
+        const block = await cpu.mineBlock();
+        assert(block);
+        assert(await chain.add(block));
+      }
+    });
+
+    it('should not be able to transfer a weak name', async () => {
+      const addr = recip.createReceive().getAddress();
+      const mtx = await wallet.createTransfer('cloudflare', addr);
+
+      const job = await cpu.createJob();
+      job.addTX(mtx.toTX(), mtx.view);
+      job.refresh();
+
+      const block = await job.mineAsync();
+
+      let err = null;
+
+      try {
+        await chain.add(block);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.reason, 'invalid-covenant');
+    });
+
+    it('should not be able to revoke a weak name', async () => {
+      const addr = recip.createReceive().getAddress();
+      const mtx = await wallet.createRevoke('cloudflare', addr);
+
+      const job = await cpu.createJob();
+      job.addTX(mtx.toTX(), mtx.view);
+      job.refresh();
+
+      const block = await job.mineAsync();
+
+      let err = null;
+
+      try {
+        await chain.add(block);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.reason, 'invalid-covenant');
+    });
+
+    it('should register a claimed name', async () => {
+      const mtx = await wallet.createRegister('af', Buffer.from([1,2,3]));
+
+      const job = await cpu.createJob();
+      job.addTX(mtx.toTX(), mtx.view);
+      job.refresh();
+
+      const block = await job.mineAsync();
+
+      assert(await chain.add(block));
+    });
+
+    it('should transfer strong name', async () => {
+      const addr = recip.createReceive().getAddress();
+      const mtx = await wallet.createTransfer('af', addr);
+
+      const job = await cpu.createJob();
+      job.addTX(mtx.toTX(), mtx.view);
+      job.refresh();
+
+      const block = await job.mineAsync();
+
+      assert(await chain.add(block));
+    });
+
+    it('should not be able to finalize early', async () => {
+      const mtx = await wallet.createFinalize('af');
+
+      const job = await cpu.createJob();
+      job.addTX(mtx.toTX(), mtx.view);
+      job.refresh();
+
+      const block = await job.mineAsync();
+
+      let err = null;
+
+      try {
+        await chain.add(block);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.reason, 'invalid-covenant');
+    });
+
+    it('should mine 20 blocks', async () => {
+      for (let i = 0; i < 20; i++) {
+        const block = await cpu.mineBlock();
+        assert(block);
+        assert(await chain.add(block));
+      }
+    });
+
+    it('should finalize name', async () => {
+      const mtx = await wallet.createFinalize('af');
+
+      const job = await cpu.createJob();
+      job.addTX(mtx.toTX(), mtx.view);
       job.refresh();
 
       const block = await job.mineAsync();

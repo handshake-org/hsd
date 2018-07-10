@@ -7,7 +7,8 @@
 'use strict';
 
 const assert = require('assert');
-const random = require('bcrypto/lib/random');
+const bio = require('bufio');
+const blake2b = require('bcrypto/lib/blake2b');
 const rules = require('../../lib/covenants/rules');
 const Network = require('../../lib/protocol/network');
 const MTX = require('../../lib/primitives/mtx');
@@ -15,9 +16,19 @@ const HD = require('../../lib/hd/hd');
 const {BloomFilter} = require('bfilter');
 const KeyRing = require('../../lib/primitives/keyring');
 const Outpoint = require('../../lib/primitives/outpoint');
+const CoinView = require('../../lib/coins/coinview');
 const Output = require('../../lib/primitives/output');
 const Coin = require('../../lib/primitives/coin');
 const consensus = require('../../lib/protocol/consensus');
+const Claim = require('../../lib/primitives/claim');
+const Auction = require('../../lib/covenants/auction');
+const AuctionUndo = require('../../lib/covenants/undo');
+const reserved = require('../../lib/covenants/reserved');
+const ownership = require('../../lib/covenants/ownership');
+const policy = require('../../lib/protocol/policy');
+const Resource = require('../../lib/dns/resource');
+const Address = require('../../lib/primitives/address');
+const {states} = Auction;
 const {types} = rules;
 
 const EMPTY = Buffer.alloc(0);
@@ -29,6 +40,7 @@ class MemWallet {
     this.key = null;
     this.witness = false;
     this.account = 0;
+    this.height = 0;
     this.receiveDepth = 1;
     this.changeDepth = 1;
     this.receive = null;
@@ -40,9 +52,10 @@ class MemWallet {
 
     this.chain = [];
     this.auctions = new Map();
+    this.auctionUndo = new Map();
     this.bids = new Map();
     this.reveals = new Map();
-    this.values = new Map();
+    this.blinds = new Map();
 
     this.balance = 0;
     this.txs = 0;
@@ -248,6 +261,7 @@ class MemWallet {
       this.addTX(tx, entry.height);
     }
     this.chain.push(entry.hash);
+    this.height = entry.height;
   }
 
   removeBlock(entry, txs) {
@@ -256,28 +270,7 @@ class MemWallet {
       this.removeTX(tx, entry.height);
     }
     this.chain.pop();
-  }
-
-  addBid(bb) {
-    const key = bb.nameHash.toString('hex');
-
-    if (!this.bids.has(key))
-      this.bids.set(key, new Map());
-
-    this.bids.get(key).set(bb.prevout.toKey(), bb);
-  }
-
-  addReveal(brv) {
-    const key = brv.nameHash.toString('hex');
-
-    if (!this.reveals.has(key))
-      this.reveals.set(key, new Map());
-
-    this.reveals.get(key).set(brv.prevout.toKey(), brv);
-  }
-
-  addValue(blind, bv) {
-    this.values.set(blind.toString('hex'), bv);
+    this.height = entry.height - 1;
   }
 
   addTX(tx, height) {
@@ -291,6 +284,8 @@ class MemWallet {
     if (this.map.has(hash))
       return true;
 
+    const view = new CoinView();
+
     for (let i = 0; i < tx.inputs.length; i++) {
       const input = tx.inputs[i];
       const op = input.prevout.toKey();
@@ -302,183 +297,18 @@ class MemWallet {
       result = true;
 
       this.removeCoin(op);
+
+      view.addCoin(coin);
     }
 
     for (let i = 0; i < tx.outputs.length; i++) {
       const output = tx.outputs[i];
-      const {covenant} = output;
       const addr = output.getHash('hex');
 
       if (!addr)
         continue;
 
       const path = this.getPath(addr);
-      const outpoint = tx.outpoint(i);
-
-      switch (covenant.type) {
-        case types.CLAIM: {
-          if (!path)
-            break;
-
-          const nameHash = covenant.items[0];
-          const key = nameHash.toString('hex');
-          const name = covenant.items[1];
-
-          if (!this.auction.has(key)) {
-            const auction = new Auction();
-            auction.name = name;
-            auction.nameHash = nameHash;
-            auction.owner = outpoint;
-            auction.state = types.CLAIM;
-            auction.height = height;
-
-            this.auctions.set(key, auction);
-          }
-
-          break;
-        }
-        case types.BID: {
-          if (!path)
-            break;
-
-          const nameHash = covenant.items[0];
-          const key = nameHash.toString('hex');
-          const name = covenant.items[1];
-
-          if (!this.auctions.has(key)) {
-            const auction = new Auction();
-            auction.name = name;
-            auction.nameHash = nameHash;
-            auction.owner = outpoint;
-            auction.state = types.BID;
-            auction.height = height;
-
-            this.auctions.set(key, auction);
-          }
-
-          const bb = new BlindBid();
-          bb.name = name;
-          bb.nameHash = nameHash;
-          bb.prevout = outpoint;
-          bb.lockup = output.value;
-          bb.blind = covenant.items[2];
-          this.addBid(bb);
-
-          break;
-        }
-        case types.REVEAL: {
-          const nameHash = covenant.items[0];
-          const key = nameHash.toString('hex');
-          const auction = this.auctions.get(key);
-
-          if (!auction)
-            break;
-
-          const brv = new BidReveal();
-          brv.name = auction.name;
-          brv.nameHash = nameHash;
-          brv.prevout = outpoint;
-          brv.value = output.value;
-          brv.height = height;
-          brv.own = path ? true : false;
-
-          this.addReveal(brv);
-
-          if (path) {
-            // Useful for rescans:
-            // const nonce = covenant.items[1];
-            // const bv = new BlindValue();
-            // bv.value = output.value;
-            // bv.nonce = nonce;
-            // this.addValue(blind, bv);
-
-            auction.outpoint = outpoint;
-            auction.state = types.REVEAL;
-          }
-
-          break;
-        }
-        case types.REDEEM: {
-          if (!path)
-            break;
-
-          const nameHash = covenant.items[0];
-          const key = nameHash.toString('hex');
-          const auction = this.auctions.get(key);
-
-          if (!auction)
-            break;
-
-          // We lost.
-          auction.state = types.REVOKE;
-
-          break;
-        }
-        case types.REGISTER: {
-          if (!path)
-            break;
-
-          const nameHash = covenant.items[0];
-          const key = nameHash.toString('hex');
-          const auction = this.auctions.get(key);
-
-          if (!auction)
-            break;
-
-          auction.state = types.UPDATE;
-          auction.owner = tx.outpoint(i);
-          auction.data = covenant.items[1];
-
-          break;
-        }
-        case types.UPDATE: {
-          if (!path)
-            break;
-
-          const nameHash = covenant.items[0];
-          const key = nameHash.toString('hex');
-          const auction = this.auctions.get(key);
-
-          if (!auction)
-            break;
-
-          auction.owner = tx.outpoint(i);
-
-          if (covenant.items[1].length > 0)
-            auction.data = covenant.items[1];
-
-          break;
-        }
-        case types.TRANSFER: {
-          const nameHash = covenant.items[0];
-          const key = nameHash.toString('hex');
-          const auction = this.auctions.get(key);
-
-          if (!auction)
-            break;
-
-          auction.state = types.TRANSFER;
-          auction.owner = tx.outpoint(i);
-
-          break;
-        }
-        case types.REVOKE: {
-          if (!path)
-            break;
-
-          const nameHash = covenant.items[0];
-          const key = nameHash.toString('hex');
-          const auction = this.auctions.get(key);
-
-          if (!auction)
-            break;
-
-          // Someone released it.
-          auction.state = types.REVOKE;
-
-          break;
-        }
-      }
 
       if (!path)
         continue;
@@ -491,12 +321,310 @@ class MemWallet {
       this.syncKey(path);
     }
 
+    if (height !== -1)
+      this.connectAuctions(tx, view, height);
+
     if (result) {
       this.txs += 1;
       this.map.add(hash);
     }
 
     return result;
+  }
+
+  connectAuctions(tx, view, height) {
+    const hash = tx.hash('hex');
+    const network = this.network;
+
+    assert(height !== -1);
+
+    let updated = false;
+
+    for (let i = 0; i < tx.outputs.length; i++) {
+      const output = tx.outputs[i];
+      const {covenant} = output;
+
+      if (covenant.type < types.CLAIM
+          || covenant.type > types.REVOKE) {
+        continue;
+      }
+
+      const addr = output.getHash('hex');
+
+      if (!addr)
+        continue;
+
+      const path = this.getPath(addr);
+      const nameHash = covenant.items[0];
+      const outpoint = tx.outpoint(i);
+      const auction = view.getAuctionSync(this, nameHash);
+
+      if (!auction.isNull()) {
+        if (auction.isExpired(height, network))
+          auction.setAuction(auction.name, height);
+      }
+
+      switch (covenant.type) {
+        case types.CLAIM: {
+          if (!path)
+            break;
+
+          const name = covenant.items[1];
+          const flags = covenant.items[2];
+
+          // if (auction.isNull())
+          //   this.addNameMap(b, nameHash);
+
+          auction.setAuction(name, height);
+          auction.setClaimed(true);
+          auction.setValue(0);
+          auction.setOwner(outpoint);
+          auction.setHighest(0);
+          auction.setWeak((flags[0] & 1) === 1);
+
+          updated = true;
+
+          break;
+        }
+
+        case types.BID: {
+          const name = covenant.items[1];
+          const blind = covenant.items[2];
+          const lockup = output.value;
+
+          if (!path) {
+            if (auction.isNull())
+              break;
+
+            this.putBid(nameHash, outpoint, {
+              name,
+              lockup,
+              blind,
+              own: false
+            });
+
+            updated = true;
+
+            break;
+          }
+
+          if (auction.isNull()) {
+            auction.setAuction(name, height);
+
+            // this.addNameMap(b, nameHash);
+
+            // const state = this.getAuctionState(nameHash, height);
+            // auction.setAuction(name, state.height);
+            // auction.setHighest(state.highest);
+            // auction.setValue(state.value);
+          }
+
+          this.putBid(nameHash, outpoint, {
+            name,
+            lockup,
+            blind,
+            own: true
+          });
+
+          updated = true;
+
+          break;
+        }
+
+        case types.REVEAL: {
+          if (auction.isNull())
+            break;
+
+          if (output.value > auction.highest) {
+            auction.setValue(auction.highest);
+            auction.setOwner(outpoint);
+            auction.setHighest(output.value);
+          } else if (output.value > auction.value) {
+            auction.setValue(output.value);
+          }
+
+          if (!path) {
+            this.putReveal(nameHash, outpoint, {
+              name: auction.name,
+              value: output.value,
+              height: height,
+              own: false
+            });
+            updated = true;
+            break;
+          }
+
+          const {prevout} = tx.inputs[i];
+          const coin = view.getOutput(prevout);
+          const uc = coin.covenant;
+          const blind = uc.items[2];
+          const nonce = covenant.items[1];
+
+          this.putBlind(blind, {
+            value: output.value,
+            nonce: nonce
+          });
+
+          this.putReveal(nameHash, outpoint, {
+            name: auction.name,
+            value: output.value,
+            height: height,
+            own: true
+          });
+
+          updated = true;
+
+          break;
+        }
+
+        case types.REDEEM: {
+          if (auction.isNull())
+            break;
+
+          if (!path)
+            break;
+
+          break;
+        }
+
+        case types.REGISTER: {
+          if (auction.isNull())
+            break;
+
+          const data = covenant.items[1];
+
+          // If we didn't have a second
+          // bidder, use our own bid.
+          if (auction.value === -1) {
+            assert(auction.highest !== -1);
+            auction.setValue(auction.highest);
+          }
+
+          auction.setOwner(outpoint);
+
+          if (data.length > 0)
+            auction.setData(data);
+
+          auction.setRenewal(height);
+
+          updated = true;
+
+          if (!path) {
+            // Somebody else registered.
+            break;
+          }
+
+          break;
+        }
+
+        case types.UPDATE: {
+          if (auction.isNull())
+            break;
+
+          if (!path)
+            break;
+
+          const data = covenant.items[1];
+
+          auction.setOwner(outpoint);
+          auction.setTransfer(-1);
+
+          if (data.length > 0)
+            auction.setData(data);
+
+          if (covenant.items.length === 3)
+            auction.setRenewal(height);
+
+          updated = true;
+
+          break;
+        }
+
+        case types.TRANSFER: {
+          if (auction.isNull())
+            break;
+
+          if (!path)
+            break;
+
+          auction.setOwner(outpoint);
+
+          assert(auction.transfer === -1);
+          auction.setTransfer(height);
+
+          if (covenant.items.length === 3)
+            auction.setRenewal(height);
+
+          updated = true;
+
+          break;
+        }
+
+        case types.FINALIZE: {
+          if (auction.isNull()) {
+            if (!path)
+              break;
+
+            const name = covenant.items[1];
+            const start = covenant.items[2].readUInt32LE(0);
+            const weak = (covenant.items[3][0] & 1) === 1;
+            const claimed = (covenant.items[3][0] & 4) === 4;
+
+            auction.setAuction(name, start);
+            auction.setValue(output.value);
+            auction.setWeak(weak);
+            auction.setClaimed(claimed);
+
+            // Cannot get data or highest.
+            auction.setHighest(output.value);
+          } else {
+            assert(auction.transfer !== -1);
+          }
+
+          auction.setOwner(tx.outpoint(i));
+          auction.setTransfer(-1);
+          auction.setRenewal(height);
+
+          updated = true;
+
+          break;
+        }
+
+        case types.REVOKE: {
+          if (auction.isNull())
+            break;
+
+          if (!path)
+            break;
+
+          assert(auction.revoked === -1);
+          auction.setRevoked(height);
+          auction.setData(null);
+
+          updated = true;
+
+          break;
+        }
+      }
+    }
+
+    for (const auction of view.auctions.values()) {
+      const {nameHash} = auction;
+
+      if (auction.isNull())
+        this.removeAuction(nameHash);
+      else
+        this.putAuction(nameHash, auction);
+    }
+
+    if (updated) {
+      const undo = view.toAuctionUndo();
+
+      if (undo.auctions.length > 0)
+        this.putAuctionUndo(hash, undo);
+    }
+
+    return updated;
   }
 
   removeTX(tx, height) {
@@ -532,12 +660,61 @@ class MemWallet {
       this.addCoin(coin);
     }
 
+    this.undoAuction(tx);
+
     if (result)
       this.txs -= 1;
 
     this.map.delete(hash);
 
     return result;
+  }
+
+  undoAuction(tx) {
+    const hash = tx.hash('hex');
+
+    for (let i = 0; i < tx.outputs.length; i++) {
+      const output = tx.outputs[i];
+      const {covenant} = output;
+
+      if (covenant.type < types.CLAIM
+          || covenant.type > types.REVOKE) {
+        continue;
+      }
+
+      switch (covenant.type) {
+        case types.BID: {
+          const nameHash = covenant.items[0];
+          this.removeBid(nameHash, tx.outpoint(i));
+          break;
+        }
+        case types.REVEAL: {
+          const nameHash = covenant.items[0];
+          this.removeReveal(nameHash, tx.outpoint(i));
+          break;
+        }
+      }
+    }
+
+    const undo = this.getAuctionUndo(hash);
+
+    if (!undo)
+      return;
+
+    const view = new CoinView();
+
+    for (const [nameHash, delta] of undo.auctions) {
+      const auction = view.getAuctionSync(this, nameHash);
+
+      auction.applyState(delta);
+
+      if (auction.isNull())
+        this.removeAuction(nameHash);
+      else
+        this.putAuction(nameHash, auction);
+    }
+
+    this.removeAuctionUndo(hash);
   }
 
   deriveInputs(mtx) {
@@ -568,24 +745,257 @@ class MemWallet {
     return keys;
   }
 
-  async createBid(name, bid, value, options) {
+  generateNonce(nameHash, address, value) {
+    const path = this.getPath(address.hash.toString('hex'));
+
+    if (!path)
+      throw new Error('Account not found.');
+
+    const hi = (value * (1 / 0x100000000)) >>> 0;
+    const lo = value >>> 0;
+    const index = (hi ^ lo) & 0x7fffffff;
+
+    const {publicKey} = this.master.derive(index);
+
+    return blake2b.multi(address.hash, publicKey, nameHash);
+  }
+
+  generateBlind(nameHash, address, value) {
+    const nonce = this.generateNonce(nameHash, address, value);
+    const blind = rules.blind(value, nonce);
+
+    this.putBlind(blind, {value, nonce});
+
+    return blind;
+  }
+
+  async buildClaim(name, options) {
+    if (options == null)
+      options = {};
+
+    assert(typeof name === 'string');
+    assert(options && typeof options === 'object');
+
+    if (!rules.verifyName(name))
+      throw new Error('Invalid name.');
+
     const rawName = Buffer.from(name, 'ascii');
     const nameHash = rules.hashName(rawName);
-    const nonce = random.randomBytes(32);
-    const blind = rules.blind(bid, nonce);
+    const height = this.height + 1;
+    const hardened = Boolean(options.hardened);
+    const network = this.network;
+
+    if (!rules.isReserved(name, height, network))
+      throw new Error('Name is not reserved.');
+
+    const auction = await this.getAuction(nameHash);
+
+    let forked = false;
+
+    if (auction) {
+      if (hardened) {
+        if (auction.weak
+            && height < auction.height + network.names.weakLockup) {
+          auction.setAuction(auction.name, height);
+          forked = true;
+        }
+      }
+
+      if (!auction.isExpired(height, network))
+        throw new Error('Name already claimed.');
+    } else {
+      // if (!await this.isBiddable(nameHash))
+      //   throw new Error('Name is not available.');
+    }
+
+    const item = reserved.get(name);
+    assert(item);
+
+    let rate = options.rate;
+    if (rate == null)
+      rate = 1000;
+
+    let size = 5 << 10;
+    let proof = null;
+
+    try {
+      proof = await ownership.prove(item.target, true);
+    } catch (e) {
+      ;
+    }
+
+    if (proof) {
+      const zones = proof.zones;
+      const zone = zones.length >= 2
+        ? zones[zones.length - 1]
+        : null;
+
+      let added = 0;
+
+      // TXT record.
+      added += item.target.length; // rrname
+      added += 10; // header
+      added += 1; // txt size
+      added += 183; // max string size
+
+      // RRSIG record size.
+      if (!zone || zone.claim.length === 0) {
+        added += item.target.length; // rrname
+        added += 10; // header
+        added += 275; // avg rsa sig size
+      }
+
+      const claim = Claim.fromProof(proof);
+
+      size = claim.getVirtualSize() + (added >>> 2);
+    }
+
+    let minFee = options.fee;
+
+    if (minFee == null)
+      minFee = policy.getMinFee(size, rate);
+
+    let fee = Math.min(item.value, minFee);
+
+    if (forked)
+      fee = 0;
+
+    const renewal = this.getRenewalBlock();
+    const block = renewal.toString('hex');
+
+    const address = this.createReceive().getAddress();
+    const txt = ownership.createData(fee, block, address, forked, network);
+
+    return {
+      name,
+      target: item.target,
+      value: item.value,
+      proof,
+      size,
+      fee,
+      block,
+      address,
+      txt
+    };
+  }
+
+  async fakeClaim(name, options) {
+    assert(typeof name === 'string');
+
+    if (!rules.verifyName(name))
+      throw new Error('Invalid name.');
+
+    const rawName = Buffer.from(name, 'ascii');
+    const nameHash = rules.hashName(rawName);
+    const height = this.height + 1;
+    const network = this.network;
+
+    if (!rules.isReserved(name, height, network))
+      throw new Error('Name is not reserved.');
+
+    const auction = this.getAuction(nameHash);
+
+    if (auction) {
+      if (!auction.isExpired(height, network))
+        throw new Error('Name already claimed.');
+    } else {
+      // if (!await this.isBiddable(nameHash))
+      //   throw new Error('Name is not available.');
+    }
+
+    const {proof, txt} = await this.buildClaim(name, options);
+
+    if (!proof)
+      throw new Error('Could not resolve name.');
+
+    proof.addData([txt]);
+
+    return Claim.fromProof(proof);
+  }
+
+  async createClaim(name) {
+    assert(typeof name === 'string');
+
+    if (!rules.verifyName(name))
+      throw new Error('Invalid name.');
+
+    const rawName = Buffer.from(name, 'ascii');
+    const nameHash = rules.hashName(rawName);
+    const height = this.height + 1;
+    const network = this.network;
+
+    if (!rules.isReserved(name, height, network))
+      throw new Error('Name is not reserved.');
+
+    const auction = this.getAuction(nameHash);
+
+    if (auction) {
+      if (!auction.isExpired(height, network))
+        throw new Error('Name already claimed.');
+    } else {
+      // if (!await this.isBiddable(nameHash))
+      //   throw new Error('Name is not available.');
+    }
+
+    const item = reserved.get(name);
+    assert(item);
+
+    const proof = await ownership.prove(item.target);
+    const data = proof.getData(this.network);
+
+    if (!data)
+      throw new Error(`No valid DNS commitment found for ${name}.`);
+
+    return Claim.fromProof(proof);
+  }
+
+  async createBid(name, value, lockup, options) {
+    assert(typeof name === 'string');
+    assert(Number.isSafeInteger(value) && value >= 0);
+    assert(Number.isSafeInteger(lockup) && lockup >= 0);
+
+    if (!rules.verifyName(name))
+      throw new Error('Invalid name.');
+
+    const rawName = Buffer.from(name, 'ascii');
+    const nameHash = rules.hashName(rawName);
+    const height = this.height + 1;
+    const network = this.network;
+
+    if (rules.isReserved(name, height, network))
+      throw new Error('Name is reserved.');
+
+    if (!rules.verifyRollout(nameHash, height, network))
+      throw new Error('Name not yet available.');
+
+    const auction = this.getAuction(nameHash);
+
+    if (auction) {
+      if (auction.isExpired(height, network))
+        auction.setAuction(auction.name, height);
+
+      const state = auction.state(height, network);
+
+      if (state !== states.BIDDING)
+        throw new Error('Bidding has closed.');
+    } else {
+      // if (!await this.isBiddable(nameHash))
+      //   throw new Error('Name is not available.');
+    }
+
+    if (value > lockup)
+      throw new Error('Bid exceeds lockup value.');
+
+    const addr = this.createReceive().getAddress();
+    const blind = this.generateBlind(nameHash, addr, value);
 
     const output = new Output();
-    output.address = this.createReceive().getAddress();
-    output.value = value;
+    output.address = addr;
+    output.value = lockup;
     output.covenant.type = types.BID;
     output.covenant.items.push(nameHash);
     output.covenant.items.push(rawName);
     output.covenant.items.push(blind);
-
-    const bv = new BlindValue();
-    bv.value = bid;
-    bv.nonce = nonce;
-    this.addValue(blind, bv);
 
     const mtx = new MTX();
     mtx.outputs.push(output);
@@ -594,108 +1004,200 @@ class MemWallet {
   }
 
   async createReveal(name, options) {
+    assert(typeof name === 'string');
+
+    if (!rules.verifyName(name))
+      throw new Error('Invalid name.');
+
     const rawName = Buffer.from(name, 'ascii');
     const nameHash = rules.hashName(rawName);
-    const key = nameHash.toString('hex');
-    const auction = this.auctions.get(key);
+    const auction = this.getAuction(nameHash);
+    const height = this.height + 1;
+    const network = this.network;
 
     if (!auction)
-      throw new Error('No auction found.');
+      throw new Error('Auction not found.');
 
-    if (auction.state !== types.BID)
-      throw new Error('Bad auction state.');
+    if (auction.isExpired(height, network))
+      auction.setAuction(auction.name, height);
 
-    const bids = this.bids.get(key);
+    const state = auction.state(height, network);
 
-    if (!bids || bids.size === 0)
-      throw new Error('No bids found.');
+    if (state < states.REVEAL)
+      throw new Error('Cannot reveal yet.');
 
+    if (state > states.REVEAL)
+      throw new Error('Reveal period has passed.');
+
+    const bids = this.getBids(nameHash);
     const mtx = new MTX();
 
-    for (const bb of bids.values()) {
-      const coin = this.getCoin(bb.prevout.toKey());
-      assert(coin);
+    for (const {prevout, own} of bids) {
+      if (!own)
+        continue;
 
-      // XXX Put on blindbid object?
+      const coin = this.getCoin(prevout.toKey());
+
+      if (!coin)
+        continue;
+
+      // Is local?
+      if (coin.height < auction.height)
+        continue;
+
       const blind = coin.covenant.items[2];
+      const bv = this.getBlind(blind);
 
-      const bv = this.values.get(blind.toString('hex'));
-      assert(bv);
+      if (!bv)
+        throw new Error('Blind value not found.');
+
+      const {value, nonce} = bv;
 
       const output = new Output();
       output.address = coin.address;
-      output.value = bv.value;
+      output.value = value;
       output.covenant.type = types.REVEAL;
       output.covenant.items.push(nameHash);
-      output.covenant.items.push(bv.nonce);
+      output.covenant.items.push(nonce);
 
-      mtx.addOutpoint(bb.prevout);
+      mtx.addOutpoint(prevout);
       mtx.outputs.push(output);
     }
+
+    if (mtx.outputs.length === 0)
+      throw new Error('No bids to reveal.');
 
     return this._create(mtx, options);
   }
 
-  async createRegister(name, data, options) {
+  async createRedeem(name, options) {
+    assert(typeof name === 'string');
+
+    if (!rules.verifyName(name))
+      throw new Error('Invalid name.');
+
     const rawName = Buffer.from(name, 'ascii');
     const nameHash = rules.hashName(rawName);
-    const key = nameHash.toString('hex');
-    const auction = this.auctions.get(key);
+    const auction = this.getAuction(nameHash);
+    const height = this.height + 1;
+    const network = this.network;
 
     if (!auction)
-      throw new Error('No auction found.');
+      throw new Error('Auction not found.');
 
-    if (auction.state !== types.REVEAL)
-      throw new Error('Bad auction state.');
+    if (auction.isExpired(height, network))
+      throw new Error('Name has expired!');
 
-    const [value, winner] = this.getWinningReveal(nameHash);
+    const state = auction.state(height, network);
 
-    const coin = this.getCoin(winner.toKey());
+    if (state < states.CLOSED)
+      throw new Error('Auction is not yet closed.');
+
+    const reveals = this.getReveals(nameHash);
+    const mtx = new MTX();
+
+    for (const {prevout, own} of reveals) {
+      if (!own)
+        continue;
+
+      if (prevout.equals(auction.owner))
+        continue;
+
+      const coin = this.getCoin(prevout.toKey());
+
+      if (!coin)
+        continue;
+
+      // Is local?
+      if (coin.height < auction.height)
+        continue;
+
+      mtx.addOutpoint(prevout);
+
+      const output = new Output();
+      output.address = coin.address;
+      output.value = coin.value;
+      output.covenant.type = types.REDEEM;
+      output.covenant.items.push(nameHash);
+
+      mtx.outputs.push(output);
+    }
+
+    if (mtx.outputs.length === 0)
+      throw new Error('No reveals to redeem.');
+
+    return this._create(mtx, options);
+  }
+
+  async createRegister(name, resource, options) {
+    assert(typeof name === 'string');
+
+    if (resource instanceof Resource)
+      resource = resource.toRaw();
+
+    assert(!resource || Buffer.isBuffer(resource));
+
+    if (!rules.verifyName(name))
+      throw new Error('Invalid name.');
+
+    const rawName = Buffer.from(name, 'ascii');
+    const nameHash = rules.hashName(rawName);
+    const auction = this.getAuction(nameHash);
+    const height = this.height + 1;
+    const network = this.network;
+
+    if (!auction)
+      throw new Error('Auction not found.');
+
+    const coin = this.getCoin(auction.owner.toKey());
 
     if (!coin)
-      return null;
+      throw new Error('Wallet did not win the auction.');
+
+    if (auction.isExpired(height, network))
+      throw new Error('Name has expired!');
+
+    // Is local?
+    if (coin.height < auction.height)
+      throw new Error('Wallet did not win the auction.');
+
+    if (coin.covenant.type !== types.REVEAL
+        && coin.covenant.type !== types.CLAIM) {
+      throw new Error('Name must be in REVEAL or CLAIM state.');
+    }
+
+    if (coin.covenant.type === types.CLAIM) {
+      if (height < coin.height + network.coinbaseMaturity)
+        throw new Error('Claim is not yet mature.');
+    }
+
+    const state = auction.state(height, network);
+
+    if (state !== states.CLOSED)
+      throw new Error('Auction is not yet closed.');
+
+    if (auction.highest === -1)
+      throw new Error('Value not recorded (rescan required).');
+
+    let value = auction.value;
+
+    // If we were the only bidder.
+    if (value === -1)
+      value = auction.highest;
 
     const output = new Output();
     output.address = coin.address;
     output.value = value;
+
     output.covenant.type = types.REGISTER;
     output.covenant.items.push(nameHash);
-    output.covenant.items.push(data);
+
+    if (resource)
+      output.covenant.items.push(resource);
+    else
+      output.covenant.items.push(EMPTY);
+
     output.covenant.items.push(this.getRenewalBlock());
-
-    const mtx = new MTX();
-    mtx.addOutpoint(winner);
-    mtx.outputs.push(output);
-
-    return this._create(mtx, options);
-  }
-
-  async createUpdate(name, data, options) {
-    const rawName = Buffer.from(name, 'ascii');
-    const nameHash = rules.hashName(rawName);
-    const key = nameHash.toString('hex');
-    const auction = this.auctions.get(key);
-
-    if (!auction)
-      throw new Error('No auction found.');
-
-    if (auction.state === types.REVEAL)
-      return this.createRegister(name, data, options);
-
-    if (auction.state !== types.REGISTER
-        && auction.state !== types.UPDATE) {
-      throw new Error('Bad auction state.');
-    }
-
-    const output = new Output();
-    const coin = this.getCoin(auction.owner.toKey());
-    assert(coin);
-
-    output.address = coin.address;
-    output.value = coin.value;
-    output.covenant.type = types.UPDATE;
-    output.covenant.items.push(nameHash);
-    output.covenant.items.push(data);
 
     const mtx = new MTX();
     mtx.addOutpoint(auction.owner);
@@ -704,81 +1206,315 @@ class MemWallet {
     return this._create(mtx, options);
   }
 
-  async createRedeem(name, options) {
+  async createUpdate(name, resource, options) {
+    assert(typeof name === 'string');
+
+    if (resource instanceof Resource)
+      resource = resource.toRaw();
+
+    assert(!resource || Buffer.isBuffer(resource));
+
+    if (!rules.verifyName(name))
+      throw new Error('Invalid name.');
+
     const rawName = Buffer.from(name, 'ascii');
     const nameHash = rules.hashName(rawName);
-    const key = nameHash.toString('hex');
-    const auction = this.auctions.get(key);
+    const auction = this.getAuction(nameHash);
+    const height = this.height + 1;
+    const network = this.network;
 
     if (!auction)
-      throw new Error('No auction found.');
+      throw new Error('Auction not found.');
 
-    if (auction.state !== types.REVEAL)
-      throw new Error('Bad auction state.');
+    const coin = this.getCoin(auction.owner.toKey());
 
-    const reveals = this.reveals.get(key);
+    if (!coin)
+      throw new Error(`Wallet does not own: "${name}".`);
 
-    if (!reveals || reveals.size === 0)
-      throw new Error('No reveals found.');
-
-    const [, winner] = this.getWinningReveal(nameHash);
-
-    const mtx = new MTX();
-
-    for (const brv of reveals.values()) {
-      if (!brv.own)
-        continue;
-
-      if (brv.prevout.equals(winner))
-        continue;
-
-      const coin = this.getCoin(brv.prevout.toKey());
-      assert(coin);
-
-      const output = new Output();
-      output.address = coin.address;
-      output.value = coin.value;
-      output.covenant.type = types.REDEEM;
-      output.covenant.items.push(nameHash);
-
-      mtx.addOutpoint(brv.prevout);
-      mtx.outputs.push(output);
+    if (coin.covenant.type === types.REVEAL
+        || coin.covenant.type === types.CLAIM) {
+      return this.createRegister(name, resource, options);
     }
 
-    if (mtx.outputs.length === 0)
-      throw new Error('No suitable reveals found.');
+    if (auction.isExpired(height, network))
+      throw new Error('Name has expired!');
+
+    // Is local?
+    if (coin.height < auction.height)
+      throw new Error(`Wallet does not own: "${name}".`);
+
+    const state = auction.state(height, network);
+
+    if (state !== states.CLOSED)
+      throw new Error('Auction is not yet closed.');
+
+    if (coin.covenant.type !== types.REGISTER
+        && coin.covenant.type !== types.UPDATE
+        && coin.covenant.type !== types.FINALIZE) {
+      throw new Error('Name must be registered.');
+    }
+
+    const output = new Output();
+    output.address = coin.address;
+    output.value = coin.value;
+    output.covenant.type = types.UPDATE;
+    output.covenant.items.push(nameHash);
+
+    if (resource)
+      output.covenant.items.push(resource);
+    else
+      output.covenant.items.push(EMPTY);
+
+    output.covenant.items.push(this.getRenewalBlock());
+
+    const mtx = new MTX();
+    mtx.addOutpoint(auction.owner);
+    mtx.outputs.push(output);
 
     return this._create(mtx, options);
   }
 
-  getWinningReveal(nameHash) {
-    const key = nameHash.toString('hex');
-    const reveals = this.reveals.get(key);
+  async createRenewal(name, options) {
+    assert(typeof name === 'string');
+    return this.createUpdate(name, null, options);
+  }
 
-    if (!reveals)
-      throw new Error('Could not find winner.');
+  async createTransfer(name, address, options) {
+    assert(typeof name === 'string');
+    assert(address instanceof Address);
 
-    let highest = -1;
-    let value = -1;
-    let winner = null;
+    if (!rules.verifyName(name))
+      throw new Error('Invalid name.');
 
-    for (const brv of reveals.values()) {
-      if (brv.value > highest) {
-        value = highest;
-        winner = brv.prevout;
-        highest = brv.value;
-      } else if (brv.value > value) {
-        value = brv.value;
-      }
+    const rawName = Buffer.from(name, 'ascii');
+    const nameHash = rules.hashName(rawName);
+    const auction = this.getAuction(nameHash);
+    const height = this.height + 1;
+    const network = this.network;
+
+    if (!auction)
+      throw new Error('Auction not found.');
+
+    const coin = this.getCoin(auction.owner.toKey());
+
+    if (!coin)
+      throw new Error(`Wallet does not own: "${name}".`);
+
+    if (auction.isExpired(height, network))
+      throw new Error('Name has expired!');
+
+    // Is local?
+    if (coin.height < auction.height)
+      throw new Error(`Wallet does not own: "${name}".`);
+
+    const state = auction.state(height, network);
+
+    if (state !== states.CLOSED)
+      throw new Error('Auction is not yet closed.');
+
+    if (coin.covenant.type !== types.REGISTER
+        && coin.covenant.type !== types.UPDATE
+        && coin.covenant.type !== types.FINALIZE) {
+      throw new Error('Name must be registered.');
     }
 
-    if (!winner)
-      throw new Error('Could not find winner.');
+    // if (auction.weak && height < auction.height + network.names.weakLockup)
+    //   throw new Error('Cannot transfer a weak name prematurely.');
 
-    if (value === -1)
-      value = highest;
+    const output = new Output();
+    output.address = coin.address;
+    output.value = coin.value;
+    output.covenant.type = types.TRANSFER;
+    output.covenant.items.push(nameHash);
+    output.covenant.items.push(address.toRaw());
+    output.covenant.items.push(this.getRenewalBlock());
 
-    return [value, winner];
+    const mtx = new MTX();
+    mtx.addOutpoint(auction.owner);
+    mtx.outputs.push(output);
+
+    return this._create(mtx, options);
+  }
+
+  async createCancel(name, resource, options) {
+    assert(typeof name === 'string');
+
+    if (resource instanceof Resource)
+      resource = resource.toRaw();
+
+    assert(!resource || Buffer.isBuffer(resource));
+
+    if (!rules.verifyName(name))
+      throw new Error('Invalid name.');
+
+    const rawName = Buffer.from(name, 'ascii');
+    const nameHash = rules.hashName(rawName);
+    const auction = this.getAuction(nameHash);
+    const height = this.height + 1;
+    const network = this.network;
+
+    if (!auction)
+      throw new Error('Auction not found.');
+
+    const coin = this.getCoin(auction.owner.toKey());
+
+    if (!coin)
+      throw new Error(`Wallet does not own: "${name}".`);
+
+    if (auction.isExpired(height, network))
+      throw new Error('Name has expired!');
+
+    // Is local?
+    if (coin.height < auction.height)
+      throw new Error(`Wallet does not own: "${name}".`);
+
+    const state = auction.state(height, network);
+
+    if (state !== states.CLOSED)
+      throw new Error('Auction is not yet closed.');
+
+    if (coin.covenant.type !== types.TRANSFER)
+      throw new Error('Name is not being transfered.');
+
+    const output = new Output();
+    output.address = coin.address;
+    output.value = coin.value;
+    output.covenant.type = types.UPDATE;
+    output.covenant.items.push(nameHash);
+
+    if (resource)
+      output.covenant.items.push(resource);
+    else
+      output.covenant.items.push(EMPTY);
+
+    output.covenant.items.push(this.getRenewalBlock());
+
+    const mtx = new MTX();
+    mtx.addOutpoint(auction.owner);
+    mtx.outputs.push(output);
+
+    return this._create(mtx, options);
+  }
+
+  async createFinalize(name, options) {
+    assert(typeof name === 'string');
+
+    if (!rules.verifyName(name))
+      throw new Error('Invalid name.');
+
+    const rawName = Buffer.from(name, 'ascii');
+    const nameHash = rules.hashName(rawName);
+    const auction = this.getAuction(nameHash);
+    const height = this.height + 1;
+    const network = this.network;
+
+    if (!auction)
+      throw new Error('Auction not found.');
+
+    const coin = this.getCoin(auction.owner.toKey());
+
+    if (!coin)
+      throw new Error(`Wallet does not own: "${name}".`);
+
+    if (auction.isExpired(height, network))
+      throw new Error('Name has expired!');
+
+    // Is local?
+    if (coin.height < auction.height)
+      throw new Error(`Wallet does not own: "${name}".`);
+
+    const state = auction.state(height, network);
+
+    if (state !== states.CLOSED)
+      throw new Error('Auction is not yet closed.');
+
+    if (coin.covenant.type !== types.TRANSFER)
+      throw new Error('Name is not being transfered.');
+
+    // if (height < coin.height + network.names.transferLockup)
+    //   throw new Error('Transfer is still locked up.');
+
+    const rawAddr = coin.covenant.items[1];
+    const address = Address.fromRaw(rawAddr);
+
+    let flags = 0;
+
+    if (auction.weak)
+      flags |= 1;
+
+    if (auction.claimed)
+      flags |= 4;
+
+    const output = new Output();
+    output.address = address;
+    output.value = coin.value;
+    output.covenant.type = types.FINALIZE;
+    output.covenant.items.push(nameHash);
+    output.covenant.items.push(rawName);
+    output.covenant.items.push(encodeU32(auction.height));
+    output.covenant.items.push(Buffer.from([flags]));
+    output.covenant.items.push(this.getRenewalBlock());
+
+    const mtx = new MTX();
+    mtx.addOutpoint(auction.owner);
+    mtx.outputs.push(output);
+
+    return this._create(mtx, options);
+  }
+
+  async createRevoke(name, options) {
+    assert(typeof name === 'string');
+
+    if (!rules.verifyName(name))
+      throw new Error('Invalid name.');
+
+    const rawName = Buffer.from(name, 'ascii');
+    const nameHash = rules.hashName(rawName);
+    const auction = this.getAuction(nameHash);
+    const height = this.height + 1;
+    const network = this.network;
+
+    if (!auction)
+      throw new Error('Auction not found.');
+
+    const coin = this.getCoin(auction.owner.toKey());
+
+    if (!coin)
+      throw new Error(`Wallet does not own: "${name}".`);
+
+    // Is local?
+    if (coin.height < auction.height)
+      throw new Error(`Wallet does not own: "${name}".`);
+
+    if (auction.isExpired(height, network))
+      throw new Error('Name has expired!');
+
+    const state = auction.state(height, network);
+
+    if (state !== states.CLOSED)
+      throw new Error('Auction is not yet closed.');
+
+    if (coin.covenant.type !== types.REGISTER
+        && coin.covenant.type !== types.UPDATE
+        && coin.covenant.type !== types.TRANSFER
+        && coin.covenant.type !== types.FINALIZE) {
+      throw new Error('Name must be registered.');
+    }
+
+    // if (auction.weak && height < auction.height + network.names.weakLockup)
+    //   throw new Error('Cannot revoke a weak name prematurely.');
+
+    const output = new Output();
+    output.address = coin.address;
+    output.value = coin.value;
+    output.covenant.type = types.REVOKE;
+    output.covenant.items.push(nameHash);
+
+    const mtx = new MTX();
+    mtx.addOutpoint(auction.owner);
+    mtx.outputs.push(output);
+
+    return this._create(mtx, options);
   }
 
   getRenewalBlock() {
@@ -849,6 +1585,285 @@ class MemWallet {
     this.addTX(mtx.toTX());
     return mtx;
   }
+
+  putAuction(nameHash, auction) {
+    assert(Buffer.isBuffer(nameHash));
+    this.auctions.set(nameHash.toString('hex'), auction.encode());
+  }
+
+  getAuction(nameHash) {
+    assert(Buffer.isBuffer(nameHash));
+    const raw = this.auctions.get(nameHash.toString('hex'));
+
+    if (!raw)
+      return null;
+
+    const auction = Auction.decode(raw);
+    auction.nameHash = nameHash;
+    return auction;
+  }
+
+  removeAuction(nameHash) {
+    assert(Buffer.isBuffer(nameHash));
+    this.auctions.delete(nameHash.toString('hex'));
+  }
+
+  putAuctionUndo(hash, undo) {
+    this.auctionUndo.set(hash, undo.encode());
+  }
+
+  getAuctionUndo(hash) {
+    const raw = this.auctionUndo.get(hash);
+
+    if (!raw)
+      return null;
+
+    return AuctionUndo.decode(raw);
+  }
+
+  removeAuctionUndo(hash) {
+    this.auctionUndo.delete(hash);
+  }
+
+  getBid(nameHash, outpoint) {
+    assert(Buffer.isBuffer(nameHash));
+
+    const nameHex = nameHash.toString('hex');
+    const map = this.bids.get(nameHex);
+
+    if (!map)
+      return null;
+
+    const raw = map.get(outpoint.toKey());
+
+    if (!raw)
+      return null;
+
+    const bb = BlindBid.fromRaw(raw);
+    bb.nameHash = nameHash;
+    bb.prevout = outpoint;
+
+    return bb;
+  }
+
+  putBid(nameHash, outpoint, options) {
+    assert(Buffer.isBuffer(nameHash));
+
+    const nameHex = nameHash.toString('hex');
+
+    if (!this.bids.has(nameHex))
+      this.bids.set(nameHex, new Map());
+
+    const map = this.bids.get(nameHex);
+
+    const bb = new BlindBid();
+
+    bb.nameHash = nameHash;
+    bb.name = options.name;
+    bb.lockup = options.lockup;
+    bb.blind = options.blind;
+    bb.own = options.own;
+
+    map.set(outpoint.toKey(), bb.toRaw());
+  }
+
+  removeBid(nameHash, outpoint) {
+    assert(Buffer.isBuffer(nameHash));
+
+    const nameHex = nameHash.toString('hex');
+    const map = this.bids.get(nameHex);
+
+    if (!map)
+      return;
+
+    map.delete(outpoint.toKey());
+
+    if (map.size === 0)
+      this.bids.delete(nameHex);
+  }
+
+  getBids(nameHash) {
+    if (nameHash) {
+      assert(Buffer.isBuffer(nameHash));
+
+      const nameHex = nameHash.toString('hex');
+      const map = this.bids.get(nameHex);
+
+      if (!map)
+        return [];
+
+      const bids = [];
+
+      for (const [key, raw] of map) {
+        const bb = BlindBid.fromRaw(raw);
+
+        bb.nameHash = nameHash;
+        bb.prevout = Outpoint.fromKey(key);
+
+        const bv = this.getBlind(bb.blind);
+
+        if (bv)
+          bb.value = bv.value;
+
+        bids.push(bb);
+      }
+
+      return bids;
+    }
+
+    const bids = [];
+
+    for (const [nameHex, map] of this.bids) {
+      const nameHash = Buffer.from(nameHex, 'hex');
+
+      for (const [key, raw] of map) {
+        const bb = BlindBid.fromRaw(raw);
+
+        bb.nameHash = nameHash;
+        bb.prevout = Outpoint.fromKey(key);
+
+        const bv = this.getBlind(bb.blind);
+
+        if (bv)
+          bb.value = bv.value;
+
+        bids.push(bb);
+      }
+    }
+
+    return bids;
+  }
+
+  removeBids(nameHash) {
+    assert(Buffer.isBuffer(nameHash));
+    this.bids.delete(nameHash.toString('hex'));
+  }
+
+  getReveal(nameHash, outpoint) {
+    assert(Buffer.isBuffer(nameHash));
+
+    const nameHex = nameHash.toString('hex');
+    const map = this.reveals.get(nameHex);
+
+    if (!map)
+      return null;
+
+    const raw = map.get(outpoint.toKey());
+
+    if (!raw)
+      return null;
+
+    const brv = BidReveal.fromRaw(raw);
+    brv.nameHash = nameHash;
+    brv.prevout = outpoint;
+
+    return brv;
+  }
+
+  putReveal(nameHash, outpoint, options) {
+    assert(Buffer.isBuffer(nameHash));
+
+    const nameHex = nameHash.toString('hex');
+
+    if (!this.reveals.get(nameHex))
+      this.reveals.set(nameHex, new Map());
+
+    const map = this.reveals.get(nameHex);
+
+    const brv = new BidReveal();
+    brv.nameHash = nameHash;
+    brv.name = options.name;
+    brv.value = options.value;
+    brv.height = options.height;
+    brv.own = options.own;
+
+    map.set(outpoint.toKey(), brv.toRaw());
+  }
+
+  removeReveal(nameHash, outpoint) {
+    assert(Buffer.isBuffer(nameHash));
+
+    const nameHex = nameHash.toString('hex');
+    const map = this.reveals.get(nameHex);
+
+    if (!map)
+      return;
+
+    map.delete(outpoint.toKey());
+
+    if (map.size === 0)
+      this.bids.delete(nameHex);
+  }
+
+  getReveals(nameHash) {
+    if (nameHash) {
+      assert(Buffer.isBuffer(nameHash));
+
+      const nameHex = nameHash.toString('hex');
+      const map = this.reveals.get(nameHex);
+
+      if (!map)
+        return [];
+
+      const reveals = [];
+
+      for (const [key, raw] of map) {
+        const brv = BidReveal.fromRaw(raw);
+        brv.nameHash = nameHash;
+        brv.prevout = Outpoint.fromKey(key);
+        reveals.push(brv);
+      }
+
+      return reveals;
+    }
+
+    const reveals = [];
+
+    for (const [nameHex, map] of this.reveals) {
+      const nameHash = Buffer.from(nameHex, 'hex');
+
+      for (const [key, raw] of map) {
+        const brv = BidReveal.fromRaw(raw);
+        brv.nameHash = nameHash;
+        brv.prevout = Outpoint.fromKey(key);
+        reveals.push(brv);
+      }
+    }
+
+    return reveals;
+  }
+
+  removeReveals(nameHash) {
+    assert(Buffer.isBuffer(nameHash));
+    this.reveals.delete(nameHash.toString('hex'));
+  }
+
+  getBlind(blind) {
+    assert(Buffer.isBuffer(blind));
+    const key = blind.toString('hex');
+    const raw = this.blinds.get(key);
+
+    if (!raw)
+      return null;
+
+    return BlindValue.fromRaw(raw);
+  }
+
+  putBlind(blind, options) {
+    assert(Buffer.isBuffer(blind));
+    const key = blind.toString('hex');
+    const {value, nonce} = options;
+    const bv = new BlindValue();
+    bv.value = value;
+    bv.nonce = nonce;
+    this.blinds.set(key, bv.toRaw());
+  }
+
+  removeBlind(blind) {
+    assert(Buffer.isBuffer(blind));
+    const key = blind.toString('hex');
+    this.blinds.remove(key);
+  }
 }
 
 class Path {
@@ -859,24 +1874,47 @@ class Path {
   }
 }
 
-class Auction {
-  constructor() {
-    this.name = EMPTY;
-    this.nameHash = consensus.ZERO_HASH;
-    this.owner = new Outpoint();
-    this.state = 0;
-    this.height = -1;
-    this.data = Buffer.alloc(0);
-  }
-}
-
 class BlindBid {
   constructor() {
     this.name = EMPTY;
     this.nameHash = consensus.ZERO_HASH;
     this.prevout = new Outpoint();
+    this.value = -1;
     this.lockup = 0;
     this.blind = consensus.ZERO_HASH;
+    this.own = false;
+  }
+
+  toRaw() {
+    const bw = bio.write(1 + this.name.length + 41);
+    bw.writeU8(this.name.length);
+    bw.writeBytes(this.name);
+    bw.writeU64(this.lockup);
+    bw.writeBytes(this.blind);
+    bw.writeU8(this.own ? 1 : 0);
+    return bw.render();
+  }
+
+  static fromRaw(data) {
+    const br = bio.read(data);
+    const bb = new this();
+    bb.name = br.readBytes(br.readU8());
+    bb.lockup = br.readU64();
+    bb.blind = br.readBytes(32);
+    bb.own = br.readU8() === 1;
+    return bb;
+  }
+
+  toJSON() {
+    return {
+      name: this.name.toString('ascii'),
+      nameHash: this.nameHash.toString('hex'),
+      prevout: this.prevout.toJSON(),
+      value: this.value === -1 ? undefined : this.value,
+      lockup: this.lockup,
+      blind: this.blind.toString('hex'),
+      own: this.own
+    };
   }
 }
 
@@ -884,6 +1922,28 @@ class BlindValue {
   constructor() {
     this.value = 0;
     this.nonce = consensus.ZERO_HASH;
+  }
+
+  toRaw() {
+    const bw = bio.write(40);
+    bw.writeU64(this.value);
+    bw.writeBytes(this.nonce);
+    return bw.render();
+  }
+
+  static fromRaw(data) {
+    const br = bio.read(data);
+    const bv = new this();
+    bv.value = br.readU64();
+    bv.nonce = br.readBytes(32);
+    return bv;
+  }
+
+  toJSON() {
+    return {
+      value: this.value,
+      nonce: this.nonce.toString('hex')
+    };
   }
 }
 
@@ -896,6 +1956,56 @@ class BidReveal {
     this.height = -1;
     this.own = false;
   }
+
+  toRaw() {
+    const bw = bio.write(1 + this.name.length + 13);
+
+    let height = this.height;
+
+    if (height === -1)
+      height = 0xffffffff;
+
+    bw.writeU8(this.name.length);
+    bw.writeBytes(this.name);
+    bw.writeU64(this.value);
+    bw.writeU32(height);
+    bw.writeU8(this.own);
+
+    return bw.render();
+  }
+
+  static fromRaw(data) {
+    const br = bio.read(data);
+    const brv = new this();
+
+    brv.name = br.readBytes(br.readU8());
+    brv.value = br.readU64();
+    brv.height = br.readU32();
+    brv.own = br.readU8() === 1;
+
+    if (brv.height === 0xffffffff)
+      brv.height = -1;
+
+    return brv;
+  }
+
+  toJSON() {
+    return {
+      name: this.name.toString('ascii'),
+      nameHash: this.nameHash.toString('hex'),
+      prevout: this.prevout.toJSON(),
+      value: this.value,
+      height: this.height,
+      own: this.own
+    };
+  }
+}
+
+function encodeU32(num) {
+  assert((num >>> 0) === num);
+  const buf = Buffer.allocUnsafe(4);
+  bio.writeU32(buf, num, 0);
+  return buf;
 }
 
 module.exports = MemWallet;
