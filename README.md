@@ -163,11 +163,11 @@ RPC.
 
 All node calls should be made with `$ hsk-cli rpc [call] [arguments...]`.
 
-- `isnameavailable [name]` - Returns true or false.
 - `getnameinfo [name]` - Returns name and auction status.
 - `getnameresource [name]` - Returns parsed DNS-style resource.
 - `getnameproof [name]` - Returns a JSON-ified [urkel] proof of a name.
 - `getnamebyhash [hex-hash]` - Returns the name hash preimage.
+- `sendrawclaim [hex-string]` - Send a raw serialized claim.
 
 #### Wallet Calls
 
@@ -215,12 +215,12 @@ services:
 - Cloudflare: https://support.cloudflare.com/hc/en-us/articles/209114378
 
 If you run your own nameserver, you're going to need some tools for managing
-keys and signing your zonefile. We recommend [LDNS][ldns], as it has a number
-of command-line tools for accomplishing this:
+keys and signing your zonefile. BIND has a number of command-line tools for
+accomplishing this:
 
-- https://linux.die.net/man/1/ldns-keygen
-- https://linux.die.net/man/1/ldns-key2ds
-- https://linux.die.net/man/1/ldns-signzone
+- https://linux.die.net/man/8/dnssec-keygen
+- https://linux.die.net/man/8/dnssec-dsfromkey
+- https://linux.die.net/man/8/dnssec-signzone
 
 ---
 
@@ -313,4 +313,3 @@ See LICENSE for more info.
 [hsk-miner]: https://github.com/handshake-org/hsk-miner
 [hsk-client]: https://github.com/handshake-org/hsk-client
 [urkel]: https://github.com/handshake-org/urkel
-[ldns]: https://www.nlnetlabs.nl/projects/ldns/about/

@@ -56,6 +56,7 @@ class MemWallet {
     this.bids = new Map();
     this.reveals = new Map();
     this.blinds = new Map();
+    this.isBiddable = async () => true;
 
     this.balance = 0;
     this.txs = 0;
@@ -794,8 +795,7 @@ class MemWallet {
 
     if (auction) {
       if (hardened) {
-        if (auction.weak
-            && height < auction.height + network.names.weakLockup) {
+        if (auction.isWeak(height, network)) {
           auction.setAuction(auction.name, height);
           forked = true;
         }
@@ -804,8 +804,8 @@ class MemWallet {
       if (!auction.isExpired(height, network))
         throw new Error('Name already claimed.');
     } else {
-      // if (!await this.isBiddable(nameHash))
-      //   throw new Error('Name is not available.');
+      if (!await this.isBiddable(nameHash))
+        throw new Error('Name is not available.');
     }
 
     const item = reserved.get(name);
@@ -880,6 +880,9 @@ class MemWallet {
   }
 
   async fakeClaim(name, options) {
+    if (options == null)
+      options = {};
+
     assert(typeof name === 'string');
 
     if (!rules.verifyName(name))
@@ -888,6 +891,7 @@ class MemWallet {
     const rawName = Buffer.from(name, 'ascii');
     const nameHash = rules.hashName(rawName);
     const height = this.height + 1;
+    const hardened = Boolean(options.hardened);
     const network = this.network;
 
     if (!rules.isReserved(name, height, network))
@@ -895,12 +899,17 @@ class MemWallet {
 
     const auction = this.getAuction(nameHash);
 
+    let forked = false;
+
     if (auction) {
-      if (!auction.isExpired(height, network))
+      if (hardened && auction.isWeak(height, network))
+        forked = true;
+
+      if (!forked && !auction.isExpired(height, network))
         throw new Error('Name already claimed.');
     } else {
-      // if (!await this.isBiddable(nameHash))
-      //   throw new Error('Name is not available.');
+      if (!await this.isBiddable(nameHash))
+        throw new Error('Name is not available.');
     }
 
     const {proof, txt} = await this.buildClaim(name, options);
@@ -910,10 +919,21 @@ class MemWallet {
 
     proof.addData([txt]);
 
+    const data = proof.getData(this.network);
+
+    if (!data)
+      throw new Error(`No valid DNS commitment found for ${name}.`);
+
+    if (data.forked !== forked)
+      throw new Error('Proof data must have the correct fork flag.');
+
     return Claim.fromProof(proof);
   }
 
-  async createClaim(name) {
+  async createClaim(name, options) {
+    if (options == null)
+      options = {};
+
     assert(typeof name === 'string');
 
     if (!rules.verifyName(name))
@@ -922,6 +942,7 @@ class MemWallet {
     const rawName = Buffer.from(name, 'ascii');
     const nameHash = rules.hashName(rawName);
     const height = this.height + 1;
+    const hardened = Boolean(options.hardened);
     const network = this.network;
 
     if (!rules.isReserved(name, height, network))
@@ -929,12 +950,17 @@ class MemWallet {
 
     const auction = this.getAuction(nameHash);
 
+    let forked = false;
+
     if (auction) {
-      if (!auction.isExpired(height, network))
+      if (hardened && auction.isWeak(height, network))
+        forked = true;
+
+      if (!forked && !auction.isExpired(height, network))
         throw new Error('Name already claimed.');
     } else {
-      // if (!await this.isBiddable(nameHash))
-      //   throw new Error('Name is not available.');
+      if (!await this.isBiddable(nameHash))
+        throw new Error('Name is not available.');
     }
 
     const item = reserved.get(name);
@@ -945,6 +971,9 @@ class MemWallet {
 
     if (!data)
       throw new Error(`No valid DNS commitment found for ${name}.`);
+
+    if (data.forked !== forked)
+      throw new Error('Proof data must have the correct fork flag.');
 
     return Claim.fromProof(proof);
   }
@@ -979,8 +1008,8 @@ class MemWallet {
       if (state !== states.BIDDING)
         throw new Error('Bidding has closed.');
     } else {
-      // if (!await this.isBiddable(nameHash))
-      //   throw new Error('Name is not available.');
+      if (!await this.isBiddable(nameHash))
+        throw new Error('Name is not available.');
     }
 
     if (value > lockup)
@@ -1318,7 +1347,7 @@ class MemWallet {
       throw new Error('Name must be registered.');
     }
 
-    // if (auction.weak && height < auction.height + network.names.weakLockup)
+    // if (auction.isWeak(height, network))
     //   throw new Error('Cannot transfer a weak name prematurely.');
 
     const output = new Output();
@@ -1501,7 +1530,7 @@ class MemWallet {
       throw new Error('Name must be registered.');
     }
 
-    // if (auction.weak && height < auction.height + network.names.weakLockup)
+    // if (auction.isWeak(height, network))
     //   throw new Error('Cannot revoke a weak name prematurely.');
 
     const output = new Output();

@@ -47,6 +47,16 @@ function createNode() {
         wallet.removeBlock(entry, block.txs);
       });
 
+      wallet.isBiddable = async (nameHash) => {
+        assert(Buffer.isBuffer(nameHash));
+        const cdb = chain.cdb;
+        const height = chain.height + 1;
+        const state = await chain.getNextState();
+        const hardened = state.hasHardening();
+        const auction = await cdb.getAuctionState(nameHash, height, hardened);
+        return auction.state === 'BIDDING';
+      };
+
       return wallet;
     }
   };
