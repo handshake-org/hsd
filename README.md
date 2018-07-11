@@ -282,6 +282,28 @@ $ hwallet-cli rpc sendupdate example \
   '{"ttl":3600,"canonical":"icanhazip.com."}'
 ```
 
+#### Creating a proof by hand
+
+If you already have DNSSEC setup, you can avoid publishing a TXT record
+publicly by creating the proof locally. This requires that you have direct
+access to your zone-signing keys. The private keys themselves must be stored in
+BIND's private key format (v1.3) and naming convention.
+
+We use [bns] for this task, which includes a command-line tool for creating
+ownership proofs.
+
+``` bash
+$ npm install bns
+$ bns-prove -x -K /path/to/keys example.com. \
+  'hns-claim:qnPxvMRKAAAAAAAA+4mmSeRmfY/8TOEF+ux'
+```
+
+The above will output a hex string which can then be passed to the RPC:
+
+``` bash
+$ hsk-cli rpc sendrawclaim 'hex-string'
+```
+
 ## Support
 
 Join us on [freenode][freenode] in the [#handshake][irc] channel.
@@ -313,3 +335,4 @@ See LICENSE for more info.
 [hsk-miner]: https://github.com/handshake-org/hsk-miner
 [hsk-client]: https://github.com/handshake-org/hsk-client
 [urkel]: https://github.com/handshake-org/urkel
+[bns]: https://github.com/bcoin-org/bns
