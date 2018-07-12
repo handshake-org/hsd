@@ -47,14 +47,14 @@ function createNode() {
         wallet.removeBlock(entry, block.txs);
       });
 
-      wallet.isBiddable = async (nameHash) => {
+      wallet.getAuctionState = async (nameHash) => {
         assert(Buffer.isBuffer(nameHash));
         const cdb = chain.cdb;
         const height = chain.height + 1;
         const state = await chain.getNextState();
         const hardened = state.hasHardening();
-        const auction = await cdb.getAuctionState(nameHash, height, hardened);
-        return auction.state === 'BIDDING';
+        const s = await cdb.getAuctionState(nameHash, height, hardened);
+        return s.getJSON(height, network);
       };
 
       return wallet;
@@ -90,6 +90,26 @@ describe('Auction', function() {
 
     it('should mine 20 blocks', async () => {
       for (let i = 0; i < 20; i++) {
+        const block = await cpu.mineBlock();
+        assert(block);
+        assert(await chain.add(block));
+      }
+    });
+
+    it('should open auction', async () => {
+      const mtx = await winner.createOpen(NAME1);
+
+      const job = await cpu.createJob();
+      job.addTX(mtx.toTX(), mtx.view);
+      job.refresh();
+
+      const block = await job.mineAsync();
+
+      assert(await chain.add(block));
+    });
+
+    it('should mine blocks', async () => {
+      for (let i = 0; i < network.names.treeInterval; i++) {
         const block = await cpu.mineBlock();
         assert(block);
         assert(await chain.add(block));

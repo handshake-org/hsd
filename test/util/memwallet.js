@@ -56,7 +56,6 @@ class MemWallet {
     this.bids = new Map();
     this.reveals = new Map();
     this.blinds = new Map();
-    this.isBiddable = async () => true;
 
     this.balance = 0;
     this.txs = 0;
@@ -362,7 +361,7 @@ class MemWallet {
 
       if (!auction.isNull()) {
         if (auction.isExpired(height, network))
-          auction.setAuction(auction.name, height);
+          auction.reset(height);
       }
 
       switch (covenant.type) {
@@ -388,9 +387,27 @@ class MemWallet {
           break;
         }
 
+        case types.OPEN: {
+          if (!path)
+            break;
+
+          if (auction.isNull()) {
+            const name = covenant.items[1];
+
+            // this.addNameMap(b, nameHash);
+
+            auction.setAuction(name, height);
+
+            updated = true;
+          }
+
+          break;
+        }
+
         case types.BID: {
           const name = covenant.items[1];
-          const blind = covenant.items[2];
+          const start = covenant.items[2].readUInt32LE(0);
+          const blind = covenant.items[3];
           const lockup = output.value;
 
           if (!path) {
@@ -409,16 +426,10 @@ class MemWallet {
             break;
           }
 
-          if (auction.isNull()) {
-            auction.setAuction(name, height);
+          // if (auction.isNull())
+          //   this.addNameMap(b, nameHash);
 
-            // this.addNameMap(b, nameHash);
-
-            // const state = this.getAuctionState(nameHash, height);
-            // auction.setAuction(name, state.height);
-            // auction.setHighest(state.highest);
-            // auction.setValue(state.value);
-          }
+          auction.setAuction(name, start);
 
           this.putBid(nameHash, outpoint, {
             name,
@@ -455,16 +466,18 @@ class MemWallet {
             break;
           }
 
-          const {prevout} = tx.inputs[i];
-          const coin = view.getOutput(prevout);
-          const uc = coin.covenant;
-          const blind = uc.items[2];
-          const nonce = covenant.items[1];
+          const coin = view.getOutputFor(tx.inputs[i]);
 
-          this.putBlind(blind, {
-            value: output.value,
-            nonce: nonce
-          });
+          if (coin) {
+            const blind = coin.covenant.items[3];
+            const nonce = covenant.items[1];
+
+
+            this.putBlind(blind, {
+              value: output.value,
+              nonce: nonce
+            });
+          }
 
           this.putReveal(nameHash, outpoint, {
             name: auction.name,
@@ -479,12 +492,6 @@ class MemWallet {
         }
 
         case types.REDEEM: {
-          if (auction.isNull())
-            break;
-
-          if (!path)
-            break;
-
           break;
         }
 
@@ -510,19 +517,11 @@ class MemWallet {
 
           updated = true;
 
-          if (!path) {
-            // Somebody else registered.
-            break;
-          }
-
           break;
         }
 
         case types.UPDATE: {
           if (auction.isNull())
-            break;
-
-          if (!path)
             break;
 
           const data = covenant.items[1];
@@ -543,9 +542,6 @@ class MemWallet {
 
         case types.TRANSFER: {
           if (auction.isNull())
-            break;
-
-          if (!path)
             break;
 
           auction.setOwner(outpoint);
@@ -593,9 +589,6 @@ class MemWallet {
 
         case types.REVOKE: {
           if (auction.isNull())
-            break;
-
-          if (!path)
             break;
 
           assert(auction.revoked === -1);
@@ -770,6 +763,23 @@ class MemWallet {
     return blind;
   }
 
+  async getAuctionState(nameHash) {
+    return {
+      state: 0,
+      height: 0,
+      renewal: 0,
+      revoked: -1,
+      claimed: false,
+      weak: false,
+      owned: false
+    };
+  }
+
+  async isAvailable(nameHash) {
+    const state = await this.getAuctionState(nameHash);
+    return state.state === 0;
+  }
+
   async buildClaim(name, options) {
     if (options == null)
       options = {};
@@ -796,7 +806,7 @@ class MemWallet {
     if (auction) {
       if (hardened) {
         if (auction.isWeak(height, network)) {
-          auction.setAuction(auction.name, height);
+          auction.reset(height);
           forked = true;
         }
       }
@@ -804,7 +814,7 @@ class MemWallet {
       if (!auction.isExpired(height, network))
         throw new Error('Name already claimed.');
     } else {
-      if (!await this.isBiddable(nameHash))
+      if (!await this.isAvailable(nameHash))
         throw new Error('Name is not available.');
     }
 
@@ -908,7 +918,7 @@ class MemWallet {
       if (!forked && !auction.isExpired(height, network))
         throw new Error('Name already claimed.');
     } else {
-      if (!await this.isBiddable(nameHash))
+      if (!await this.isAvailable(nameHash))
         throw new Error('Name is not available.');
     }
 
@@ -959,7 +969,7 @@ class MemWallet {
       if (!forked && !auction.isExpired(height, network))
         throw new Error('Name already claimed.');
     } else {
-      if (!await this.isBiddable(nameHash))
+      if (!await this.isAvailable(nameHash))
         throw new Error('Name is not available.');
     }
 
@@ -976,6 +986,62 @@ class MemWallet {
       throw new Error('Proof data must have the correct fork flag.');
 
     return Claim.fromProof(proof);
+  }
+
+  async createOpen(name, options) {
+    assert(typeof name === 'string');
+
+    if (!rules.verifyName(name))
+      throw new Error('Invalid name.');
+
+    const rawName = Buffer.from(name, 'ascii');
+    const nameHash = rules.hashName(rawName);
+    const height = this.height + 1;
+    const network = this.network;
+
+    if (rules.isReserved(name, height, network))
+      throw new Error('Name is reserved.');
+
+    if (!rules.verifyRollout(nameHash, height, network))
+      throw new Error('Name not yet available.');
+
+    const auction = this.getAuction(nameHash);
+
+    let state = -1;
+    let start = -1;
+
+    if (auction) {
+      if (auction.isExpired(height, network))
+        auction.reset(height);
+
+      state = auction.state(height, network);
+      start = auction.height;
+    } else {
+      const s = await this.getAuctionState(nameHash);
+
+      state = s.state;
+      start = s.height;
+    }
+
+    if (state !== states.OPENING)
+      throw new Error('Name is not available.');
+
+    if (start !== 0 && start !== height)
+      throw new Error('Name is already opening.');
+
+    const addr = this.createReceive().getAddress();
+
+    const output = new Output();
+    output.address = addr;
+    output.value = 0;
+    output.covenant.type = types.OPEN;
+    output.covenant.items.push(nameHash);
+    output.covenant.items.push(rawName);
+
+    const mtx = new MTX();
+    mtx.outputs.push(output);
+
+    return this._create(mtx, options);
   }
 
   async createBid(name, value, lockup, options) {
@@ -997,20 +1063,29 @@ class MemWallet {
     if (!rules.verifyRollout(nameHash, height, network))
       throw new Error('Name not yet available.');
 
+    let state = -1;
+    let start = -1;
+
     const auction = this.getAuction(nameHash);
 
     if (auction) {
       if (auction.isExpired(height, network))
-        auction.setAuction(auction.name, height);
+        auction.reset(height);
 
-      const state = auction.state(height, network);
-
-      if (state !== states.BIDDING)
-        throw new Error('Bidding has closed.');
+      state = auction.state(height, network);
+      start = auction.height;
     } else {
-      if (!await this.isBiddable(nameHash))
-        throw new Error('Name is not available.');
+      const s = await this.getAuctionState(nameHash);
+
+      state = s.state;
+      start = s.height;
     }
+
+    if (state === states.OPENING)
+      throw new Error('Name has not reached the bidding phase yet.');
+
+    if (state !== states.BIDDING)
+      throw new Error('Name is not available.');
 
     if (value > lockup)
       throw new Error('Bid exceeds lockup value.');
@@ -1024,6 +1099,7 @@ class MemWallet {
     output.covenant.type = types.BID;
     output.covenant.items.push(nameHash);
     output.covenant.items.push(rawName);
+    output.covenant.items.push(encodeU32(start));
     output.covenant.items.push(blind);
 
     const mtx = new MTX();
@@ -1048,7 +1124,7 @@ class MemWallet {
       throw new Error('Auction not found.');
 
     if (auction.isExpired(height, network))
-      auction.setAuction(auction.name, height);
+      auction.reset(height);
 
     const state = auction.state(height, network);
 
@@ -1074,7 +1150,7 @@ class MemWallet {
       if (coin.height < auction.height)
         continue;
 
-      const blind = coin.covenant.items[2];
+      const blind = coin.covenant.items[3];
       const bv = this.getBlind(blind);
 
       if (!bv)
