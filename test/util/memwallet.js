@@ -796,7 +796,7 @@ class MemWallet {
     const hardened = Boolean(options.hardened);
     const network = this.network;
 
-    if (!rules.isReserved(name, height, network))
+    if (!rules.isReserved(nameHash, height, network))
       throw new Error('Name is not reserved.');
 
     const auction = await this.getAuction(nameHash);
@@ -818,7 +818,7 @@ class MemWallet {
         throw new Error('Name is not available.');
     }
 
-    const item = reserved.get(name);
+    const item = reserved.get(nameHash);
     assert(item);
 
     let rate = options.rate;
@@ -904,7 +904,7 @@ class MemWallet {
     const hardened = Boolean(options.hardened);
     const network = this.network;
 
-    if (!rules.isReserved(name, height, network))
+    if (!rules.isReserved(nameHash, height, network))
       throw new Error('Name is not reserved.');
 
     const auction = this.getAuction(nameHash);
@@ -955,7 +955,7 @@ class MemWallet {
     const hardened = Boolean(options.hardened);
     const network = this.network;
 
-    if (!rules.isReserved(name, height, network))
+    if (!rules.isReserved(nameHash, height, network))
       throw new Error('Name is not reserved.');
 
     const auction = this.getAuction(nameHash);
@@ -973,7 +973,7 @@ class MemWallet {
         throw new Error('Name is not available.');
     }
 
-    const item = reserved.get(name);
+    const item = reserved.get(nameHash);
     assert(item);
 
     const proof = await ownership.prove(item.target);
@@ -999,7 +999,7 @@ class MemWallet {
     const height = this.height + 1;
     const network = this.network;
 
-    if (rules.isReserved(name, height, network))
+    if (rules.isReserved(nameHash, height, network))
       throw new Error('Name is reserved.');
 
     if (!rules.verifyRollout(nameHash, height, network))
@@ -1057,7 +1057,7 @@ class MemWallet {
     const height = this.height + 1;
     const network = this.network;
 
-    if (rules.isReserved(name, height, network))
+    if (rules.isReserved(nameHash, height, network))
       throw new Error('Name is reserved.');
 
     if (!rules.verifyRollout(nameHash, height, network))
