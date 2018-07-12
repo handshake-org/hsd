@@ -21,31 +21,31 @@ See the [Beginner's Guide][guide] for more in-depth installation instructions.
 
 ## Testnet
 
-A testnet is currently running as of June 19th.
+A testnet is __not__ currently running as of June 19th.
 
 Current testnet seed nodes (`pubkey@ip`):
 
-- `aoihqqagbhzz6wxg43itefqvmgda4uwtky362p22kbimcyg5fdp54@173.255.248.12`
-- `ajdzrpoxsusaw4ixq4ttibxxsuh5fkkduc5qszyboidif2z25i362@66.175.217.103`
-- `ajk57wutnhfdzvqwqrgab3wwh4wxoqgnkz4avbln54pgj5jwefcts@45.56.92.136`
-- `am2lsmbzzxncaptqjo22jay3mztfwl33bxhkp7icfx7kmi5rvjaic@45.56.82.169`
+- `aoihqqagbhzz6wxg43itefqvmgda4uwtky362p22kbimcyg5fdp54@172.104.214.189`
+- `ajdzrpoxsusaw4ixq4ttibxxsuh5fkkduc5qszyboidif2z25i362@173.255.209.126`
+- `ajk57wutnhfdzvqwqrgab3wwh4wxoqgnkz4avbln54pgj5jwefcts@172.104.177.177`
+- `am2lsmbzzxncaptqjo22jay3mztfwl33bxhkp7icfx7kmi5rvjaic@139.162.183.168`
 
 Current public DNS servers:
 
-- 173.255.248.12 - Recursive Server 1.
-- 66.175.217.103 - Authoritative Server 1.
-- 45.56.92.136 - Recursive Server 2.
-- 45.56.82.169 - Authoritative Server 2.
+- 172.104.214.189 - Recursive Server 1.
+- 173.255.209.126 - Authoritative Server 1.
+- 172.104.177.177 - Recursive Server 2.
+- 139.162.183.168 - Authoritative Server 2.
 
 Example:
 
 ``` bash
-$ dig @173.255.248.12 google.com A +short
+$ dig @172.104.214.189 google.com A +short
 172.217.0.46
 ```
 
 ``` bash
-$ dig @66.175.217.103 com NS
+$ dig @173.255.209.126 com NS
 ...
 ;; AUTHORITY SECTION:
 com.                    86400   IN      NS      a.gtld-servers.net.
@@ -89,7 +89,8 @@ To mine with getwork on a GPU, HSKD should be used in combination with
 [hsk-miner] and [hsk-client].
 
 ``` bash
-# HSKD must boot with a coinbase address (`$ hwallet account get default`).
+# To boot and listen publicly on the HTTP server...
+# Optionally pass in a custom coinbase address.
 $ hskd --http-host '::' --api-key 'hunter2' \
   --coinbase-address 'ts1qsu62stru80svj5xk6mescy65v0lhg8xxtweqsr'
 ```
@@ -110,7 +111,18 @@ First we should look at the current status of a name we want.
 $ hsk-cli rpc getnameinfo handshake
 ```
 
-Once we know the name is biddable, we can send a bid, with a lockup-value to
+Once we know the name is available, we can send an "open transaction", this is
+necessary to start the bidding process. After an open transaction is mined,
+there is a short delay before bidding begins. This delay is necessary to ensure
+the auction's state is inserted into the [urkel] tree.
+
+``` bash
+# Attempt to open bidding for `handshake`.
+$ hwallet-cli rpc sendopen handshake
+```
+
+Using `getnameinfo` we can check to see when bidding will begin. Once the
+auction enters the bidding state, we can send a bid, with a lockup-value to
 conceal our true bid.
 
 ``` bash
@@ -123,7 +135,7 @@ After the appropriate amount of time has passed, (1 day in the case of
 testnet), we should reveal our bid.
 
 ``` bash
-# Reveal our bid for handshake
+# Reveal our bid for `handshake`.
 $ hwallet-cli rpc sendreveal handshake
 ```
 
@@ -143,7 +155,7 @@ If we won, we can now register and update the name using `sendupdate`.
 
 ``` bash
 $ hwallet-cli rpc sendupdate handshake \
-  '{"ttl":3600,"ns":["ns1.myserver.net.@1.2.3.4"]}'
+  '{"ttl":172800,"ns":["ns1.example.com.@1.2.3.4"]}'
 ```
 
 Note that the `ns` field's `domain@ip` format symbolizes glue.
@@ -182,7 +194,8 @@ All wallet calls should be made with `$ hwallet-cli rpc [call] [arguments...]`.
 - `getnamebyhash [hex-hash]` - Returns the name hash preimage.
 - `createclaim [name]` - Create a to-be-signed claim.
 - `sendclaim [name]` - Claim a name by publishing a DNSSEC ownership proof.
-- `sendbid [name] [bid-value] [lockup-value]` - Open a bid on a name.
+- `sendopen [name]` - Open an auction.
+- `sendbid [name] [bid-value] [lockup-value]` - Bid on a name.
 - `sendreveal [name]` - Reveal bids for name.
 - `sendredeem [name]` - Redeem reveals in the case of an auction loss.
 - `sendupdate [name] [json-data]` - Register or update a name.
