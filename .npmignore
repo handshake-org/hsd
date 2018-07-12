@@ -7,3 +7,4 @@ node_modules/
 browser/hsk*
 package-lock.json
 npm-debug.log
+lib/covenants/names.json
