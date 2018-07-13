@@ -1,4 +1,2 @@
 lib/protocol/genesis.json -diff
 lib/protocol/genesis-data.json -diff
-lib/covenants/reserved.js -diff
-etc/root.json -diff
