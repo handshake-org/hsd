@@ -91,6 +91,7 @@
   },
   "browser": {
     "./lib/covenants/reserved": "./lib/covenants/reserved-browser.js",
+    "./lib/dns/icann": "./lib/dns/icann-browser.js",
     "./lib/hd/nfkd": "./lib/hd/nfkd-compat.js",
     "./lib/hd/wordlist": "./lib/hd/wordlist-browser.js",
     "./lib/workers/child": "./lib/workers/child-browser.js",
