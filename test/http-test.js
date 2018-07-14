@@ -217,7 +217,7 @@ describe('HTTP', function() {
         + '0000000000000000000000000000000000000000'
         + 'ffffffffffffffffffffffffffffffffffffffff',
       curtime: json.curtime,
-      mintime: 1514765691,
+      mintime: 1514765791,
       maxtime: json.maxtime,
       expires: json.expires,
       sigoplimit: 80000,
