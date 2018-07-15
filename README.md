@@ -246,11 +246,10 @@ $ hwallet-cli rpc createclaim example
   "name": "example",
   "target": "example.com.",
   "value": 1133761643,
-  "size": 957,
-  "fee": 19140,
-  "block": "fb89a649e4667d8ffc4ce105faec7872ef47e0ce0e60a6a9e58e0b7cc3bb6147",
-  "address": "rs1qz588tmrclt4x2v48nu4ty2dnyenusul8q5djcj",
-  "txt": "hns-claim:qnPxvMRKAAAAAAAA+4mmSeRmfY/8TOEF+ux4cu9H4M4OYKap5Y4LfMO7YUcAFBUOdex4+uplMqefKrIpsyZnyHPn"
+  "size": 3583,
+  "fee": 17900,
+  "address": "ts1qd6u7vhu084494kf9cejkp4qel69vsk82takamu",
+  "txt": "hns-testnet:_exFABRuueZfjz1qWtklxmVg1Bn-ishY6gA"
 }
 ```
 
@@ -261,7 +260,7 @@ our name's zone file and signed:
 
 ``` zone
 ...
-example.com. 1800 IN TXT "hns-claim:qnPxvMRKAAAAAAAA+4mmSeRmfY/8TOEF+ux4cu9H4M4OYKap5Y4LfMO7YUcAFBUOdex4+uplMqefKrIpsyZnyHPn"
+example.com. 1800 IN TXT "hns-testnet:_exFABRuueZfjz1qWtklxmVg1Bn-ishY6gA"
 example.com. 1800 IN RRSIG TXT 5 2 1800 20190615140933 20180615131108 ...
 ```
 
@@ -285,7 +284,8 @@ $ hwallet-cli rpc sendclaim example
 
 This will create and broadcast the proof to all of your peers, ultimately
 ending up in a miner's mempool. Your claim should be mined within 5-20 minutes.
-Once mined, you must wait 400 blocks before your claim is considered "mature".
+Once mined, you must wait several blocks before your claim is considered
+"mature".
 
 Once the claim has reached maturity, you are able to bypass the auction process
 by calling `sendupdate` on your claimed name.
@@ -300,7 +300,7 @@ $ hwallet-cli rpc sendupdate example \
 If you already have DNSSEC setup, you can avoid publishing a TXT record
 publicly by creating the proof locally. This requires that you have direct
 access to your zone-signing keys. The private keys themselves must be stored in
-BIND's private key format (v1.3) and naming convention.
+BIND's private key format and naming convention.
 
 We use [bns] for this task, which includes a command-line tool for creating
 ownership proofs.
@@ -308,7 +308,7 @@ ownership proofs.
 ``` bash
 $ npm install bns
 $ bns-prove -x -K /path/to/keys example.com. \
-  'hns-claim:qnPxvMRKAAAAAAAA+4mmSeRmfY/8TOEF+ux'
+  'hns-testnet:_exFABRuueZfjz1qWtklxmVg1Bn-ishY6gA'
 ```
 
 The above will output a hex string which can then be passed to the RPC:
