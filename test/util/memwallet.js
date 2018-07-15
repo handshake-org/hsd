@@ -870,11 +870,8 @@ class MemWallet {
     if (forked)
       fee = 0;
 
-    const renewal = this.getRenewalBlock();
-    const block = renewal;
-
     const address = this.createReceive().getAddress();
-    const txt = ownership.createData(fee, block, address, forked, network);
+    const txt = ownership.createData(fee, address, forked, network);
 
     return {
       name,
@@ -883,7 +880,6 @@ class MemWallet {
       proof,
       size,
       fee,
-      block,
       address,
       txt
     };
