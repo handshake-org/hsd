@@ -9,6 +9,7 @@
 const assert = require('assert');
 const bio = require('bufio');
 const blake2b = require('bcrypto/lib/blake2b');
+const {BufferMap, BufferSet} = require('buffer-map');
 const rules = require('../../lib/covenants/rules');
 const Network = require('../../lib/protocol/network');
 const MTX = require('../../lib/primitives/mtx');
@@ -45,17 +46,17 @@ class MemWallet {
     this.changeDepth = 1;
     this.receive = null;
     this.change = null;
-    this.map = new Set();
-    this.coins = new Map();
-    this.spent = new Map();
-    this.paths = new Map();
+    this.map = new BufferSet();
+    this.coins = new BufferMap();
+    this.spent = new BufferMap();
+    this.paths = new BufferMap();
 
     this.chain = [];
-    this.auctions = new Map();
-    this.auctionUndo = new Map();
-    this.bids = new Map();
-    this.reveals = new Map();
-    this.blinds = new Map();
+    this.auctions = new BufferMap();
+    this.auctionUndo = new BufferMap();
+    this.bids = new BufferMap();
+    this.reveals = new BufferMap();
+    this.blinds = new BufferMap();
 
     this.balance = 0;
     this.txs = 0;
@@ -129,8 +130,8 @@ class MemWallet {
   createReceive() {
     const index = this.receiveDepth++;
     const key = this.deriveReceive(index);
-    const hash = key.getHash('hex');
-    this.filter.add(hash, 'hex');
+    const hash = key.getHash();
+    this.filter.add(hash);
     this.paths.set(hash, new Path(hash, 0, index));
     this.receive = key;
     return key;
@@ -139,8 +140,8 @@ class MemWallet {
   createChange() {
     const index = this.changeDepth++;
     const key = this.deriveChange(index);
-    const hash = key.getHash('hex');
-    this.filter.add(hash, 'hex');
+    const hash = key.getHash();
+    this.filter.add(hash);
     this.paths.set(hash, new Path(hash, 1, index));
     this.change = key;
     return key;
@@ -198,7 +199,7 @@ class MemWallet {
     const op = new Outpoint(coin.hash, coin.index);
     const key = op.toKey();
 
-    this.filter.add(op.toRaw());
+    this.filter.add(op.encode());
 
     this.spent.delete(key);
 
@@ -274,7 +275,7 @@ class MemWallet {
   }
 
   addTX(tx, height) {
-    const hash = tx.hash('hex');
+    const hash = tx.hash();
 
     let result = false;
 
@@ -303,7 +304,7 @@ class MemWallet {
 
     for (let i = 0; i < tx.outputs.length; i++) {
       const output = tx.outputs[i];
-      const addr = output.getHash('hex');
+      const addr = output.getHash();
 
       if (!addr)
         continue;
@@ -333,7 +334,7 @@ class MemWallet {
   }
 
   connectAuctions(tx, view, height) {
-    const hash = tx.hash('hex');
+    const hash = tx.hash();
     const network = this.network;
 
     assert(height !== -1);
@@ -349,7 +350,7 @@ class MemWallet {
         continue;
       }
 
-      const addr = output.getHash('hex');
+      const addr = output.getHash();
 
       if (!addr)
         continue;
@@ -471,7 +472,6 @@ class MemWallet {
           if (coin) {
             const blind = coin.covenant.items[3];
             const nonce = covenant.items[1];
-
 
             this.putBlind(blind, {
               value: output.value,
@@ -622,7 +622,7 @@ class MemWallet {
   }
 
   removeTX(tx, height) {
-    const hash = tx.hash('hex');
+    const hash = tx.hash();
 
     let result = false;
 
@@ -665,7 +665,7 @@ class MemWallet {
   }
 
   undoAuction(tx) {
-    const hash = tx.hash('hex');
+    const hash = tx.hash();
 
     for (let i = 0; i < tx.outputs.length; i++) {
       const output = tx.outputs[i];
@@ -721,7 +721,7 @@ class MemWallet {
       if (!coin)
         continue;
 
-      const addr = coin.getHash('hex');
+      const addr = coin.getHash();
 
       if (!addr)
         continue;
@@ -740,7 +740,7 @@ class MemWallet {
   }
 
   generateNonce(nameHash, address, value) {
-    const path = this.getPath(address.hash.toString('hex'));
+    const path = this.getPath(address.hash);
 
     if (!path)
       throw new Error('Account not found.');
@@ -871,7 +871,7 @@ class MemWallet {
       fee = 0;
 
     const renewal = this.getRenewalBlock();
-    const block = renewal.toString('hex');
+    const block = renewal;
 
     const address = this.createReceive().getAddress();
     const txt = ownership.createData(fee, block, address, forked, network);
@@ -1238,7 +1238,7 @@ class MemWallet {
     assert(typeof name === 'string');
 
     if (resource instanceof Resource)
-      resource = resource.toRaw();
+      resource = resource.encode();
 
     assert(!resource || Buffer.isBuffer(resource));
 
@@ -1315,7 +1315,7 @@ class MemWallet {
     assert(typeof name === 'string');
 
     if (resource instanceof Resource)
-      resource = resource.toRaw();
+      resource = resource.encode();
 
     assert(!resource || Buffer.isBuffer(resource));
 
@@ -1431,7 +1431,7 @@ class MemWallet {
     output.value = coin.value;
     output.covenant.type = types.TRANSFER;
     output.covenant.items.push(nameHash);
-    output.covenant.items.push(address.toRaw());
+    output.covenant.items.push(address.encode());
     output.covenant.items.push(this.getRenewalBlock());
 
     const mtx = new MTX();
@@ -1445,7 +1445,7 @@ class MemWallet {
     assert(typeof name === 'string');
 
     if (resource instanceof Resource)
-      resource = resource.toRaw();
+      resource = resource.encode();
 
     assert(!resource || Buffer.isBuffer(resource));
 
@@ -1540,7 +1540,7 @@ class MemWallet {
     //   throw new Error('Transfer is still locked up.');
 
     const rawAddr = coin.covenant.items[1];
-    const address = Address.fromRaw(rawAddr);
+    const address = Address.decode(rawAddr);
 
     let flags = 0;
 
@@ -1628,7 +1628,7 @@ class MemWallet {
     if (height < 0)
       height = 0;
 
-    return Buffer.from(this.chain[height], 'hex');
+    return this.chain[height];
   }
 
   fund(mtx, options) {
@@ -1693,12 +1693,12 @@ class MemWallet {
 
   putAuction(nameHash, auction) {
     assert(Buffer.isBuffer(nameHash));
-    this.auctions.set(nameHash.toString('hex'), auction.encode());
+    this.auctions.set(nameHash, auction.encode());
   }
 
   getAuction(nameHash) {
     assert(Buffer.isBuffer(nameHash));
-    const raw = this.auctions.get(nameHash.toString('hex'));
+    const raw = this.auctions.get(nameHash);
 
     if (!raw)
       return null;
@@ -1710,7 +1710,7 @@ class MemWallet {
 
   removeAuction(nameHash) {
     assert(Buffer.isBuffer(nameHash));
-    this.auctions.delete(nameHash.toString('hex'));
+    this.auctions.delete(nameHash);
   }
 
   putAuctionUndo(hash, undo) {
@@ -1733,8 +1733,7 @@ class MemWallet {
   getBid(nameHash, outpoint) {
     assert(Buffer.isBuffer(nameHash));
 
-    const nameHex = nameHash.toString('hex');
-    const map = this.bids.get(nameHex);
+    const map = this.bids.get(nameHash);
 
     if (!map)
       return null;
@@ -1744,7 +1743,7 @@ class MemWallet {
     if (!raw)
       return null;
 
-    const bb = BlindBid.fromRaw(raw);
+    const bb = BlindBid.decode(raw);
     bb.nameHash = nameHash;
     bb.prevout = outpoint;
 
@@ -1754,12 +1753,10 @@ class MemWallet {
   putBid(nameHash, outpoint, options) {
     assert(Buffer.isBuffer(nameHash));
 
-    const nameHex = nameHash.toString('hex');
+    if (!this.bids.has(nameHash))
+      this.bids.set(nameHash, new BufferMap());
 
-    if (!this.bids.has(nameHex))
-      this.bids.set(nameHex, new Map());
-
-    const map = this.bids.get(nameHex);
+    const map = this.bids.get(nameHash);
 
     const bb = new BlindBid();
 
@@ -1769,14 +1766,13 @@ class MemWallet {
     bb.blind = options.blind;
     bb.own = options.own;
 
-    map.set(outpoint.toKey(), bb.toRaw());
+    map.set(outpoint.toKey(), bb.encode());
   }
 
   removeBid(nameHash, outpoint) {
     assert(Buffer.isBuffer(nameHash));
 
-    const nameHex = nameHash.toString('hex');
-    const map = this.bids.get(nameHex);
+    const map = this.bids.get(nameHash);
 
     if (!map)
       return;
@@ -1784,15 +1780,14 @@ class MemWallet {
     map.delete(outpoint.toKey());
 
     if (map.size === 0)
-      this.bids.delete(nameHex);
+      this.bids.delete(nameHash);
   }
 
   getBids(nameHash) {
     if (nameHash) {
       assert(Buffer.isBuffer(nameHash));
 
-      const nameHex = nameHash.toString('hex');
-      const map = this.bids.get(nameHex);
+      const map = this.bids.get(nameHash);
 
       if (!map)
         return [];
@@ -1800,7 +1795,7 @@ class MemWallet {
       const bids = [];
 
       for (const [key, raw] of map) {
-        const bb = BlindBid.fromRaw(raw);
+        const bb = BlindBid.decode(raw);
 
         bb.nameHash = nameHash;
         bb.prevout = Outpoint.fromKey(key);
@@ -1818,11 +1813,9 @@ class MemWallet {
 
     const bids = [];
 
-    for (const [nameHex, map] of this.bids) {
-      const nameHash = Buffer.from(nameHex, 'hex');
-
+    for (const [nameHash, map] of this.bids) {
       for (const [key, raw] of map) {
-        const bb = BlindBid.fromRaw(raw);
+        const bb = BlindBid.decode(raw);
 
         bb.nameHash = nameHash;
         bb.prevout = Outpoint.fromKey(key);
@@ -1841,14 +1834,13 @@ class MemWallet {
 
   removeBids(nameHash) {
     assert(Buffer.isBuffer(nameHash));
-    this.bids.delete(nameHash.toString('hex'));
+    this.bids.delete(nameHash);
   }
 
   getReveal(nameHash, outpoint) {
     assert(Buffer.isBuffer(nameHash));
 
-    const nameHex = nameHash.toString('hex');
-    const map = this.reveals.get(nameHex);
+    const map = this.reveals.get(nameHash);
 
     if (!map)
       return null;
@@ -1858,7 +1850,7 @@ class MemWallet {
     if (!raw)
       return null;
 
-    const brv = BidReveal.fromRaw(raw);
+    const brv = BidReveal.decode(raw);
     brv.nameHash = nameHash;
     brv.prevout = outpoint;
 
@@ -1868,12 +1860,10 @@ class MemWallet {
   putReveal(nameHash, outpoint, options) {
     assert(Buffer.isBuffer(nameHash));
 
-    const nameHex = nameHash.toString('hex');
+    if (!this.reveals.get(nameHash))
+      this.reveals.set(nameHash, new BufferMap());
 
-    if (!this.reveals.get(nameHex))
-      this.reveals.set(nameHex, new Map());
-
-    const map = this.reveals.get(nameHex);
+    const map = this.reveals.get(nameHash);
 
     const brv = new BidReveal();
     brv.nameHash = nameHash;
@@ -1882,14 +1872,13 @@ class MemWallet {
     brv.height = options.height;
     brv.own = options.own;
 
-    map.set(outpoint.toKey(), brv.toRaw());
+    map.set(outpoint.toKey(), brv.encode());
   }
 
   removeReveal(nameHash, outpoint) {
     assert(Buffer.isBuffer(nameHash));
 
-    const nameHex = nameHash.toString('hex');
-    const map = this.reveals.get(nameHex);
+    const map = this.reveals.get(nameHash);
 
     if (!map)
       return;
@@ -1897,15 +1886,14 @@ class MemWallet {
     map.delete(outpoint.toKey());
 
     if (map.size === 0)
-      this.bids.delete(nameHex);
+      this.bids.delete(nameHash);
   }
 
   getReveals(nameHash) {
     if (nameHash) {
       assert(Buffer.isBuffer(nameHash));
 
-      const nameHex = nameHash.toString('hex');
-      const map = this.reveals.get(nameHex);
+      const map = this.reveals.get(nameHash);
 
       if (!map)
         return [];
@@ -1913,7 +1901,7 @@ class MemWallet {
       const reveals = [];
 
       for (const [key, raw] of map) {
-        const brv = BidReveal.fromRaw(raw);
+        const brv = BidReveal.decode(raw);
         brv.nameHash = nameHash;
         brv.prevout = Outpoint.fromKey(key);
         reveals.push(brv);
@@ -1924,11 +1912,9 @@ class MemWallet {
 
     const reveals = [];
 
-    for (const [nameHex, map] of this.reveals) {
-      const nameHash = Buffer.from(nameHex, 'hex');
-
+    for (const [nameHash, map] of this.reveals) {
       for (const [key, raw] of map) {
-        const brv = BidReveal.fromRaw(raw);
+        const brv = BidReveal.decode(raw);
         brv.nameHash = nameHash;
         brv.prevout = Outpoint.fromKey(key);
         reveals.push(brv);
@@ -1940,33 +1926,33 @@ class MemWallet {
 
   removeReveals(nameHash) {
     assert(Buffer.isBuffer(nameHash));
-    this.reveals.delete(nameHash.toString('hex'));
+    this.reveals.delete(nameHash);
   }
 
   getBlind(blind) {
     assert(Buffer.isBuffer(blind));
-    const key = blind.toString('hex');
+    const key = blind;
     const raw = this.blinds.get(key);
 
     if (!raw)
       return null;
 
-    return BlindValue.fromRaw(raw);
+    return BlindValue.decode(raw);
   }
 
   putBlind(blind, options) {
     assert(Buffer.isBuffer(blind));
-    const key = blind.toString('hex');
+    const key = blind;
     const {value, nonce} = options;
     const bv = new BlindValue();
     bv.value = value;
     bv.nonce = nonce;
-    this.blinds.set(key, bv.toRaw());
+    this.blinds.set(key, bv.encode());
   }
 
   removeBlind(blind) {
     assert(Buffer.isBuffer(blind));
-    const key = blind.toString('hex');
+    const key = blind;
     this.blinds.remove(key);
   }
 }
@@ -1979,8 +1965,9 @@ class Path {
   }
 }
 
-class BlindBid {
+class BlindBid extends bio.Struct {
   constructor() {
+    super();
     this.name = EMPTY;
     this.nameHash = consensus.ZERO_HASH;
     this.prevout = new Outpoint();
@@ -1990,27 +1977,28 @@ class BlindBid {
     this.own = false;
   }
 
-  toRaw() {
-    const bw = bio.write(1 + this.name.length + 41);
+  getSize() {
+    return 1 + this.name.length + 41;
+  }
+
+  write(bw) {
     bw.writeU8(this.name.length);
     bw.writeBytes(this.name);
     bw.writeU64(this.lockup);
     bw.writeBytes(this.blind);
     bw.writeU8(this.own ? 1 : 0);
-    return bw.render();
+    return bw;
   }
 
-  static fromRaw(data) {
-    const br = bio.read(data);
-    const bb = new this();
-    bb.name = br.readBytes(br.readU8());
-    bb.lockup = br.readU64();
-    bb.blind = br.readBytes(32);
-    bb.own = br.readU8() === 1;
-    return bb;
+  read(br) {
+    this.name = br.readBytes(br.readU8());
+    this.lockup = br.readU64();
+    this.blind = br.readBytes(32);
+    this.own = br.readU8() === 1;
+    return this;
   }
 
-  toJSON() {
+  getJSON() {
     return {
       name: this.name.toString('ascii'),
       nameHash: this.nameHash.toString('hex'),
@@ -2023,28 +2011,30 @@ class BlindBid {
   }
 }
 
-class BlindValue {
+class BlindValue extends bio.Struct {
   constructor() {
+    super();
     this.value = 0;
     this.nonce = consensus.ZERO_HASH;
   }
 
-  toRaw() {
-    const bw = bio.write(40);
+  getSize() {
+    return 40;
+  }
+
+  write(bw) {
     bw.writeU64(this.value);
     bw.writeBytes(this.nonce);
-    return bw.render();
+    return bw;
   }
 
-  static fromRaw(data) {
-    const br = bio.read(data);
-    const bv = new this();
-    bv.value = br.readU64();
-    bv.nonce = br.readBytes(32);
-    return bv;
+  read(br) {
+    this.value = br.readU64();
+    this.nonce = br.readBytes(32);
+    return this;
   }
 
-  toJSON() {
+  getJSON() {
     return {
       value: this.value,
       nonce: this.nonce.toString('hex')
@@ -2052,8 +2042,9 @@ class BlindValue {
   }
 }
 
-class BidReveal {
+class BidReveal extends bio.Struct {
   constructor() {
+    super();
     this.name = EMPTY;
     this.nameHash = consensus.ZERO_HASH;
     this.prevout = new Outpoint();
@@ -2062,9 +2053,11 @@ class BidReveal {
     this.own = false;
   }
 
-  toRaw() {
-    const bw = bio.write(1 + this.name.length + 13);
+  getSize() {
+    return 1 + this.name.length + 13;
+  }
 
+  write(bw) {
     let height = this.height;
 
     if (height === -1)
@@ -2076,25 +2069,22 @@ class BidReveal {
     bw.writeU32(height);
     bw.writeU8(this.own);
 
-    return bw.render();
+    return bw;
   }
 
-  static fromRaw(data) {
-    const br = bio.read(data);
-    const brv = new this();
+  read(br) {
+    this.name = br.readBytes(br.readU8());
+    this.value = br.readU64();
+    this.height = br.readU32();
+    this.own = br.readU8() === 1;
 
-    brv.name = br.readBytes(br.readU8());
-    brv.value = br.readU64();
-    brv.height = br.readU32();
-    brv.own = br.readU8() === 1;
+    if (this.height === 0xffffffff)
+      this.height = -1;
 
-    if (brv.height === 0xffffffff)
-      brv.height = -1;
-
-    return brv;
+    return this;
   }
 
-  toJSON() {
+  getJSON() {
     return {
       name: this.name.toString('ascii'),
       nameHash: this.nameHash.toString('hex'),

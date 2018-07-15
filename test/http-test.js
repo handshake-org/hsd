@@ -78,7 +78,7 @@ describe('HTTP', function() {
 
   it('should fill with funds', async () => {
     const mtx = new MTX();
-    mtx.addOutpoint(new Outpoint(consensus.NULL_HASH, 0));
+    mtx.addOutpoint(new Outpoint(consensus.ZERO_HASH, 0));
     mtx.addOutput(addr, 50460);
     mtx.addOutput(addr, 50460);
     mtx.addOutput(addr, 50460);
@@ -206,9 +206,9 @@ describe('HTTP', function() {
       vbavailable: {},
       vbrequired: 0,
       height: 1,
-      previousblockhash: network.genesis.hash,
-      treeroot: network.genesis.treeRoot,
-      reservedroot: consensus.NULL_HASH,
+      previousblockhash: network.genesis.hash.toString('hex'),
+      treeroot: network.genesis.treeRoot.toString('hex'),
+      reservedroot: consensus.ZERO_HASH.toString('hex'),
       target:
         '7fffff0000000000000000000000000000000000000000000000000000000000',
       cuckoo: { bits: 8, size: 4, perc: 50 },
@@ -223,7 +223,7 @@ describe('HTTP', function() {
       sigoplimit: 80000,
       sizelimit: 1000000,
       weightlimit: 4000000,
-      longpollid: node.chain.tip.hash + '00000000',
+      longpollid: node.chain.tip.hash.toString('hex') + '00000000',
       submitold: false,
       coinbaseaux: { flags: '6d696e65642062792068736b64' },
       coinbasevalue: 1000000000,
@@ -235,7 +235,7 @@ describe('HTTP', function() {
   it('should send a block template proposal', async () => {
     const attempt = await node.miner.createBlock();
     const block = attempt.toBlock();
-    const hex = block.toRaw().toString('hex');
+    const hex = block.toHex();
     const json = await nclient.execute('getblocktemplate', [{
       mode: 'proposal',
       data: hex

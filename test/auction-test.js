@@ -308,7 +308,7 @@ describe('Auction', function() {
       assert(auction);
 
       assert.deepStrictEqual(auction, snapshot.auction);
-      assert.strictEqual(chain.tip.treeRoot, snapshot.treeRoot);
+      assert.bufferEqual(chain.tip.treeRoot, snapshot.treeRoot);
     });
 
     it('should cleanup', async () => {

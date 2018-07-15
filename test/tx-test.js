@@ -22,7 +22,7 @@ const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER;
 const MAX_SAFE_ADDITION = 0xfffffffffffff;
 
 function createInput(value, view) {
-  const hash = random.randomBytes(32).toString('hex');
+  const hash = random.randomBytes(32);
 
   const input = {
     prevout: {
@@ -65,7 +65,7 @@ function sigopContext(witness, addr) {
     spend.version = 1;
 
     const input = new Input();
-    input.prevout.hash = fund.hash('hex');
+    input.prevout.hash = fund.hash();
     input.prevout.index = 0;
     input.witness = witness;
     spend.inputs.push(input);
@@ -240,19 +240,19 @@ describe('TX', function() {
       locktime: 0
     });
 
-    let raw = tx.toRaw();
+    let raw = tx.encode();
     assert.strictEqual(encoding.readU64(raw, 46), 0xdeadbeef);
     raw[54] = 0x7f;
 
-    assert.throws(() => TX.fromRaw(raw));
+    assert.throws(() => TX.decode(raw));
 
     tx.outputs[0].value = 0;
     tx.refresh();
 
-    raw = tx.toRaw();
+    raw = tx.encode();
     assert.strictEqual(encoding.readU64(raw, 46), 0x00);
     raw[54] = 0x80;
-    assert.throws(() => TX.fromRaw(raw));
+    assert.throws(() => TX.decode(raw));
   });
 
   it('should fail on 53 bit coin values', () => {
@@ -389,7 +389,7 @@ describe('TX', function() {
     {
       const ctx = sigopContext(witness, key.getAddress());
 
-      ctx.spend.inputs[0].prevout.hash = consensus.NULL_HASH;
+      ctx.spend.inputs[0].prevout.hash = consensus.ZERO_HASH;
       ctx.spend.inputs[0].prevout.index = 0xffffffff;
       ctx.spend.refresh();
 
@@ -407,7 +407,7 @@ describe('TX', function() {
     const witness = new Witness([
       Buffer.from([0]),
       Buffer.from([0]),
-      redeem.toRaw()
+      redeem.encode()
     ]);
 
     const ctx = sigopContext(witness, addr);

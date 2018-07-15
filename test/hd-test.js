@@ -95,7 +95,7 @@ describe('HD', function() {
 
   it('should deserialize and reserialize json', () => {
     const key = HD.generate();
-    const json = key.toJSON();
+    const json = key.getJSON('main');
     base58Equal(
       HD.fromJSON(json, 'main').toBase58('main'),
       key.toBase58('main'));

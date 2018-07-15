@@ -39,7 +39,7 @@ function parseScriptTest(data) {
     flags |= flag;
   }
 
-  witness.items.push(script.toRaw());
+  witness.items.push(script.encode());
 
   return {
     comments: data.comments || data.script.substring(0, 60),
@@ -261,7 +261,7 @@ describe('Script', function() {
         version: 1,
         inputs: [{
           prevout: {
-            hash: consensus.NULL_HASH,
+            hash: consensus.ZERO_HASH,
             index: 0xffffffff
           },
           witness: [
@@ -282,7 +282,7 @@ describe('Script', function() {
         version: 1,
         inputs: [{
           prevout: {
-            hash: prev.hash('hex'),
+            hash: prev.hash(),
             index: 0
           },
           witness: witness,

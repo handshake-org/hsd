@@ -36,7 +36,7 @@ describe('Protocol', function() {
         }
         cb();
       });
-      const raw = framer.packet(type, payload.toRaw());
+      const raw = framer.packet(type, payload.encode());
       parser.feed(raw);
     });
   }

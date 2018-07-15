@@ -82,7 +82,7 @@ describe('Mempool', function() {
 
     const script = Script.fromPubkeyhash(key.getHash());
 
-    t1.addCoin(dummyInput(addr, ONE_HASH.toString('hex')));
+    t1.addCoin(dummyInput(addr, ONE_HASH));
 
     const sig = t1.signature(0, script, 70000, key.privateKey, ALL);
 
@@ -174,7 +174,7 @@ describe('Mempool', function() {
 
     const txs = mempool.getHistory();
     assert(txs.some((tx) => {
-      return tx.hash('hex') === f1.hash('hex');
+      return tx.hash().equals(f1.hash());
     }));
   });
 
@@ -187,7 +187,7 @@ describe('Mempool', function() {
     tx.addOutput(wallet.getAddress(), 10000);
 
     const prev = Script.fromPubkeyhash(key.getHash());
-    const prevHash = random.randomBytes(32).toString('hex');
+    const prevHash = random.randomBytes(32);
 
     tx.addCoin(dummyInput(addr, prevHash));
     tx.setLocktime(200);
@@ -210,7 +210,7 @@ describe('Mempool', function() {
     tx.addOutput(wallet.getAddress(), 10000);
 
     const prev = Script.fromPubkeyhash(key.getHash());
-    const prevHash = random.randomBytes(32).toString('hex');
+    const prevHash = random.randomBytes(32);
 
     tx.addCoin(dummyInput(addr, prevHash));
     tx.setLocktime(200);
@@ -239,7 +239,7 @@ describe('Mempool', function() {
     tx.addOutput(wallet.getAddress(), 50000);
     tx.addOutput(wallet.getAddress(), 10000);
 
-    const prevHash = random.randomBytes(32).toString('hex');
+    const prevHash = random.randomBytes(32);
 
     tx.addCoin(dummyInput(addr, prevHash));
 
@@ -269,7 +269,7 @@ describe('Mempool', function() {
     tx.addOutput(wallet.getAddress(), 50000);
     tx.addOutput(wallet.getAddress(), 10000);
 
-    const prevHash = random.randomBytes(32).toString('hex');
+    const prevHash = random.randomBytes(32);
 
     tx.addCoin(dummyInput(addr, prevHash));
 

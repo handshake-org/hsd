@@ -11,7 +11,6 @@ const Block = require('../lib/primitives/block');
 const Address = require('../lib/primitives/address');
 const Witness = require('../lib/script/witness');
 const util = require('../lib/utils/util');
-const reserved = require('../lib/covenants/reserved');
 
 const networks = {
   main: Network.get('main'),
@@ -42,7 +41,7 @@ function createGenesisBlock(options) {
     version: 0,
     inputs: [{
       prevout: {
-        hash: consensus.NULL_HASH,
+        hash: consensus.ZERO_HASH,
         index: 0xffffffff
       },
       witness: new Witness([flags]),
@@ -73,10 +72,10 @@ function createGenesisBlock(options) {
 
   const block = new Block({
     version: 0,
-    prevBlock: consensus.NULL_HASH,
-    merkleRoot: consensus.NULL_HASH,
-    treeRoot: consensus.NULL_HASH,
-    reservedRoot: consensus.NULL_HASH,
+    prevBlock: consensus.ZERO_HASH,
+    merkleRoot: consensus.ZERO_HASH,
+    treeRoot: consensus.ZERO_HASH,
+    reservedRoot: consensus.ZERO_HASH,
     time: options.time,
     bits: options.bits,
     nonce: nonce,
@@ -85,7 +84,7 @@ function createGenesisBlock(options) {
 
   block.txs.push(tx);
 
-  block.merkleRoot = block.createMerkleRoot('hex');
+  block.merkleRoot = block.createMerkleRoot();
 
   return block;
 }
@@ -123,14 +122,21 @@ function formatJS(name, block) {
   let out = '';
   out += `genesis.${name} = {\n`;
   out += `  version: ${block.version},\n`;
-  out += `  hash: '${block.hash('hex')}',\n`;
-  out += `  prevBlock: '${block.prevBlock}',\n`;
-  out += `  merkleRoot:\n`;
-  out += `    '${block.merkleRoot}',\n`;
-  out += `  treeRoot:\n`;
-  out += `    '${block.treeRoot}',\n`;
-  out += `  reservedRoot:\n`;
-  out += `    '${block.reservedRoot}',\n`;
+  out += `  hash: Buffer.from(\n`;
+  out += `    '${block.hash().toString('hex')}',\n`;
+  out += `    'hex'),\n`;
+  out += `  prevBlock: Buffer.from(\n`;
+  out += `    '${block.prevBlock.toString('hex')}',\n`;
+  out += `    'hex'),\n`;
+  out += `  merkleRoot: Buffer.from(\n`;
+  out += `    '${block.merkleRoot.toString('hex')}',\n`;
+  out += `    'hex'),\n`;
+  out += `  treeRoot: Buffer.from(\n`;
+  out += `    '${block.treeRoot.toString('hex')}',\n`;
+  out += `    'hex'),\n`;
+  out += `  reservedRoot: Buffer.from(\n`;
+  out += `    '${block.reservedRoot.toString('hex')}',\n`;
+  out += `    'hex'),\n`;
   out += `  time: ${block.time},\n`;
   out += `  bits: 0x${util.hex32(block.bits)},\n`;
   out += `  nonce: Buffer.from('${block.nonce.toString('hex')}', 'hex'),\n`;
@@ -186,10 +192,10 @@ for (const name of Object.keys(blocks)) {
 }
 
 const json = JSON.stringify({
-  main: blocks.main.toRaw().toString('base64'),
-  testnet: blocks.testnet.toRaw().toString('base64'),
-  regtest: blocks.regtest.toRaw().toString('base64'),
-  simnet: blocks.simnet.toRaw().toString('base64')
+  main: blocks.main.encode().toString('base64'),
+  testnet: blocks.testnet.encode().toString('base64'),
+  regtest: blocks.regtest.encode().toString('base64'),
+  simnet: blocks.simnet.encode().toString('base64')
 }, null, 2);
 
 const ccode = [
