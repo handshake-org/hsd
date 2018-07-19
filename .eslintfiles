@@ -1,12 +1,9 @@
-bench/
 bin/cli
 bin/node
 bin/spvnode
 bin/wallet
-browser/
 lib/
 scripts/
 test/
 webpack.browser.js
 webpack.compat.js
-webpack.node.js

@@ -2063,7 +2063,7 @@ class BidReveal extends bio.Struct {
     bw.writeBytes(this.name);
     bw.writeU64(this.value);
     bw.writeU32(height);
-    bw.writeU8(this.own);
+    bw.writeU8(this.own ? 1 : 0);
 
     return bw;
   }

@@ -1,6 +1,6 @@
 {
   "name": "hskd",
-  "version": "0.0.1",
+  "version": "0.0.0",
   "private": true,
   "description": "Cryptocurrency bike-shed",
   "license": "MIT",
@@ -21,52 +21,41 @@
     "node": ">=8.0.0"
   },
   "dependencies": {
-    "bcfg": "~0.1.0",
-    "bcrypto": "~0.3.7",
-    "bcuckoo": "~0.3.3",
-    "bdb": "~0.2.2",
-    "bdns": "~0.1.0",
-    "bevent": "~0.1.0",
-    "bfile": "~0.1.0",
-    "bfilter": "~0.2.0",
-    "bheep": "~0.1.0",
-    "binet": "~0.3.0",
-    "blgr": "~0.1.0",
-    "blru": "~0.1.1",
-    "blst": "~0.1.0",
-    "bmutex": "~0.1.1",
+    "bcfg": "~0.1.2",
+    "bcrypto": "~1.0.0",
+    "bcuckoo": "~0.4.0",
+    "bdb": "~0.2.3",
+    "bdns": "~0.1.1",
+    "bevent": "~0.1.1",
+    "bfile": "~0.1.1",
+    "bfilter": "~1.0.0",
+    "bheep": "~0.1.1",
+    "binet": "~0.3.1",
+    "blgr": "~0.1.1",
+    "blru": "~0.1.2",
+    "blst": "~0.1.1",
+    "bmutex": "~0.1.2",
     "bn.js": "~4.11.8",
-    "bns": "~0.1.8",
-    "bs32": "~0.1.0",
-    "bsip": "~0.1.0",
-    "bsock": "~0.1.0",
-    "bsocks": "~0.2.0",
-    "bstring": "~0.1.0",
-    "btcp": "~0.1.0",
-    "bufio": "~0.2.0",
-    "bupnp": "~0.2.1",
-    "bval": "~0.1.1",
-    "bweb": "~0.1.1",
+    "bns": "~0.2.0",
+    "bs32": "~0.1.1",
+    "bsert": "~0.0.3",
+    "bsip": "~0.1.1",
+    "bsock": "~0.1.1",
+    "bsocks": "~0.2.1",
+    "bstring": "~0.1.1",
+    "btcp": "~0.1.1",
+    "bufio": "~1.0.1",
+    "bupnp": "~0.2.2",
+    "bval": "~0.1.2",
+    "bweb": "~0.1.2",
     "hsk-client": "~0.0.0",
-    "mrmr": "~0.1.0",
-    "n64": "~0.2.0",
-    "urkel": "~0.3.0"
+    "mrmr": "~0.1.1",
+    "n64": "~0.2.1",
+    "urkel": "~0.4.0"
   },
   "devDependencies": {
-    "babel-core": "^6.26.3",
-    "babel-loader": "^7.1.4",
-    "babel-plugin-transform-runtime": "^6.23.0",
-    "babel-polyfill": "^6.26.0",
-    "babel-preset-env": "^1.7.0",
-    "babelify": "^8.0.0",
-    "browserify": "^16.2.2",
-    "eslint": "^4.19.1",
-    "jsdoc": "^3.5.5",
-    "mocha": "^5.2.0",
-    "uglify-es": "^3.3.9",
-    "uglifyjs-webpack-plugin": "^1.2.5",
-    "webpack": "^4.11.1",
-    "webpack-cli": "^3.0.3"
+    "eslint": "^5.1.0",
+    "mocha": "^5.2.0"
   },
   "main": "./lib/hskd.js",
   "bin": {
@@ -75,19 +64,12 @@
     "hskd-spvnode": "./bin/spvnode"
   },
   "scripts": {
-    "browserify": "browserify -s hskd lib/hskd-browser.js | uglifyjs -c > hskd.js",
-    "clean": "rm -f {browser/,}{hskd.js,hskd-worker.js,app.js,worker.js}",
-    "docs": "jsdoc -c jsdoc.json",
     "lint": "eslint $(cat .eslintfiles) || exit 0",
     "lint-file": "eslint",
     "test": "mocha --reporter spec test/*.js",
     "test-browser": "NODE_BACKEND=js mocha --reporter spec test/*.js",
     "test-file": "mocha --reporter spec",
-    "test-file-browser": "NODE_BACKEND=js mocha --reporter spec",
-    "webpack": "webpack --mode production --config webpack.browser.js",
-    "webpack-browser": "webpack --mode production --config webpack.browser.js",
-    "webpack-compat": "webpack --mode production --config webpack.compat.js",
-    "webpack-app": "webpack --mode production --config webpack.app.js"
+    "test-file-browser": "NODE_BACKEND=js mocha --reporter spec"
   },
   "browser": {
     "./lib/covenants/reserved": "./lib/covenants/reserved-browser.js",
@@ -97,10 +79,5 @@
     "./lib/workers/child": "./lib/workers/child-browser.js",
     "./lib/workers/parent": "./lib/workers/parent-browser.js",
     "./lib/hskd": "./lib/hskd-browser.js"
-  },
-  "browserify": {
-    "transform": [
-      "babelify"
-    ]
   }
 }
