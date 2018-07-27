@@ -29,6 +29,7 @@ const ownership = require('../../lib/covenants/ownership');
 const policy = require('../../lib/protocol/policy');
 const Resource = require('../../lib/dns/resource');
 const Address = require('../../lib/primitives/address');
+const {encodeU32} = require('../../lib/utils/util');
 const {states} = Auction;
 const {types} = rules;
 
@@ -370,8 +371,8 @@ class MemWallet {
           if (!path)
             break;
 
-          const name = covenant.items[1];
-          const flags = covenant.items[2];
+          const name = covenant.items[2];
+          const flags = covenant.items[3][0];
 
           // if (auction.isNull())
           //   this.addNameMap(b, nameHash);
@@ -381,7 +382,7 @@ class MemWallet {
           auction.setValue(0);
           auction.setOwner(outpoint);
           auction.setHighest(0);
-          auction.setWeak((flags[0] & 1) === 1);
+          auction.setWeak((flags & 1) !== 0);
 
           updated = true;
 
@@ -393,7 +394,7 @@ class MemWallet {
             break;
 
           if (auction.isNull()) {
-            const name = covenant.items[1];
+            const name = covenant.items[2];
 
             // this.addNameMap(b, nameHash);
 
@@ -406,8 +407,8 @@ class MemWallet {
         }
 
         case types.BID: {
-          const name = covenant.items[1];
-          const start = covenant.items[2].readUInt32LE(0);
+          const start = bio.readU32(covenant.items[1], 0);
+          const name = covenant.items[2];
           const blind = covenant.items[3];
           const lockup = output.value;
 
@@ -471,7 +472,7 @@ class MemWallet {
 
           if (coin) {
             const blind = coin.covenant.items[3];
-            const nonce = covenant.items[1];
+            const nonce = covenant.items[2];
 
             this.putBlind(blind, {
               value: output.value,
@@ -499,13 +500,13 @@ class MemWallet {
           if (auction.isNull())
             break;
 
-          const data = covenant.items[1];
+          const data = covenant.items[2];
 
           // If we didn't have a second
-          // bidder, use our own bid.
+          // bidder, the bidder pays zero.
           if (auction.value === -1) {
             assert(auction.highest !== -1);
-            auction.setValue(auction.highest);
+            auction.setValue(0);
           }
 
           auction.setOwner(outpoint);
@@ -524,7 +525,7 @@ class MemWallet {
           if (auction.isNull())
             break;
 
-          const data = covenant.items[1];
+          const data = covenant.items[2];
 
           auction.setOwner(outpoint);
           auction.setTransfer(-1);
@@ -532,7 +533,7 @@ class MemWallet {
           if (data.length > 0)
             auction.setData(data);
 
-          if (covenant.items.length === 3)
+          if (covenant.items.length === 4)
             auction.setRenewal(height);
 
           updated = true;
@@ -549,7 +550,7 @@ class MemWallet {
           assert(auction.transfer === -1);
           auction.setTransfer(height);
 
-          if (covenant.items.length === 3)
+          if (covenant.items.length === 5)
             auction.setRenewal(height);
 
           updated = true;
@@ -562,10 +563,10 @@ class MemWallet {
             if (!path)
               break;
 
-            const name = covenant.items[1];
-            const start = covenant.items[2].readUInt32LE(0);
-            const weak = (covenant.items[3][0] & 1) === 1;
-            const claimed = (covenant.items[3][0] & 4) === 4;
+            const start = bio.readU32(covenant.items[1], 0);
+            const name = covenant.items[2];
+            const weak = (covenant.items[3][0] & 1) !== 0;
+            const claimed = (covenant.items[3][0] & 4) !== 0;
 
             auction.setAuction(name, start);
             auction.setValue(output.value);
@@ -1032,6 +1033,7 @@ class MemWallet {
     output.value = 0;
     output.covenant.type = types.OPEN;
     output.covenant.items.push(nameHash);
+    output.covenant.items.push(encodeU32(0));
     output.covenant.items.push(rawName);
 
     const mtx = new MTX();
@@ -1094,8 +1096,8 @@ class MemWallet {
     output.value = lockup;
     output.covenant.type = types.BID;
     output.covenant.items.push(nameHash);
-    output.covenant.items.push(rawName);
     output.covenant.items.push(encodeU32(start));
+    output.covenant.items.push(rawName);
     output.covenant.items.push(blind);
 
     const mtx = new MTX();
@@ -1159,6 +1161,7 @@ class MemWallet {
       output.value = value;
       output.covenant.type = types.REVEAL;
       output.covenant.items.push(nameHash);
+      output.covenant.items.push(encodeU32(auction.height));
       output.covenant.items.push(nonce);
 
       mtx.addOutpoint(prevout);
@@ -1220,6 +1223,7 @@ class MemWallet {
       output.value = coin.value;
       output.covenant.type = types.REDEEM;
       output.covenant.items.push(nameHash);
+      output.covenant.items.push(encodeU32(auction.height));
 
       mtx.outputs.push(output);
     }
@@ -1284,7 +1288,7 @@ class MemWallet {
 
     // If we were the only bidder.
     if (value === -1)
-      value = auction.highest;
+      value = 0;
 
     const output = new Output();
     output.address = coin.address;
@@ -1292,6 +1296,7 @@ class MemWallet {
 
     output.covenant.type = types.REGISTER;
     output.covenant.items.push(nameHash);
+    output.covenant.items.push(encodeU32(auction.height));
 
     if (resource)
       output.covenant.items.push(resource);
@@ -1360,6 +1365,7 @@ class MemWallet {
     output.value = coin.value;
     output.covenant.type = types.UPDATE;
     output.covenant.items.push(nameHash);
+    output.covenant.items.push(encodeU32(auction.height));
 
     if (resource)
       output.covenant.items.push(resource);
@@ -1427,7 +1433,9 @@ class MemWallet {
     output.value = coin.value;
     output.covenant.type = types.TRANSFER;
     output.covenant.items.push(nameHash);
-    output.covenant.items.push(address.encode());
+    output.covenant.items.push(encodeU32(auction.height));
+    output.covenant.items.push(Buffer.from([address.version]));
+    output.covenant.items.push(address.hash);
     output.covenant.items.push(this.getRenewalBlock());
 
     const mtx = new MTX();
@@ -1482,6 +1490,7 @@ class MemWallet {
     output.value = coin.value;
     output.covenant.type = types.UPDATE;
     output.covenant.items.push(nameHash);
+    output.covenant.items.push(encodeU32(auction.height));
 
     if (resource)
       output.covenant.items.push(resource);
@@ -1535,8 +1544,9 @@ class MemWallet {
     // if (height < coin.height + network.names.transferLockup)
     //   throw new Error('Transfer is still locked up.');
 
-    const rawAddr = coin.covenant.items[1];
-    const address = Address.decode(rawAddr);
+    const version = coin.covenant.items[2][0];
+    const hash = coin.covenant.items[3];
+    const address = Address.fromHash(hash, version);
 
     let flags = 0;
 
@@ -1551,8 +1561,8 @@ class MemWallet {
     output.value = coin.value;
     output.covenant.type = types.FINALIZE;
     output.covenant.items.push(nameHash);
-    output.covenant.items.push(rawName);
     output.covenant.items.push(encodeU32(auction.height));
+    output.covenant.items.push(rawName);
     output.covenant.items.push(Buffer.from([flags]));
     output.covenant.items.push(this.getRenewalBlock());
 
@@ -1610,6 +1620,7 @@ class MemWallet {
     output.value = coin.value;
     output.covenant.type = types.REVOKE;
     output.covenant.items.push(nameHash);
+    output.covenant.items.push(encodeU32(auction.height));
 
     const mtx = new MTX();
     mtx.addOutpoint(auction.owner);
@@ -2090,13 +2101,6 @@ class BidReveal extends bio.Struct {
       own: this.own
     };
   }
-}
-
-function encodeU32(num) {
-  assert((num >>> 0) === num);
-  const buf = Buffer.allocUnsafe(4);
-  bio.writeU32(buf, num, 0);
-  return buf;
 }
 
 module.exports = MemWallet;
