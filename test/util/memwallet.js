@@ -989,7 +989,7 @@ class MemWallet {
     if (rules.isReserved(nameHash, height, network))
       throw new Error('Name is reserved.');
 
-    if (!rules.verifyRollout(nameHash, height, network))
+    if (!rules.hasRollout(nameHash, height, network))
       throw new Error('Name not yet available.');
 
     let ns = this.getNameState(nameHash);
@@ -1041,7 +1041,7 @@ class MemWallet {
     if (rules.isReserved(nameHash, height, network))
       throw new Error('Name is reserved.');
 
-    if (!rules.verifyRollout(nameHash, height, network))
+    if (!rules.hasRollout(nameHash, height, network))
       throw new Error('Name not yet available.');
 
     let ns = this.getNameState(nameHash);
