@@ -1419,7 +1419,8 @@ describe('Wallet', function() {
     assert(!await wdb.get('alice100'));
   });
 
-  it('should cleanup', () => {
+  it('should cleanup', async () => {
     network.coinbaseMaturity = 2;
+    await wdb.close()
   });
 });

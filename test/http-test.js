@@ -257,6 +257,7 @@ describe('HTTP', function() {
 
   it('should cleanup', async () => {
     await wallet.close();
+    await wclient.close();
     await nclient.close();
     await node.close();
   });
