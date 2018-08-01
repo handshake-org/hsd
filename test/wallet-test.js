@@ -1421,6 +1421,6 @@ describe('Wallet', function() {
 
   it('should cleanup', async () => {
     network.coinbaseMaturity = 2;
-    await wdb.close()
+    await wdb.close();
   });
 });
