@@ -377,7 +377,7 @@ class MemWallet {
           // if (ns.isNull())
           //   this.addNameMap(b, nameHash);
 
-          ns.setNameState(name, height);
+          ns.set(name, height);
           ns.setClaimed(true);
           ns.setValue(0);
           ns.setOwner(outpoint);
@@ -398,7 +398,7 @@ class MemWallet {
 
             // this.addNameMap(b, nameHash);
 
-            ns.setNameState(name, height);
+            ns.set(name, height);
 
             updated = true;
           }
@@ -431,7 +431,7 @@ class MemWallet {
           // if (ns.isNull())
           //   this.addNameMap(b, nameHash);
 
-          ns.setNameState(name, start);
+          ns.set(name, start);
 
           this.putBid(nameHash, outpoint, {
             name,
@@ -561,7 +561,7 @@ class MemWallet {
             const weak = (covenant.items[3][0] & 1) !== 0;
             const claimed = (covenant.items[3][0] & 4) !== 0;
 
-            ns.setNameState(name, start);
+            ns.set(name, start);
             ns.setValue(output.value);
             ns.setWeak(weak);
             ns.setClaimed(claimed);
