@@ -47,14 +47,12 @@ function createNode() {
         wallet.removeBlock(entry, block.txs);
       });
 
-      wallet.getAuctionState = async (nameHash) => {
+      wallet.getAuctionStatus = async (nameHash) => {
         assert(Buffer.isBuffer(nameHash));
-        const cdb = chain.cdb;
         const height = chain.height + 1;
         const state = await chain.getNextState();
         const hardened = state.hasHardening();
-        const s = await cdb.getAuctionState(nameHash, height, hardened);
-        return s.getJSON(height, network);
+        return chain.db.getAuctionStatus(nameHash, height, hardened);
       };
 
       return wallet;
@@ -218,7 +216,7 @@ describe('Auction', function() {
 
       snapshot = {
         treeRoot: chain.tip.treeRoot,
-        auction: await chain.cdb.getAuctionByName(NAME1)
+        auction: await chain.db.getAuctionByName(NAME1)
       };
     });
 
@@ -251,7 +249,7 @@ describe('Auction', function() {
       chain.once('reorganize', () => reorgd = true);
 
       // chain.on('disconnect', async () => {
-      //   const auction = await chain.cdb.getAuctionByName(NAME1);
+      //   const auction = await chain.db.getAuctionByName(NAME1);
       //   if (auction)
       //     console.log(auction.format(chain.height, network));
       // });
@@ -265,7 +263,7 @@ describe('Auction', function() {
 
       assert(reorgd);
 
-      const auction = await chain.cdb.getAuctionByName(NAME1);
+      const auction = await chain.db.getAuctionByName(NAME1);
       assert(!auction);
     });
 
@@ -275,7 +273,7 @@ describe('Auction', function() {
       chain.once('reorganize', () => reorgd = true);
 
       // chain.on('connect', async () => {
-      //   const auction = await chain.cdb.getAuctionByName(NAME1);
+      //   const auction = await chain.db.getAuctionByName(NAME1);
       //   if (auction)
       //     console.log(auction.format(chain.height, network));
       // });
@@ -304,7 +302,7 @@ describe('Auction', function() {
     });
 
     it('should have the same DB state', async () => {
-      const auction = await chain.cdb.getAuctionByName(NAME1);
+      const auction = await chain.db.getAuctionByName(NAME1);
       assert(auction);
 
       assert.deepStrictEqual(auction, snapshot.auction);
@@ -499,7 +497,7 @@ describe('Auction', function() {
       }
 
       assert(err);
-      assert.strictEqual(err.reason, 'invalid-covenant');
+      assert.strictEqual(err.reason, 'bad-transfer-state');
     });
 
     it('should not be able to revoke a weak name', async () => {
@@ -521,7 +519,7 @@ describe('Auction', function() {
       }
 
       assert(err);
-      assert.strictEqual(err.reason, 'invalid-covenant');
+      assert.strictEqual(err.reason, 'bad-revoke-state');
     });
 
     it('should register a claimed name', async () => {
@@ -567,7 +565,7 @@ describe('Auction', function() {
       }
 
       assert(err);
-      assert.strictEqual(err.reason, 'invalid-covenant');
+      assert.strictEqual(err.reason, 'bad-finalize-maturity');
     });
 
     it('should mine 20 blocks', async () => {

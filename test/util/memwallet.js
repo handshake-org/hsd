@@ -764,21 +764,13 @@ class MemWallet {
     return blind;
   }
 
-  async getAuctionState(nameHash) {
-    return {
-      state: 0,
-      height: 0,
-      renewal: 0,
-      revoked: -1,
-      claimed: false,
-      weak: false,
-      owned: false
-    };
+  async getAuctionStatus(nameHash) {
+    return new Auction();
   }
 
   async isAvailable(nameHash) {
-    const state = await this.getAuctionState(nameHash);
-    return state.state === 0;
+    const auction = await this.getAuctionStatus(nameHash);
+    return auction.state(this.height + 1, this.network) === 0;
   }
 
   async buildClaim(name, options) {
@@ -1002,23 +994,16 @@ class MemWallet {
     if (!rules.verifyRollout(nameHash, height, network))
       throw new Error('Name not yet available.');
 
-    const auction = this.getAuction(nameHash);
+    let auction = this.getAuction(nameHash);
 
-    let state = -1;
-    let start = -1;
+    if (!auction)
+      auction = await this.getAuctionStatus(nameHash);
 
-    if (auction) {
-      if (auction.isExpired(height, network))
-        auction.reset(height);
+    if (auction.isExpired(height, network))
+      auction.reset(height);
 
-      state = auction.state(height, network);
-      start = auction.height;
-    } else {
-      const s = await this.getAuctionState(nameHash);
-
-      state = s.state;
-      start = s.height;
-    }
+    const state = auction.state(height, network);
+    const start = auction.height;
 
     if (state !== states.OPENING)
       throw new Error('Name is not available.');
@@ -1061,23 +1046,16 @@ class MemWallet {
     if (!rules.verifyRollout(nameHash, height, network))
       throw new Error('Name not yet available.');
 
-    let state = -1;
-    let start = -1;
+    let auction = this.getAuction(nameHash);
 
-    const auction = this.getAuction(nameHash);
+    if (!auction)
+      auction = await this.getAuctionStatus(nameHash);
 
-    if (auction) {
-      if (auction.isExpired(height, network))
-        auction.reset(height);
+    if (auction.isExpired(height, network))
+      auction.reset(height);
 
-      state = auction.state(height, network);
-      start = auction.height;
-    } else {
-      const s = await this.getAuctionState(nameHash);
-
-      state = s.state;
-      start = s.height;
-    }
+    const state = auction.state(height, network);
+    const start = auction.height;
 
     if (state === states.OPENING)
       throw new Error('Name has not reached the bidding phase yet.');
