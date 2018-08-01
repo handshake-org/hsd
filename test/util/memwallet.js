@@ -449,7 +449,7 @@ class MemWallet {
           if (auction.isNull())
             break;
 
-          if (output.value > auction.highest) {
+          if (auction.owner.isNull() || output.value > auction.highest) {
             auction.setValue(auction.highest);
             auction.setOwner(outpoint);
             auction.setHighest(output.value);
@@ -502,13 +502,6 @@ class MemWallet {
 
           const data = covenant.items[2];
 
-          // If we didn't have a second
-          // bidder, the bidder pays zero.
-          if (auction.value === -1) {
-            assert(auction.highest !== -1);
-            auction.setValue(0);
-          }
-
           auction.setOwner(outpoint);
 
           if (data.length > 0)
@@ -528,7 +521,7 @@ class MemWallet {
           const data = covenant.items[2];
 
           auction.setOwner(outpoint);
-          auction.setTransfer(-1);
+          auction.setTransfer(0);
 
           if (data.length > 0)
             auction.setData(data);
@@ -547,7 +540,7 @@ class MemWallet {
 
           auction.setOwner(outpoint);
 
-          assert(auction.transfer === -1);
+          assert(auction.transfer === 0);
           auction.setTransfer(height);
 
           if (covenant.items.length === 5)
@@ -576,11 +569,11 @@ class MemWallet {
             // Cannot get data or highest.
             auction.setHighest(output.value);
           } else {
-            assert(auction.transfer !== -1);
+            assert(auction.transfer !== 0);
           }
 
           auction.setOwner(tx.outpoint(i));
-          auction.setTransfer(-1);
+          auction.setTransfer(0);
           auction.setRenewal(height);
 
           updated = true;
@@ -592,7 +585,7 @@ class MemWallet {
           if (auction.isNull())
             break;
 
-          assert(auction.revoked === -1);
+          assert(auction.revoked === 0);
           auction.setRevoked(height);
           auction.setData(null);
 
@@ -1259,18 +1252,9 @@ class MemWallet {
     if (state !== states.CLOSED)
       throw new Error('Auction is not yet closed.');
 
-    if (auction.highest === -1)
-      throw new Error('Value not recorded (rescan required).');
-
-    let value = auction.value;
-
-    // If we were the only bidder.
-    if (value === -1)
-      value = 0;
-
     const output = new Output();
     output.address = coin.address;
-    output.value = value;
+    output.value = auction.value;
 
     output.covenant.type = types.REGISTER;
     output.covenant.items.push(nameHash);
