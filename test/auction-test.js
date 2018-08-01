@@ -207,6 +207,39 @@ describe('Auction', function() {
       assert(await chain.add(block));
     });
 
+    it('should renew', async () => {
+      const mtx = await winner.createRenewal(NAME1);
+
+      const job = await cpu.createJob();
+      job.addTX(mtx.toTX(), mtx.view);
+      job.refresh();
+
+      const block = await job.mineAsync();
+
+      assert(await chain.add(block));
+    });
+
+    it('should fail renew', async () => {
+      const mtx = await winner.createRenewal(NAME1);
+
+      const job = await cpu.createJob();
+      job.addTX(mtx.toTX(), mtx.view);
+      job.refresh();
+
+      const block = await job.mineAsync();
+
+      let err = null;
+
+      try {
+        await chain.add(block);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.reason, 'bad-renewal-premature');
+    });
+
     it('should mine 10 blocks', async () => {
       for (let i = 0; i < 10; i++) {
         const block = await cpu.mineBlock();
@@ -429,6 +462,7 @@ describe('Auction', function() {
       }
     });
 
+    /*
     it('should open an i18n-ized TLD claim', async () => {
       const claim = await wallet.fakeClaim('xn--ogbpf8fl');
 
@@ -449,6 +483,7 @@ describe('Auction', function() {
         ownership.ignore = false;
       }
     });
+    */
 
     it('should mine 20 blocks', async () => {
       for (let i = 0; i < 20; i++) {

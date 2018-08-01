@@ -503,10 +503,7 @@ class MemWallet {
           const data = covenant.items[2];
 
           ns.setOwner(outpoint);
-
-          if (data.length > 0)
-            ns.setData(data);
-
+          ns.setData(data);
           ns.setRenewal(height);
 
           updated = true;
@@ -521,13 +518,24 @@ class MemWallet {
           const data = covenant.items[2];
 
           ns.setOwner(outpoint);
-          ns.setTransfer(0);
 
           if (data.length > 0)
             ns.setData(data);
 
-          if (covenant.items.length === 4)
-            ns.setRenewal(height);
+          ns.setTransfer(0);
+
+          updated = true;
+
+          break;
+        }
+
+        case types.RENEW: {
+          if (ns.isNull())
+            break;
+
+          ns.setOwner(outpoint);
+          ns.setTransfer(0);
+          ns.setRenewal(height);
 
           updated = true;
 
@@ -542,9 +550,6 @@ class MemWallet {
 
           assert(ns.transfer === 0);
           ns.setTransfer(height);
-
-          if (covenant.items.length === 5)
-            ns.setRenewal(height);
 
           updated = true;
 
@@ -1280,7 +1285,7 @@ class MemWallet {
     if (resource instanceof Resource)
       resource = resource.encode();
 
-    assert(!resource || Buffer.isBuffer(resource));
+    assert(Buffer.isBuffer(resource));
 
     if (!rules.verifyName(name))
       throw new Error('Invalid name.');
@@ -1318,6 +1323,7 @@ class MemWallet {
 
     if (coin.covenant.type !== types.REGISTER
         && coin.covenant.type !== types.UPDATE
+        && coin.covenant.type !== types.RENEW
         && coin.covenant.type !== types.FINALIZE) {
       throw new Error('Name must be registered.');
     }
@@ -1328,13 +1334,7 @@ class MemWallet {
     output.covenant.type = types.UPDATE;
     output.covenant.items.push(nameHash);
     output.covenant.items.push(encodeU32(ns.height));
-
-    if (resource)
-      output.covenant.items.push(resource);
-    else
-      output.covenant.items.push(EMPTY);
-
-    output.covenant.items.push(this.getRenewalBlock());
+    output.covenant.items.push(resource);
 
     const mtx = new MTX();
     mtx.addOutpoint(ns.owner);
@@ -1345,7 +1345,59 @@ class MemWallet {
 
   async createRenewal(name, options) {
     assert(typeof name === 'string');
-    return this.createUpdate(name, null, options);
+
+    if (!rules.verifyName(name))
+      throw new Error('Invalid name.');
+
+    const rawName = Buffer.from(name, 'ascii');
+    const nameHash = rules.hashName(rawName);
+    const ns = this.getNameState(nameHash);
+    const height = this.height + 1;
+    const network = this.network;
+
+    if (!ns)
+      throw new Error('Auction not found.');
+
+    const coin = this.getCoin(ns.owner.toKey());
+
+    if (!coin)
+      throw new Error(`Wallet does not own: "${name}".`);
+
+    if (ns.isExpired(height, network))
+      throw new Error('Name has expired!');
+
+    // Is local?
+    if (coin.height < ns.height)
+      throw new Error(`Wallet does not own: "${name}".`);
+
+    const state = ns.state(height, network);
+
+    if (state !== states.CLOSED)
+      throw new Error('Auction is not yet closed.');
+
+    if (coin.covenant.type !== types.REGISTER
+        && coin.covenant.type !== types.UPDATE
+        && coin.covenant.type !== types.RENEW
+        && coin.covenant.type !== types.FINALIZE) {
+      throw new Error('Name must be registered.');
+    }
+
+    // if (height < ns.renewal + network.names.treeInterval)
+    //   throw new Error('Must wait to renew.');
+
+    const output = new Output();
+    output.address = coin.address;
+    output.value = coin.value;
+    output.covenant.type = types.RENEW;
+    output.covenant.items.push(nameHash);
+    output.covenant.items.push(encodeU32(ns.height));
+    output.covenant.items.push(this.getRenewalBlock());
+
+    const mtx = new MTX();
+    mtx.addOutpoint(ns.owner);
+    mtx.outputs.push(output);
+
+    return this._create(mtx, options);
   }
 
   async createTransfer(name, address, options) {
@@ -1383,6 +1435,7 @@ class MemWallet {
 
     if (coin.covenant.type !== types.REGISTER
         && coin.covenant.type !== types.UPDATE
+        && coin.covenant.type !== types.RENEW
         && coin.covenant.type !== types.FINALIZE) {
       throw new Error('Name must be registered.');
     }
@@ -1398,7 +1451,6 @@ class MemWallet {
     output.covenant.items.push(encodeU32(ns.height));
     output.covenant.items.push(Buffer.from([address.version]));
     output.covenant.items.push(address.hash);
-    output.covenant.items.push(this.getRenewalBlock());
 
     const mtx = new MTX();
     mtx.addOutpoint(ns.owner);
@@ -1453,13 +1505,7 @@ class MemWallet {
     output.covenant.type = types.UPDATE;
     output.covenant.items.push(nameHash);
     output.covenant.items.push(encodeU32(ns.height));
-
-    if (resource)
-      output.covenant.items.push(resource);
-    else
-      output.covenant.items.push(EMPTY);
-
-    output.covenant.items.push(this.getRenewalBlock());
+    output.covenant.items.push(EMPTY);
 
     const mtx = new MTX();
     mtx.addOutpoint(ns.owner);
