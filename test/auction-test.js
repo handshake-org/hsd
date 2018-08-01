@@ -47,12 +47,12 @@ function createNode() {
         wallet.removeBlock(entry, block.txs);
       });
 
-      wallet.getAuctionStatus = async (nameHash) => {
+      wallet.getNameStatus = async (nameHash) => {
         assert(Buffer.isBuffer(nameHash));
         const height = chain.height + 1;
         const state = await chain.getNextState();
         const hardened = state.hasHardening();
-        return chain.db.getAuctionStatus(nameHash, height, hardened);
+        return chain.db.getNameStatus(nameHash, height, hardened);
       };
 
       return wallet;
@@ -216,7 +216,7 @@ describe('Auction', function() {
 
       snapshot = {
         treeRoot: chain.tip.treeRoot,
-        auction: await chain.db.getAuctionByName(NAME1)
+        ns: await chain.db.getNameStateByName(NAME1)
       };
     });
 
@@ -249,9 +249,9 @@ describe('Auction', function() {
       chain.once('reorganize', () => reorgd = true);
 
       // chain.on('disconnect', async () => {
-      //   const auction = await chain.db.getAuctionByName(NAME1);
-      //   if (auction)
-      //     console.log(auction.format(chain.height, network));
+      //   const ns = await chain.db.getNameStateByName(NAME1);
+      //   if (ns)
+      //     console.log(ns.format(chain.height, network));
       // });
 
       for (let i = 1; i <= comp.chain.height; i++) {
@@ -263,8 +263,8 @@ describe('Auction', function() {
 
       assert(reorgd);
 
-      const auction = await chain.db.getAuctionByName(NAME1);
-      assert(!auction);
+      const ns = await chain.db.getNameStateByName(NAME1);
+      assert(!ns);
     });
 
     it('should reorg back to the correct state', async () => {
@@ -273,9 +273,9 @@ describe('Auction', function() {
       chain.once('reorganize', () => reorgd = true);
 
       // chain.on('connect', async () => {
-      //   const auction = await chain.db.getAuctionByName(NAME1);
-      //   if (auction)
-      //     console.log(auction.format(chain.height, network));
+      //   const ns = await chain.db.getNameStateByName(NAME1);
+      //   if (ns)
+      //     console.log(ns.format(chain.height, network));
       // });
 
       while (!reorgd) {
@@ -302,10 +302,10 @@ describe('Auction', function() {
     });
 
     it('should have the same DB state', async () => {
-      const auction = await chain.db.getAuctionByName(NAME1);
-      assert(auction);
+      const ns = await chain.db.getNameStateByName(NAME1);
+      assert(ns);
 
-      assert.deepStrictEqual(auction, snapshot.auction);
+      assert.deepStrictEqual(ns, snapshot.ns);
       assert.bufferEqual(chain.tip.treeRoot, snapshot.treeRoot);
     });
 
