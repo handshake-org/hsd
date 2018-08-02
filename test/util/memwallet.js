@@ -346,10 +346,8 @@ class MemWallet {
       const output = tx.outputs[i];
       const {covenant} = output;
 
-      if (covenant.type < types.CLAIM
-          || covenant.type > types.REVOKE) {
+      if (!covenant.isName())
         continue;
-      }
 
       const addr = output.getHash();
 
@@ -357,7 +355,7 @@ class MemWallet {
         continue;
 
       const path = this.getPath(addr);
-      const nameHash = covenant.items[0];
+      const nameHash = covenant.getHash(0);
       const outpoint = tx.outpoint(i);
       const ns = view.getNameStateSync(this, nameHash);
 
@@ -371,8 +369,8 @@ class MemWallet {
           if (!path)
             break;
 
-          const name = covenant.items[2];
-          const flags = covenant.items[3][0];
+          const name = covenant.get(2);
+          const flags = covenant.getU8(3);
 
           // if (ns.isNull())
           //   this.addNameMap(b, nameHash);
@@ -394,7 +392,7 @@ class MemWallet {
             break;
 
           if (ns.isNull()) {
-            const name = covenant.items[2];
+            const name = covenant.get(2);
 
             // this.addNameMap(b, nameHash);
 
@@ -407,9 +405,9 @@ class MemWallet {
         }
 
         case types.BID: {
-          const start = bio.readU32(covenant.items[1], 0);
-          const name = covenant.items[2];
-          const blind = covenant.items[3];
+          const start = covenant.getU32(1);
+          const name = covenant.get(2);
+          const blind = covenant.getHash(3);
           const lockup = output.value;
 
           if (!path) {
@@ -471,8 +469,8 @@ class MemWallet {
           const coin = view.getOutputFor(tx.inputs[i]);
 
           if (coin) {
-            const blind = coin.covenant.items[3];
-            const nonce = covenant.items[2];
+            const blind = coin.covenant.getHash(3);
+            const nonce = covenant.getHash(2);
 
             this.putBlind(blind, {
               value: output.value,
@@ -500,7 +498,7 @@ class MemWallet {
           if (ns.isNull())
             break;
 
-          const data = covenant.items[2];
+          const data = covenant.get(2);
 
           ns.setOwner(outpoint);
           ns.setData(data);
@@ -515,7 +513,7 @@ class MemWallet {
           if (ns.isNull())
             break;
 
-          const data = covenant.items[2];
+          const data = covenant.get(2);
 
           ns.setOwner(outpoint);
 
@@ -561,10 +559,11 @@ class MemWallet {
             if (!path)
               break;
 
-            const start = bio.readU32(covenant.items[1], 0);
-            const name = covenant.items[2];
-            const weak = (covenant.items[3][0] & 1) !== 0;
-            const claimed = (covenant.items[3][0] & 4) !== 0;
+            const start = covenant.getU32(1);
+            const name = covenant.get(2);
+            const flags = covenant.getU8(3);
+            const weak = (flags & 1) !== 0;
+            const claimed = (flags & 4) !== 0;
 
             ns.set(name, start);
             ns.setValue(output.value);
@@ -670,19 +669,17 @@ class MemWallet {
       const output = tx.outputs[i];
       const {covenant} = output;
 
-      if (covenant.type < types.CLAIM
-          || covenant.type > types.REVOKE) {
+      if (!covenant.isName())
         continue;
-      }
 
       switch (covenant.type) {
         case types.BID: {
-          const nameHash = covenant.items[0];
+          const nameHash = covenant.getHash(0);
           this.removeBid(nameHash, tx.outpoint(i));
           break;
         }
         case types.REVEAL: {
-          const nameHash = covenant.items[0];
+          const nameHash = covenant.getHash(0);
           this.removeReveal(nameHash, tx.outpoint(i));
           break;
         }
@@ -1015,9 +1012,9 @@ class MemWallet {
     output.address = addr;
     output.value = 0;
     output.covenant.type = types.OPEN;
-    output.covenant.items.push(nameHash);
-    output.covenant.items.push(encodeU32(0));
-    output.covenant.items.push(rawName);
+    output.covenant.pushHash(nameHash);
+    output.covenant.pushU32(0);
+    output.covenant.push(rawName);
 
     const mtx = new MTX();
     mtx.outputs.push(output);
@@ -1071,10 +1068,10 @@ class MemWallet {
     output.address = addr;
     output.value = lockup;
     output.covenant.type = types.BID;
-    output.covenant.items.push(nameHash);
-    output.covenant.items.push(encodeU32(start));
-    output.covenant.items.push(rawName);
-    output.covenant.items.push(blind);
+    output.covenant.pushHash(nameHash);
+    output.covenant.pushU32(start);
+    output.covenant.push(rawName);
+    output.covenant.pushHash(blind);
 
     const mtx = new MTX();
     mtx.outputs.push(output);
@@ -1124,7 +1121,7 @@ class MemWallet {
       if (coin.height < ns.height)
         continue;
 
-      const blind = coin.covenant.items[3];
+      const blind = coin.covenant.getHash(3);
       const bv = this.getBlind(blind);
 
       if (!bv)
@@ -1136,9 +1133,9 @@ class MemWallet {
       output.address = coin.address;
       output.value = value;
       output.covenant.type = types.REVEAL;
-      output.covenant.items.push(nameHash);
-      output.covenant.items.push(encodeU32(ns.height));
-      output.covenant.items.push(nonce);
+      output.covenant.pushHash(nameHash);
+      output.covenant.pushU32(ns.height);
+      output.covenant.pushHash(nonce);
 
       mtx.addOutpoint(prevout);
       mtx.outputs.push(output);
@@ -1198,8 +1195,8 @@ class MemWallet {
       output.address = coin.address;
       output.value = coin.value;
       output.covenant.type = types.REDEEM;
-      output.covenant.items.push(nameHash);
-      output.covenant.items.push(encodeU32(ns.height));
+      output.covenant.pushHash(nameHash);
+      output.covenant.pushU32(ns.height);
 
       mtx.outputs.push(output);
     }
@@ -1242,12 +1239,10 @@ class MemWallet {
     if (coin.height < ns.height)
       throw new Error('Wallet did not win the auction.');
 
-    if (coin.covenant.type !== types.REVEAL
-        && coin.covenant.type !== types.CLAIM) {
+    if (!coin.covenant.isReveal() && !coin.covenant.isClaim())
       throw new Error('Name must be in REVEAL or CLAIM state.');
-    }
 
-    if (coin.covenant.type === types.CLAIM) {
+    if (coin.covenant.isClaim()) {
       if (height < coin.height + network.coinbaseMaturity)
         throw new Error('Claim is not yet mature.');
     }
@@ -1262,15 +1257,15 @@ class MemWallet {
     output.value = ns.value;
 
     output.covenant.type = types.REGISTER;
-    output.covenant.items.push(nameHash);
-    output.covenant.items.push(encodeU32(ns.height));
+    output.covenant.pushHash(nameHash);
+    output.covenant.pushU32(ns.height);
 
     if (resource)
-      output.covenant.items.push(resource);
+      output.covenant.push(resource);
     else
-      output.covenant.items.push(EMPTY);
+      output.covenant.push(EMPTY);
 
-    output.covenant.items.push(this.getRenewalBlock());
+    output.covenant.pushHash(this.getRenewalBlock());
 
     const mtx = new MTX();
     mtx.addOutpoint(ns.owner);
@@ -1304,10 +1299,8 @@ class MemWallet {
     if (!coin)
       throw new Error(`Wallet does not own: "${name}".`);
 
-    if (coin.covenant.type === types.REVEAL
-        || coin.covenant.type === types.CLAIM) {
+    if (coin.covenant.isReveal() || coin.covenant.isClaim())
       return this.createRegister(name, resource, options);
-    }
 
     if (ns.isExpired(height, network))
       throw new Error('Name has expired!');
@@ -1321,10 +1314,10 @@ class MemWallet {
     if (state !== states.CLOSED)
       throw new Error('Auction is not yet closed.');
 
-    if (coin.covenant.type !== types.REGISTER
-        && coin.covenant.type !== types.UPDATE
-        && coin.covenant.type !== types.RENEW
-        && coin.covenant.type !== types.FINALIZE) {
+    if (!coin.covenant.isRegister()
+        && !coin.covenant.isUpdate()
+        && !coin.covenant.isRenew()
+        && !coin.covenant.isFinalize()) {
       throw new Error('Name must be registered.');
     }
 
@@ -1332,9 +1325,9 @@ class MemWallet {
     output.address = coin.address;
     output.value = coin.value;
     output.covenant.type = types.UPDATE;
-    output.covenant.items.push(nameHash);
-    output.covenant.items.push(encodeU32(ns.height));
-    output.covenant.items.push(resource);
+    output.covenant.pushHash(nameHash);
+    output.covenant.pushU32(ns.height);
+    output.covenant.push(resource);
 
     const mtx = new MTX();
     mtx.addOutpoint(ns.owner);
@@ -1375,10 +1368,10 @@ class MemWallet {
     if (state !== states.CLOSED)
       throw new Error('Auction is not yet closed.');
 
-    if (coin.covenant.type !== types.REGISTER
-        && coin.covenant.type !== types.UPDATE
-        && coin.covenant.type !== types.RENEW
-        && coin.covenant.type !== types.FINALIZE) {
+    if (!coin.covenant.isRegister()
+        && !coin.covenant.isUpdate()
+        && !coin.covenant.isRenew()
+        && !coin.covenant.isFinalize()) {
       throw new Error('Name must be registered.');
     }
 
@@ -1389,9 +1382,9 @@ class MemWallet {
     output.address = coin.address;
     output.value = coin.value;
     output.covenant.type = types.RENEW;
-    output.covenant.items.push(nameHash);
-    output.covenant.items.push(encodeU32(ns.height));
-    output.covenant.items.push(this.getRenewalBlock());
+    output.covenant.pushHash(nameHash);
+    output.covenant.pushU32(ns.height);
+    output.covenant.pushHash(this.getRenewalBlock());
 
     const mtx = new MTX();
     mtx.addOutpoint(ns.owner);
@@ -1433,10 +1426,10 @@ class MemWallet {
     if (state !== states.CLOSED)
       throw new Error('Auction is not yet closed.');
 
-    if (coin.covenant.type !== types.REGISTER
-        && coin.covenant.type !== types.UPDATE
-        && coin.covenant.type !== types.RENEW
-        && coin.covenant.type !== types.FINALIZE) {
+    if (!coin.covenant.isRegister()
+        && !coin.covenant.isUpdate()
+        && !coin.covenant.isRenew()
+        && !coin.covenant.isFinalize()) {
       throw new Error('Name must be registered.');
     }
 
@@ -1447,10 +1440,10 @@ class MemWallet {
     output.address = coin.address;
     output.value = coin.value;
     output.covenant.type = types.TRANSFER;
-    output.covenant.items.push(nameHash);
-    output.covenant.items.push(encodeU32(ns.height));
-    output.covenant.items.push(Buffer.from([address.version]));
-    output.covenant.items.push(address.hash);
+    output.covenant.pushHash(nameHash);
+    output.covenant.pushU32(ns.height);
+    output.covenant.pushU8(address.version);
+    output.covenant.push(address.hash);
 
     const mtx = new MTX();
     mtx.addOutpoint(ns.owner);
@@ -1496,16 +1489,16 @@ class MemWallet {
     if (state !== states.CLOSED)
       throw new Error('Auction is not yet closed.');
 
-    if (coin.covenant.type !== types.TRANSFER)
+    if (!coin.covenant.isTransfer())
       throw new Error('Name is not being transfered.');
 
     const output = new Output();
     output.address = coin.address;
     output.value = coin.value;
     output.covenant.type = types.UPDATE;
-    output.covenant.items.push(nameHash);
-    output.covenant.items.push(encodeU32(ns.height));
-    output.covenant.items.push(EMPTY);
+    output.covenant.pushHash(nameHash);
+    output.covenant.pushU32(ns.height);
+    output.covenant.push(EMPTY);
 
     const mtx = new MTX();
     mtx.addOutpoint(ns.owner);
@@ -1546,14 +1539,14 @@ class MemWallet {
     if (state !== states.CLOSED)
       throw new Error('Auction is not yet closed.');
 
-    if (coin.covenant.type !== types.TRANSFER)
+    if (!coin.covenant.isTransfer())
       throw new Error('Name is not being transfered.');
 
     // if (height < coin.height + network.names.transferLockup)
     //   throw new Error('Transfer is still locked up.');
 
-    const version = coin.covenant.items[2][0];
-    const hash = coin.covenant.items[3];
+    const version = coin.covenant.getU8(2);
+    const hash = coin.covenant.get(3);
     const address = Address.fromHash(hash, version);
 
     let flags = 0;
@@ -1568,11 +1561,11 @@ class MemWallet {
     output.address = address;
     output.value = coin.value;
     output.covenant.type = types.FINALIZE;
-    output.covenant.items.push(nameHash);
-    output.covenant.items.push(encodeU32(ns.height));
-    output.covenant.items.push(rawName);
-    output.covenant.items.push(Buffer.from([flags]));
-    output.covenant.items.push(this.getRenewalBlock());
+    output.covenant.pushHash(nameHash);
+    output.covenant.pushU32(ns.height);
+    output.covenant.push(rawName);
+    output.covenant.pushU8(flags);
+    output.covenant.pushHash(this.getRenewalBlock());
 
     const mtx = new MTX();
     mtx.addOutpoint(ns.owner);
@@ -1613,10 +1606,10 @@ class MemWallet {
     if (state !== states.CLOSED)
       throw new Error('Auction is not yet closed.');
 
-    if (coin.covenant.type !== types.REGISTER
-        && coin.covenant.type !== types.UPDATE
-        && coin.covenant.type !== types.TRANSFER
-        && coin.covenant.type !== types.FINALIZE) {
+    if (!coin.covenant.isRegister()
+        && !coin.covenant.isUpdate()
+        && !coin.covenant.isTransfer()
+        && !coin.covenant.isFinalize()) {
       throw new Error('Name must be registered.');
     }
 
@@ -1627,8 +1620,8 @@ class MemWallet {
     output.address = coin.address;
     output.value = coin.value;
     output.covenant.type = types.REVOKE;
-    output.covenant.items.push(nameHash);
-    output.covenant.items.push(encodeU32(ns.height));
+    output.covenant.pushHash(nameHash);
+    output.covenant.pushU32(ns.height);
 
     const mtx = new MTX();
     mtx.addOutpoint(ns.owner);
