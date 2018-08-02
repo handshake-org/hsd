@@ -7,17 +7,9 @@
 ```
 $ git clone git://github.com/handshake-org/hsd.git
 $ cd hsd
-$ npm install
+$ npm install --production
 $ ./bin/hsd
 ```
-
-See the [Beginner's Guide][guide] for more in-depth installation instructions.
-
-## Documentation
-
-- API Docs: http://handshake.org/docs/
-- REST Docs: http://handshake.org/api-docs/index.html
-- Docs: [docs/](docs/README.md)
 
 ## Testnet
 
@@ -351,10 +343,8 @@ MIT License.
 See LICENSE for more info.
 
 [handshake]: https://handshake.org/
-[guide]: https://github.com/handshake-org/hsd/blob/master/docs/Beginner's-Guide.md
 [freenode]: https://freenode.net/
 [irc]: irc://irc.freenode.net/handshake
-[changelog]: https://github.com/handshake-org/hsd/blob/master/CHANGELOG.md
 [hnsd]: https://github.com/handshake-org/hnsd
 [hs-miner]: https://github.com/handshake-org/hs-miner
 [hs-client]: https://github.com/handshake-org/hs-client
