@@ -349,4 +349,4 @@ See LICENSE for more info.
 [hs-miner]: https://github.com/handshake-org/hs-miner
 [hs-client]: https://github.com/handshake-org/hs-client
 [urkel]: https://github.com/handshake-org/urkel
-[bns]: https://github.com/bcoin-org/bns
+[bns]: https://github.com/chjj/bns
