@@ -225,7 +225,7 @@ describe('HTTP', function() {
       weightlimit: 4000000,
       longpollid: node.chain.tip.hash.toString('hex') + '00000000',
       submitold: false,
-      coinbaseaux: { flags: '6d696e65642062792068736b64' },
+      coinbaseaux: { flags: '6d696e656420627920687364' },
       coinbasevalue: 1000000000,
       claims: [],
       transactions: []
