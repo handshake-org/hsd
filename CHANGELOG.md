@@ -1,4 +1,4 @@
-# HSK Release Notes & Changelog
+# HSD Release Notes & Changelog
 
 ## v0.0.0
 

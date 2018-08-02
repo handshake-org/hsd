@@ -4,7 +4,7 @@ docs/
 docker_data/
 test/
 node_modules/
-browser/hsk*
+browser/hsd*
 package-lock.json
 npm-debug.log
 lib/covenants/names.json

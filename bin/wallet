@@ -2,7 +2,7 @@
 
 'use strict';
 
-process.title = 'hwallet';
+process.title = 'hsw';
 
 if (process.argv.indexOf('--help') !== -1
     || process.argv.indexOf('-h') !== -1) {

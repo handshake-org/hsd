@@ -3,12 +3,12 @@
 'use strict';
 
 console.error('%s%s',
-  'Warning: The `hsk cli` interface is deprecated.\n',
-  'Please use `hsk-cli` ($ npm install bclient).');
+  'Warning: The `hsd cli` interface is deprecated.\n',
+  'Please use `hsd-cli` ($ npm install bclient).');
 
 if (process.argv.length > 2 && process.argv[2] === 'wallet') {
   process.argv.splice(2, 1); // Evil hack.
-  require('hsk-client/bin/hwallet-cli');
+  require('hs-client/bin/hsw-cli');
 } else {
-  require('hsk-client/bin/hsk-cli');
+  require('hs-client/bin/hsd-cli');
 }

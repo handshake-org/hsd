@@ -1,20 +1,20 @@
 {
-  "name": "hskd",
+  "name": "hsd",
   "version": "0.0.0",
   "private": true,
   "description": "Cryptocurrency bike-shed",
   "license": "MIT",
-  "repository": "git://github.com/handshake-org/hskd.git",
-  "homepage": "https://github.com/handshake-org/hskd",
+  "repository": "git://github.com/handshake-org/hsd.git",
+  "homepage": "https://github.com/handshake-org/hsd",
   "bugs": {
-    "url": "https://github.com/handshake-org/hskd/issues"
+    "url": "https://github.com/handshake-org/hsd/issues"
   },
   "author": "Christopher Jeffrey <chjjeffrey@gmail.com>",
   "keywords": [
-    "hsk",
     "blockchain",
     "cryptocurrency",
     "handshake",
+    "hns",
     "wallet"
   ],
   "engines": {
@@ -48,7 +48,7 @@
     "bupnp": "~0.2.2",
     "bval": "~0.1.2",
     "bweb": "~0.1.3",
-    "hsk-client": "~0.0.0",
+    "hs-client": "~0.0.0",
     "mrmr": "~0.1.1",
     "n64": "~0.2.1",
     "urkel": "~0.4.2"
@@ -57,11 +57,11 @@
     "eslint": "^5.1.0",
     "mocha": "^5.2.0"
   },
-  "main": "./lib/hskd.js",
+  "main": "./lib/hsd.js",
   "bin": {
-    "hskd": "./bin/hskd",
-    "hskd-node": "./bin/node",
-    "hskd-spvnode": "./bin/spvnode"
+    "hsd": "./bin/hsd",
+    "hsd-node": "./bin/node",
+    "hsd-spvnode": "./bin/spvnode"
   },
   "scripts": {
     "lint": "eslint $(cat .eslintfiles) || exit 0",
@@ -78,6 +78,6 @@
     "./lib/hd/wordlist": "./lib/hd/wordlist-browser.js",
     "./lib/workers/child": "./lib/workers/child-browser.js",
     "./lib/workers/parent": "./lib/workers/parent-browser.js",
-    "./lib/hskd": "./lib/hskd-browser.js"
+    "./lib/hsd": "./lib/hsd-browser.js"
   }
 }

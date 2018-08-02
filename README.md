@@ -1,14 +1,14 @@
-# HSKD
+# HSD
 
-**HSKD** is an implementation of the [Handshake][handshake] Protocol.
+**HSD** is an implementation of the [Handshake][handshake] Protocol.
 
 ## Install
 
 ```
-$ git clone git://github.com/handshake-org/hskd.git
-$ cd hskd
+$ git clone git://github.com/handshake-org/hsd.git
+$ cd hsd
 $ npm install
-$ ./bin/hskd
+$ ./bin/hsd
 ```
 
 See the [Beginner's Guide][guide] for more in-depth installation instructions.
@@ -58,22 +58,22 @@ com.                    86400   IN      NS      c.gtld-servers.net.
 
 ### Unbound support
 
-HSKD currently has a built-in recursive resolver written in javascript,
-however, for the best performance and best DNS conformance, HSKD also includes
+HSD currently has a built-in recursive resolver written in javascript,
+however, for the best performance and best DNS conformance, HSD also includes
 native bindings to `libunbound` -- to make use of this, be sure to have
-`unbound` installed on your system _before_ installing `hskd`.
+`unbound` installed on your system _before_ installing `hsd`.
 
 ### Booting with a local recursive and authoritative nameserver
 
-By default HSKD will listen on an authoritative and recursive nameserver (ports
+By default HSD will listen on an authoritative and recursive nameserver (ports
 `15359` and `15360` respectively). To configure this:
 
 ``` bash
 # Have the authoritative server listen on port 5300.
-$ hskd --ns-port 5300
+$ hsd --ns-port 5300
 
 # Have the recursive server listen on port 53.
-$ hskd --rs-host 0.0.0.0 --rs-port 53 # Warning: public!
+$ hsd --rs-host 0.0.0.0 --rs-port 53 # Warning: public!
 ```
 
 Your localhost should now be diggable:
@@ -85,22 +85,22 @@ $ dig @127.0.0.1 -p 5300 org +dnssec
 
 ### Mining
 
-To mine with getwork on a GPU, HSKD should be used in combination with
-[hsk-miner] and [hsk-client].
+To mine with getwork on a GPU, HSD should be used in combination with
+[hs-miner] and [hs-client].
 
 ``` bash
 # To boot and listen publicly on the HTTP server...
 # Optionally pass in a custom coinbase address.
-$ hskd --http-host '::' --api-key 'hunter2' \
+$ hsd --http-host '::' --api-key 'hunter2' \
   --coinbase-address 'ts1qsu62stru80svj5xk6mescy65v0lhg8xxtweqsr'
 ```
 
-Once HSKD is running, we can run [hsk-miner] on a machine with a CUDA-capable
+Once HSD is running, we can run [hs-miner] on a machine with a CUDA-capable
 GPU and point it at our full node.
 
 ``` bash
-$ hsk-miner --rpc-host 'my-ip-address' \
-  --rpc-user bitcoinrpc --rpc-pass 'hunter2'
+$ hs-miner --rpc-host 'my-ip-address' \
+  --rpc-user handshakerpc --rpc-pass 'hunter2'
 ```
 
 ### Auctions
@@ -108,7 +108,7 @@ $ hsk-miner --rpc-host 'my-ip-address' \
 First we should look at the current status of a name we want.
 
 ``` bash
-$ hsk-cli rpc getnameinfo handshake
+$ hsd-cli rpc getnameinfo handshake
 ```
 
 Once we know the name is available, we can send an "open transaction", this is
@@ -118,7 +118,7 @@ the auction's state is inserted into the [urkel] tree.
 
 ``` bash
 # Attempt to open bidding for `handshake`.
-$ hwallet-cli rpc sendopen handshake
+$ hsw-cli rpc sendopen handshake
 ```
 
 Using `getnameinfo` we can check to see when bidding will begin. Once the
@@ -128,7 +128,7 @@ conceal our true bid.
 ``` bash
 # Send a bid of 5 coins, with a lockup value of 10 coins.
 # These units are in HNS (1 HNS = 1,000,000 dollarydoos).
-$ hwallet-cli rpc sendbid handshake 5 10
+$ hsw-cli rpc sendbid handshake 5 10
 ```
 
 After the appropriate amount of time has passed, (1 day in the case of
@@ -136,25 +136,25 @@ testnet), we should reveal our bid.
 
 ``` bash
 # Reveal our bid for `handshake`.
-$ hwallet-cli rpc sendreveal handshake
+$ hsw-cli rpc sendreveal handshake
 ```
 
 We can continue monitoring the status, now with the wallet's version of
 getnameinfo:
 
 ``` bash
-$ hwallet-cli rpc getnameinfo handshake
+$ hsw-cli rpc getnameinfo handshake
 # To see other bids and reveals
-$ hwallet-cli rpc getauctioninfo handshake
+$ hsw-cli rpc getauctioninfo handshake
 ```
 
 If we end up losing, we can redeem our money from the covenant with
-`$ hwallet-cli rpc sendredeem handshake`.
+`$ hsw-cli rpc sendredeem handshake`.
 
 If we won, we can now register and update the name using `sendupdate`.
 
 ``` bash
-$ hwallet-cli rpc sendupdate handshake \
+$ hsw-cli rpc sendupdate handshake \
   '{"ttl":172800,"ns":["ns1.example.com.@1.2.3.4"]}'
 ```
 
@@ -163,7 +163,7 @@ Note that the `ns` field's `domain@ip` format symbolizes glue.
 Expiration on testnet is around 30 days, so be sure to send a renewal soon!
 
 ``` bash
-$ hwallet-cli rpc sendrenewal handshake
+$ hsw-cli rpc sendrenewal handshake
 ```
 
 ### RPC Calls
@@ -173,7 +173,7 @@ RPC.
 
 #### Node Calls
 
-All node calls should be made with `$ hsk-cli rpc [call] [arguments...]`.
+All node calls should be made with `$ hsd-cli rpc [call] [arguments...]`.
 
 - `getnameinfo [name]` - Returns name and auction status.
 - `getnameresource [name]` - Returns parsed DNS-style resource.
@@ -183,7 +183,7 @@ All node calls should be made with `$ hsk-cli rpc [call] [arguments...]`.
 
 #### Wallet Calls
 
-All wallet calls should be made with `$ hwallet-cli rpc [call] [arguments...]`.
+All wallet calls should be made with `$ hsw-cli rpc [call] [arguments...]`.
 
 - `getbids [name]` - List own bids on a name.
 - `getauctions` - List all watched auctions and their statuses.
@@ -241,7 +241,7 @@ First, we need to create a TXT record which we will sign in our zone (say we
 own example.com for instance):
 
 ``` bash
-$ hwallet-cli rpc createclaim example
+$ hsw-cli rpc createclaim example
 {
   "name": "example",
   "target": "example.com.",
@@ -279,7 +279,7 @@ Once our proof is published on the DNS layer, we can use `sendclaim` to crawl
 the relevant zones and create the proof.
 
 ``` bash
-$ hwallet-cli rpc sendclaim example
+$ hsw-cli rpc sendclaim example
 ```
 
 This will create and broadcast the proof to all of your peers, ultimately
@@ -291,7 +291,7 @@ Once the claim has reached maturity, you are able to bypass the auction process
 by calling `sendupdate` on your claimed name.
 
 ``` bash
-$ hwallet-cli rpc sendupdate example \
+$ hsw-cli rpc sendupdate example \
   '{"ttl":3600,"canonical":"icanhazip.com."}'
 ```
 
@@ -314,7 +314,7 @@ $ bns-prove -x -K /path/to/keys example.com. \
 The above will output a hex string which can then be passed to the RPC:
 
 ``` bash
-$ hsk-cli rpc sendrawclaim 'hex-string'
+$ hsd-cli rpc sendrawclaim 'hex-string'
 ```
 
 ## Support
@@ -323,7 +323,7 @@ Join us on [freenode][freenode] in the [#handshake][irc] channel.
 
 ## Disclaimer
 
-HSKD does not guarantee you against theft or lost funds due to bugs, mishaps,
+HSD does not guarantee you against theft or lost funds due to bugs, mishaps,
 or your own incompetence. You and you alone are responsible for securing your
 money.
 
@@ -340,12 +340,12 @@ all code is your original work. `</legalese>`
 See LICENSE for more info.
 
 [handshake]: https://handshake.org/
-[guide]: https://github.com/handshake-org/hskd/blob/master/docs/Beginner's-Guide.md
+[guide]: https://github.com/handshake-org/hsd/blob/master/docs/Beginner's-Guide.md
 [freenode]: https://freenode.net/
 [irc]: irc://irc.freenode.net/handshake
-[changelog]: https://github.com/handshake-org/hskd/blob/master/CHANGELOG.md
+[changelog]: https://github.com/handshake-org/hsd/blob/master/CHANGELOG.md
 [hnsd]: https://github.com/handshake-org/hnsd
-[hsk-miner]: https://github.com/handshake-org/hsk-miner
-[hsk-client]: https://github.com/handshake-org/hsk-client
+[hs-miner]: https://github.com/handshake-org/hs-miner
+[hs-client]: https://github.com/handshake-org/hs-client
 [urkel]: https://github.com/handshake-org/urkel
 [bns]: https://github.com/bcoin-org/bns

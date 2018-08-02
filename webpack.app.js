@@ -23,10 +23,10 @@ module.exports = {
   },
   plugins: [
     new webpack.DefinePlugin({
-      'process.env.HSKD_NETWORK':
-        str(env.HSKD_NETWORK || 'main'),
-      'process.env.HSKD_WORKER_FILE':
-        str(env.HSKD_WORKER_FILE || '/hskd-worker.js')
+      'process.env.HSD_NETWORK':
+        str(env.HSD_NETWORK || 'main'),
+      'process.env.HSD_WORKER_FILE':
+        str(env.HSD_WORKER_FILE || '/hsd-worker.js')
     }),
     new UglifyJsPlugin()
   ]
