@@ -21,7 +21,7 @@ See the [Beginner's Guide][guide] for more in-depth installation instructions.
 
 ## Testnet
 
-A testnet is __not__ currently running as of June 19th.
+A testnet is currently running as of August 2nd.
 
 Current testnet seed nodes (`pubkey@ip`):
 
