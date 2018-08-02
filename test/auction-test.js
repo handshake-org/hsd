@@ -15,6 +15,7 @@ const ownership = require('../lib/covenants/ownership');
 
 const network = Network.get('regtest');
 const NAME1 = rules.grindName(20, network);
+const NAME2 = rules.grindName(20, network);
 
 const workers = new WorkerPool({
   enabled: false
@@ -340,6 +341,34 @@ describe('Auction', function() {
 
       assert.deepStrictEqual(ns, snapshot.ns);
       assert.bufferEqual(chain.tip.treeRoot, snapshot.treeRoot);
+    });
+
+    it('should mine 2 blocks', async () => {
+      for (let i = 0; i < 2; i++) {
+        const block = await cpu.mineBlock();
+        assert(block);
+        assert(await chain.add(block));
+      }
+    });
+
+    it('should open auction', async () => {
+      const mtx = await winner.createOpen(NAME2);
+
+      const job = await cpu.createJob();
+      job.addTX(mtx.toTX(), mtx.view);
+      job.refresh();
+
+      const block = await job.mineAsync();
+
+      assert(await chain.add(block));
+    });
+
+    it('should have the same DB root', async () => {
+      assert((chain.height % network.names.treeInterval) !== 0);
+      const root = chain.db.txn.rootHash();
+      await chain.close();
+      await chain.open();
+      assert.bufferEqual(root, chain.db.txn.rootHash());
     });
 
     it('should cleanup', async () => {
