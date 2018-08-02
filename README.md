@@ -335,7 +335,18 @@ all code is your original work. `</legalese>`
 
 ## License
 
-- Copyright (c) 2017-2018, Christopher Jeffrey (MIT License).
+MIT License.
+
+### Bcoin
+
+- Copyright (c) 2014-2015, Fedor Indutny (https://github.com/indutny)
+- Copyright (c) 2014-2018, Christopher Jeffrey (https://github.com/chjj)
+- Copyright (c) 2014-2018, Bcoin Contributors (https://github.com/bcoin-org)
+
+### HSD
+
+- Copyright (c) 2017-2018, Christopher Jeffrey (https://github.com/chjj)
+- Copyright (c) 2018, Handshake Contributors (https://github.com/handshake-org)
 
 See LICENSE for more info.
 
