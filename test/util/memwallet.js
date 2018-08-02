@@ -29,7 +29,6 @@ const ownership = require('../../lib/covenants/ownership');
 const policy = require('../../lib/protocol/policy');
 const Resource = require('../../lib/dns/resource');
 const Address = require('../../lib/primitives/address');
-const {encodeU32} = require('../../lib/utils/util');
 const {states} = NameState;
 const {types} = rules;
 
