@@ -4,18 +4,18 @@
 'use strict';
 
 const assert = require('./util/assert');
-const Amount = require('../lib/btc/amount');
+const Amount = require('../lib/ui/amount');
 const fixed = require('../lib/utils/fixed');
 const {COIN} = require('../lib/protocol/consensus');
 
 describe('Utils', function() {
-  it('should convert satoshi to btc', () => {
+  it('should convert dollarydoos to hns', () => {
     assert.strictEqual(Amount.coin(5460), '0.00546');
     assert.strictEqual(Amount.coin(54678 * 1000000), '54678.0');
     assert.strictEqual(Amount.coin(5460 * 10000000), '54600.0');
   });
 
-  it('should convert btc to satoshi', () => {
+  it('should convert hns to dollarydoos', () => {
     assert.strictEqual(Amount.value('0.00546'), 5460);
     assert.strictEqual(Amount.value('54678'), 54678 * 1000000);
     assert.strictEqual(Amount.value('54600'), 5460 * 10000000);
