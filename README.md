@@ -108,7 +108,7 @@ $ hs-miner --rpc-host 'my-ip-address' \
 First we should look at the current status of a name we want.
 
 ``` bash
-$ hsd-cli rpc getnameinfo handshake
+$ hsd-rpc getnameinfo handshake
 ```
 
 Once we know the name is available, we can send an "open transaction", this is
@@ -118,7 +118,7 @@ the auction's state is inserted into the [urkel] tree.
 
 ``` bash
 # Attempt to open bidding for `handshake`.
-$ hsw-cli rpc sendopen handshake
+$ hsw-rpc sendopen handshake
 ```
 
 Using `getnameinfo` we can check to see when bidding will begin. Once the
@@ -128,7 +128,7 @@ conceal our true bid.
 ``` bash
 # Send a bid of 5 coins, with a lockup value of 10 coins.
 # These units are in HNS (1 HNS = 1,000,000 dollarydoos).
-$ hsw-cli rpc sendbid handshake 5 10
+$ hsw-rpc sendbid handshake 5 10
 ```
 
 After the appropriate amount of time has passed, (1 day in the case of
@@ -136,25 +136,25 @@ testnet), we should reveal our bid.
 
 ``` bash
 # Reveal our bid for `handshake`.
-$ hsw-cli rpc sendreveal handshake
+$ hsw-rpc sendreveal handshake
 ```
 
 We can continue monitoring the status, now with the wallet's version of
 getnameinfo:
 
 ``` bash
-$ hsw-cli rpc getnameinfo handshake
+$ hsw-rpc getnameinfo handshake
 # To see other bids and reveals
-$ hsw-cli rpc getauctioninfo handshake
+$ hsw-rpc getauctioninfo handshake
 ```
 
 If we end up losing, we can redeem our money from the covenant with
-`$ hsw-cli rpc sendredeem handshake`.
+`$ hsw-rpc sendredeem handshake`.
 
 If we won, we can now register and update the name using `sendupdate`.
 
 ``` bash
-$ hsw-cli rpc sendupdate handshake \
+$ hsw-rpc sendupdate handshake \
   '{"ttl":172800,"ns":["ns1.example.com.@1.2.3.4"]}'
 ```
 
@@ -163,7 +163,7 @@ Note that the `ns` field's `domain@ip` format symbolizes glue.
 Expiration on testnet is around 30 days, so be sure to send a renewal soon!
 
 ``` bash
-$ hsw-cli rpc sendrenewal handshake
+$ hsw-rpc sendrenewal handshake
 ```
 
 ### RPC Calls
@@ -173,7 +173,7 @@ RPC.
 
 #### Node Calls
 
-All node calls should be made with `$ hsd-cli rpc [call] [arguments...]`.
+All node calls should be made with `$ hsd-rpc [call] [arguments...]`.
 
 - `getnameinfo [name]` - Returns name and auction status.
 - `getnameresource [name]` - Returns parsed DNS-style resource.
@@ -183,7 +183,7 @@ All node calls should be made with `$ hsd-cli rpc [call] [arguments...]`.
 
 #### Wallet Calls
 
-All wallet calls should be made with `$ hsw-cli rpc [call] [arguments...]`.
+All wallet calls should be made with `$ hsw-rpc [call] [arguments...]`.
 
 - `getbids [name]` - List own bids on a name.
 - `getauctions` - List all watched auctions and their statuses.
@@ -241,7 +241,7 @@ First, we need to create a TXT record which we will sign in our zone (say we
 own example.com for instance):
 
 ``` bash
-$ hsw-cli rpc createclaim example
+$ hsw-rpc createclaim example
 {
   "name": "example",
   "target": "example.com.",
@@ -279,7 +279,7 @@ Once our proof is published on the DNS layer, we can use `sendclaim` to crawl
 the relevant zones and create the proof.
 
 ``` bash
-$ hsw-cli rpc sendclaim example
+$ hsw-rpc sendclaim example
 ```
 
 This will create and broadcast the proof to all of your peers, ultimately
@@ -291,7 +291,7 @@ Once the claim has reached maturity, you are able to bypass the auction process
 by calling `sendupdate` on your claimed name.
 
 ``` bash
-$ hsw-cli rpc sendupdate example \
+$ hsw-rpc sendupdate example \
   '{"ttl":3600,"canonical":"icanhazip.com."}'
 ```
 
@@ -314,7 +314,7 @@ $ bns-prove -x -K /path/to/keys example.com. \
 The above will output a hex string which can then be passed to the RPC:
 
 ``` bash
-$ hsd-cli rpc sendrawclaim 'hex-string'
+$ hsd-rpc sendrawclaim 'hex-string'
 ```
 
 ## Support
