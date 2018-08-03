@@ -100,7 +100,7 @@ GPU and point it at our full node.
 
 ``` bash
 $ hs-miner --rpc-host 'my-ip-address' \
-  --rpc-user handshakerpc --rpc-pass 'hunter2'
+  --rpc-user hnsrpc --rpc-pass 'hunter2'
 ```
 
 ### Auctions
