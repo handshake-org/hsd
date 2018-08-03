@@ -267,6 +267,9 @@ The ZSK which signs our TXT record must be signed by our zone's KSK. As per the
 typical DNSSEC setup, our zone's KSK must be committed as a DS record in the
 parent zone.
 
+The final proof is an aggregation of all signed DNS referrals plus our signed
+TXT record ([example here][proof]).
+
 Once our proof is published on the DNS layer, we can use `sendclaim` to crawl
 the relevant zones and create the proof.
 
@@ -350,3 +353,4 @@ See LICENSE for more info.
 [hs-client]: https://github.com/handshake-org/hs-client
 [urkel]: https://github.com/handshake-org/urkel
 [bns]: https://github.com/chjj/bns
+[proof]: https://github.com/handshake-org/hsd/blob/master/test/data/ownership-cloudflare.zone
