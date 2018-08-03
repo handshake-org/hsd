@@ -28,6 +28,8 @@ Current public DNS servers:
 - 173.255.209.126 - Authoritative Server 1.
 - 172.104.177.177 - Recursive Server 2.
 - 139.162.183.168 - Authoritative Server 2.
+- 74.207.247.120 - Recursive Server 3 ([hnsd] node)
+- 45.79.134.225 - Authoritative Server 3 ([hnsd] node)
 
 Example:
 
@@ -363,3 +365,4 @@ See LICENSE for more info.
 [bns]: https://github.com/chjj/bns
 [proof]: https://github.com/handshake-org/hsd/blob/master/test/data/ownership-cloudflare.zone
 [unbound]: https://www.nlnetlabs.nl/projects/unbound/download/
+[hnsd]: https://github.com/handshake-org/hnsd
