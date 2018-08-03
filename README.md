@@ -50,10 +50,10 @@ com.                    86400   IN      NS      c.gtld-servers.net.
 
 ### Unbound support
 
-HSD currently has a built-in recursive resolver written in javascript,
-however, for the best performance and best DNS conformance, HSD also includes
-native bindings to `libunbound` -- to make use of this, be sure to have
-`unbound` installed on your system _before_ installing `hsd`.
+HSD currently has a built-in recursive resolver written in javascript, however,
+for the best performance and best DNS conformance, HSD also includes native
+bindings to `libunbound` -- to make use of this, be sure to have [unbound]
+installed on your system _before_ installing `hsd`.
 
 ### Booting with a local recursive and authoritative nameserver
 
@@ -362,3 +362,4 @@ See LICENSE for more info.
 [urkel]: https://github.com/handshake-org/urkel
 [bns]: https://github.com/chjj/bns
 [proof]: https://github.com/handshake-org/hsd/blob/master/test/data/ownership-cloudflare.zone
+[unbound]: https://www.nlnetlabs.nl/projects/unbound/download/
