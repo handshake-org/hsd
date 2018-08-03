@@ -48,7 +48,7 @@ const node = new FullNode({
   logLevel: 'debug',
   memory: false,
   workers: true,
-  listen: true,
+  listen: false,
   network: 'testnet',
   loader: require
 });
@@ -62,6 +62,7 @@ if (!node.config.bool('no-wallet') && !node.has('walletdb')) {
 if (node.config.str('network') === 'main') {
   console.error('Mainnet not yet active.');
   process.exit(1);
+  return;
 }
 
 process.on('unhandledRejection', (err, promise) => {

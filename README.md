@@ -75,6 +75,14 @@ $ dig @127.0.0.1 www.ietf.org +dnssec
 $ dig @127.0.0.1 -p 5300 org +dnssec
 ```
 
+### Accepting Inbound
+
+To accept inbound connections, add the `--listen` flag.
+
+```
+$ hsd --listen --max-inbound=20
+```
+
 ### Mining
 
 To mine with getwork on a GPU, HSD should be used in combination with
