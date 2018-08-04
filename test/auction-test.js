@@ -14,8 +14,8 @@ const rules = require('../lib/covenants/rules');
 const ownership = require('../lib/covenants/ownership');
 
 const network = Network.get('regtest');
-const NAME1 = rules.grindName(20, network);
-const NAME2 = rules.grindName(20, network);
+const NAME1 = rules.grindName(10, 20, network);
+const NAME2 = rules.grindName(10, 20, network);
 
 const workers = new WorkerPool({
   enabled: false
