@@ -177,21 +177,24 @@ RPC.
 
 All node calls should be made with `$ hsd-rpc [call] [arguments...]`.
 
+- `getnames [name]` - List all names (debugging).
 - `getnameinfo [name]` - Returns name and auction status.
 - `getnameresource [name]` - Returns parsed DNS-style resource.
 - `getnameproof [name]` - Returns a JSON-ified [urkel] proof of a name.
 - `getnamebyhash [hex-hash]` - Returns the name hash preimage.
 - `sendrawclaim [hex-string]` - Send a raw serialized claim.
+- `grindname [size]` - Grind a name which satisifies the rollout.
 
 #### Wallet Calls
 
 All wallet calls should be made with `$ hsw-rpc [call] [arguments...]`.
 
-- `getbids [name]` - List own bids on a name.
-- `getauctions` - List all watched auctions and their statuses.
+- `getbids [name] [own]` - List own bids on a name.
+- `getreveals [name] [own]` - List own reveals on a name.
+- `getnames` - List all watched names and their statuses.
+- `getnameinfo [name]` - Returns name info, similar to the node call above.
 - `getauctioninfo [name]` - Returns auction info, along with all bids and
   reveals.
-- `getnameinfo [name]` - Returns name info, similar to the node call above.
 - `getnameresource [name]` - Returns parsed DNS-style resource.
 - `getnamebyhash [hex-hash]` - Returns the name hash preimage.
 - `createclaim [name]` - Create a to-be-signed claim.
