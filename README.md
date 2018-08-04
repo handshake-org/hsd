@@ -11,6 +11,13 @@ $ npm install --production
 $ ./bin/hsd
 ```
 
+You can also build and run using Docker:
+
+```
+$ docker build . -t hsd
+$ docker run -it --rm hsd
+```
+
 ## Testnet
 
 A testnet is currently running as of August 2nd.
