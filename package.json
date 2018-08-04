@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "bcfg": "~0.1.2",
-    "bcrypto": "~1.0.0",
+    "bcrypto": "^1.0.0",
     "bcuckoo": "~0.4.0",
     "bdb": "~0.2.3",
     "bdns": "~0.1.1",
@@ -52,6 +52,7 @@
     "hs-client": "~0.0.2",
     "mrmr": "~0.1.1",
     "n64": "~0.2.1",
+    "secp256k1": "git+https://github.com/cryptocoinjs/secp256k1-node.git",
     "urkel": "~0.5.0"
   },
   "devDependencies": {
