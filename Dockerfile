@@ -1,12 +1,11 @@
-FROM base/archlinux:latest AS base
+FROM node:alpine AS base
 
 RUN mkdir -p /code
 WORKDIR /code
 CMD "hsd"
 
-RUN pacman -Sy --noconfirm archlinux-keyring && \
-    pacman -Syu --noconfirm nodejs unbound && \
-    rm /var/cache/pacman/pkg/*
+RUN apk upgrade --no-cache && \
+    apk add --no-cache bash unbound-dev
 
 COPY package.json \
      #package-lock.json \
@@ -14,9 +13,7 @@ COPY package.json \
 
 FROM base AS build
 # Install build dependencies
-RUN pacman -Syu --noconfirm base-devel unrar git python2 npm
-#HACK: Node-gyp needs python
-RUN ln -s /usr/bin/python2 /usr/bin/python
+RUN apk add --no-cache g++ gcc make python2
 
 # Install hsd
 RUN npm install --production
