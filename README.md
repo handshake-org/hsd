@@ -177,7 +177,7 @@ RPC.
 
 All node calls should be made with `$ hsd-rpc [call] [arguments...]`.
 
-- `getnames [name]` - List all names (debugging).
+- `getnames` - List all names (debugging).
 - `getnameinfo [name]` - Returns name and auction status.
 - `getnameresource [name]` - Returns parsed DNS-style resource.
 - `getnameproof [name]` - Returns a JSON-ified [urkel] proof of a name.
