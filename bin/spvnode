@@ -46,11 +46,10 @@ const node = new SPVNode({
   logFile: true,
   logConsole: true,
   logLevel: 'debug',
-  db: 'leveldb',
-  persistent: true,
   memory: false,
   workers: true,
   listen: false,
+  network: 'testnet',
   loader: require
 });
 
