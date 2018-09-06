@@ -11,6 +11,11 @@ $ npm install --production
 $ ./bin/hsd
 ```
 
+## Documentation
+- Documentation Site: [https://handshake-org.github.io](https://handshake-org.github.io)
+- API Docs: [https://handshake-org.github.io/api-docs/index.html](https://handshake-org.github.io/api-docs/index.html)
+- JSDoc: [https://handshake-org.github.io/docs](https://handshake-org.github.io/docs)
+
 ## Testnet
 
 A testnet is currently running as of August 2nd.
