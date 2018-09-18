@@ -7,9 +7,28 @@ services:
       - chain:/root/.hsd
     ports:
       - "53:5300/udp" # recursive resolver
-      - "13037:13037" # testnet node
-      - "13039:13039" # testnet wallet
-    command: hsd --rs-host=0.0.0.0 --rs-port=5300 --http-host='::' #--coinbase-address=COINBASE_ADDRESS --api-key=PASSWORD
+      ## Uncomment to make these public!
+      #- "13037:13037" # testnet node
+      #- "13039:13039" # testnet wallet
+    command: hsd --rs-host=0.0.0.0 --rs-port=5300 --http-host='::' --wallet-http-host='::' --api-key=PASSWORD
+
+  bpanel:
+    image: bpanel/bpanel
+    restart: unless-stopped
+    environment:
+      ## Need this to tell the bpanel client
+      # how to communicate with the node in docker
+      _DOCKER_CHAIN: handshake
+      _DOCKER_NETWORK: testnet
+      _DOCKER_NODE_HOST: hsd
+      _DOCKER_API_KEY: PASSWORD
+      _DOCKER_WALLET_API_KEY: PASSWORD
+      BPANEL_PLUGINS: '@bpanel/genesis-theme,@bpanel/recent-blocks,@bpanel/simple-wallet,@bpanel/name-manager'
+    ports:
+      - "5000:5000"
+      - "8000:8000"
+    ## Only MacOSX users need --watch-poll
+    command: server --dev --watch-poll
 
   #miner:
   #  image: handshakeorg/hs-miner:nvidia
@@ -18,6 +37,11 @@ services:
   #  restart: unless-stopped
   #  command: hs-miner --rpc-host=hsd --rpc-pass=PASSWORD
 
+  #cpu_miner:
+  #  image: handshakeorg/hs-miner:cpu
+  #  scale: 1
+  #  restart: unless-stopped
+  #  command: hs-miner --rpc-host=hsd --rpc-pass=PASSWORD
 
 volumes:
   chain:
