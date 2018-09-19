@@ -1,5 +1,4 @@
 FROM node:alpine AS base
-
 RUN mkdir -p /code
 WORKDIR /code
 CMD "hsd"
@@ -11,11 +10,9 @@ COPY package.json \
      #package-lock.json \
      /code/
 
+# Install build dependencies and compile
 FROM base AS build
-# Install build dependencies
 RUN apk add --no-cache g++ gcc make python2
-
-# Install hsd
 RUN npm install --production
 
 FROM base
