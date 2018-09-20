@@ -7,9 +7,9 @@ services:
       - chain:/root/.hsd
     ports:
       - "53:5300/udp" # recursive resolver
-      ## Uncomment to make these public!
-      #- "13037:13037" # testnet node
-      #- "13039:13039" # testnet wallet
+      ## Comment these out to make them private
+      - "13037:13037" # testnet node
+      - "13039:13039" # testnet wallet
     command: hsd --rs-host=0.0.0.0 --rs-port=5300 --http-host='::' --wallet-http-host='::' --api-key=PASSWORD
 
   bpanel:

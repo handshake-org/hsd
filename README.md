@@ -10,6 +10,7 @@ $ cd hsd
 $ npm install --production
 $ ./bin/hsd
 ```
+Alternatively, you can use [docker](#docker) instead of npm installing, and also get the bpanel UI.
 
 ## Documentation
 
@@ -335,6 +336,30 @@ The above will output a base64 string which can then be passed to the RPC:
 
 ``` bash
 $ hsd-rpc sendrawclaim 'base64-string'
+```
+
+## Docker
+
+Official images are available as [handshakeorg/hsd](https://hub.docker.com/r/handshakeorg/hsd/tags).
+Install [docker](https://docs.docker.com/install/#supported-platforms)
+then startup hsd and the bpanel UI with this:
+```bash
+$ docker-compose up -d
+```
+Now open [bpanel](http://localhost:5000), it may take a minute on first start.
+
+To configure the node or UI, edit the `docker-compose.yml` file.
+Additionally, uncomment the `miner` or `cpu_miner` sections to start mining.
+(GPU miner requires [nvidia-docker](https://github.com/NVIDIA/nvidia-docker))
+
+By default this is serving to the public and the api-key is `PASSWORD` so be sure to change it to something more secure,
+
+You can run the CLI tools using docker exec; for example, this will get your wallet info:
+```bash
+$ docker exec hsd_hsd_1 hsw-cli get --api-key=PASSWORD
+$ # or
+$ npm install -g hs-client
+$ hsw-cli get --api-key=PASSWORD
 ```
 
 ## Support
