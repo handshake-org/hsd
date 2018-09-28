@@ -6,8 +6,8 @@ process.title = 'hsd';
 
 if (process.argv.indexOf('--help') !== -1
     || process.argv.indexOf('-h') !== -1) {
-  console.error('See the hsd wiki at:');
-  console.error('https://github.com/handshake-org/hsd/wiki.');
+  console.error('See the hsd docs at:');
+  console.error('https://handshake-org.github.io');
   process.exit(1);
   throw new Error('Could not exit.');
 }
