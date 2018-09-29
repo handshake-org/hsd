@@ -18,16 +18,18 @@ $ ./bin/hsd
 
 ## Testnet
 
-A testnet is currently running as of August 2nd.
+Testnet2, which was running as of August 2nd, was created with a finite
+lifespan of one month. While all reserved names have now been released, it is
+still stable and usable via the `testnet2-final` tag.
 
-Current testnet seed nodes (`pubkey@ip`):
+Testnet2 seed nodes (`pubkey@ip`):
 
 - `aoihqqagbhzz6wxg43itefqvmgda4uwtky362p22kbimcyg5fdp54@172.104.214.189`
 - `ajdzrpoxsusaw4ixq4ttibxxsuh5fkkduc5qszyboidif2z25i362@173.255.209.126`
 - `ajk57wutnhfdzvqwqrgab3wwh4wxoqgnkz4avbln54pgj5jwefcts@172.104.177.177`
 - `am2lsmbzzxncaptqjo22jay3mztfwl33bxhkp7icfx7kmi5rvjaic@139.162.183.168`
 
-Current public DNS servers:
+Testnet2 public DNS servers:
 
 - 172.104.214.189 - Recursive Server 1.
 - 173.255.209.126 - Authoritative Server 1.
