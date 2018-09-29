@@ -3,10 +3,12 @@
 rl=0
 daemon=0
 cmd='node'
+log='/dev/null'
+next=0
 
 if ! type perl > /dev/null 2>& 1; then
   if uname | grep -i 'darwin' > /dev/null; then
-    echo 'HSK requires perl to start on OSX.' >& 2
+    echo 'hsd requires perl to start on OSX.' >& 2
     exit 1
   fi
   rl=1
@@ -39,9 +41,20 @@ if test x"$1" = x'rpc'; then
 fi
 
 for arg in "$@"; do
+  if test $next -eq 1; then
+    log="$arg"
+    next=0
+  fi
   case "$arg" in
     --daemon)
       daemon=1
+    ;;
+    --daemon-log)
+      next=1
+    ;;
+    --daemon-log=*)
+      log=$(echo "$arg" | sed 's/^--daemon-log=//g')
+      log="${log/#\~/$HOME}"
     ;;
     --spv)
       cmd='spvnode'
@@ -53,13 +66,13 @@ if test $daemon -eq 1; then
   # And yet again, OSX doesn't support something.
   if ! type setsid > /dev/null 2>& 1; then
     (
-      "${dir}/${cmd}" "$@" > /dev/null 2>& 1 &
+      "${dir}/${cmd}" "$@" > "$log" 2>& 1 &
       echo "$!"
     )
     exit 0
   fi
   (
-    setsid "${dir}/${cmd}" "$@" > /dev/null 2>& 1 &
+    setsid "${dir}/${cmd}" "$@" > "$log" 2>& 1 &
     echo "$!"
   )
   exit 0
