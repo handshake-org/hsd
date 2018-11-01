@@ -17,6 +17,9 @@ module.exports = {
     filename: '[name].js'
   },
   resolve: {
+    alias: {
+      path$: 'path-browserify'
+    },
     modules: ['node_modules'],
     extensions: ['-browser.js', '.js', '.json']
   },
