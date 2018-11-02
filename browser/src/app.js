@@ -242,11 +242,8 @@ async function _formatWallet(wallet) {
 
   let html = '';
 
-  console.log(master, wallet, account);
-
   html += '<b>Wallet</b><br>';
   html += `Current Address: <b>${raddr}</b><br>`;
-
   html += `Extended Private Key: <b>${master.key.xprivkey}</b><br>`;
   html += `Mnemonic: <b>${master.mnemonic.phrase}</b><br>`;
 

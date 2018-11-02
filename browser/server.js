@@ -9,7 +9,7 @@ const app = fs.readFileSync(`${__dirname}/app.js`);
 const worker = fs.readFileSync(`${__dirname}/worker.js`);
 
 const proxy = new WSProxy({
-  ports: [12038, 13038, 18444, 28333, 28901]
+  ports: [12038, 13038]
 });
 
 const server = bweb.server({
