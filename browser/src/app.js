@@ -1,7 +1,7 @@
 'use strict';
 
 const Logger = require('blgr');
-const FullNode = require('../../lib/node/fullnode');
+const SPVNode = require('../../lib/node/spvnode');
 const Amount = require('../../lib/ui/amount');
 const plugin = require('../../lib/wallet/plugin');
 const util = require('../../lib/utils/util');
@@ -54,12 +54,12 @@ logger.writeConsole = function writeConsole(level, module, args) {
   log.scrollTop = log.scrollHeight;
 };
 
-const node = new FullNode({
+const node = new SPVNode({
   hash: true,
   query: true,
   prune: true,
   network: 'testnet',
-  memory: true,
+  memory: false,
   coinCache: 30,
   logConsole: true,
   workers: true,
@@ -268,7 +268,6 @@ async function _formatWallet(wallet) {
 }
 
 node.chain.on('block', addItem);
-node.mempool.on('tx', addItem);
 
 (async () => {
   await node.ensure();
