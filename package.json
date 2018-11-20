@@ -1,10 +1,10 @@
 {
-  "name": "hsd",
+  "name": "namebase-hsd",
   "version": "0.0.0",
-  "private": true,
+  "private": false,
   "description": "Cryptocurrency bike-shed",
   "license": "MIT",
-  "repository": "git://github.com/handshake-org/hsd.git",
+  "repository": "git://github.com/namebasehq/hsd.git",
   "homepage": "https://github.com/handshake-org/hsd",
   "bugs": {
     "url": "https://github.com/handshake-org/hsd/issues"
