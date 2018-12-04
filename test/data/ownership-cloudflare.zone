@@ -40,6 +40,6 @@ cloudflare.com. 300 IN TXT "google-site-verification=C7thfNeXVahkVhniiqTI1iSVnEl
 cloudflare.com. 300 IN TXT "status-page-domain-verification=r14frwljwbxs"
 cloudflare.com. 300 IN TXT "v=spf1 ip4:199.15.212.0/22 ip4:173.245.48.0/20 include:_spf.google.com include:spf1.mcsv.net include:spf.mandrillapp.com include:mail.zendesk.com include:customeriomail.com include:stspg-customer.com -all"
 cloudflare.com. 300 IN TXT "facebook-domain-verification=h9mm6zopj6p2po54woa16m5bskm6oo"
-cloudflare.com. 300 IN TXT "hns-regtest:vQMAAAAAAADYz9SnUFIYeuiUQ30Nlz64baEpHTKQIVa8KJpaT9PcIQAUTP-SDF6Agh56W9HvpW2CaFu7A_oA"
+cloudflare.com. 300 IN TXT "hns-regtest:aakbvmygsp7rrhmsauhwlnwx6srd5m2v4m3p3eidadl5yn2f"
 cloudflare.com. 300 IN RRSIG TXT 13 2 300 20180711033430 20180709013430 35273 cloudflare.com. PTky4WVoueznMvh3Sb7eQRn47VXBqc3IqYGxydy8DUxVKHyiF0Fqh9FY 9h+5HttrQ79rBqlLS5+up8HlFdUnKQ==  ; alg = ECDSAP256SHA256
 

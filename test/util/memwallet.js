@@ -833,7 +833,7 @@ class MemWallet {
       added += item.target.length; // rrname
       added += 10; // header
       added += 1; // txt size
-      added += 183; // max string size
+      added += 100; // max string size
 
       // RRSIG record size.
       if (!zone || zone.claim.length === 0) {
@@ -858,7 +858,7 @@ class MemWallet {
       fee = 0;
 
     const address = this.createReceive().getAddress();
-    const txt = ownership.createData(fee, address, forked, network);
+    const txt = ownership.createData(address, fee, forked, network);
 
     return {
       name,

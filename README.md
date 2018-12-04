@@ -261,7 +261,7 @@ $ hsw-rpc createclaim example
   "size": 3583,
   "fee": 17900,
   "address": "ts1qd6u7vhu084494kf9cejkp4qel69vsk82takamu",
-  "txt": "hns-testnet:_exFABRuueZfjz1qWtklxmVg1Bn-ishY6gA"
+  "txt": "hns-testnet:aakbvmygsp7rrhmsauhwlnwx6srd5m2v4m3p3eidadl5yn2f"
 }
 ```
 
@@ -272,7 +272,7 @@ our name's zone file and signed:
 
 ``` zone
 ...
-example.com. 1800 IN TXT "hns-testnet:_exFABRuueZfjz1qWtklxmVg1Bn-ishY6gA"
+example.com. 1800 IN TXT "hns-testnet:aakbvmygsp7rrhmsauhwlnwx6srd5m2v4m3p3eidadl5yn2f"
 example.com. 1800 IN RRSIG TXT 5 2 1800 20190615140933 20180615131108 ...
 ```
 
@@ -322,14 +322,14 @@ ownership proofs.
 
 ``` bash
 $ npm install bns
-$ bns-prove -x -K /path/to/keys example.com. \
-  'hns-testnet:_exFABRuueZfjz1qWtklxmVg1Bn-ishY6gA'
+$ bns-prove -b -K /path/to/keys example.com. \
+  'hns-testnet:aakbvmygsp7rrhmsauhwlnwx6srd5m2v4m3p3eidadl5yn2f'
 ```
 
-The above will output a hex string which can then be passed to the RPC:
+The above will output a base64 string which can then be passed to the RPC:
 
 ``` bash
-$ hsd-rpc sendrawclaim 'hex-string'
+$ hsd-rpc sendrawclaim 'base64-string'
 ```
 
 ## Support
