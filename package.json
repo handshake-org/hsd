@@ -60,7 +60,8 @@
   "bin": {
     "hsd": "./bin/hsd",
     "hsd-node": "./bin/node",
-    "hsd-spvnode": "./bin/spvnode"
+    "hsd-spvnode": "./bin/spvnode",
+    "hs-wallet": "./bin/hsw"
   },
   "scripts": {
     "lint": "eslint $(cat .eslintfiles) || exit 0",
