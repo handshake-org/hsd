@@ -37,7 +37,7 @@
     "bmutex": "~0.1.4",
     "bns": "~0.6.1",
     "bs32": "~0.1.3",
-    "bsert": "~0.0.6",
+    "bsert": "~0.0.7",
     "bsip": "~0.1.4",
     "bsock": "~0.1.4",
     "bsocks": "~0.2.3",
@@ -55,7 +55,7 @@
     "urkel": "~0.6.1"
   },
   "devDependencies": {
-    "bmocha": "^0.1.5"
+    "bmocha": "^0.1.6"
   },
   "main": "./lib/hsd.js",
   "bin": {
