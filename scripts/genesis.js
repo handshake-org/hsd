@@ -21,9 +21,6 @@ const networks = {
 
 function createGenesisBlock(options) {
   const genesis = Address.fromHash(consensus.GENESIS_KEY, 0);
-  const investors = Address.fromHash(options.keys.investors, 0);
-  const creators = Address.fromHash(options.keys.creators, 0);
-  const airdrop = Address.fromHash(options.keys.airdrop, 0);
 
   let flags = options.flags;
   let nonce = options.nonce;
@@ -51,18 +48,6 @@ function createGenesisBlock(options) {
       {
         value: consensus.GENESIS_REWARD,
         address: genesis
-      },
-      {
-        value: consensus.MAX_INVESTORS,
-        address: investors
-      },
-      {
-        value: consensus.MAX_CREATORS,
-        address: creators
-      },
-      {
-        value: consensus.MAX_AIRDROP,
-        address: airdrop
       }
     ],
     locktime: 0
