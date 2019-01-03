@@ -458,6 +458,7 @@ describe('Node', function() {
         coinbasevalue: 1000000000,
         coinbasetxn: undefined,
         claims: [],
+        airdrops: [],
         transactions: []
       },
       error: null,

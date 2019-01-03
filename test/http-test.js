@@ -228,6 +228,7 @@ describe('HTTP', function() {
       coinbaseaux: { flags: '6d696e656420627920687364' },
       coinbasevalue: 1000000000,
       claims: [],
+      airdrops: [],
       transactions: []
     });
   });
