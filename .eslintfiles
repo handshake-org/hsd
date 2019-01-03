@@ -5,5 +5,3 @@ bin/wallet
 lib/
 scripts/
 test/
-webpack.browser.js
-webpack.compat.js
