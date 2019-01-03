@@ -208,16 +208,16 @@ describe('HTTP', function() {
       height: 1,
       previousblockhash: network.genesis.hash.toString('hex'),
       treeroot: network.genesis.treeRoot.toString('hex'),
+      filterroot: consensus.ZERO_HASH.toString('hex'),
       reservedroot: consensus.ZERO_HASH.toString('hex'),
       target:
         '7fffff0000000000000000000000000000000000000000000000000000000000',
-      cuckoo: { bits: 8, size: 4, perc: 50 },
       bits: '207fffff',
       noncerange: ''
-        + '0000000000000000000000000000000000000000'
-        + 'ffffffffffffffffffffffffffffffffffffffff',
+        + '0000000000000000000000000000000000000000000000000000000000000000'
+        + 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
       curtime: json.curtime,
-      mintime: 1514765791,
+      mintime: 1546499153,
       maxtime: json.maxtime,
       expires: json.expires,
       sigoplimit: 80000,

@@ -172,7 +172,7 @@ describe('Chain', function() {
   });
 
   it('should have correct chain value', () => {
-    assert.strictEqual(chain.db.state.value, 1156211004420000);
+    assert.strictEqual(chain.db.state.value, 211002210000);
     // assert.strictEqual(chain.db.state.coin, 1749);
     assert.strictEqual(chain.db.state.tx, 221);
   });
@@ -204,7 +204,7 @@ describe('Chain', function() {
   });
 
   it('should have correct chain value', () => {
-    assert.strictEqual(chain.db.state.value, 1156212004420000);
+    assert.strictEqual(chain.db.state.value, 212002210000);
     // assert.strictEqual(chain.db.state.coin, 1750);
     assert.strictEqual(chain.db.state.tx, 222);
   });
@@ -284,7 +284,7 @@ describe('Chain', function() {
   });
 
   it('should have correct chain value', () => {
-    assert.strictEqual(chain.db.state.value, 1156214004420000);
+    assert.strictEqual(chain.db.state.value, 214002210000);
     // assert.strictEqual(chain.db.state.coin, 1753);
     assert.strictEqual(chain.db.state.tx, 225);
   });
@@ -598,7 +598,7 @@ describe('Chain', function() {
       wallet.sign(mtx);
 
       if (i & 1)
-        prove.push(mtx.witnessHash());
+        prove.push(mtx.hash());
 
       job.pushTX(mtx.toTX());
     }
@@ -722,6 +722,7 @@ describe('Chain', function() {
 
       block.refresh(true);
       block.merkleRoot = block.createMerkleRoot();
+      block.witnessRoot = block.createWitnessRoot();
 
       assert(await chain.add(block, flags));
     }

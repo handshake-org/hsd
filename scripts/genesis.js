@@ -59,52 +59,51 @@ function createGenesisBlock(options) {
     version: 0,
     prevBlock: consensus.ZERO_HASH,
     merkleRoot: consensus.ZERO_HASH,
+    witnessRoot: consensus.ZERO_HASH,
     treeRoot: consensus.ZERO_HASH,
+    filterRoot: consensus.ZERO_HASH,
     reservedRoot: consensus.ZERO_HASH,
     time: options.time,
     bits: options.bits,
-    nonce: nonce,
-    solution: options.solution
+    nonce: nonce
   });
 
   block.txs.push(tx);
 
   block.merkleRoot = block.createMerkleRoot();
+  block.witnessRoot = block.createWitnessRoot();
 
   return block;
 }
 
+// Funny that we did this almost exactly
+// ten years after Jan. 3rd 2009.
 const blocks = {
   main: createGenesisBlock({
-    time: 1514765788,
+    time: 1546499150,
     bits: networks.main.pow.bits,
-    solution: new Uint32Array(networks.main.cuckoo.size),
     keys: networks.main.keys
   }),
   testnet: createGenesisBlock({
-    time: 1514765789,
+    time: 1546499151,
     bits: networks.testnet.pow.bits,
-    solution: new Uint32Array(networks.testnet.cuckoo.size),
     keys: networks.testnet.keys
   }),
   regtest: createGenesisBlock({
-    time: 1514765790,
+    time: 1546499152,
     bits: networks.regtest.pow.bits,
-    solution: new Uint32Array(networks.regtest.cuckoo.size),
     keys: networks.regtest.keys
   }),
   simnet: createGenesisBlock({
-    time: 1514765791,
+    time: 1546499153,
     bits: networks.simnet.pow.bits,
-    solution: new Uint32Array(networks.simnet.cuckoo.size),
     keys: networks.simnet.keys
   })
 };
 
 function formatJS(name, block) {
-  const sol = block.solution.toArray();
-
   let out = '';
+
   out += `genesis.${name} = {\n`;
   out += `  version: ${block.version},\n`;
   out += `  hash: Buffer.from(\n`;
@@ -116,23 +115,23 @@ function formatJS(name, block) {
   out += `  merkleRoot: Buffer.from(\n`;
   out += `    '${block.merkleRoot.toString('hex')}',\n`;
   out += `    'hex'),\n`;
+  out += `  witnessRoot: Buffer.from(\n`;
+  out += `    '${block.witnessRoot.toString('hex')}',\n`;
+  out += `    'hex'),\n`;
   out += `  treeRoot: Buffer.from(\n`;
   out += `    '${block.treeRoot.toString('hex')}',\n`;
+  out += `    'hex'),\n`;
+  out += `  filterRoot: Buffer.from(\n`;
+  out += `    '${block.filterRoot.toString('hex')}',\n`;
   out += `    'hex'),\n`;
   out += `  reservedRoot: Buffer.from(\n`;
   out += `    '${block.reservedRoot.toString('hex')}',\n`;
   out += `    'hex'),\n`;
   out += `  time: ${block.time},\n`;
   out += `  bits: 0x${util.hex32(block.bits)},\n`;
-  out += `  nonce: Buffer.from('${block.nonce.toString('hex')}', 'hex'),\n`;
-  out += `  solution: new Uint32Array([\n`;
-
-  for (let i = 0; i < sol.length; i++)
-    out += `    0x${util.hex32(sol[i])},\n`;
-
-  out = out.slice(0, -2) + '\n';
-
-  out += `  ]),\n`;
+  out += `  nonce: Buffer.from(\n`;
+  out += `    '${block.nonce.toString('hex')}',\n`;
+  out += `    'hex'),\n`;
   out += `  height: 0\n`;
   out += `};`;
 

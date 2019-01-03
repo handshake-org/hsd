@@ -23,7 +23,6 @@
   "dependencies": {
     "bcfg": "~0.1.4",
     "bcrypto": "~3.0.1",
-    "bcuckoo": "~0.7.1",
     "bdb": "~1.1.3",
     "bdns": "~0.1.3",
     "bevent": "~0.1.3",

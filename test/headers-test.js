@@ -10,6 +10,6 @@ describe('Headers', function() {
   it('should match headers size', () => {
     const headers = new Headers();
 
-    assert.strictEqual(headers.getSize(), 181);
+    assert.strictEqual(headers.getSize(), 240);
   });
 });

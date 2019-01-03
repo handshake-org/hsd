@@ -138,7 +138,7 @@ describe('Node', function() {
   });
 
   it('should have correct chain value', () => {
-    assert.strictEqual(chain.db.state.value, 1156012004420000);
+    assert.strictEqual(chain.db.state.value, 12002210000);
     // assert.strictEqual(chain.db.state.coin, 1569);
     assert.strictEqual(chain.db.state.tx, 21);
   });
@@ -175,7 +175,7 @@ describe('Node', function() {
   });
 
   it('should have correct chain value', () => {
-    assert.strictEqual(chain.db.state.value, 1156013004420000);
+    assert.strictEqual(chain.db.state.value, 13002210000);
     // assert.strictEqual(chain.db.state.coin, 1570);
     assert.strictEqual(chain.db.state.tx, 22);
   });
@@ -239,7 +239,7 @@ describe('Node', function() {
   });
 
   it('should have correct chain value', () => {
-    assert.strictEqual(chain.db.state.value, 1156014004420000);
+    assert.strictEqual(chain.db.state.value, 14002210000);
     // assert.strictEqual(chain.db.state.coin, 1572);
     assert.strictEqual(chain.db.state.tx, 24);
   });
@@ -434,17 +434,17 @@ describe('Node', function() {
         rules: [],
         vbavailable: {},
         vbrequired: 0,
-        height: node.chain.tip.height + 1,
-        previousblockhash: node.chain.tip.hash.toString('hex'),
-        treeroot: node.chain.tip.treeRoot.toString('hex'),
+        height: 20,
+        previousblockhash: chain.tip.hash.toString('hex'),
+        treeroot: network.genesis.treeRoot.toString('hex'),
+        filterroot: consensus.ZERO_HASH.toString('hex'),
         reservedroot: consensus.ZERO_HASH.toString('hex'),
         target:
           '7fffff0000000000000000000000000000000000000000000000000000000000',
-        cuckoo: { bits: 8, size: 4, perc: 50 },
         bits: '207fffff',
         noncerange: ''
-          + '0000000000000000000000000000000000000000'
-          + 'ffffffffffffffffffffffffffffffffffffffff',
+          + '0000000000000000000000000000000000000000000000000000000000000000'
+          + 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
         curtime: json.result.curtime,
         mintime: json.result.mintime,
         maxtime: json.result.maxtime,
@@ -455,8 +455,8 @@ describe('Node', function() {
         longpollid: node.chain.tip.hash.toString('hex') + '00000000',
         submitold: false,
         coinbaseaux: { flags: '6d696e656420627920687364' },
-        coinbasetxn: undefined,
         coinbasevalue: 1000000000,
+        coinbasetxn: undefined,
         claims: [],
         transactions: []
       },
