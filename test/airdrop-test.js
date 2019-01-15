@@ -93,6 +93,18 @@ const rawProof = Buffer.from(''
   + 'fFk7ChzidwGBdnFLx4bjl6DeSHb7K8cKDabUODIIAnbh+vNn7K/ZFXX2/4p'
   + 'mDsDyncYOHhg0KWh6SoTNS3czTVu3uPGxvaM', 'base64');
 
+const rawFaucetProof = Buffer.from(''
+  + 'bwAAAAsnph9MVn1r09UQy6vGKBZhGepaRnzZynKv0M6m7tnkq5b5Tjw77gx'
+  + 'oQRzEoJdgga3Yd04r8AXVrUV5cjno32n3QwnqKGkYoEfspsU7HB3aX+zOcl'
+  + 'NnvJ7y2WS6T7+vWeVaMMi+CzCAlVmLefC/h4EDwN9WjOHEGVvtaFcTLa1XH'
+  + '2U/1XaGOmav2ot4KozaGQCm6FqsCF730nogJKbANMiqHdWAS7m5pKbxdEjJ'
+  + 'sRhNOrKs3z2Xjvh5ETcLcVY8wsPo9paPbsQ+Y1DwaQHz51FsRsqQidhTnaX'
+  + 'yr6L2+NWsLF39yNMXWsCoDMpX1vinZotX4sK7/+khpu7BTwUIdleXY9yTFh'
+  + 'uXelO+3APlnCqjPGLjZH1yrFBjEF8KzRO/tB2tk77PeM+E/7S1TbEGc0o47'
+  + 'ztSMxoAjkRsPSnmsLQEGVofkKU6pbcW/6QhrITqk3JzWPD0mNjwpOa43pbN'
+  + '+TErAAAgBAAU3IMpICLzdoj4PQF5aBqkkHXqaK9oISopAgAAAAAAFNyDKSA'
+  + 'i83aI+D0BeWgapJB16miv/gDh9QUA', 'base64');
+
 function createNode() {
   const chain = new Chain({
     memory: true,
@@ -198,7 +210,7 @@ describe('Airdrop', (ctx) => {
     assert(input);
     assert(input.prevout.isNull());
     assert(input.witness.length === 1);
-    assert(output.value === 4639.780756e6);
+    assert(output.value === 4639780756);
 
     assert(await chain.add(block));
   });
@@ -264,11 +276,13 @@ describe('Airdrop', (ctx) => {
     assert(reorgd);
   });
 
-  it('should mine airdrop proof', async () => {
+  it('should mine airdrop+faucet proof', async () => {
     const proof = AirdropProof.decode(rawProof);
+    const fproof = AirdropProof.decode(rawFaucetProof);
 
     const job = await cpu.createJob();
     job.addAirdrop(proof);
+    job.addAirdrop(fproof);
     job.refresh();
 
     const block = await job.mineAsync();
@@ -277,16 +291,28 @@ describe('Airdrop', (ctx) => {
 
     const [cb] = block.txs;
 
-    assert(cb.inputs.length === 2);
-    assert(cb.outputs.length === 2);
+    assert(cb.inputs.length === 3);
+    assert(cb.outputs.length === 3);
 
-    const [, input] = cb.inputs;
-    const [, output] = cb.outputs;
+    {
+      const input = cb.inputs[1];
+      const output = cb.outputs[1];
 
-    assert(input);
-    assert(input.prevout.isNull());
-    assert(input.witness.length === 1);
-    assert(output.value === 4639.780756e6);
+      assert(input);
+      assert(input.prevout.isNull());
+      assert(input.witness.length === 1);
+      assert.strictEqual(output.value, 4639780756);
+    }
+
+    {
+      const input = cb.inputs[2];
+      const output = cb.outputs[2];
+
+      assert(input);
+      assert(input.prevout.isNull());
+      assert(input.witness.length === 1);
+      assert.strictEqual(output.value, 9280561512 - 100e6);
+    }
 
     assert(await chain.add(block));
   });
@@ -319,10 +345,58 @@ describe('Airdrop', (ctx) => {
       { reason: 'bad-txns-bits-missingorspent' });
   });
 
+  it('should prevent mine faucet proof', async () => {
+    const proof = AirdropProof.decode(rawFaucetProof);
+
+    const job = await cpu.createJob();
+    job.addAirdrop(proof);
+    job.refresh();
+
+    const block = await job.mineAsync();
+
+    assert(await chain.add(block));
+  });
+
+  it('should prevent double spend with bitfield', async () => {
+    const proof = AirdropProof.decode(rawFaucetProof);
+
+    const job = await cpu.createJob();
+    job.addAirdrop(proof);
+    job.refresh();
+
+    const block = await job.mineAsync();
+
+    await assert.rejects(chain.add(block),
+      { reason: 'bad-txns-bits-missingorspent' });
+  });
+
+  it('should close and open', async () => {
+    await chain.close();
+    await chain.open();
+  });
+
+  it('should prevent double spend with bitfield', async () => {
+    const proof = AirdropProof.decode(rawFaucetProof);
+
+    const job = await cpu.createJob();
+    job.addAirdrop(proof);
+    job.refresh();
+
+    const block = await job.mineAsync();
+
+    await assert.rejects(chain.add(block),
+      { reason: 'bad-txns-bits-missingorspent' });
+  });
+
   it('should close other nodes', async () => {
     await orig.miner.close();
     await orig.chain.close();
     await comp.miner.close();
     await comp.chain.close();
+  });
+
+  it('should cleanup', async () => {
+    await miner.close();
+    await chain.close();
   });
 });
