@@ -12,24 +12,23 @@ $ ./bin/hsd
 ```
 
 ## Documentation
+
 - Documentation Site: [https://handshake-org.github.io](https://handshake-org.github.io)
 - API Docs: [https://handshake-org.github.io/api-docs/index.html](https://handshake-org.github.io/api-docs/index.html)
 - JSDoc: [https://handshake-org.github.io/docs](https://handshake-org.github.io/docs)
 
 ## Testnet
 
-Testnet2, which was running as of August 2nd, was created with a finite
-lifespan of one month. While all reserved names have now been released, it is
-still stable and usable via the `testnet2-final` tag.
+Testnet3 is running as of January 22nd.
 
-Testnet2 seed nodes (`pubkey@ip`):
+Testnet3 seed nodes (`pubkey@ip`):
 
 - `aoihqqagbhzz6wxg43itefqvmgda4uwtky362p22kbimcyg5fdp54@172.104.214.189`
 - `ajdzrpoxsusaw4ixq4ttibxxsuh5fkkduc5qszyboidif2z25i362@173.255.209.126`
 - `ajk57wutnhfdzvqwqrgab3wwh4wxoqgnkz4avbln54pgj5jwefcts@172.104.177.177`
 - `am2lsmbzzxncaptqjo22jay3mztfwl33bxhkp7icfx7kmi5rvjaic@139.162.183.168`
 
-Testnet2 public DNS servers:
+Testnet3 public DNS servers:
 
 - 172.104.214.189 - Recursive Server 1.
 - 173.255.209.126 - Authoritative Server 1.
@@ -112,6 +111,11 @@ $ hs-miner --rpc-host 'my-ip-address' \
   --rpc-user hnsrpc --rpc-pass 'hunter2'
 ```
 
+### Airdrop & Faucet
+
+Testnet3 now implements a decentralized airdrop & faucet for open source
+developers. See [hs-airdrop][airdrop] for instructions on how to redeem coins.
+
 ### Auctions
 
 First we should look at the current status of a name we want.
@@ -189,8 +193,9 @@ All node calls should be made with `$ hsd-rpc [call] [arguments...]`.
 - `getnameresource [name]` - Returns parsed DNS-style resource.
 - `getnameproof [name]` - Returns a JSON-ified [urkel] proof of a name.
 - `getnamebyhash [hex-hash]` - Returns the name hash preimage.
-- `sendrawclaim [hex-string]` - Send a raw serialized claim.
+- `sendrawclaim [base64-string]` - Send a raw serialized claim.
 - `grindname [size]` - Grind a name which satisifies the rollout.
+- `sendrawairdrop [base64-string]` - Send a raw serialized [airdrop] proof.
 
 #### Wallet Calls
 
@@ -376,3 +381,4 @@ See LICENSE for more info.
 [proof]: https://github.com/handshake-org/hsd/blob/master/test/data/ownership-cloudflare.zone
 [unbound]: https://www.nlnetlabs.nl/projects/unbound/download/
 [hnsd]: https://github.com/handshake-org/hnsd
+[airdrop]: https://github.com/handshake-org/hs-airdrop
