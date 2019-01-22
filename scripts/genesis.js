@@ -76,28 +76,22 @@ function createGenesisBlock(options) {
   return block;
 }
 
-// Funny that we did this almost exactly
-// ten years after Jan. 3rd 2009.
 const blocks = {
   main: createGenesisBlock({
-    time: 1546499150,
-    bits: networks.main.pow.bits,
-    keys: networks.main.keys
+    time: 1548148523,
+    bits: networks.main.pow.bits
   }),
   testnet: createGenesisBlock({
-    time: 1546499151,
-    bits: networks.testnet.pow.bits,
-    keys: networks.testnet.keys
+    time: 1548148524,
+    bits: networks.testnet.pow.bits
   }),
   regtest: createGenesisBlock({
-    time: 1546499152,
-    bits: networks.regtest.pow.bits,
-    keys: networks.regtest.keys
+    time: 1548148525,
+    bits: networks.regtest.pow.bits
   }),
   simnet: createGenesisBlock({
-    time: 1546499153,
-    bits: networks.simnet.pow.bits,
-    keys: networks.simnet.keys
+    time: 1548148526,
+    bits: networks.simnet.pow.bits
   })
 };
 
