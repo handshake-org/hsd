@@ -7,3 +7,5 @@ node_modules/
 browser/hsd*
 package-lock.json
 npm-debug.log
+lib/covenants/names.json
+lib/dns/tld.json
