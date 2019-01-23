@@ -11,7 +11,6 @@ browser/hsd*
 build/
 docker_data/
 docs/
-lib/covenants/names.json
 lib/dns/tld.json
 node_modules/
 npm-debug.log
