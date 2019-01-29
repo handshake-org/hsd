@@ -8,7 +8,7 @@ console.error('%s%s',
 
 if (process.argv.length > 2 && process.argv[2] === 'wallet') {
   process.argv.splice(2, 1); // Evil hack.
-  require('hs-client/bin/hsw-cli');
+  require('namebase-hs-client/bin/hsw-cli');
 } else {
-  require('hs-client/bin/hsd-cli');
+  require('namebase-hs-client/bin/hsd-cli');
 }

@@ -24,7 +24,7 @@ const node = new FullNode({
   plugins: [require('../lib/wallet/plugin')]
 });
 
-const {NodeClient, WalletClient} = require('hs-client');
+const {NodeClient, WalletClient} = require('namebase-hs-client');
 
 const nclient = new NodeClient({
   port: network.rpcPort,
