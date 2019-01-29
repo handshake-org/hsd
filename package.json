@@ -47,6 +47,8 @@
     "goosig": "~0.8.0",
     "hs-client": "~0.0.8",
     "n64": "~0.2.10",
+    "mrmr": "~0.1.8",
+    "namebase-hs-client": "=0.0.2",
     "urkel": "~0.6.3"
   },
   "devDependencies": {
