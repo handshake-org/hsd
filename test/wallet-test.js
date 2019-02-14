@@ -19,6 +19,7 @@ const Input = require('../lib/primitives/input');
 const Outpoint = require('../lib/primitives/outpoint');
 const Script = require('../lib/script/script');
 const PrivateKey = require('../lib/hd/private.js');
+const Resource = require('../lib/dns/resource');
 
 const KEY1 = 'xprv9s21ZrQH143K3Aj6xQBymM31Zb4BVc7wxqfUhMZrzewdDVCt'
   + 'qUP9iWfcHgJofs25xbaUpCps9GDXj83NiWvQCAkWQhVj5J4CorfnpKX94AZ';
@@ -1461,6 +1462,20 @@ describe('Wallet', function() {
     assert(await wdb.get('alice100'));
     await wdb.remove('alice100');
     assert(!await wdb.get('alice100'));
+  });
+
+  it('should prevent sending malformed resource', async () => {
+    const badResource =
+      Resource.fromJSON({MyCatsBreath: 'SmellsLikeCatFood'});
+
+    let err = null;
+    try {
+      await currentWallet.makeUpdate('wiggum', badResource);
+    } catch (e) {
+      err = e;
+    }
+    assert(err);
+    assert.strictEqual(err.message, 'Resource is empty');
   });
 
   it('should cleanup', async () => {
