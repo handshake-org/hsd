@@ -110,6 +110,8 @@ class MemWallet {
   init() {
     let i;
 
+    this.chain = [this.network.genesis.hash];
+
     if (!this.master)
       this.master = HD.PrivateKey.generate();
 
@@ -855,8 +857,11 @@ class MemWallet {
     if (minFee == null)
       minFee = policy.getMinFee(size, rate);
 
-    let commitHash = this.network.genesis.hash;
-    let commitHeight = 0;
+    if (this.chain.length < 2)
+      throw new Error('Chain too immature for name claim.');
+
+    let commitHash = this.chain[1];
+    let commitHeight = 1;
 
     if (options.commitHeight != null) {
       const block = this.chain[options.commitHeight];
