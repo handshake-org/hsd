@@ -542,50 +542,6 @@ describe('Auction', function() {
       }
     });
 
-    it('should not be able to transfer a weak name', async () => {
-      const addr = recip.createReceive().getAddress();
-      const mtx = await wallet.createTransfer('cloudflare', addr);
-
-      const job = await cpu.createJob();
-      job.addTX(mtx.toTX(), mtx.view);
-      job.refresh();
-
-      const block = await job.mineAsync();
-
-      let err = null;
-
-      try {
-        await chain.add(block);
-      } catch (e) {
-        err = e;
-      }
-
-      assert(err);
-      assert.strictEqual(err.reason, 'bad-transfer-state');
-    });
-
-    it('should not be able to revoke a weak name', async () => {
-      const addr = recip.createReceive().getAddress();
-      const mtx = await wallet.createRevoke('cloudflare', addr);
-
-      const job = await cpu.createJob();
-      job.addTX(mtx.toTX(), mtx.view);
-      job.refresh();
-
-      const block = await job.mineAsync();
-
-      let err = null;
-
-      try {
-        await chain.add(block);
-      } catch (e) {
-        err = e;
-      }
-
-      assert(err);
-      assert.strictEqual(err.reason, 'bad-revoke-state');
-    });
-
     it('should register a claimed name', async () => {
       const mtx = await wallet.createRegister('af', Buffer.from([1,2,3]));
 

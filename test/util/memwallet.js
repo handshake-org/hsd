@@ -358,10 +358,8 @@ class MemWallet {
       const outpoint = tx.outpoint(i);
       const ns = view.getNameStateSync(this, nameHash);
 
-      if (!ns.isNull()) {
-        if (ns.isExpired(height, network))
-          ns.reset(height);
-      }
+      if (!ns.isNull())
+        ns.maybeExpire(height, network);
 
       switch (covenant.type) {
         case types.CLAIM: {
@@ -370,12 +368,17 @@ class MemWallet {
 
           const name = covenant.get(2);
           const flags = covenant.getU8(3);
+          const claimed = covenant.getU32(5);
 
           // if (ns.isNull())
           //   this.addNameMap(b, nameHash);
 
-          ns.set(name, height);
-          ns.setClaimed(true);
+          if (ns.isNull())
+            ns.set(name, height);
+
+          ns.setHeight(height);
+          ns.setRenewal(height);
+          ns.setClaimed(claimed);
           ns.setValue(0);
           ns.setOwner(outpoint);
           ns.setHighest(0);
@@ -499,8 +502,12 @@ class MemWallet {
 
           const data = covenant.get(2);
 
+          ns.setRegistered(true);
           ns.setOwner(outpoint);
-          ns.setData(data);
+
+          if (data.length > 0)
+            ns.setData(data);
+
           ns.setRenewal(height);
 
           updated = true;
@@ -533,6 +540,7 @@ class MemWallet {
           ns.setOwner(outpoint);
           ns.setTransfer(0);
           ns.setRenewal(height);
+          ns.setRenewals(ns.renewals + 1);
 
           updated = true;
 
@@ -562,12 +570,15 @@ class MemWallet {
             const name = covenant.get(2);
             const flags = covenant.getU8(3);
             const weak = (flags & 1) !== 0;
-            const claimed = (flags & 4) !== 0;
+            const claimed = covenant.getU32(4);
+            const renewals = covenant.getU32(5);
 
             ns.set(name, start);
+            ns.setRegistered(true);
             ns.setValue(output.value);
             ns.setWeak(weak);
             ns.setClaimed(claimed);
+            ns.setRenewals(renewals);
 
             // Cannot get data or highest.
             ns.setHighest(output.value);
@@ -578,6 +589,7 @@ class MemWallet {
           ns.setOwner(tx.outpoint(i));
           ns.setTransfer(0);
           ns.setRenewal(height);
+          ns.setRenewals(ns.renewals + 1);
 
           updated = true;
 
@@ -780,24 +792,15 @@ class MemWallet {
     const rawName = Buffer.from(name, 'ascii');
     const nameHash = rules.hashName(rawName);
     const height = this.height + 1;
-    const hardened = Boolean(options.hardened);
     const network = this.network;
 
+    // TODO: Handle expired behavior.
     if (!rules.isReserved(nameHash, height, network))
       throw new Error('Name is not reserved.');
 
     const ns = await this.getNameState(nameHash);
 
-    let forked = false;
-
     if (ns) {
-      if (hardened) {
-        if (ns.isWeak(height, network)) {
-          ns.reset(height);
-          forked = true;
-        }
-      }
-
       if (!ns.isExpired(height, network))
         throw new Error('Name already claimed.');
     } else {
@@ -833,7 +836,7 @@ class MemWallet {
       added += item.target.length; // rrname
       added += 10; // header
       added += 1; // txt size
-      added += 100; // max string size
+      added += 200; // max string size
 
       // RRSIG record size.
       if (!zone || zone.claim.length === 0) {
@@ -852,13 +855,26 @@ class MemWallet {
     if (minFee == null)
       minFee = policy.getMinFee(size, rate);
 
-    let fee = Math.min(item.value, minFee);
+    let commitHash = this.network.genesis.hash;
+    let commitHeight = 0;
 
-    if (forked)
-      fee = 0;
+    if (options.commitHeight != null) {
+      const block = this.chain[options.commitHeight];
 
+      if (!block)
+        throw new Error('Block not found.');
+
+      commitHeight = options.commitHeight;
+      commitHash = block;
+    }
+
+    const fee = Math.min(item.value, minFee);
     const address = this.createReceive().getAddress();
-    const txt = ownership.createData(address, fee, forked, network);
+    const txt = ownership.createData(address,
+                                     fee,
+                                     commitHash,
+                                     commitHeight,
+                                     network);
 
     return {
       name,
@@ -884,21 +900,16 @@ class MemWallet {
     const rawName = Buffer.from(name, 'ascii');
     const nameHash = rules.hashName(rawName);
     const height = this.height + 1;
-    const hardened = Boolean(options.hardened);
     const network = this.network;
 
+    // TODO: Handle expired behavior.
     if (!rules.isReserved(nameHash, height, network))
       throw new Error('Name is not reserved.');
 
     const ns = this.getNameState(nameHash);
 
-    let forked = false;
-
     if (ns) {
-      if (hardened && ns.isWeak(height, network))
-        forked = true;
-
-      if (!forked && !ns.isExpired(height, network))
+      if (!ns.isExpired(height, network))
         throw new Error('Name already claimed.');
     } else {
       if (!await this.isAvailable(nameHash))
@@ -917,9 +928,6 @@ class MemWallet {
     if (!data)
       throw new Error(`No valid DNS commitment found for ${name}.`);
 
-    if (data.forked !== forked)
-      throw new Error('Proof data must have the correct fork flag.');
-
     return Claim.fromProof(proof);
   }
 
@@ -935,21 +943,16 @@ class MemWallet {
     const rawName = Buffer.from(name, 'ascii');
     const nameHash = rules.hashName(rawName);
     const height = this.height + 1;
-    const hardened = Boolean(options.hardened);
     const network = this.network;
 
+    // TODO: Handle expired behavior.
     if (!rules.isReserved(nameHash, height, network))
       throw new Error('Name is not reserved.');
 
     const ns = this.getNameState(nameHash);
 
-    let forked = false;
-
     if (ns) {
-      if (hardened && ns.isWeak(height, network))
-        forked = true;
-
-      if (!forked && !ns.isExpired(height, network))
+      if (!ns.isExpired(height, network))
         throw new Error('Name already claimed.');
     } else {
       if (!await this.isAvailable(nameHash))
@@ -965,9 +968,6 @@ class MemWallet {
     if (!data)
       throw new Error(`No valid DNS commitment found for ${name}.`);
 
-    if (data.forked !== forked)
-      throw new Error('Proof data must have the correct fork flag.');
-
     return Claim.fromProof(proof);
   }
 
@@ -982,6 +982,7 @@ class MemWallet {
     const height = this.height + 1;
     const network = this.network;
 
+    // TODO: Handle expired behavior.
     if (rules.isReserved(nameHash, height, network))
       throw new Error('Name is reserved.');
 
@@ -993,8 +994,7 @@ class MemWallet {
     if (!ns)
       ns = await this.getNameStatus(nameHash);
 
-    if (ns.isExpired(height, network))
-      ns.reset(height);
+    ns.maybeExpire(height, network);
 
     const state = ns.state(height, network);
     const start = ns.height;
@@ -1045,8 +1045,7 @@ class MemWallet {
     if (!ns)
       ns = await this.getNameStatus(nameHash);
 
-    if (ns.isExpired(height, network))
-      ns.reset(height);
+    ns.maybeExpire(height, network);
 
     const state = ns.state(height, network);
     const start = ns.height;
@@ -1093,8 +1092,7 @@ class MemWallet {
     if (!ns)
       throw new Error('Auction not found.');
 
-    if (ns.isExpired(height, network))
-      ns.reset(height);
+    ns.maybeExpire(height, network);
 
     const state = ns.state(height, network);
 
@@ -1432,9 +1430,6 @@ class MemWallet {
       throw new Error('Name must be registered.');
     }
 
-    // if (ns.isWeak(height, network))
-    //   throw new Error('Cannot transfer a weak name prematurely.');
-
     const output = new Output();
     output.address = coin.address;
     output.value = coin.value;
@@ -1553,9 +1548,6 @@ class MemWallet {
     if (ns.weak)
       flags |= 1;
 
-    if (ns.claimed)
-      flags |= 4;
-
     const output = new Output();
     output.address = address;
     output.value = coin.value;
@@ -1564,6 +1556,8 @@ class MemWallet {
     output.covenant.pushU32(ns.height);
     output.covenant.push(rawName);
     output.covenant.pushU8(flags);
+    output.covenant.pushU32(ns.claimed);
+    output.covenant.pushU32(ns.renewals);
     output.covenant.pushHash(this.getRenewalBlock());
 
     const mtx = new MTX();
@@ -1611,9 +1605,6 @@ class MemWallet {
         && !coin.covenant.isFinalize()) {
       throw new Error('Name must be registered.');
     }
-
-    // if (ns.isWeak(height, network))
-    //   throw new Error('Cannot revoke a weak name prematurely.');
 
     const output = new Output();
     output.address = coin.address;
