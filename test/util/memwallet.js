@@ -1095,7 +1095,7 @@ class MemWallet {
     const network = this.network;
 
     if (!ns)
-      throw new Error('Auction not found.');
+      throw new Error(`Auction not found: "${name}".`);
 
     ns.maybeExpire(height, network);
 
@@ -1162,10 +1162,10 @@ class MemWallet {
     const network = this.network;
 
     if (!ns)
-      throw new Error('Auction not found.');
+      throw new Error(`Auction not found: "${name}".`);
 
     if (ns.isExpired(height, network))
-      throw new Error('Name has expired!');
+      throw new Error(`Name has expired: "${name}"!`);
 
     const state = ns.state(height, network);
 
@@ -1227,7 +1227,7 @@ class MemWallet {
     const network = this.network;
 
     if (!ns)
-      throw new Error('Auction not found.');
+      throw new Error(`Auction not found: "${name}".`);
 
     const coin = this.getCoin(ns.owner.toKey());
 
@@ -1235,7 +1235,7 @@ class MemWallet {
       throw new Error('Wallet did not win the auction.');
 
     if (ns.isExpired(height, network))
-      throw new Error('Name has expired!');
+      throw new Error(`Name has expired: "${name}"!`);
 
     // Is local?
     if (coin.height < ns.height)
@@ -1294,7 +1294,7 @@ class MemWallet {
     const network = this.network;
 
     if (!ns)
-      throw new Error('Auction not found.');
+      throw new Error(`Auction not found: "${name}".`);
 
     const coin = this.getCoin(ns.owner.toKey());
 
@@ -1305,7 +1305,7 @@ class MemWallet {
       return this.createRegister(name, resource, options);
 
     if (ns.isExpired(height, network))
-      throw new Error('Name has expired!');
+      throw new Error(`Name has expired: "${name}"!`);
 
     // Is local?
     if (coin.height < ns.height)
@@ -1351,7 +1351,7 @@ class MemWallet {
     const network = this.network;
 
     if (!ns)
-      throw new Error('Auction not found.');
+      throw new Error(`Auction not found: "${name}".`);
 
     const coin = this.getCoin(ns.owner.toKey());
 
@@ -1359,7 +1359,7 @@ class MemWallet {
       throw new Error(`Wallet does not own: "${name}".`);
 
     if (ns.isExpired(height, network))
-      throw new Error('Name has expired!');
+      throw new Error(`Name has expired: "${name}"!`);
 
     // Is local?
     if (coin.height < ns.height)
@@ -1409,7 +1409,7 @@ class MemWallet {
     const network = this.network;
 
     if (!ns)
-      throw new Error('Auction not found.');
+      throw new Error(`Auction not found: "${name}".`);
 
     const coin = this.getCoin(ns.owner.toKey());
 
@@ -1417,7 +1417,7 @@ class MemWallet {
       throw new Error(`Wallet does not own: "${name}".`);
 
     if (ns.isExpired(height, network))
-      throw new Error('Name has expired!');
+      throw new Error(`Name has expired: "${name}"!`);
 
     // Is local?
     if (coin.height < ns.height)
@@ -1469,7 +1469,7 @@ class MemWallet {
     const network = this.network;
 
     if (!ns)
-      throw new Error('Auction not found.');
+      throw new Error(`Auction not found: "${name}".`);
 
     const coin = this.getCoin(ns.owner.toKey());
 
@@ -1477,7 +1477,7 @@ class MemWallet {
       throw new Error(`Wallet does not own: "${name}".`);
 
     if (ns.isExpired(height, network))
-      throw new Error('Name has expired!');
+      throw new Error(`Name has expired: "${name}"!`);
 
     // Is local?
     if (coin.height < ns.height)
@@ -1519,7 +1519,7 @@ class MemWallet {
     const network = this.network;
 
     if (!ns)
-      throw new Error('Auction not found.');
+      throw new Error(`Auction not found: "${name}".`);
 
     const coin = this.getCoin(ns.owner.toKey());
 
@@ -1527,7 +1527,7 @@ class MemWallet {
       throw new Error(`Wallet does not own: "${name}".`);
 
     if (ns.isExpired(height, network))
-      throw new Error('Name has expired!');
+      throw new Error(`Name has expired: "${name}"!`);
 
     // Is local?
     if (coin.height < ns.height)
@@ -1585,7 +1585,7 @@ class MemWallet {
     const network = this.network;
 
     if (!ns)
-      throw new Error('Auction not found.');
+      throw new Error(`Auction not found: "${name}".`);
 
     const coin = this.getCoin(ns.owner.toKey());
 
@@ -1597,7 +1597,7 @@ class MemWallet {
       throw new Error(`Wallet does not own: "${name}".`);
 
     if (ns.isExpired(height, network))
-      throw new Error('Name has expired!');
+      throw new Error(`Name has expired: "${name}"!`);
 
     const state = ns.state(height, network);
 
