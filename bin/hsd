@@ -1,82 +1,62 @@
-#!/bin/bash
+#!/usr/bin/env node
 
-rl=0
-daemon=0
-cmd='node'
-log='/dev/null'
-next=0
+'use strict';
 
-if ! type perl > /dev/null 2>& 1; then
-  if uname | grep -i 'darwin' > /dev/null; then
-    echo 'hsd requires perl to start on OSX.' >& 2
-    exit 1
-  fi
-  rl=1
-fi
+const execPath = process.execPath || process.argv[0];
+const execArgv = process.execArgv || [];
+const {argv, exit, stdout} = process;
 
-if test $rl -eq 1; then
-  file=$(readlink -f "$0")
-else
-  # Have to do it this way
-  # because OSX isn't a real OS
-  file=$(perl -MCwd -e "print Cwd::realpath('$0')")
-fi
+/*
+ * Main
+ */
 
-dir=$(dirname "$file")
+function main() {
+  if (argv.length > 2) {
+    switch (argv[2]) {
+      case 'cli':
+        argv.splice(2, 1);
+        require('./cli');
+        return;
+      case 'wallet':
+        require('./cli');
+        return;
+      case 'rpc':
+        require('./cli');
+        return;
+    }
+  }
 
-if test x"$1" = x'cli'; then
-  shift
-  exec "${dir}/cli" "$@"
-  exit 1
-fi
+  if (!argv.includes('--daemon')) {
+    if (argv.includes('--spv'))
+      require('./spvnode');
+    else
+      require('./node');
 
-if test x"$1" = x'wallet'; then
-  exec "${dir}/cli" "$@"
-  exit 1
-fi
+    return;
+  }
 
-if test x"$1" = x'rpc'; then
-  exec "${dir}/cli" "$@"
-  exit 1
-fi
+  const {spawn} = require('child_process');
+  const {resolve} = require('path');
 
-for arg in "$@"; do
-  if test $next -eq 1; then
-    log="$arg"
-    next=0
-  fi
-  case "$arg" in
-    --daemon)
-      daemon=1
-    ;;
-    --daemon-log)
-      next=1
-    ;;
-    --daemon-log=*)
-      log=$(echo "$arg" | sed 's/^--daemon-log=//g')
-      log="${log/#\~/$HOME}"
-    ;;
-    --spv)
-      cmd='spvnode'
-    ;;
-  esac
-done
+  const node = argv.includes('--spv') ? 'spvnode' : 'node';
+  const args = [];
 
-if test $daemon -eq 1; then
-  # And yet again, OSX doesn't support something.
-  if ! type setsid > /dev/null 2>& 1; then
-    (
-      "${dir}/${cmd}" "$@" > "$log" 2>& 1 &
-      echo "$!"
-    )
-    exit 0
-  fi
-  (
-    setsid "${dir}/${cmd}" "$@" > "$log" 2>& 1 &
-    echo "$!"
-  )
-  exit 0
-else
-  exec "${dir}/${cmd}" "$@"
-  exit 1
-fi
+  args.push(...execArgv);
+  args.push(resolve(__dirname, node));
+  args.push(...argv.slice(2));
+
+  const ps = spawn(execPath, args, {
+    stdio: 'ignore',
+    detached: true
+  });
+
+  stdout.write(ps.pid + '\n');
+
+  exit(0);
+}
+
+/*
+ * Execute
+ */
+
+main();
