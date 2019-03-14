@@ -67,8 +67,8 @@ function createNode() {
   };
 }
 
-describe('Airdrop', (ctx) => {
-  ctx.timeout(15000);
+describe('Airdrop', function() {
+  this.timeout(15000);
 
   const node = createNode();
   const orig = createNode();
