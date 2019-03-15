@@ -11,6 +11,7 @@ const MTX = require('../lib/primitives/mtx');
 const FullNode = require('../lib/node/fullnode');
 const pkg = require('../lib/pkg');
 const Network = require('../lib/protocol/network');
+const Script = require('../lib/script/script');
 const network = Network.get('regtest');
 
 const node = new FullNode({
@@ -250,9 +251,44 @@ describe('HTTP', function() {
     ]);
     assert.deepStrictEqual(json, {
       isvalid: true,
+      isscript: false,
+      isspendable: true,
       address: addr.toString(node.network),
-      ismine: false,
-      iswatchonly: false
+      witness_program: addr.hash.toString('hex'),
+      witness_version: addr.version
+    });
+  });
+
+  it('should not validate invalid address', async () => {
+    const json = await nclient.execute('validateaddress', [
+      addr.toString('main')
+    ]);
+    assert.deepStrictEqual(json, {
+      isvalid: false
+    });
+  });
+
+  it('should validate a p2wsh address', async () => {
+    const pubkeys = [];
+    for (let i = 0; i < 2; i++) {
+      const result = await wallet.createAddress('default');
+      pubkeys.push(Buffer.from(result.publicKey, 'hex'));
+    }
+
+    const script = Script.fromMultisig(2, 2, pubkeys);
+    const address = Address.fromScript(script);
+
+    const json = await nclient.execute('validateaddress', [
+      address.toString(node.network)
+    ]);
+
+    assert.deepStrictEqual(json, {
+      address: address.toString(node.network),
+      isscript: true,
+      isspendable: true,
+      isvalid: true,
+      witness_version: address.version,
+      witness_program: address.hash.toString('hex')
     });
   });
 
