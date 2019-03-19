@@ -3,14 +3,14 @@
 
 'use strict';
 
-const assert = require('./util/assert');
-const consensus = require('../lib/protocol/consensus');
-const Address = require('../lib/primitives/address');
-const Outpoint = require('../lib/primitives/outpoint');
-const MTX = require('../lib/primitives/mtx');
-const FullNode = require('../lib/node/fullnode');
-const pkg = require('../lib/pkg');
-const Network = require('../lib/protocol/network');
+const assert = require('../util/assert');
+const consensus = require('../../lib/protocol/consensus');
+const Address = require('../../lib/primitives/address');
+const Outpoint = require('../../lib/primitives/outpoint');
+const MTX = require('../../lib/primitives/mtx');
+const FullNode = require('../../lib/node/fullnode');
+const pkg = require('../../lib/pkg');
+const Network = require('../../lib/protocol/network');
 const network = Network.get('regtest');
 
 const node = new FullNode({
@@ -19,7 +19,7 @@ const node = new FullNode({
   walletAuth: true,
   memory: true,
   workers: true,
-  plugins: [require('../lib/wallet/plugin')]
+  plugins: [require('../../lib/wallet/plugin')]
 });
 
 const {NodeClient, WalletClient} = require('hs-client');

@@ -5,14 +5,14 @@
 'use strict';
 
 const fs = require('fs');
-const {resolve} = require('path');
-const assert = require('./util/assert');
-const Chain = require('../lib/blockchain/chain');
-const WorkerPool = require('../lib/workers/workerpool');
-const Miner = require('../lib/mining/miner');
-const MemWallet = require('./util/memwallet');
-const Network = require('../lib/protocol/network');
-const AirdropProof = require('../lib/primitives/airdropproof');
+const {join} = require('path');
+const assert = require('../util/assert');
+const Chain = require('../../lib/blockchain/chain');
+const WorkerPool = require('../../lib/workers/workerpool');
+const Miner = require('../../lib/mining/miner');
+const MemWallet = require('../util/memwallet');
+const Network = require('../../lib/protocol/network');
+const AirdropProof = require('../../lib/primitives/airdropproof');
 
 const network = Network.get('regtest');
 
@@ -20,8 +20,8 @@ const workers = new WorkerPool({
   enabled: false
 });
 
-const AIRDROP_PROOF_FILE = resolve(__dirname, 'data', 'airdrop-proof.base64');
-const FAUCET_PROOF_FILE = resolve(__dirname, 'data', 'faucet-proof.base64');
+const AIRDROP_PROOF_FILE = join(__dirname, '../data/airdrop-proof.base64');
+const FAUCET_PROOF_FILE = join(__dirname, '../data/faucet-proof.base64');
 const read = file => Buffer.from(fs.readFileSync(file, 'binary'), 'base64');
 
 // Sent to:

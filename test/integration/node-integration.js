@@ -3,16 +3,16 @@
 
 'use strict';
 
-const assert = require('./util/assert');
-const consensus = require('../lib/protocol/consensus');
-const Network = require('../lib/protocol/network');
-const Coin = require('../lib/primitives/coin');
-const Script = require('../lib/script/script');
-const Opcode = require('../lib/script/opcode');
-const FullNode = require('../lib/node/fullnode');
-const MTX = require('../lib/primitives/mtx');
-const TX = require('../lib/primitives/tx');
-const Address = require('../lib/primitives/address');
+const assert = require('../util/assert');
+const consensus = require('../../lib/protocol/consensus');
+const Network = require('../../lib/protocol/network');
+const Coin = require('../../lib/primitives/coin');
+const Script = require('../../lib/script/script');
+const Opcode = require('../../lib/script/opcode');
+const FullNode = require('../../lib/node/fullnode');
+const MTX = require('../../lib/primitives/mtx');
+const TX = require('../../lib/primitives/tx');
+const Address = require('../../lib/primitives/address');
 const network = Network.get('regtest');
 
 const node = new FullNode({
@@ -20,7 +20,7 @@ const node = new FullNode({
   apiKey: 'foo',
   network: 'regtest',
   workers: true,
-  plugins: [require('../lib/wallet/plugin')]
+  plugins: [require('../../lib/wallet/plugin')]
 });
 
 const chain = node.chain;

@@ -4,19 +4,19 @@
 'use strict';
 
 const {encoding} = require('bufio');
-const assert = require('./util/assert');
+const assert = require('../util/assert');
 const random = require('bcrypto/lib/random');
-const consensus = require('../lib/protocol/consensus');
-const Network = require('../lib/protocol/network');
-const Address = require('../lib/primitives/address');
-const TX = require('../lib/primitives/tx');
-const Output = require('../lib/primitives/output');
-const Outpoint = require('../lib/primitives/outpoint');
-const Script = require('../lib/script/script');
-const Witness = require('../lib/script/witness');
-const Input = require('../lib/primitives/input');
-const CoinView = require('../lib/coins/coinview');
-const KeyRing = require('../lib/primitives/keyring');
+const consensus = require('../../lib/protocol/consensus');
+const Network = require('../../lib/protocol/network');
+const Address = require('../../lib/primitives/address');
+const TX = require('../../lib/primitives/tx');
+const Output = require('../../lib/primitives/output');
+const Outpoint = require('../../lib/primitives/outpoint');
+const Script = require('../../lib/script/script');
+const Witness = require('../../lib/script/witness');
+const Input = require('../../lib/primitives/input');
+const CoinView = require('../../lib/coins/coinview');
+const KeyRing = require('../../lib/primitives/keyring');
 
 const MAX_SAFE_INTEGER = Number.MAX_SAFE_INTEGER;
 const MAX_SAFE_ADDITION = 0xfffffffffffff;
