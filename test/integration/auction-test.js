@@ -4,14 +4,14 @@
 
 'use strict';
 
-const assert = require('./util/assert');
-const Chain = require('../lib/blockchain/chain');
-const WorkerPool = require('../lib/workers/workerpool');
-const Miner = require('../lib/mining/miner');
-const MemWallet = require('./util/memwallet');
-const Network = require('../lib/protocol/network');
-const rules = require('../lib/covenants/rules');
-const ownership = require('../lib/covenants/ownership');
+const assert = require('../util/assert');
+const Chain = require('../../lib/blockchain/chain');
+const WorkerPool = require('../../lib/workers/workerpool');
+const Miner = require('../../lib/mining/miner');
+const MemWallet = require('../util/memwallet');
+const Network = require('../../lib/protocol/network');
+const rules = require('../../lib/covenants/rules');
+const ownership = require('../../lib/covenants/ownership');
 
 const network = Network.get('regtest');
 const NAME1 = rules.grindName(10, 20, network);
