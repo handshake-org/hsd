@@ -68,7 +68,8 @@
     "lint-file": "eslint",
     "test": "bmocha --reporter spec test/**/*.js",
     "test-integration": "bmocha --reporter spec test/integration/*.js",
-    "test-browser": "NODE_BACKEND=js bmocha --reporter spec test/**/*.js test/*.js",
+    "test-unit": "bmocha --reporter spec test/**/*-unit.js",
+    "test-browser": "NODE_BACKEND=js bmocha --reporter spec test/**/*.js",
     "test-file": "bmocha --reporter spec",
     "test-file-browser": "NODE_BACKEND=js bmocha --reporter spec",
     "test-ci": "istanbul cover --report lcovonly node_modules/.bin/bmocha -- --reporter spec test/*.js"
