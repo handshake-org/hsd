@@ -4,11 +4,37 @@
 
 ## Install
 
+### Handshake Node
 ```
 $ git clone git://github.com/handshake-org/hsd.git
 $ cd hsd
 $ npm install --production
+```
+
+The `hsd`, `hsd-node`, and `hsd-spvnode` binaries should now be installed in the `bin` directory.
+
+Start `hsd` by:
+```
 $ ./bin/hsd
+```
+
+### Handshake Client
+```
+$ git clone git://github.com/handshake-org/hs-client.git
+$ cd hs-client
+$ npm install --production
+```
+
+The `hsd-cli`, `hsd-rpc`, `hsw-cli`, and `hsw-rpc` binaries should now be installed in the `bin` directory.
+
+### Symlink Binaries (recommended)
+It is recommended to create a symlink `hsd`, `hsd-cli`, `hsd-rpc`, `hsw-cli`, and `hsw-rpc` to the `/usr/local/bin` directory by:
+```
+$ ln -s <full-path>/hsd/bin/hsd /usr/local/bin/hsd
+$ ln -s <full-path>/hs-client/bin/hsd-cli /usr/local/bin/hsd-cli
+$ ln -s <full-path>/hs-client/bin/hsd-rpc /usr/local/bin/hsd-rpc
+$ ln -s <full-path>/hs-client/bin/hsw-cli /usr/local/bin/hsw-cli
+$ ln -s <full-path>/hs-client/bin/hsw-rpc /usr/local/bin/hsw-rpc
 ```
 
 ## Documentation
@@ -54,8 +80,6 @@ com.                    86400   IN      NS      c.gtld-servers.net.
 ...
 ```
 
-## Quickstart
-
 ### Unbound support
 
 HSD currently has a built-in recursive resolver written in javascript, however,
@@ -85,11 +109,54 @@ $ dig @127.0.0.1 -p 5300 org +dnssec
 
 ### Accepting Inbound
 
-To accept inbound connections, add the `--listen` flag.
+Accept inbound connections by adding the `--listen` flag:
 
 ```
 $ hsd --listen --max-inbound=20
 ```
+
+### Account and Wallet Setup
+HSD uses a hierarchical deterministic wallet structure. 
+
+The `hsw-cli` binary is used to interact with the HSD wallet. Make sure you have a `hsd` node running.
+
+Note that any account specific calls can be modified by the `--account=<ACCOUNT_NAME>` flag to access a different account.
+
+View the extended public key and mnemonic details (entropy and phrase information) by:
+
+`$ hsw-cli master`
+
+A wallet has a master key from which many accounts can be derived. It is customary, but not required, to name the initial wallet id `primary`. Make a new wallet by:
+
+`$ hsw-cli mkwallet <WALLET_ID>`
+
+View existing wallets by:
+
+`$ hsw-cli wallets`
+
+View wallet details by:
+
+`$ hsw-cli get`
+
+View the `default` account details, such as the `accountKey`, by:
+
+` $ hsw-cli account get default`
+
+Create a new account by:
+
+`$ hsw-cli account create <NEW ACCOUNT NAME>`
+
+View existing accounts by:
+
+`$ hsw-cli account list`
+
+View the default account balance by:
+
+`$ hsw-cli balance`
+
+Derive a new `address` by:
+
+`$ hsw-cli address --id=<WALLET_ID> --account=<ACCOUNT_NAME>`
 
 ### Mining
 
@@ -223,6 +290,62 @@ All wallet calls should be made with `$ hsw-rpc [call] [arguments...]`.
 - `sendrevoke [name]` - Revoke a name.
 - `importnonce [name] [address] [bid-value]` - Deterministically regenerate a
   bid's nonce.
+
+### CLI Calls
+
+#### Node Calls
+
+All node cli calls should be made with `$ hsd-cli [call] [arguments...]`.
+
+- `info` - Get server info.
+- `broadcast [tx-hex]` - Broadcast transaction.
+- `mempool` - Get mempool snapshot.
+- `tx [hash/address]` - View transactions.
+- `coin [hash+index/address]` - View coins.
+- `block [hash/height]` - View block.
+- `reset [height/hash]` - Reset chain to desired block.
+- `rpc [command] [args]` - Execute RPC command.
+
+#### Wallet Calls
+
+All wallet cli calls should be made with `$ hsw-cli [call] [arguments...]`.
+
+- `mkwallet [wallet-id]` - Create wallet.
+- `listen` - Listen for events.
+- `get` - View wallet.
+- `master` - View wallet master key.
+- `shared add [xpubkey]` - Add key to wallet.
+- `shared remove [xpubkey]` - Remove key from wallet.
+- `balance` - Get wallet balance.
+- `history` - View TX history.
+- `pending` - View pending TXs.
+- `coins` - View wallet coins.
+- `account list` - List account names.
+- `account create [account-name]` - Create account.
+- `account get [account-name]` - Get account details.
+- `address` - Derive new address.
+- `change` - Derive new change address.
+- `nested` - Derive new nested address.
+- `retoken` - Create new api key.
+- `send [address] [value]` - Send transaction.
+- `mktx [address] [value]` - Create transaction.
+- `sign [tx-hex]` - Sign transaction.
+- `zap [age?]` - Zap pending wallet TXs.
+- `tx [hash]` - View transaction details.
+- `blocks` - List wallet blocks.
+- `block [height]` - View wallet block.
+- `view [tx-hex]` - Parse and view transaction.
+- `import [wif|hex]` - Import private or public key.
+- `watch [address]` - Import an address.
+- `key [address]` - Get wallet key by address.
+- `dump [address]` - Get wallet key WIF by address.
+- `lock` - Lock wallet.
+- `unlock [passphrase] [timeout?]` - Unlock wallet.
+- `resend` - Resend pending transactions.
+- `rescan [height]` - Rescan for transactions.
+Other Options:
+-  `--passphrase [passphrase]` - For signing/account-creation.
+-  `--account [account-name]` - Account name.
 
 ### Claiming a name
 
