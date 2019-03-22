@@ -4,6 +4,8 @@
 
 ## Install
 
+`hsd` requires Node.js v10 or higher
+
 ```
 $ git clone git://github.com/handshake-org/hsd.git
 $ cd hsd
