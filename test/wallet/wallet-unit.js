@@ -7,12 +7,16 @@ const assert = require('../util/assert');
 const common = require('../util/common');
 const random = require('bcrypto/lib/random');
 const {HDPrivateKey, Mnemonic, WalletDB, wallet} = require('../../lib/hsd');
+const mnemonics = require('../data/mnemonic-english.json');
 
 describe('Wallet Unit Tests', () => {
   describe('constructor', () => {
-    const xprv = common.readFile('xprv.utf8', 'utf8');
-    const phrase = common.readFile('mnemonic-128bit.utf8', 'utf8');
-    const mnemonic = new Mnemonic(phrase);
+    // abandon, abandon... about
+    const phrase = mnemonics[0][1];
+    const passphrase = mnemonics[0][2];
+    const mnemonic = new Mnemonic(phrase, passphrase);
+    const xprv = HDPrivateKey.fromMnemonic(mnemonic).xprivkey();
+
     let wdb;
 
     // m/44'/5355'/0'
