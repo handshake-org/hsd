@@ -35,7 +35,7 @@ const csvScript2 = new Script([
 const network = Network.get('regtest');
 
 const workers = new WorkerPool({
-  enabled: true
+  enabled: process.browser ? false : true
 });
 
 const chain = new Chain({
