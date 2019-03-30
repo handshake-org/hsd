@@ -78,7 +78,8 @@ describe('Script', function() {
       input.execute(stack);
       output.execute(stack);
 
-      assert.deepEqual(stack.items, [[1], [3], [5]]);
+      const expected = [Buffer.from([1]), Buffer.from([3]), Buffer.from([5])];
+      assert.deepEqual(stack.items, expected)
     }
 
     {
@@ -103,7 +104,8 @@ describe('Script', function() {
       input.execute(stack);
       output.execute(stack);
 
-      assert.deepEqual(stack.items, [[1], [4], [5]]);
+      const expected = [Buffer.from([1]), Buffer.from([4]), Buffer.from([5])];
+      assert.deepEqual(stack.items, expected);
     }
 
     {
@@ -126,7 +128,8 @@ describe('Script', function() {
       input.execute(stack);
       output.execute(stack);
 
-      assert.deepEqual(stack.items, [[1], [3], [5]]);
+      const expected = [Buffer.from([1]), Buffer.from([3]), Buffer.from([5])];
+      assert.deepEqual(stack.items, expected);
     }
 
     {
@@ -149,7 +152,8 @@ describe('Script', function() {
       input.execute(stack);
       output.execute(stack);
 
-      assert.deepEqual(stack.items, [[1], [5]]);
+      const expected = [Buffer.from([1]), Buffer.from([5])];
+      assert.deepEqual(stack.items, expected);
     }
 
     {
@@ -172,7 +176,8 @@ describe('Script', function() {
       input.execute(stack);
       output.execute(stack);
 
-      assert.deepEqual(stack.items, [[1], [3], [5]]);
+      const expected = [Buffer.from([1]), Buffer.from([3]), Buffer.from([5])];
+      assert.deepEqual(stack.items, expected);
     }
   });
 
