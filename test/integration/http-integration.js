@@ -42,6 +42,9 @@ let addr = null;
 let hash = null;
 
 describe('HTTP', function() {
+  if (process.browser)
+    return;
+
   this.timeout(15000);
 
   it('should open node', async () => {

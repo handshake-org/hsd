@@ -91,6 +91,9 @@ async function mineCSV(fund) {
 }
 
 describe('Node', function() {
+  if (process.browser)
+    return;
+
   this.timeout(5000);
 
   it('should open chain and miner', async () => {

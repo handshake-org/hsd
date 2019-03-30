@@ -24,7 +24,7 @@ const ONE_HASH = Buffer.alloc(32, 0x00);
 ONE_HASH[0] = 0x01;
 
 const workers = new WorkerPool({
-  enabled: true
+  enabled: process.browser ? false : true
 });
 
 const chain = new Chain({
@@ -64,7 +64,7 @@ function dummyInput(addr, hash) {
 }
 
 describe('Mempool', function() {
-  this.timeout(5000);
+  this.timeout(process.browser ? 8000 : 5000);
 
   it('should open mempool', async () => {
     await workers.open();

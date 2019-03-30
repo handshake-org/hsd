@@ -378,6 +378,10 @@ describe('Auction', function() {
   });
 
   describe('Claim', function() {
+    // UDP unsupported in the browser
+    if (process.browser)
+      return;
+
     const node = createNode();
     const {chain, miner, cpu} = node;
 
