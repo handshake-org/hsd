@@ -96,7 +96,6 @@ describe('Node', function() {
   if (process.browser)
     return;
 
-
   it('should open chain and miner', async () => {
     miner.mempool = null;
     await node.open();
