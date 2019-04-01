@@ -22,6 +22,11 @@ $ npm run test
 
 To run all tests with the `bcrypto` JavaScript backend:
 ```bash
+$ npm run test-js
+```
+
+To run all tests in the default headless browser
+```bash
 $ npm run test-browser
 ```
 
