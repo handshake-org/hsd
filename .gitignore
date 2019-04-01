@@ -1,5 +1,6 @@
-node_modules/
-docs/reference/
-docker_data/
 browser/hsd*
+build/
+docker_data/
+docs/reference/
+node_modules/
 npm-debug.log
