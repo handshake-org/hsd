@@ -4,7 +4,7 @@
 'use strict';
 
 const assert = require('assert');
-const {Brontide} = require('../lib/net/brontide');
+const {Brontide} = require('../../lib/net/brontide');
 
 const HELLO = Buffer.from('hello', 'ascii');
 const PROLOGUE = 'lightning';

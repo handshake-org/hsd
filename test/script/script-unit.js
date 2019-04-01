@@ -3,16 +3,16 @@
 
 'use strict';
 
-const assert = require('./util/assert');
-const Address = require('../lib/primitives/address');
-const Script = require('../lib/script/script');
-const Witness = require('../lib/script/witness');
-const Stack = require('../lib/script/stack');
-const Opcode = require('../lib/script/opcode');
-const TX = require('../lib/primitives/tx');
-const consensus = require('../lib/protocol/consensus');
+const assert = require('../util/assert');
+const Address = require('../../lib/primitives/address');
+const Script = require('../../lib/script/script');
+const Witness = require('../../lib/script/witness');
+const Stack = require('../../lib/script/stack');
+const Opcode = require('../../lib/script/opcode');
+const TX = require('../../lib/primitives/tx');
+const consensus = require('../../lib/protocol/consensus');
 
-const scripts = require('./data/script-tests.json');
+const scripts = require('../data/script-tests.json');
 
 function isSuccess(stack) {
   if (stack.length === 0)
@@ -78,7 +78,11 @@ describe('Script', function() {
       input.execute(stack);
       output.execute(stack);
 
-      assert.deepEqual(stack.items, [[1], [3], [5]]);
+      assert.deepEqual(stack.items, [
+        Buffer.from([1]),
+        Buffer.from([3]),
+        Buffer.from([5])
+      ]);
     }
 
     {
@@ -103,7 +107,11 @@ describe('Script', function() {
       input.execute(stack);
       output.execute(stack);
 
-      assert.deepEqual(stack.items, [[1], [4], [5]]);
+      assert.deepEqual(stack.items, [
+        Buffer.from([1]),
+        Buffer.from([4]),
+        Buffer.from([5])
+      ]);
     }
 
     {
@@ -126,7 +134,11 @@ describe('Script', function() {
       input.execute(stack);
       output.execute(stack);
 
-      assert.deepEqual(stack.items, [[1], [3], [5]]);
+      assert.deepEqual(stack.items, [
+        Buffer.from([1]),
+        Buffer.from([3]),
+        Buffer.from([5])
+      ]);
     }
 
     {
@@ -149,7 +161,10 @@ describe('Script', function() {
       input.execute(stack);
       output.execute(stack);
 
-      assert.deepEqual(stack.items, [[1], [5]]);
+      assert.deepEqual(stack.items, [
+        Buffer.from([1]),
+        Buffer.from([5])
+      ]);
     }
 
     {
@@ -172,7 +187,11 @@ describe('Script', function() {
       input.execute(stack);
       output.execute(stack);
 
-      assert.deepEqual(stack.items, [[1], [3], [5]]);
+      assert.deepEqual(stack.items, [
+        Buffer.from([1]),
+        Buffer.from([3]),
+        Buffer.from([5])
+      ]);
     }
   });
 

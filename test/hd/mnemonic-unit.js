@@ -3,13 +3,13 @@
 
 'use strict';
 
-const assert = require('./util/assert');
-const Mnemonic = require('../lib/hd/mnemonic');
-const HDPrivateKey = require('../lib/hd/private');
+const assert = require('../util/assert');
+const Mnemonic = require('../../lib/hd/mnemonic');
+const HDPrivateKey = require('../../lib/hd/private');
 
 const tests = {
-  english: require('./data/mnemonic-english.json'),
-  japanese: require('./data/mnemonic-japanese.json')
+  english: require('../data/mnemonic-english.json'),
+  japanese: require('../data/mnemonic-japanese.json')
 };
 
 describe('Mnemonic', function() {

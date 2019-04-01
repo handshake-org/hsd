@@ -3,21 +3,21 @@
 
 'use strict';
 
-const assert = require('./util/assert');
-const consensus = require('../lib/protocol/consensus');
-const Address = require('../lib/primitives/address');
-const Coin = require('../lib/primitives/coin');
-const Script = require('../lib/script/script');
-const Chain = require('../lib/blockchain/chain');
-const WorkerPool = require('../lib/workers/workerpool');
-const Miner = require('../lib/mining/miner');
-const MTX = require('../lib/primitives/mtx');
-const MemWallet = require('./util/memwallet');
-const Network = require('../lib/protocol/network');
-const Output = require('../lib/primitives/output');
-const MerkleBlock = require('../lib/primitives/merkleblock');
-const common = require('../lib/blockchain/common');
-const Opcode = require('../lib/script/opcode');
+const assert = require('../util/assert');
+const consensus = require('../../lib/protocol/consensus');
+const Address = require('../../lib/primitives/address');
+const Coin = require('../../lib/primitives/coin');
+const Script = require('../../lib/script/script');
+const Chain = require('../../lib/blockchain/chain');
+const WorkerPool = require('../../lib/workers/workerpool');
+const Miner = require('../../lib/mining/miner');
+const MTX = require('../../lib/primitives/mtx');
+const MemWallet = require('../util/memwallet');
+const Network = require('../../lib/protocol/network');
+const Output = require('../../lib/primitives/output');
+const MerkleBlock = require('../../lib/primitives/merkleblock');
+const common = require('../../lib/blockchain/common');
+const Opcode = require('../../lib/script/opcode');
 const opcodes = Script.opcodes;
 
 const ZERO_KEY = Buffer.alloc(33, 0x00);
@@ -110,7 +110,7 @@ chain.on('disconnect', (entry, block) => {
 });
 
 describe('Chain', function() {
-  this.timeout(45000);
+  this.timeout(process.browser ? 90000 : 45000);
 
   it('should open chain and miner', async () => {
     await chain.open();
@@ -528,6 +528,9 @@ describe('Chain', function() {
 
     assert(await chain.add(block));
   });
+
+  if (process.browser)
+    return;
 
   it('should mine fail to connect too much weight', async () => {
     const start = chain.height - 2000;

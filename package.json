@@ -54,7 +54,8 @@
     "urkel": "~0.6.2"
   },
   "devDependencies": {
-    "bmocha": "^1.0.0"
+    "bmocha": "^2.0.1",
+    "bpkg": "^0.5.1"
   },
   "main": "./lib/hsd.js",
   "bin": {
@@ -66,11 +67,15 @@
     "lint": "eslint $(cat .eslintfiles) || exit 0",
     "lint-ci": "eslint $(cat .eslintfiles)",
     "lint-file": "eslint",
-    "test": "bmocha --reporter spec test/*.js",
-    "test-browser": "NODE_BACKEND=js bmocha --reporter spec test/*.js",
+    "test": "bmocha --reporter spec test/**/*.js",
+    "test-js": "bmocha -B js --reporter spec test/**/*.js",
+    "test-browser": "bmocha -H --reporter spec test/**/*.js",
+    "test-integration": "bmocha --reporter spec test/integration/*.js",
+    "test-unit": "bmocha --reporter spec test/**/*-unit.js",
     "test-file": "bmocha --reporter spec",
-    "test-file-browser": "NODE_BACKEND=js bmocha --reporter spec",
-    "test-ci": "istanbul cover --report lcovonly node_modules/.bin/bmocha -- --reporter spec test/*.js"
+    "test-file-js": "bmocha -B js --reporter spec",
+    "test-file-browser": "bmocha -H --reporter spec",
+    "test-ci": "istanbul cover --report lcovonly node_modules/.bin/bmocha -- --reporter spec test/**/*.js"
   },
   "browser": {
     "./lib/covenants/reserved": "./lib/covenants/reserved-browser.js",

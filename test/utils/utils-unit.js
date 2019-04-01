@@ -3,10 +3,10 @@
 
 'use strict';
 
-const assert = require('./util/assert');
-const Amount = require('../lib/ui/amount');
-const fixed = require('../lib/utils/fixed');
-const {COIN} = require('../lib/protocol/consensus');
+const assert = require('../util/assert');
+const Amount = require('../../lib/ui/amount');
+const fixed = require('../../lib/utils/fixed');
+const {COIN} = require('../../lib/protocol/consensus');
 
 describe('Utils', function() {
   it('should convert dollarydoos to hns', () => {
