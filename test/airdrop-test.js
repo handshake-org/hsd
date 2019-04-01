@@ -33,7 +33,7 @@ const read = file => Buffer.from(fs.readFileSync(file, 'binary'), 'base64');
 
 // Doxing myself (watch some wiseguy publish this on mainnet):
 const rawProof = read(AIRDROP_PROOF_FILE);
-const rawFaucetProof = read(FAUCET_PROOF_FILE);
+const rawFaucetProof = read(FAUCET_PROOF_FILE); // hs1qmjpjjgpz7dmg37paq9uksx4yjp675690dafg3q
 
 function createNode() {
   const chain = new Chain({
@@ -140,7 +140,7 @@ describe('Airdrop', function() {
     assert(input);
     assert(input.prevout.isNull());
     assert(input.witness.length === 1);
-    assert.strictEqual(output.value, 4639011876);
+    assert.strictEqual(output.value, 4370322008);
 
     assert(await chain.add(block));
   });
@@ -231,7 +231,7 @@ describe('Airdrop', function() {
       assert(input);
       assert(input.prevout.isNull());
       assert(input.witness.length === 1);
-      assert.strictEqual(output.value, 4639011876);
+      assert.strictEqual(output.value, 4370322008);
     }
 
     {
@@ -241,7 +241,7 @@ describe('Airdrop', function() {
       assert(input);
       assert(input.prevout.isNull());
       assert(input.witness.length === 1);
-      assert.strictEqual(output.value, 9279023752 - 100e6);
+      assert.strictEqual(output.value, 8741644016 - 100e6);
     }
 
     assert(await chain.add(block));
@@ -259,7 +259,7 @@ describe('Airdrop', function() {
       assert(await chain.add(block));
     }
 
-    assert.strictEqual(chain.db.state.value, snapshot + 3000e6);
+    assert.strictEqual(chain.db.state.value, snapshot + 6000e6);
   });
 
   it('should prevent double spend with bitfield', async () => {

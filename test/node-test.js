@@ -139,8 +139,8 @@ describe('Node', function() {
   });
 
   it('should have correct chain value', () => {
-    assert.strictEqual(chain.db.state.value, 12002210000);
-    // assert.strictEqual(chain.db.state.coin, 1569);
+    assert.strictEqual(chain.db.state.value, 23002210000);
+    assert.strictEqual(chain.db.state.coin, 21);
     assert.strictEqual(chain.db.state.tx, 21);
   });
 
@@ -148,8 +148,8 @@ describe('Node', function() {
     await new Promise(r => setTimeout(r, 100));
 
     const balance = await wallet.getBalance();
-    assert.strictEqual(balance.unconfirmed, 11000 * consensus.COIN);
-    assert.strictEqual(balance.confirmed, 11000 * consensus.COIN);
+    assert.strictEqual(balance.unconfirmed, 22000 * consensus.COIN);
+    assert.strictEqual(balance.confirmed, 22000 * consensus.COIN);
   });
 
   it('should handle a reorg', async () => {
@@ -176,8 +176,8 @@ describe('Node', function() {
   });
 
   it('should have correct chain value', () => {
-    assert.strictEqual(chain.db.state.value, 13002210000);
-    // assert.strictEqual(chain.db.state.coin, 1570);
+    assert.strictEqual(chain.db.state.value, 25002210000);
+    assert.strictEqual(chain.db.state.coin, 22);
     assert.strictEqual(chain.db.state.tx, 22);
   });
 
@@ -185,8 +185,8 @@ describe('Node', function() {
     await new Promise(r => setTimeout(r, 100));
 
     const balance = await wallet.getBalance();
-    assert.strictEqual(balance.unconfirmed, 22000 * consensus.COIN);
-    assert.strictEqual(balance.confirmed, 12000 * consensus.COIN);
+    assert.strictEqual(balance.unconfirmed, 44000 * consensus.COIN);
+    assert.strictEqual(balance.confirmed, 24000 * consensus.COIN);
   });
 
   it('should check main chain', async () => {
@@ -240,8 +240,8 @@ describe('Node', function() {
   });
 
   it('should have correct chain value', () => {
-    assert.strictEqual(chain.db.state.value, 14002210000);
-    // assert.strictEqual(chain.db.state.coin, 1572);
+    assert.strictEqual(chain.db.state.value, 27002210000);
+    assert.strictEqual(chain.db.state.coin, 24);
     assert.strictEqual(chain.db.state.tx, 24);
   });
 
@@ -264,8 +264,8 @@ describe('Node', function() {
     await new Promise(r => setTimeout(r, 100));
 
     const balance = await wallet.getBalance();
-    assert.strictEqual(balance.unconfirmed, 25000 * consensus.COIN);
-    assert.strictEqual(balance.confirmed, 15000 * consensus.COIN);
+    assert.strictEqual(balance.unconfirmed, 50000 * consensus.COIN);
+    assert.strictEqual(balance.confirmed, 30000 * consensus.COIN);
 
     assert((await wallet.receiveDepth()) >= 7);
     assert((await wallet.changeDepth()) >= 6);
@@ -407,7 +407,7 @@ describe('Node', function() {
 
   it('should rescan for transactions', async () => {
     await wdb.rescan(0);
-    assert.strictEqual((await wallet.getBalance()).confirmed, 18980000000);
+    assert.strictEqual((await wallet.getBalance()).confirmed, 37980000000);
   });
 
   it('should reset miner mempool', async () => {
@@ -456,7 +456,7 @@ describe('Node', function() {
         longpollid: node.chain.tip.hash.toString('hex') + '00000000',
         submitold: false,
         coinbaseaux: { flags: '6d696e656420627920687364' },
-        coinbasevalue: 1000000000,
+        coinbasevalue: 2000000000,
         coinbasetxn: undefined,
         claims: [],
         airdrops: [],
@@ -598,7 +598,7 @@ describe('Node', function() {
     // XXX
     // assert.strictEqual(result.transactions[0].hash, tx1.txid());
     // assert.strictEqual(result.transactions[1].hash, tx2.txid());
-    assert.strictEqual(result.coinbasevalue, 1000 * consensus.COIN + fees);
+    assert.strictEqual(result.coinbasevalue, 2000 * consensus.COIN + fees);
   });
 
   it('should get raw transaction', async () => {
@@ -654,7 +654,7 @@ describe('Node', function() {
     // XXX
     // assert.strictEqual(result.transactions[0].hash, tx2.txid());
     // assert.strictEqual(result.transactions[1].hash, tx1.txid());
-    assert.strictEqual(result.coinbasevalue, 1000 * consensus.COIN + fees);
+    assert.strictEqual(result.coinbasevalue, 2000 * consensus.COIN + fees);
   });
 
   it('should cleanup', async () => {

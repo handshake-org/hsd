@@ -13,16 +13,16 @@ describe('Consensus', function() {
     let total = 0;
 
     for (;;) {
-      const reward = consensus.getReward(height, 340000);
-      assert(reward <= consensus.COIN * 1000);
+      const reward = consensus.getReward(height, 170000);
+      assert(reward <= consensus.COIN * 2000);
       total += reward;
       if (reward === 0)
         break;
       height++;
     }
 
-    assert.strictEqual(height, 10200000);
-    assert.strictEqual(total, 679999995580000);
+    assert.strictEqual(height, 5270000);
+    assert.strictEqual(total, 679999997790000);
   });
 
   it('should verify proof-of-work', () => {
