@@ -24,7 +24,7 @@ const ONE_HASH = Buffer.alloc(32, 0x00);
 ONE_HASH[0] = 0x01;
 
 const workers = new WorkerPool({
-  enabled: process.browser ? false : true
+  enabled: true
 });
 
 const chain = new Chain({

@@ -26,7 +26,7 @@ const KEY1 = 'xprv9s21ZrQH143K3Aj6xQBymM31Zb4BVc7wxqfUhMZrzewdDVCt'
 const KEY2 = 'xprv9s21ZrQH143K3mqiSThzPtWAabQ22Pjp3uSNnZ53A5bQ4udp'
   + 'faKekc2m4AChLYH1XDzANhrSdxHYWUeTWjYJwFwWFyHkTMnMeAcW4JyRCZa';
 
-const enabled = process.browser ? false : true;
+const enabled = true;
 const network = Network.get('main');
 const workers = new WorkerPool({ enabled });
 const wdb = new WalletDB({ network, workers });
@@ -74,7 +74,7 @@ function dummyInput() {
 }
 
 describe('Wallet', function() {
-  this.timeout(process.browser ? 10000 : 5000);
+  this.timeout(process.browser ? 20000 : 5000);
 
   it('should open walletdb', async () => {
     network.coinbaseMaturity = 1;

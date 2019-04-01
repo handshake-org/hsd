@@ -35,7 +35,7 @@ const csvScript2 = new Script([
 const network = Network.get('regtest');
 
 const workers = new WorkerPool({
-  enabled: process.browser ? false : true
+  enabled: true
 });
 
 const chain = new Chain({
@@ -110,7 +110,7 @@ chain.on('disconnect', (entry, block) => {
 });
 
 describe('Chain', function() {
-  this.timeout(45000);
+  this.timeout(process.browser ? 90000 : 45000);
 
   it('should open chain and miner', async () => {
     await chain.open();
@@ -528,6 +528,9 @@ describe('Chain', function() {
 
     assert(await chain.add(block));
   });
+
+  if (process.browser)
+    return;
 
   it('should mine fail to connect too much weight', async () => {
     const start = chain.height - 2000;
