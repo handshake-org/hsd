@@ -5,7 +5,7 @@
 'use strict';
 
 const bio = require('bufio');
-const assert = require('./util/assert');
+const assert = require('bsert');
 const Output = require('../lib/primitives/output');
 const Input = require('../lib/primitives/input');
 const Outpoint = require('../lib/primitives/outpoint');

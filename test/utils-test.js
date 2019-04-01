@@ -3,7 +3,7 @@
 
 'use strict';
 
-const assert = require('./util/assert');
+const assert = require('bsert');
 const Amount = require('../lib/ui/amount');
 const fixed = require('../lib/utils/fixed');
 const {COIN} = require('../lib/protocol/consensus');

@@ -5,7 +5,7 @@
 'use strict';
 
 const Coin = require('../lib/primitives/coin');
-const assert = require('./util/assert');
+const assert = require('bsert');
 const common = require('../test/util/common');
 
 describe('Coin', function() {

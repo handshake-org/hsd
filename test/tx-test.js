@@ -4,7 +4,7 @@
 'use strict';
 
 const {encoding} = require('bufio');
-const assert = require('./util/assert');
+const assert = require('bsert');
 const random = require('bcrypto/lib/random');
 const consensus = require('../lib/protocol/consensus');
 const Network = require('../lib/protocol/network');

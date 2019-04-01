@@ -6,7 +6,7 @@
 
 const fs = require('fs');
 const {resolve} = require('path');
-const assert = require('./util/assert');
+const assert = require('bsert');
 const Chain = require('../lib/blockchain/chain');
 const WorkerPool = require('../lib/workers/workerpool');
 const Miner = require('../lib/mining/miner');

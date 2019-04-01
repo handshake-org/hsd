@@ -5,7 +5,7 @@
 'use strict';
 
 const {BloomFilter} = require('bfilter');
-const assert = require('./util/assert');
+const assert = require('bsert');
 const common = require('./util/common');
 const Block = require('../lib/primitives/block');
 const MerkleBlock = require('../lib/primitives/merkleblock');

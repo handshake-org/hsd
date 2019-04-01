@@ -3,7 +3,7 @@
 
 'use strict';
 
-const assert = require('./util/assert');
+const assert = require('bsert');
 const Address = require('../lib/primitives/address');
 const Script = require('../lib/script/script');
 const Witness = require('../lib/script/witness');
@@ -78,7 +78,11 @@ describe('Script', function() {
       input.execute(stack);
       output.execute(stack);
 
-      assert.deepEqual(stack.items, [[1], [3], [5]]);
+      assert.deepEqual(stack.items, [
+        Buffer.from([1]),
+        Buffer.from([3]),
+        Buffer.from([5])
+      ]);
     }
 
     {
@@ -103,7 +107,11 @@ describe('Script', function() {
       input.execute(stack);
       output.execute(stack);
 
-      assert.deepEqual(stack.items, [[1], [4], [5]]);
+      assert.deepEqual(stack.items, [
+        Buffer.from([1]),
+        Buffer.from([4]),
+        Buffer.from([5])
+      ]);
     }
 
     {
@@ -126,7 +134,11 @@ describe('Script', function() {
       input.execute(stack);
       output.execute(stack);
 
-      assert.deepEqual(stack.items, [[1], [3], [5]]);
+      assert.deepEqual(stack.items, [
+        Buffer.from([1]),
+        Buffer.from([3]),
+        Buffer.from([5])
+      ]);
     }
 
     {
@@ -149,7 +161,10 @@ describe('Script', function() {
       input.execute(stack);
       output.execute(stack);
 
-      assert.deepEqual(stack.items, [[1], [5]]);
+      assert.deepEqual(stack.items, [
+        Buffer.from([1]),
+        Buffer.from([5])
+      ]);
     }
 
     {
@@ -172,7 +187,11 @@ describe('Script', function() {
       input.execute(stack);
       output.execute(stack);
 
-      assert.deepEqual(stack.items, [[1], [3], [5]]);
+      assert.deepEqual(stack.items, [
+        Buffer.from([1]),
+        Buffer.from([3]),
+        Buffer.from([5])
+      ]);
     }
   });
 
@@ -304,7 +323,7 @@ describe('Script', function() {
       }
 
       if (result !== 'OK') {
-        assert.typeOf(err, 'error');
+        assert(err instanceof Error);
         assert.strictEqual(err.code, result);
         return;
       }

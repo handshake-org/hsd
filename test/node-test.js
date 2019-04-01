@@ -3,7 +3,7 @@
 
 'use strict';
 
-const assert = require('./util/assert');
+const assert = require('bsert');
 const consensus = require('../lib/protocol/consensus');
 const Network = require('../lib/protocol/network');
 const Coin = require('../lib/primitives/coin');
@@ -421,11 +421,11 @@ describe('Node', function() {
       id: '1'
     }, {});
 
-    assert.typeOf(json.result, 'object');
-    assert.typeOf(json.result.curtime, 'number');
-    assert.typeOf(json.result.mintime, 'number');
-    assert.typeOf(json.result.maxtime, 'number');
-    assert.typeOf(json.result.expires, 'number');
+    assert(json.result && typeof json.result === 'object');
+    assert(typeof json.result.curtime === 'number');
+    assert(typeof json.result.mintime === 'number');
+    assert(typeof json.result.maxtime === 'number');
+    assert(typeof json.result.expires === 'number');
 
     assert.deepStrictEqual(json, {
       result: {

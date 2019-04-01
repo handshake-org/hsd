@@ -3,7 +3,7 @@
 
 'use strict';
 
-const assert = require('./util/assert');
+const assert = require('bsert');
 const consensus = require('../lib/protocol/consensus');
 const Address = require('../lib/primitives/address');
 const Outpoint = require('../lib/primitives/outpoint');
@@ -61,9 +61,9 @@ describe('HTTP', function() {
     const info = await nclient.getInfo();
     assert.strictEqual(info.network, node.network.type);
     assert.strictEqual(info.version, pkg.version);
-    assert.typeOf(info.pool, 'object');
+    assert(info.pool);
     assert.strictEqual(info.pool.agent, node.pool.options.agent);
-    assert.typeOf(info.chain, 'object');
+    assert(info.chain);
     assert.strictEqual(info.chain.height, 0);
   });
 
@@ -72,7 +72,7 @@ describe('HTTP', function() {
     assert.strictEqual(info.id, 'test');
     const acct = await wallet.getAccount('default');
     const str = acct.receiveAddress;
-    assert.typeOf(str, 'string');
+    assert(typeof str === 'string');
     addr = Address.fromString(str, node.network);
   });
 
