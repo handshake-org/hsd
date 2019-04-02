@@ -511,10 +511,12 @@ describe('Node', function() {
     }, {});
 
     assert.deepStrictEqual(json.result, {
-      isvalid: true,
       address: addr.toString(node.network),
-      ismine: false,
-      iswatchonly: false
+      isvalid: true,
+      isscript: false,
+      isspendable: true,
+      witness_version: addr.version,
+      witness_program: addr.hash.toString('hex')
     });
   });
 
