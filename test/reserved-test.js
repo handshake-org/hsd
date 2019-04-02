@@ -1,6 +1,7 @@
 'use strict';
 
 const assert = require('bsert');
+const fs = require('bfile');
 const reserved = require('../lib/covenants/reserved');
 
 describe('Reserved', function() {
@@ -44,5 +45,54 @@ describe('Reserved', function() {
       value: 10200566471548,
       root: false
     });
+  });
+
+  it('should get all names', async () => {
+    const map = await fs.readJSON(`${__dirname}/../lib/covenants/names.json`);
+    const zeroHash = Buffer.alloc(32, 0x00).toString('hex');
+    const [, nameValue, rootValue] = map[zeroHash];
+    const names = [];
+
+    let total = 0;
+
+    for (const hash of Object.keys(map)) {
+      const item = map[hash];
+
+      if (hash === zeroHash)
+        continue;
+
+      const [name, flags] = item;
+      const root = (flags & 1) !== 0;
+      const zero = (flags & 2) !== 0;
+      const custom = (flags & 4) !== 0;
+
+      let value = root ? rootValue : nameValue;
+
+      if (custom)
+        value += item[2];
+
+      if (zero)
+        value = 0;
+
+      names.push({
+        name: name.split('.')[0],
+        hash: Buffer.from(hash, 'hex'),
+        target: name,
+        value,
+        root
+      });
+
+      total += value;
+    }
+
+    for (const item of names) {
+      assert.deepStrictEqual(reserved.get(item.hash), item);
+      assert(reserved.has(item.hash));
+
+      assert.deepStrictEqual(reserved.getByName(item.name), item);
+      assert(reserved.hasByName(item.name));
+    }
+
+    assert.strictEqual(total, 203999999937640 - (10200000 * 1e6));
   });
 });
