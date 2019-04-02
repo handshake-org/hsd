@@ -3,21 +3,21 @@
 
 'use strict';
 
-const assert = require('./util/assert');
-const consensus = require('../lib/protocol/consensus');
-const Address = require('../lib/primitives/address');
-const Coin = require('../lib/primitives/coin');
-const Script = require('../lib/script/script');
-const Chain = require('../lib/blockchain/chain');
-const WorkerPool = require('../lib/workers/workerpool');
-const Miner = require('../lib/mining/miner');
-const MTX = require('../lib/primitives/mtx');
-const MemWallet = require('./util/memwallet');
-const Network = require('../lib/protocol/network');
-const Output = require('../lib/primitives/output');
-const MerkleBlock = require('../lib/primitives/merkleblock');
-const common = require('../lib/blockchain/common');
-const Opcode = require('../lib/script/opcode');
+const assert = require('../util/assert');
+const consensus = require('../../lib/protocol/consensus');
+const Address = require('../../lib/primitives/address');
+const Coin = require('../../lib/primitives/coin');
+const Script = require('../../lib/script/script');
+const Chain = require('../../lib/blockchain/chain');
+const WorkerPool = require('../../lib/workers/workerpool');
+const Miner = require('../../lib/mining/miner');
+const MTX = require('../../lib/primitives/mtx');
+const MemWallet = require('../util/memwallet');
+const Network = require('../../lib/protocol/network');
+const Output = require('../../lib/primitives/output');
+const MerkleBlock = require('../../lib/primitives/merkleblock');
+const common = require('../../lib/blockchain/common');
+const Opcode = require('../../lib/script/opcode');
 const opcodes = Script.opcodes;
 
 const ZERO_KEY = Buffer.alloc(33, 0x00);

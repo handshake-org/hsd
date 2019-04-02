@@ -3,8 +3,8 @@
 
 'use strict';
 
-const Headers = require('../lib/primitives/headers');
-const assert = require('./util/assert');
+const Headers = require('../../lib/primitives/headers');
+const assert = require('../util/assert');
 
 describe('Headers', function() {
   it('should match headers size', () => {

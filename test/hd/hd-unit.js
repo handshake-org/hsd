@@ -6,9 +6,9 @@
 const {base58} = require('bstring');
 const pbkdf2 = require('bcrypto/lib/pbkdf2');
 const sha512 = require('bcrypto/lib/sha512');
-const assert = require('./util/assert');
-const HD = require('../lib/hd');
-const vectors = require('./data/hd.json');
+const assert = require('../util/assert');
+const HD = require('../../lib/hd');
+const vectors = require('../data/hd.json');
 const vector1 = vectors.vector1;
 const vector2 = vectors.vector2;
 

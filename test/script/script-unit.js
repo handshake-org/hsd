@@ -3,16 +3,16 @@
 
 'use strict';
 
-const assert = require('./util/assert');
-const Address = require('../lib/primitives/address');
-const Script = require('../lib/script/script');
-const Witness = require('../lib/script/witness');
-const Stack = require('../lib/script/stack');
-const Opcode = require('../lib/script/opcode');
-const TX = require('../lib/primitives/tx');
-const consensus = require('../lib/protocol/consensus');
+const assert = require('../util/assert');
+const Address = require('../../lib/primitives/address');
+const Script = require('../../lib/script/script');
+const Witness = require('../../lib/script/witness');
+const Stack = require('../../lib/script/stack');
+const Opcode = require('../../lib/script/opcode');
+const TX = require('../../lib/primitives/tx');
+const consensus = require('../../lib/protocol/consensus');
 
-const scripts = require('./data/script-tests.json');
+const scripts = require('../data/script-tests.json');
 
 function isSuccess(stack) {
   if (stack.length === 0)

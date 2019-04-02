@@ -3,21 +3,21 @@
 
 'use strict';
 
-const assert = require('./util/assert');
+const assert = require('../util/assert');
 const random = require('bcrypto/lib/random');
-const MempoolEntry = require('../lib/mempool/mempoolentry');
-const Mempool = require('../lib/mempool/mempool');
-const WorkerPool = require('../lib/workers/workerpool');
-const Chain = require('../lib/blockchain/chain');
-const MTX = require('../lib/primitives/mtx');
-const Coin = require('../lib/primitives/coin');
-const KeyRing = require('../lib/primitives/keyring');
-const Address = require('../lib/primitives/address');
-const Outpoint = require('../lib/primitives/outpoint');
-const Script = require('../lib/script/script');
-const Witness = require('../lib/script/witness');
-const CoinView = require('../lib/coins/coinview');
-const MemWallet = require('./util/memwallet');
+const MempoolEntry = require('../../lib/mempool/mempoolentry');
+const Mempool = require('../../lib/mempool/mempool');
+const WorkerPool = require('../../lib/workers/workerpool');
+const Chain = require('../../lib/blockchain/chain');
+const MTX = require('../../lib/primitives/mtx');
+const Coin = require('../../lib/primitives/coin');
+const KeyRing = require('../../lib/primitives/keyring');
+const Address = require('../../lib/primitives/address');
+const Outpoint = require('../../lib/primitives/outpoint');
+const Script = require('../../lib/script/script');
+const Witness = require('../../lib/script/witness');
+const CoinView = require('../../lib/coins/coinview');
+const MemWallet = require('../util/memwallet');
 const ALL = Script.hashType.ALL;
 
 const ONE_HASH = Buffer.alloc(32, 0x00);

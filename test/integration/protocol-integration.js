@@ -4,17 +4,17 @@
 
 'use strict';
 
-const assert = require('./util/assert');
-const Network = require('../lib/protocol/network');
-const util = require('../lib/utils/util');
-const NetAddress = require('../lib/net/netaddress');
-const Framer = require('../lib/net/framer');
-const Parser = require('../lib/net/parser');
-const packets = require('../lib/net/packets');
+const assert = require('../util/assert');
+const Network = require('../../lib/protocol/network');
+const util = require('../../lib/utils/util');
+const NetAddress = require('../../lib/net/netaddress');
+const Framer = require('../../lib/net/framer');
+const Parser = require('../../lib/net/parser');
+const packets = require('../../lib/net/packets');
 const network = Network.get('main');
 
 describe('Protocol', function() {
-  const pkg = require('../lib/pkg');
+  const pkg = require('../../lib/pkg');
   const agent = `/${pkg.name}:${pkg.version}/`;
 
   let parser, framer;
