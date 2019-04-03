@@ -1,6 +1,6 @@
 {
   "name": "namebase-hsd",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "private": false,
   "description": "Cryptocurrency bike-shed",
   "license": "MIT",
@@ -48,7 +48,6 @@
     "bval": "~0.1.6",
     "bweb": "~0.1.8",
     "goosig": "~0.1.0",
-    "hs-client": "~0.0.6",
     "mrmr": "~0.1.8",
     "n64": "~0.2.9",
     "namebase-hs-client": "=0.0.2",
