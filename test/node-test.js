@@ -139,7 +139,7 @@ describe('Node', function() {
   });
 
   it('should have correct chain value', () => {
-    assert.strictEqual(chain.db.state.value, 23002210000);
+    assert.strictEqual(chain.db.state.value, 24002210000);
     assert.strictEqual(chain.db.state.coin, 21);
     assert.strictEqual(chain.db.state.tx, 21);
   });
@@ -176,7 +176,7 @@ describe('Node', function() {
   });
 
   it('should have correct chain value', () => {
-    assert.strictEqual(chain.db.state.value, 25002210000);
+    assert.strictEqual(chain.db.state.value, 26002210000);
     assert.strictEqual(chain.db.state.coin, 22);
     assert.strictEqual(chain.db.state.tx, 22);
   });
@@ -240,7 +240,7 @@ describe('Node', function() {
   });
 
   it('should have correct chain value', () => {
-    assert.strictEqual(chain.db.state.value, 27002210000);
+    assert.strictEqual(chain.db.state.value, 28002210000);
     assert.strictEqual(chain.db.state.coin, 24);
     assert.strictEqual(chain.db.state.tx, 24);
   });
