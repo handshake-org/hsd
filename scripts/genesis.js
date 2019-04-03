@@ -78,19 +78,19 @@ function createGenesisBlock(options) {
 
 const blocks = {
   main: createGenesisBlock({
-    time: 1548148523,
+    time: 1554268735,
     bits: networks.main.pow.bits
   }),
   testnet: createGenesisBlock({
-    time: 1548148524,
+    time: 1554268735,
     bits: networks.testnet.pow.bits
   }),
   regtest: createGenesisBlock({
-    time: 1548148525,
+    time: 1554268735,
     bits: networks.regtest.pow.bits
   }),
   simnet: createGenesisBlock({
-    time: 1548148526,
+    time: 1554268735,
     bits: networks.simnet.pow.bits
   })
 };
