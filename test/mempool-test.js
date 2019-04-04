@@ -233,6 +233,63 @@ describe('Mempool', function() {
     }));
   });
 
+  it('should get spent coins and reflect in coinview', async () => {
+    const wallet = new MemWallet();
+    const addr = wallet.getAddress();
+
+    const dummyCoin = dummyInput(addr, random.randomBytes(32));
+
+    const mtx1 = new MTX();
+    mtx1.addOutput(wallet.getAddress(), 50000);
+    mtx1.addCoin(dummyCoin);
+
+    wallet.sign(mtx1);
+
+    const tx1 = mtx1.toTX();
+    const coin1 = Coin.fromTX(tx1, 0, -1);
+
+    const mtx2 = new MTX();
+    mtx2.addOutput(wallet.getAddress(), 10000);
+    mtx2.addOutput(wallet.getAddress(), 30000); // 10k fee
+    mtx2.addCoin(coin1);
+
+    wallet.sign(mtx2);
+
+    const tx2 = mtx2.toTX();
+
+    await mempool.addTX(tx1);
+
+    {
+      const view = await mempool.getCoinView(tx2);
+      const sview = await mempool.getCoinView(tx2);
+      assert(view.hasEntry(coin1));
+      assert(sview.hasEntry(coin1));
+      assert.strictEqual(mempool.hasCoin(coin1.hash, coin1.index), true);
+      assert.strictEqual(mempool.isSpent(coin1.hash, coin1.index), false);
+    }
+
+    await mempool.addTX(tx2);
+
+    {
+      const view = await mempool.getCoinView(tx1);
+      const sview = await mempool.getSpentView(tx1);
+
+      assert(!view.hasEntry(dummyCoin));
+      assert(sview.hasEntry(dummyCoin));
+      assert.strictEqual(mempool.hasCoin(coin1.hash, coin1.index), false);
+      assert.strictEqual(mempool.isSpent(coin1.hash, coin1.index), true);
+    }
+
+    {
+      const view = await mempool.getCoinView(tx2);
+      const sview = await mempool.getSpentView(tx2);
+      assert(!view.hasEntry(coin1));
+      assert(sview.hasEntry(coin1));
+      assert.strictEqual(mempool.hasCoin(coin1.hash, coin1.index), false);
+      assert.strictEqual(mempool.isSpent(coin1.hash, coin1.index), true);
+    }
+  });
+
   it('should handle locktime', async () => {
     const key = KeyRing.generate();
     const addr = key.getAddress();
@@ -439,6 +496,8 @@ describe('Mempool', function() {
       workers,
       memory: true
     });
+
+    const wallet = new MemWallet();
 
     const COINBASE_MATURITY = mempool.network.coinbaseMaturity;
     const TREE_INTERVAL = mempool.network.names.treeInterval;
