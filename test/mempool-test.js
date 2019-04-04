@@ -178,6 +178,59 @@ describe('Mempool', function() {
     }));
   });
 
+  it('should get spent coins and reflect in coinview', async () => {
+    const key = KeyRing.generate();
+    const addr = key.getAddress();
+
+    const dummyCoin = dummyInput(addr, random.randomBytes(32));
+
+    const mtx1 = new MTX();
+    mtx1.addOutput(key.getAddress(), 50000);
+    mtx1.addCoin(dummyCoin);
+
+    const script = Script.fromPubkeyhash(key.getHash());
+    const sig = mtx1.signature(0, script, 70000, key.privateKey, ALL);
+    mtx1.inputs[0].witness = Witness.fromItems([sig, key.publicKey]);
+
+    const tx1 = mtx1.toTX();
+    const coin1 = Coin.fromTX(tx1, 0, -1);
+
+    const mtx2 = new MTX();
+    mtx2.addOutput(wallet.getAddress(), 10000);
+    mtx2.addOutput(wallet.getAddress(), 30000); // 10k fee
+    mtx2.addCoin(coin1);
+
+    const script2 = Script.fromPubkeyhash(mtx1.outputs[0].address.hash);
+    const sig2 = mtx2.signature(0, script2, 50000, key.privateKey, ALL);
+    mtx2.inputs[0].witness = Witness.fromItems([sig2, key.publicKey]);
+
+    const tx2 = mtx2.toTX();
+
+    await mempool.addTX(tx1);
+
+    {
+      const view = await mempool.getCoinView(tx2);
+      assert(view.hasEntry(coin1));
+    }
+
+    await mempool.addTX(tx2);
+
+    {
+      const view = await mempool.getCoinView(tx1);
+      const sview = await mempool.getSpentView(tx1);
+
+      assert(!view.hasEntry(dummyCoin));
+      assert(sview.hasEntry(dummyCoin));
+    }
+
+    {
+      const view = await mempool.getCoinView(tx2);
+      const sview = await mempool.getSpentView(tx2);
+      assert(!view.hasEntry(coin1));
+      assert(sview.hasEntry(coin1));
+    }
+  });
+
   it('should handle locktime', async () => {
     const key = KeyRing.generate();
     const addr = key.getAddress();
