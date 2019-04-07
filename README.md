@@ -9,6 +9,9 @@
 ```
 $ git clone git://github.com/handshake-org/hsd.git
 $ cd hsd
+$ (tr : \\n <<< $PATH | while read p ; do ls -l $p/python* 2> /dev/null ; done) | sort
+$ (install python2 if you find none from the above output, or do the following if you have python3 as default)
+$ npm config set python /usr/bin/python2.7 
 $ npm install --production
 $ ./bin/hsd
 ```
