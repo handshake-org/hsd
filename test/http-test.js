@@ -12,6 +12,7 @@ const Script = require('../lib/script/script');
 const FullNode = require('../lib/node/fullnode');
 const pkg = require('../lib/pkg');
 const Network = require('../lib/protocol/network');
+const rules = require('../lib/covenants/rules');
 const network = Network.get('regtest');
 
 const node = new FullNode({
@@ -307,6 +308,26 @@ describe('HTTP', function() {
       isvalid: true,
       witness_version: nullAddr.version,
       witness_program: nullAddr.hash.toString('hex')
+    });
+  });
+
+  it('should get name info', async () => {
+    const name = 'foobar';
+    const json = await nclient.get(`/info/name/${name}`);
+
+    const info = await nclient.getInfo();
+    const nameHash = rules.hashName(name);
+    const height = info.chain.height;
+    const [start, week] = rules.getRollout(nameHash, node.network);
+    const reserved = rules.isReserved(nameHash, height + 1, node.network);
+
+    assert.deepStrictEqual(json, {
+      start: {
+        reserved: reserved,
+        week: week,
+        start: start
+      },
+      info: null
     });
   });
 
