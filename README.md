@@ -95,8 +95,7 @@ $ hsd --listen --max-inbound=20
 
 ### Mining
 
-To mine with getwork on a GPU, HSD should be used in combination with
-[hs-miner] and [hs-client].
+To mine with a CPU, HSD should be used in combination with [hs-client].
 
 ``` bash
 # To boot and listen publicly on the HTTP server...
@@ -105,12 +104,12 @@ $ hsd --http-host '::' --api-key 'hunter2' \
   --coinbase-address 'ts1qsu62stru80svj5xk6mescy65v0lhg8xxtweqsr'
 ```
 
-Once HSD is running, we can run [hs-miner] on a machine with a CUDA-capable
-GPU and point it at our full node.
+Once HSD is running, we can use [hs-client] to activate the miner
+using the `setgenerate` RPC.
 
 ``` bash
-$ hs-miner --rpc-host 'my-ip-address' \
-  --rpc-user hnsrpc --rpc-pass 'hunter2'
+$ hsd-rpc --http-host 'my-ip-address' \
+  --api-key 'hunter2' setgenerate true 1
 ```
 
 ### Airdrop & Faucet
