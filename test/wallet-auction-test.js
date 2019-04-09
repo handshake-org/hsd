@@ -4,7 +4,7 @@
 
 'use strict';
 
-const assert = require('./util/assert');
+const assert = require('bsert');
 const Chain = require('../lib/blockchain/chain');
 const WorkerPool = require('../lib/workers/workerpool');
 const Miner = require('../lib/mining/miner');
@@ -18,8 +18,6 @@ const NAME1 = rules.grindName(10, 20, network);
 const workers = new WorkerPool({
   enabled: false
 });
-
-network.coinbaseMaturity = 1;
 
 const chain = new Chain({
   memory: true,
@@ -43,6 +41,15 @@ describe('Wallet Auction', function() {
   this.timeout(15000);
 
   let winner;
+  const currentCBMaturity = network.coinbaseMaturity;
+
+  before(() => {
+    network.coinbaseMaturity = 1;
+  });
+
+  after(() => {
+    network.coinbaseMaturity = currentCBMaturity;
+  });
 
   it('should open chain, miner and wallet', async () => {
     await chain.open();
