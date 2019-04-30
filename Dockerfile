@@ -12,7 +12,7 @@ COPY package.json \
 
 # Install build dependencies and compile
 FROM base AS build
-RUN apk add --no-cache g++ gcc make python2
+RUN apk add --no-cache g++ gcc make python2 gmp-dev
 RUN npm install --production
 
 FROM base
