@@ -14,9 +14,12 @@ const Coin = require('../lib/primitives/coin');
 const KeyRing = require('../lib/primitives/keyring');
 const Address = require('../lib/primitives/address');
 const Outpoint = require('../lib/primitives/outpoint');
+const Block = require('../lib/primitives/block');
 const Script = require('../lib/script/script');
 const Witness = require('../lib/script/witness');
 const CoinView = require('../lib/coins/coinview');
+const util = require('../lib/utils/util');
+const consensus = require('../lib/protocol/consensus');
 const MemWallet = require('./util/memwallet');
 const ALL = Script.hashType.ALL;
 
@@ -61,6 +64,38 @@ function dummyInput(addr, hash) {
   mempool.trackEntry(entry, view);
 
   return Coin.fromTX(fund, 0, -1);
+}
+
+async function dummyBlock(txs, coinbase = false) {
+  if (coinbase) {
+    const cb = new MTX();
+    cb.locktime = chain.height + 1;
+    txs = [cb, ...txs];
+  }
+
+  const view = new CoinView();
+  for (const tx of txs) {
+    view.addTX(tx, -1);
+  }
+
+  const now = util.now();
+  const time = chain.tip.time <= now ? chain.tip.time + 1 : now;
+
+  const block = new Block({
+    version: 1,
+    prevBlock: Buffer.from(chain.tip.hash, 'hex'),
+    merkleRoot: random.randomBytes(32),
+    witnessRoot: random.randomBytes(32),
+    treeRoot: random.randomBytes(32),
+    filterRoot: random.randomBytes(32),
+    reservedRoot: random.randomBytes(32),
+    time: time,
+    bits: await chain.getTarget(time, chain.tip),
+    nonce: Buffer.alloc(consensus.NONCE_SIZE),
+    txs: txs
+  });
+
+  return [block, view];
 }
 
 describe('Mempool', function() {
@@ -296,6 +331,62 @@ describe('Mempool', function() {
     await mempool.addBlock({ height: 1 }, [tx.toTX()], new CoinView());
 
     assert(!mempool.hasReject(cachedTX.hash()));
+  });
+
+  it('should remove tx after being included in block', async () => {
+    const key = KeyRing.generate();
+    const addr = key.getAddress();
+
+    const t1 = new MTX();
+    {
+      t1.addOutput(wallet.getAddress(), 50000);
+      t1.addOutput(wallet.getAddress(), 10000);
+
+      const script = Script.fromPubkeyhash(key.getHash());
+
+      t1.addCoin(dummyInput(addr, ONE_HASH));
+
+      const sig = t1.signature(0, script, 70000, key.privateKey, ALL);
+      t1.inputs[0].witness = Witness.fromItems([sig, key.publicKey]);
+      await mempool.addTX(t1.toTX());
+    }
+
+    const t2 = new MTX();
+    {
+      const key = KeyRing.generate();
+      const addr = key.getAddress();
+
+      t2.addOutput(wallet.getAddress(), 50000);
+      t2.addOutput(wallet.getAddress(), 10000);
+
+      const script = Script.fromPubkeyhash(key.getHash());
+
+      t2.addCoin(dummyInput(addr, ONE_HASH));
+
+      const sig = t2.signature(0, script, 70000, key.privateKey, ALL);
+      t2.inputs[0].witness = Witness.fromItems([sig, key.publicKey]);
+      await mempool.addTX(t2.toTX());
+    }
+
+    const [block, view] = await dummyBlock([t1], true);
+
+    {
+      const entry = await mempool.getEntry(t1.hash());
+      assert.equal(entry.txid(), t1.txid());
+    }
+
+    await mempool.addBlock(block, block.txs, view);
+
+    {
+      const entry = await mempool.getEntry(t1.hash());
+      assert.equal(entry, undefined);
+    }
+
+    {
+      const tx = t2.toTX();
+      const entry = await mempool.getEntry(tx.hash());
+      assert.equal(entry.txid(), tx.txid());
+    }
   });
 
   it('should destroy mempool', async () => {
