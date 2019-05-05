@@ -4,16 +4,8 @@
 'use strict';
 
 const assert = require('bsert');
-const consensus = require('../lib/protocol/consensus');
 const Network = require('../lib/protocol/network');
-const Coin = require('../lib/primitives/coin');
-const Script = require('../lib/script/script');
-const Opcode = require('../lib/script/opcode');
 const FullNode = require('../lib/node/fullnode');
-const Wallet = require('../lib/wallet/wallet');
-const MTX = require('../lib/primitives/mtx');
-const TX = require('../lib/primitives/tx');
-const Address = require('../lib/primitives/address');
 const rules = require('../lib/covenants/rules');
 const network = Network.get('regtest');
 
@@ -149,6 +141,79 @@ describe('Node http', function() {
         const { name } = await nclient.getNameByHash(nameHash.toString('hex'));
         assert.equal(name, NAME0);
       });
+    });
+  });
+
+  describe('getNameResource', () => {
+    const zonefile = { compat: false, version: 0, ttl: 172800, ns: ['ns1.example.com.@1.2.3.4'] };
+    it('It should return null when an auction has not been initiated', async () => {
+      const resource = await nclient.getNameResource(NAME0);
+      assert.equal(resource, null);
+    });
+
+    describe('When an auction has been initiated', () => {
+      beforeEach(async () => {
+        await mineBlocks(250);
+        await wclient.execute('sendopen', [NAME0]);
+        // Question: We have to mine ~7 blocks here to get 'getauctioninfo' to work consistently. Will pass w. 4
+        await mineBlocks(7);
+        const { stats: { blocksUntilBidding } } = await wclient.execute('getauctioninfo', [NAME0]);
+        await mineBlocks(blocksUntilBidding);
+        const sendBid = await wclient.execute('sendbid', [NAME0, 12, 12]);
+        assert(sendBid);
+        const { stats: { blocksUntilReveal } } = await wclient.execute('getauctioninfo', [NAME0]);
+        // Question: We have to mine ~2 blocks here to get 'sendreveal' to work consistently. Will pass w. 1.
+        await mineBlocks(blocksUntilReveal + 2);
+        await wclient.execute('sendreveal', [NAME0]);
+        const { stats: { blocksUntilClose } } = await wclient.execute('getauctioninfo', [NAME0]);
+        await mineBlocks(blocksUntilClose);
+        await wclient.execute('sendupdate', [NAME0, zonefile]);
+        await mineBlocks(1);
+      });
+      it('It should return the resource', async () => {
+        const resource = await nclient.getNameResource(NAME0);
+        assert.deepEqual(resource, zonefile);
+      });
+    });
+  });
+
+  describe('getNameProof', () => {
+    it('It should return null when an auction has not been initiated', async () => {
+      const proof = await nclient.getNameProof(NAME0);
+      assert.equal(proof.proof.type, 'TYPE_DEADEND');
+      assert.equal(proof.name, NAME0);
+    });
+
+    describe('When an auction has been initiated', () => {
+      beforeEach(async () => {
+        await mineBlocks(250);
+        await wclient.execute('sendopen', [NAME0]);
+        // Question: We have to mine ~7 blocks here to get 'getauctioninfo' to work consistently. Will pass w. 4
+        await mineBlocks(7);
+        const { stats: { blocksUntilBidding } } = await wclient.execute('getauctioninfo', [NAME0]);
+        await mineBlocks(blocksUntilBidding);
+        const sendBid = await wclient.execute('sendbid', [NAME0, 12, 12]);
+        assert(sendBid);
+        const { stats: { blocksUntilReveal } } = await wclient.execute('getauctioninfo', [NAME0]);
+        // Question: We have to mine ~2 blocks here to get 'sendreveal' to work consistently. Will pass w. 1.
+        await mineBlocks(blocksUntilReveal + 2);
+        await wclient.execute('sendreveal', [NAME0]);
+        const { stats: { blocksUntilClose } } = await wclient.execute('getauctioninfo', [NAME0]);
+        await mineBlocks(blocksUntilClose);
+        await wclient.execute('sendupdate', [NAME0, { compat: false, version: 0, ttl: 172800, ns: ['ns1.example.com.@1.2.3.4'] }]);
+        await mineBlocks(1);
+      });
+      it('It should return the name\'s proof', async () => {
+        const proof = await nclient.getNameProof(NAME0);
+        assert.equal(proof.proof.type, 'TYPE_EXISTS');
+        assert.equal(proof.name, NAME0);
+      });
+    });
+  });
+  describe('grindName', () => {
+    it('It should grind a name', async () => {
+      const { name } = await nclient.grindName(10);
+      assert(name);
     });
   });
 });
