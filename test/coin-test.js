@@ -4,14 +4,18 @@
 
 'use strict';
 
-const Coin = require('../lib/primitives/coin');
-const assert = require('bsert');
-const common = require('../test/util/common');
-const KeyRing = require('../lib/primitives/keyring');
-const random = require('bcrypto/lib/random');
-const rules = require('../lib/covenants/rules');
-const {types, typesByVal} = rules;
 const {BufferWriter} = require('bufio');
+const assert = require('bsert');
+const nodejsUtil = require('util');
+const random = require('bcrypto/lib/random');
+
+const Coin = require('../lib/primitives/coin');
+const KeyRing = require('../lib/primitives/keyring');
+const common = require('../test/util/common');
+const {types, typesByVal} = require('../lib/covenants/rules');
+
+const tx1 = common.readTX('tx1');
+const coin1 = common.readFile('coin1.raw');
 
 describe('Coin', function() {
   it('should serialize and deserialize from JSON', () => {
@@ -21,7 +25,6 @@ describe('Coin', function() {
     for (const network of networks) {
       const addr = key.getAddress().toString(network);
       const item = random.randomBytes(32);
-
       const json = {
         version: 0,
         height: 0,
@@ -35,16 +38,59 @@ describe('Coin', function() {
         }
       };
 
-      const coin = Coin.fromJSON(json, network);
-      const bw = new BufferWriter(coin.getSize());
-      coin.write(bw);
+      const fromJSON = Coin.fromJSON(json, network);
+      const bw = new BufferWriter(fromJSON.getSize());
+      fromJSON.write(bw);
 
-      const coin2 = Coin.fromRaw(bw.render());
-      const json2 = coin2.getJSON(network);
+      const fromRaw = Coin.fromRaw(bw.render()).getJSON(network);
 
-      for (const [key, value] of Object.entries(json)) {
-        assert.deepEqual(value, json2[key]);
+      for (const [key, want] of Object.entries(json)) {
+        const got = fromRaw[key];
+        assert.deepEqual(want, got);
       }
     }
+  });
+
+  it('should instantiate from tx', () => {
+    const [tx] = tx1.getTX();
+    const json = require('./data/coin1.json');
+    const want = Coin.fromJSON(json);
+    const got = Coin.fromTX(tx, 0, -1);
+
+    assert.deepEqual(want.version, got.version);
+    assert.deepEqual(want.height, got.height);
+    assert.deepEqual(want.value, got.value);
+    assert.deepEqual(want.address, got.address);
+    assert.deepEqual(want.covenant, got.covenant);
+    assert.deepEqual(want.coinbase, got.coinbase);
+    assert.deepEqual(want.coinbase, got.coinbase);
+  });
+
+  it('should instantiate from raw', () => {
+    const json = require('./data/coin1.json');
+    const want = Coin.fromJSON(json);
+    const got = Coin.fromRaw(coin1);
+
+    assert.deepEqual(want.version, got.version);
+    assert.deepEqual(want.height, got.height);
+    assert.deepEqual(want.value, got.value);
+    assert.deepEqual(want.address, got.address);
+    assert.deepEqual(want.covenant, got.covenant);
+    assert.deepEqual(want.coinbase, got.coinbase);
+    assert.deepEqual(want.coinbase, got.coinbase);
+  });
+
+  it('should inspect Coin', () => {
+    const coin = new Coin();
+    const fmt = nodejsUtil.format(coin);
+    assert(typeof fmt === 'string');
+    assert(fmt.includes('version'));
+    assert(fmt.includes('height'));
+    assert(fmt.includes('value'));
+    assert(fmt.includes('address'));
+    assert(fmt.includes('covenant'));
+    assert(fmt.includes('coinbase'));
+    assert(fmt.includes('hash'));
+    assert(fmt.includes('index'));
   });
 });
