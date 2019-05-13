@@ -13,6 +13,7 @@ const FullNode = require('../lib/node/fullnode');
 const pkg = require('../lib/pkg');
 const Network = require('../lib/protocol/network');
 const network = Network.get('regtest');
+const {ZERO_HASH} = consensus;
 
 const node = new FullNode({
   network: 'regtest',
@@ -66,6 +67,7 @@ describe('HTTP', function() {
     assert.strictEqual(info.pool.agent, node.pool.options.agent);
     assert(info.chain);
     assert.strictEqual(info.chain.height, 0);
+    assert.strictEqual(info.chain.treeRoot, ZERO_HASH.toString('hex'));
   });
 
   it('should get wallet info', async () => {
