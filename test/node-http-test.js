@@ -12,7 +12,7 @@ const network = Network.get('regtest');
 const { NodeClient, WalletClient } = require('hs-client');
 
 const nclient = new NodeClient({
-  port: network.rpcPort, // Todo: Make it so this doesnt bind to any port
+  port: network.rpcPort,
   apiKey: 'foo'
 });
 
