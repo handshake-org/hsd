@@ -68,6 +68,10 @@ describe('HTTP', function() {
     assert(info.chain);
     assert.strictEqual(info.chain.height, 0);
     assert.strictEqual(info.chain.treeRoot, ZERO_HASH.toString('hex'));
+    // state comes from genesis block
+    assert.strictEqual(info.chain.state.tx, 1);
+    assert.strictEqual(info.chain.state.coin, 1);
+    assert.strictEqual(info.chain.state.burned, 0);
   });
 
   it('should get wallet info', async () => {
