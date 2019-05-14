@@ -101,10 +101,10 @@ describe('Node http', function() {
         });
         const open = await wclient.execute('sendopen', [NAME0]);
         assert(open);
-        const nameInfoBefore = await nclient.getNameInfo(NAME0);
+        const nameInfoBefore = await nclient.get(`/info/name/${NAME0}`);
         assert.equal(nameInfoBefore.info, null);
         await mineBlocks(1);
-        const nameInfoAfter = await nclient.getNameInfo(NAME0);
+        const nameInfoAfter = await nclient.get(`/info/name/${NAME0}`);
         assert.equal(nameInfoAfter.info.name, NAME0);
         assert.equal(nameInfoAfter.info.state, 'OPENING');
       });
