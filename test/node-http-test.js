@@ -12,12 +12,12 @@ const network = Network.get('regtest');
 const { NodeClient, WalletClient } = require('hs-client');
 
 const nclient = new NodeClient({
-  port: network.rpcPort,
+  port: network.rpcPort, // Todo: Make it so this doesnt bind to any port
   apiKey: 'foo'
 });
 
 const wclient = new WalletClient({
-  port: network.walletPort,
+  port: network.walletPort, // Todo: Make it so this doesnt bind to any port
   apiKey: 'foo'
 });
 
@@ -61,7 +61,7 @@ describe('Node http', function() {
   describe('getNameInfo', () => {
     describe('For names that are available at height 0', () => {
       it('It should return null when there hasn\'t been an auction initiated', async () => {
-        const nameInfo = await nclient.getNameInfo(NAME0);
+        const nameInfo = await nclient.get(`/info/name/${NAME0}`);
         assert.deepEqual(nameInfo, {
           info: null,
             start: {
@@ -73,7 +73,7 @@ describe('Node http', function() {
       });
       it('It should start an auction on the first day', async () => {
         await mineBlocks(1);
-        const nameInfo = await nclient.getNameInfo(NAME0);
+        const nameInfo = await nclient.get(`/info/name/${NAME0}`);
         assert.deepEqual(nameInfo, {
           info: null,
             start: {
@@ -90,7 +90,7 @@ describe('Node http', function() {
         // Note: Keeping this test as proof that the behavior of grindName
         // isnt working as one would expect.
         await mineBlocks(175); // Note: This number seems to pass consistently. \o.o/
-        const nameInfo = await nclient.getNameInfo(NAME0);
+        const nameInfo = await nclient.get(`/info/name/${NAME0}`);
         assert.deepEqual(nameInfo, {
           info: null,
             start: {
@@ -115,7 +115,7 @@ describe('Node http', function() {
         await mineBlocks(20);
         await wclient.execute('sendopen', [NAME1]);
         await mineBlocks(1);
-        const nameInfo = await nclient.getNameInfo(NAME1);
+        const nameInfo = await nclient.get(`/info/name/${NAME1}`);
         assert(nameInfo.start.start < 20);
         assert.equal(nameInfo.start.reserved, false);
         assert.equal(nameInfo.info.state, 'OPENING');
@@ -126,7 +126,7 @@ describe('Node http', function() {
   describe('getNameByHash', () => {
     it('It should return null when an auction has not been initiated', async () => {
       const nameHash = rules.hashName(NAME0);
-      const name = await nclient.getNameByHash(nameHash.toString('hex'));
+      const name = await nclient.get(`/name/hash/${nameHash.toString('hex')}`);
       assert.equal(name, null);
     });
 
@@ -138,7 +138,7 @@ describe('Node http', function() {
       });
       it('It should return the name', async () => {
         const nameHash = rules.hashName(NAME0);
-        const { name } = await nclient.getNameByHash(nameHash.toString('hex'));
+        const { name } = await nclient.get(`/name/hash/${nameHash.toString('hex')}`);
         assert.equal(name, NAME0);
       });
     });
@@ -147,7 +147,7 @@ describe('Node http', function() {
   describe('getNameResource', () => {
     const zonefile = { compat: false, version: 0, ttl: 172800, ns: ['ns1.example.com.@1.2.3.4'] };
     it('It should return null when an auction has not been initiated', async () => {
-      const resource = await nclient.getNameResource(NAME0);
+      const resource = await nclient.get(`/resource/name/${NAME0}`);
       assert.equal(resource, null);
     });
 
@@ -171,7 +171,7 @@ describe('Node http', function() {
         await mineBlocks(1);
       });
       it('It should return the resource', async () => {
-        const resource = await nclient.getNameResource(NAME0);
+        const resource = await nclient.get(`/resource/name/${NAME0}`);
         assert.deepEqual(resource, zonefile);
       });
     });
@@ -179,7 +179,7 @@ describe('Node http', function() {
 
   describe('getNameProof', () => {
     it('It should return null when an auction has not been initiated', async () => {
-      const proof = await nclient.getNameProof(NAME0);
+      const proof = await nclient.get(`/proof/name/${NAME0}`);
       assert.equal(proof.proof.type, 'TYPE_DEADEND');
       assert.equal(proof.name, NAME0);
     });
@@ -204,7 +204,7 @@ describe('Node http', function() {
         await mineBlocks(1);
       });
       it('It should return the name\'s proof', async () => {
-        const proof = await nclient.getNameProof(NAME0);
+        const proof = await nclient.get(`/proof/name/${NAME0}`);
         assert.equal(proof.proof.type, 'TYPE_EXISTS');
         assert.equal(proof.name, NAME0);
       });
