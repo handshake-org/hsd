@@ -212,7 +212,7 @@ describe('Node http', function() {
   });
   describe('grindName', () => {
     it('It should grind a name', async () => {
-      const { name } = await nclient.grindName(10);
+      const { name } = await nclient.get('/grind', { size: 10 });
       assert(name);
     });
   });
