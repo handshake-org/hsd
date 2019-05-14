@@ -17,7 +17,7 @@ const nclient = new NodeClient({
 });
 
 const wclient = new WalletClient({
-  port: network.walletPort, // Todo: Make it so this doesnt bind to any port
+  port: network.walletPort,
   apiKey: 'foo'
 });
 
