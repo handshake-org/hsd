@@ -35,7 +35,6 @@ describe('Node http', function() {
       await chain.add(block);
       await common.forValue(witnessedBlockHashes, blockHash, blockHash);
     }
-    await common.sleep(100);
   };
 
   beforeEach(async () => {
