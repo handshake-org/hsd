@@ -24,13 +24,16 @@ const wclient = new WalletClient({
 
 describe('Node http', function() {
   this.timeout(15000);
+  const witnessedBlockHashes = {};
   let NAME0, NAME1;
   let node, miner, chain;
 
   const mineBlocks = async (n = 1) => {
     for (let i = 0; i < n; i++) {
       const block = await miner.mineBlock();
+      const blockHash = block.hash().toString('hex');
       await chain.add(block);
+      await common.forValue(witnessedBlockHashes, blockHash, blockHash);
     }
     await common.sleep(100);
   };
@@ -44,6 +47,12 @@ describe('Node http', function() {
       workers: true,
       plugins: [require('../lib/wallet/plugin')]
     });
+
+    node.on('connect', (entry, block) => {
+      const blockHash = block.hash().toString('hex');
+      witnessedBlockHashes[blockHash] = blockHash;
+    });
+
     miner = node.miner;
     chain = node.chain;
     NAME0 = await rules.grindName(10, 0, network);
