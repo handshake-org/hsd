@@ -23,11 +23,8 @@ const wclient = new WalletClient({
 
 describe('Node http', function() {
   this.timeout(5000);
-  let NAME0;
-  let node;
-  let miner;
-  let chain;
-  let NAME1;
+  let NAME0, NAME1;
+  let node, miner, chain;
 
   const mineBlocks = async (n = 1) => {
     for (let i = 0; i < n; i++) {
@@ -37,6 +34,7 @@ describe('Node http', function() {
   };
 
   beforeEach(async () => {
+    assert.equal(network.names.auctionStart, 0);
     node = new FullNode({
       memory: true,
       apiKey: 'foo',
@@ -50,7 +48,6 @@ describe('Node http', function() {
     NAME1 = await rules.grindName(10, 20, network);
     await node.open();
     await mineBlocks(network.names.auctionStart);
-    assert.equal(network.names.auctionStart, 0);
     await mineBlocks(1);
   });
 
@@ -145,14 +142,14 @@ describe('Node http', function() {
   });
 
   describe('getNameResource', () => {
-    const zonefile = { compat: false, version: 0, ttl: 172800, ns: ['ns1.example.com.@1.2.3.4'] };
+    const records = { compat: false, version: 0, ttl: 172800, ns: ['ns1.example.com.@1.2.3.4'] };
     it('It should return null when an auction has not been initiated', async () => {
       const resource = await nclient.get(`/resource/name/${NAME0}`);
       assert.equal(resource, null);
     });
 
     describe('When an auction has been initiated', () => {
-      beforeEach(async () => {
+      it('It should return the resource', async () => {
         await mineBlocks(250);
         await wclient.execute('sendopen', [NAME0]);
         // Question: We have to mine ~7 blocks here to get 'getauctioninfo' to work consistently. Will pass w. 4
@@ -167,12 +164,10 @@ describe('Node http', function() {
         await wclient.execute('sendreveal', [NAME0]);
         const { stats: { blocksUntilClose } } = await wclient.execute('getauctioninfo', [NAME0]);
         await mineBlocks(blocksUntilClose);
-        await wclient.execute('sendupdate', [NAME0, zonefile]);
+        await wclient.execute('sendupdate', [NAME0, records]);
         await mineBlocks(1);
-      });
-      it('It should return the resource', async () => {
         const resource = await nclient.get(`/resource/name/${NAME0}`);
-        assert.deepEqual(resource, zonefile);
+        assert.deepEqual(resource, records);
       });
     });
   });
@@ -210,10 +205,13 @@ describe('Node http', function() {
       });
     });
   });
-  describe('grindName', () => {
+  describe.only('grindName', () => {
     it('It should grind a name', async () => {
-      const { name } = await nclient.get('/grind', { size: 10 });
+      const size = 10;
+      const { name } = await nclient.get('/grind', { size });
       assert(name);
+      assert.equal(name.length, size);
+      assert(rules.verifyName(name));
     });
   });
 });
