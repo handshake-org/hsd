@@ -174,7 +174,7 @@ describe('Node http', function() {
     });
 
     describe('When an auction has been initiated', () => {
-      beforeEach(async () => {
+      it('It should return the name\'s proof', async () => {
         await mineBlocks(250);
         await wclient.execute('sendopen', [NAME0]);
         await mineBlocks(1);
@@ -189,8 +189,6 @@ describe('Node http', function() {
         await mineBlocks(blocksUntilClose);
         await wclient.execute('sendupdate', [NAME0, { compat: false, version: 0, ttl: 172800, ns: ['ns1.example.com.@1.2.3.4'] }]);
         await mineBlocks(1);
-      });
-      it('It should return the name\'s proof', async () => {
         const proof = await nclient.get(`/proof/name/${NAME0}`);
         assert.equal(proof.proof.type, 'TYPE_EXISTS');
         assert.equal(proof.name, NAME0);
