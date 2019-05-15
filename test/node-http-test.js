@@ -7,6 +7,7 @@ const assert = require('bsert');
 const Network = require('../lib/protocol/network');
 const FullNode = require('../lib/node/fullnode');
 const rules = require('../lib/covenants/rules');
+const common = require('./util/common');
 const network = Network.get('regtest');
 
 const { NodeClient, WalletClient } = require('hs-client');
@@ -31,6 +32,7 @@ describe('Node http', function() {
       const block = await miner.mineBlock();
       await chain.add(block);
     }
+    await common.sleep(100);
   };
 
   beforeEach(async () => {
@@ -48,7 +50,6 @@ describe('Node http', function() {
     NAME1 = await rules.grindName(10, 20, network);
     await node.open();
     await mineBlocks(network.names.auctionStart);
-    await mineBlocks(1);
   });
 
   afterEach(async () => {
@@ -69,24 +70,21 @@ describe('Node http', function() {
         });
       });
       it('It should start an auction on the first day', async () => {
-        await mineBlocks(1);
         const nameInfo = await nclient.get(`/info/name/${NAME0}`);
         assert.deepEqual(nameInfo, {
           info: null,
-            start: {
-              reserved: false,
-              start: 0,
-              week: 0
-            }
+          start: {
+            reserved: false,
+            start: 0,
+            week: 0
+          }
         });
+        await mineBlocks(10);
         const open = await wclient.execute('sendopen', [NAME0]);
         assert(open);
       });
       it('It should start an auction on the 2nd day', async () => {
-        // Question: This test passes non-deterministically. Why?
-        // Note: Keeping this test as proof that the behavior of grindName
-        // isnt working as one would expect.
-        await mineBlocks(175); // Note: This number seems to pass consistently. \o.o/
+        await mineBlocks(40);
         const nameInfo = await nclient.get(`/info/name/${NAME0}`);
         assert.deepEqual(nameInfo, {
           info: null,
@@ -128,12 +126,10 @@ describe('Node http', function() {
     });
 
     describe('When an auction has been initiated', () => {
-      beforeEach(async () => {
+      it('It should return the name', async () => {
         await mineBlocks(250);
         await wclient.execute('sendopen', [NAME0]);
         await mineBlocks(1);
-      });
-      it('It should return the name', async () => {
         const nameHash = rules.hashName(NAME0);
         const { name } = await nclient.get(`/name/hash/${nameHash.toString('hex')}`);
         assert.equal(name, NAME0);
@@ -152,15 +148,13 @@ describe('Node http', function() {
       it('It should return the resource', async () => {
         await mineBlocks(250);
         await wclient.execute('sendopen', [NAME0]);
-        // Question: We have to mine ~7 blocks here to get 'getauctioninfo' to work consistently. Will pass w. 4
-        await mineBlocks(7);
+        await mineBlocks(1);
         const { stats: { blocksUntilBidding } } = await wclient.execute('getauctioninfo', [NAME0]);
         await mineBlocks(blocksUntilBidding);
         const sendBid = await wclient.execute('sendbid', [NAME0, 12, 12]);
         assert(sendBid);
         const { stats: { blocksUntilReveal } } = await wclient.execute('getauctioninfo', [NAME0]);
-        // Question: We have to mine ~2 blocks here to get 'sendreveal' to work consistently. Will pass w. 1.
-        await mineBlocks(blocksUntilReveal + 2);
+        await mineBlocks(blocksUntilReveal);
         await wclient.execute('sendreveal', [NAME0]);
         const { stats: { blocksUntilClose } } = await wclient.execute('getauctioninfo', [NAME0]);
         await mineBlocks(blocksUntilClose);
@@ -183,15 +177,13 @@ describe('Node http', function() {
       beforeEach(async () => {
         await mineBlocks(250);
         await wclient.execute('sendopen', [NAME0]);
-        // Question: We have to mine ~7 blocks here to get 'getauctioninfo' to work consistently. Will pass w. 4
-        await mineBlocks(7);
+        await mineBlocks(1);
         const { stats: { blocksUntilBidding } } = await wclient.execute('getauctioninfo', [NAME0]);
         await mineBlocks(blocksUntilBidding);
         const sendBid = await wclient.execute('sendbid', [NAME0, 12, 12]);
         assert(sendBid);
         const { stats: { blocksUntilReveal } } = await wclient.execute('getauctioninfo', [NAME0]);
-        // Question: We have to mine ~2 blocks here to get 'sendreveal' to work consistently. Will pass w. 1.
-        await mineBlocks(blocksUntilReveal + 2);
+        await mineBlocks(blocksUntilReveal);
         await wclient.execute('sendreveal', [NAME0]);
         const { stats: { blocksUntilClose } } = await wclient.execute('getauctioninfo', [NAME0]);
         await mineBlocks(blocksUntilClose);
@@ -205,7 +197,7 @@ describe('Node http', function() {
       });
     });
   });
-  describe.only('grindName', () => {
+  describe('grindName', () => {
     it('It should grind a name', async () => {
       const size = 10;
       const { name } = await nclient.get('/grind', { size });

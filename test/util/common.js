@@ -113,6 +113,10 @@ common.forValue = async function(obj, key, val, timeout = 30000) {
   });
 };
 
+common.sleep = function sleep(time) {
+  return new Promise(resolve => setTimeout(resolve, time));
+};
+
 function parseUndo(data) {
   const br = bio.read(data);
   const items = [];
