@@ -135,7 +135,7 @@ describe('Node http', function() {
 
     describe('When an auction has been initiated', () => {
       it('It should return the name', async () => {
-        await mineBlocks(50);
+        await mineBlocks(10);
         await wclient.execute('sendopen', [NAME0]);
         await mineBlocks(1);
         const nameHash = rules.hashName(NAME0);
@@ -154,7 +154,7 @@ describe('Node http', function() {
 
     describe('When an auction has been initiated', () => {
       it('It should return the resource', async () => {
-        await mineBlocks(50);
+        await mineBlocks(10);
         await wclient.execute('sendopen', [NAME0]);
         await mineBlocks(1);
         const { stats: { blocksUntilBidding } } = await wclient.execute('getauctioninfo', [NAME0]);
@@ -183,7 +183,7 @@ describe('Node http', function() {
 
     describe('When an auction has been initiated', () => {
       it('It should return the name\'s proof', async () => {
-        await mineBlocks(50);
+        await mineBlocks(10);
         await wclient.execute('sendopen', [NAME0]);
         await mineBlocks(1);
         const { stats: { blocksUntilBidding } } = await wclient.execute('getauctioninfo', [NAME0]);
