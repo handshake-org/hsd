@@ -23,7 +23,7 @@ const wclient = new WalletClient({
 });
 
 describe('Node http', function() {
-  this.timeout(15000);
+  this.timeout(10000);
   const witnessedBlockHashes = {};
   let NAME0, NAME1;
   let node, miner, chain;
