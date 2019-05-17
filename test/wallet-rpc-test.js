@@ -15,22 +15,33 @@ const mnemonics = require('./data/mnemonic-english.json');
 // Commonly used test mnemonic
 const phrase = mnemonics[0][1];
 
+const ports = {
+  p2p: 14331,
+  node: 14332,
+  wallet: 14333
+};
+
 const node = new FullNode({
   network: network.type,
   apiKey: 'bar',
   walletAuth: true,
   memory: true,
+  port: ports.p2p,
+  httpPort: ports.node,
   workers: true,
-  plugins: [require('../lib/wallet/plugin')]
+  plugins: [require('../lib/wallet/plugin')],
+  env: {
+    'HSD_WALLET_HTTP_PORT': ports.wallet.toString()
+  }
 });
 
 const nclient = new NodeClient({
-  port: network.rpcPort,
+  port: ports.node,
   apiKey: 'bar'
 });
 
 const wclient = new WalletClient({
-  port: network.walletPort,
+  port: ports.wallet,
   apiKey: 'bar'
 });
 
