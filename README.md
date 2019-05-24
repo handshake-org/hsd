@@ -16,6 +16,22 @@ $ npm install --production
 $ ./bin/hsd
 ```
 
+`node-gyp` is used to compile native code and requires
+Python 2.7. If your machine natively supports Python 3,
+configure `npm` using the command:
+
+```
+$ npm config set python /path/to/executable/python2.7
+```
+
+You can determine the native version of Python using:
+
+```
+$ python --version
+```
+
+See the [node-gyp](https://github.com/nodejs/node-gyp) documentation for more information.
+
 ## Documentation
 
 - Documentation Site: [https://handshake-org.github.io](https://handshake-org.github.io)
