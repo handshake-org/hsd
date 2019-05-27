@@ -316,6 +316,34 @@ describe('HTTP', function() {
     });
   });
 
+  it('should get mempool rejection filter', async () => {
+    const filterInfo = await nclient.get('/mempool/invalid', { verbose: true });
+
+    assert.ok('items' in filterInfo);
+    assert.ok('filter' in filterInfo);
+    assert.ok('size' in filterInfo);
+    assert.ok('entries' in filterInfo);
+    assert.ok('n' in filterInfo);
+    assert.ok('limit' in filterInfo);
+    assert.ok('tweak' in filterInfo);
+
+    assert.equal(filterInfo.entries, 0);
+  });
+
+  it('should add an entry to the mempool rejection filter', async () => {
+    const mtx = new MTX();
+    mtx.addOutpoint(new Outpoint(consensus.ZERO_HASH, 0));
+
+    const raw = mtx.toHex();
+    const txid = await nclient.execute('sendrawtransaction', [raw]);
+
+    const json = await nclient.get(`/mempool/invalid/${txid}`);
+    assert.equal(json.invalid, true);
+
+    const filterInfo = await nclient.get('/mempool/invalid');
+    assert.equal(filterInfo.entries, 1);
+  });
+
   it('should cleanup', async () => {
     await wallet.close();
     await wclient.close();
