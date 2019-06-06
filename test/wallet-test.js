@@ -4,6 +4,7 @@
 'use strict';
 
 const assert = require('bsert');
+const common = require('./util/common');
 const consensus = require('../lib/protocol/consensus');
 const Network = require('../lib/protocol/network');
 const util = require('../lib/utils/util');
@@ -14,11 +15,14 @@ const WorkerPool = require('../lib/workers/workerpool');
 const Address = require('../lib/primitives/address');
 const MTX = require('../lib/primitives/mtx');
 const Coin = require('../lib/primitives/coin');
+const Output = require('../lib/primitives/output');
 const KeyRing = require('../lib/primitives/keyring');
 const Input = require('../lib/primitives/input');
 const Outpoint = require('../lib/primitives/outpoint');
 const Script = require('../lib/script/script');
 const PrivateKey = require('../lib/hd/private.js');
+const rules = require('../lib/covenants/rules');
+const {types, typesByVal} = rules;
 
 const KEY1 = 'xprv9s21ZrQH143K3Aj6xQBymM31Zb4BVc7wxqfUhMZrzewdDVCt'
   + 'qUP9iWfcHgJofs25xbaUpCps9GDXj83NiWvQCAkWQhVj5J4CorfnpKX94AZ';
@@ -1452,6 +1456,80 @@ describe('Wallet', function() {
     await wdb.addBlock(nextBlock(wdb), [t3.toTX()]);
 
     assert.strictEqual((await bob.getBalance()).unconfirmed, 30000);
+  });
+
+  it('should emit events for covenant types', async () => {
+    const wallet = await wdb.create();
+
+    const address = await wallet.receiveAddress();
+
+    const u8 = Buffer.alloc(1);
+    const u32 = Buffer.alloc(4);
+
+    const name = 'foo';
+    const rawName = Buffer.from(name, 'ascii');
+    const nameHash = rules.hashName(rawName);
+
+    const outputs = [
+      // open
+      new Output({
+        address: address,
+        covenant: {
+          type: types.OPEN,
+          items: [
+            nameHash,
+            u32, // height
+            rawName
+          ]
+        }
+      }),
+      // bid
+      new Output({
+        address: address,
+        covenant: {
+          type: types.BID,
+          items: [
+            nameHash,
+            u32, // height
+            rawName,
+            consensus.ZERO_HASH
+          ]
+        }
+      }),
+      // reveal
+      new Output({
+        address: address,
+        value: 1000,
+        covenant: {
+          type: types.REVEAL,
+          items: [
+            nameHash,
+            u32, // height
+            u8
+          ]
+        }
+      })
+    ];
+
+    const block = curBlock(wdb);
+    const inputs = [dummyInput()];
+
+    for (const [i, output] of Object.entries(outputs)) {
+      const mtx = new MTX();
+      mtx.addOutput(output);
+      mtx.addInput(inputs[i]);
+
+      const type = typesByVal[output.covenant.type].toLowerCase();
+
+      const tx = mtx.toTX();
+      const hash = Buffer.from(tx.hash(), 'hex');
+
+      const input = Input.fromOutpoint(new Outpoint(hash, 0));
+      inputs.push(input);
+
+      wallet.add(tx, block);
+      await common.event(wallet, type);
+    }
   });
 
   it('should remove a wallet', async () => {

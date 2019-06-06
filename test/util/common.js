@@ -85,6 +85,12 @@ common.writeTX = function writeTX(name, tx, view) {
   common.writeFile(`${name}-undo.raw`, undoRaw);
 };
 
+common.event = async function event(obj, name) {
+  return new Promise((resolve) => {
+    obj.once(name, resolve);
+  });
+};
+
 function parseUndo(data) {
   const br = bio.read(data);
   const items = [];
