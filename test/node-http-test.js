@@ -169,7 +169,7 @@ describe('Node http', function() {
         await wclient.execute('sendupdate', [NAME0, records]);
         await mineBlocks(1);
         const resource = await nclient.get(`/resource/name/${NAME0}`);
-        assert.deepEqual(resource, records);
+        assert.deepEqual(resource, { ...records, name: NAME0, version: 0 });
       });
     });
   });
