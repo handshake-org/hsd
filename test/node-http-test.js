@@ -24,7 +24,7 @@ const wclient = new WalletClient({
 
 describe('Node http', function() {
   this.timeout(10000);
-  const witnessedBlockHashes = {};
+  const witnessedBlocks = {};
   let NAME0, NAME1;
   let node, miner, chain;
 
@@ -33,7 +33,7 @@ describe('Node http', function() {
       const block = await miner.mineBlock();
       const blockHash = block.hash().toString('hex');
       await chain.add(block);
-      await common.forValue(witnessedBlockHashes, blockHash, blockHash);
+      await common.forValue(witnessedBlocks, blockHash, blockHash);
     }
   };
 
