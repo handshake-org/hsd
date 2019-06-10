@@ -57,6 +57,8 @@ const {
   transferLockup
 } = network.names;
 
+// TODO: convert to using hs-client methods
+// when the new version is published
 describe('Wallet HTTP', function() {
   this.timeout(15000);
 
@@ -183,7 +185,7 @@ describe('Wallet HTTP', function() {
   });
 
   it('should have no name state indexed initially', async () => {
-    const names = await wallet.getNames();
+    const names = await wallet.client.get(`/wallet/${wallet.id}/name`);
 
     assert.strictEqual(names.length, 0);
   });
@@ -213,7 +215,7 @@ describe('Wallet HTTP', function() {
   });
 
   it('should create an open and broadcast the tx', async () => {
-    const json = await wallet.createOpen({
+    const json = await wallet.client.post(`/wallet/${wallet.id}/open`, {
       name: name
     });
 
@@ -233,7 +235,7 @@ describe('Wallet HTTP', function() {
   });
 
   it('should create an open and not broadcast the transaction', async () => {
-    const json = await wallet.createOpen({
+    const json = await wallet.client.post(`/wallet/${wallet.id}/open`, {
       name: name,
       broadcast: false
     });
@@ -269,7 +271,7 @@ describe('Wallet HTTP', function() {
   });
 
   it('should create an open and not sign the transaction', async () => {
-    const json = await wallet.createOpen({
+    const json = await wallet.client.post(`/wallet/${wallet.id}/open`, {
       name: name,
       broadcast: false,
       sign: false
@@ -305,7 +307,7 @@ describe('Wallet HTTP', function() {
   });
 
   it('should throw error with incompatible broadcast and sign options', async () => {
-    const fn = async () => await (wallet.createOpen({
+    const fn = async () => await (wallet.client.post(`/wallet/${wallet.id}/open`, {
       name: name,
       broadcast: true,
       sign: false
@@ -319,7 +321,7 @@ describe('Wallet HTTP', function() {
     assert.equal(info.balance.tx, 0);
     assert.equal(info.balance.coin, 0);
 
-    const fn = async () => (await wallet.createOpen({
+    const fn = async () => (await wallet.client.post(`/wallet/${wallet.id}/open`, {
       name: name,
       account: accountTwo
     }));
@@ -340,7 +342,7 @@ describe('Wallet HTTP', function() {
   });
 
   it('should create open for specific account', async () => {
-    const json = await wallet.createOpen({
+    const json = await wallet.client.post(`/wallet/${wallet.id}/open`, {
       name: name,
       account: accountTwo
     });
@@ -355,7 +357,7 @@ describe('Wallet HTTP', function() {
   });
 
   it('should open an auction', async () => {
-    await wallet.createOpen({
+    await wallet.client.post(`/wallet/${wallet.id}/open`, {
       name: name
     });
 
@@ -364,7 +366,7 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(treeInterval + 1, cbAddress);
 
-    const json = await wallet.createBid({
+    const json = await wallet.client.post(`/wallet/${wallet.id}/bid`, {
       name: name,
       bid: 1000,
       lockup: 2000
@@ -392,7 +394,7 @@ describe('Wallet HTTP', function() {
   it('should be able to get nonce', async () => {
     const bid = 100;
 
-    const response = await wallet.getNonce(name, {
+    const response = await wallet.client.get(`/wallet/${wallet.id}/nonce/${name}`, {
       address: cbAddress,
       bid: bid
     });
@@ -415,18 +417,18 @@ describe('Wallet HTTP', function() {
   });
 
   it('should get name info', async () => {
-    const names = await wallet.getNames();
+    const names = await wallet.client.get(`/wallet/${wallet.id}/name`);
 
     assert(names.length > 0);
     const [ns] = names;
 
-    const nameInfo = await wallet.getName(ns.name);
+    const nameInfo = await wallet.client.get(`/wallet/${wallet.id}/name/${ns.name}`);
 
     assert.deepEqual(ns, nameInfo);
   });
 
   it('should fail to open a bid without a bid value', async () => {
-    const fn = async () => (await wallet.createBid({
+    const fn = async () => (await wallet.client.post(`/wallet/${wallet.id}/bid`, {
       name: name
     }));
 
@@ -434,7 +436,7 @@ describe('Wallet HTTP', function() {
   });
 
   it('should fail to open a bid without a lockup value', async () => {
-    const fn = async () => (await wallet.createBid({
+    const fn = async () => (await wallet.client.post(`/wallet/${wallet.id}/bid`, {
       name: name,
       bid: 1000
     }));
@@ -443,25 +445,25 @@ describe('Wallet HTTP', function() {
   });
 
   it('should get all bids (single player)', async () => {
-    await wallet.createOpen({
+    await wallet.client.post(`/wallet/${wallet.id}/open`, {
       name: name
     });
 
     await mineBlocks(treeInterval + 1, cbAddress);
 
-    const tx1 = await wallet.createBid({
+    const tx1 = await wallet.client.post(`/wallet/${wallet.id}/bid`, {
       name: name,
       bid: 1000,
       lockup: 2000
     });
 
-    const tx2 = await wallet.createBid({
+    const tx2 = await wallet.client.post(`/wallet/${wallet.id}/bid`, {
       name: name,
       bid: 2000,
       lockup: 3000
     });
 
-    const tx3 = await wallet.createBid({
+    const tx3 = await wallet.client.post(`/wallet/${wallet.id}/bid`, {
       name: name,
       bid: 4000,
       lockup: 5000
@@ -470,7 +472,7 @@ describe('Wallet HTTP', function() {
     await mineBlocks(1, cbAddress);
 
     // this method gets all bids for all names
-    const bids = await wallet.getBids();
+    const bids = await wallet.client.get(`/wallet/${wallet.id}/bid`);
 
     // this depends on this it block creating
     // the first bids of this test suite
@@ -500,19 +502,19 @@ describe('Wallet HTTP', function() {
   });
 
   it('should get all bids (two players)', async () => {
-    await wallet.createOpen({
+    await wallet.client.post(`/wallet/${wallet.id}/open`, {
       name: name
     });
 
     await mineBlocks(treeInterval + 1, cbAddress);
 
-    const tx1 = await wallet.createBid({
+    const tx1 = await wallet.client.post(`/wallet/${wallet.id}/bid`, {
       name: name,
       bid: 1000,
       lockup: 2000
     });
 
-    const tx2 = await wallet2.createBid({
+    const tx2 = await wallet2.client.post(`/wallet/${wallet2.id}/bid`, {
       name: name,
       bid: 2000,
       lockup: 3000
@@ -523,7 +525,7 @@ describe('Wallet HTTP', function() {
     {
       await sleep(100);
       // fetch all bids for the name
-      const bids = await wallet.getBidsByName(name);
+      const bids = await wallet.client.get(`/wallet/${wallet.id}/bid/${name}`);
       assert.equal(bids.length, 2);
 
       // there is no value property on bids
@@ -541,7 +543,7 @@ describe('Wallet HTTP', function() {
 
     {
       // fetch only own bids for the name
-      const bids = await wallet.getBidsByName(name, { own: true });
+      const bids = await wallet.client.get(`/wallet/${wallet.id}/bid/${name}`, {own: true});
       assert.equal(bids.length, 1);
       const [bid] = bids;
       assert.equal(bid.prevout.hash, tx1.hash);
@@ -549,13 +551,13 @@ describe('Wallet HTTP', function() {
   });
 
   it('should create a reveal', async () => {
-    await wallet.createOpen({
+    await wallet.client.post(`/wallet/${wallet.id}/open`, {
       name: name
     });
 
     await mineBlocks(treeInterval + 1, cbAddress);
 
-    await wallet.createBid({
+    await wallet.client.post(`/wallet/${wallet.id}/bid`, {
       name: name,
       bid: 1000,
       lockup: 2000
@@ -567,7 +569,7 @@ describe('Wallet HTTP', function() {
     assert.equal(info.name, name);
     assert.equal(info.state, 'REVEAL');
 
-    const json = await wallet.createReveal({
+    const json = await wallet.client.post(`/wallet/${wallet.id}/reveal`, {
       name: name
     });
 
@@ -576,25 +578,25 @@ describe('Wallet HTTP', function() {
   });
 
   it('should get all reveals (single player)', async () => {
-    await wallet.createOpen({
+    await wallet.client.post(`/wallet/${wallet.id}/open`, {
       name: name
     });
 
     const name2 = await nclient.execute('grindname', [5]);
 
-    await wallet.createOpen({
+    await wallet.client.post(`/wallet/${wallet.id}/open`, {
       name: name2
     });
 
     await mineBlocks(treeInterval + 1, cbAddress);
 
-    await wallet.createBid({
+    await wallet.client.post(`/wallet/${wallet.id}/bid`, {
       name: name,
       bid: 1000,
       lockup: 2000
     });
 
-    await wallet.createBid({
+    await wallet.client.post(`/wallet/${wallet.id}/bid`, {
       name: name2,
       bid: 2000,
       lockup: 3000
@@ -602,24 +604,24 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(biddingPeriod + 1, cbAddress);
 
-    await wallet.createReveal({
+    await wallet.client.post(`/wallet/${wallet.id}/reveal`, {
       name: name
     });
 
-    await wallet.createReveal({
+    await wallet.client.post(`/wallet/${wallet.id}/reveal`, {
       name: name2
     });
 
     await mineBlocks(revealPeriod + 1, cbAddress);
 
     {
-      const reveals = await wallet.getReveals();
+      const reveals = await wallet.client.get(`/wallet/${wallet.id}/reveal`);
       assert.equal(reveals.length, 2);
     }
 
     {
       // a single reveal per name
-      const reveals = await wallet.getRevealsByName(name);
+      const reveals = await wallet.client.get(`/wallet/${wallet.id}/reveal/${name}`);
       assert.equal(reveals.length, 1);
     }
   });
@@ -635,19 +637,19 @@ describe('Wallet HTTP', function() {
   it('should get own reveals (two players)', async () => {
     state.name = name;
 
-    await wallet.createOpen({
+    await wallet.client.post(`/wallet/${wallet.id}/open`, {
       name: name
     });
 
     await mineBlocks(treeInterval + 1, cbAddress);
 
-    const b1 = await wallet.createBid({
+    const b1 = await wallet.client.post(`/wallet/${wallet.id}/bid`, {
       name: name,
       bid: 1000,
       lockup: 2000
     });
 
-    const b2 = await wallet2.createBid({
+    const b2 = await wallet2.client.post(`/wallet/${wallet2.id}/bid`, {
       name: name,
       bid: 2000,
       lockup: 3000
@@ -658,11 +660,11 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(biddingPeriod + 1, cbAddress);
 
-    const r1 = await wallet.createReveal({
+    const r1 = await wallet.client.post(`/wallet/${wallet.id}/reveal`, {
       name: name
     });
 
-    const r2 = await wallet2.createReveal({
+    const r2 = await wallet2.client.post(`/wallet/${wallet2.id}/reveal`, {
       name: name
     });
 
@@ -672,7 +674,7 @@ describe('Wallet HTTP', function() {
     await mineBlocks(revealPeriod + 1, cbAddress);
 
     {
-      const reveals = await wallet.getRevealsByName(name, { own: true });
+      const reveals = await wallet.client.get(`/wallet/${wallet.id}/reveal/${name}`, {own: true});
       assert.equal(reveals.length, 1);
       const [reveal] = reveals;
       assert.equal(reveal.own, true);
@@ -680,7 +682,7 @@ describe('Wallet HTTP', function() {
     }
 
     {
-      const reveals = await wallet.getRevealsByName(name);
+      const reveals = await wallet.client.get(`/wallet/${wallet.id}/reveal/${name}`);
       assert.equal(reveals.length, 2);
 
       assert.ok(reveals.find(reveal =>
@@ -694,9 +696,9 @@ describe('Wallet HTTP', function() {
   });
 
   it('should get auction info', async () => {
-    const ns = await wallet.getName(state.name);
+    const ns = await wallet.client.get(`/wallet/${wallet.id}/name/${state.name}`);
 
-    const auction = await wallet.getAuctionByName(ns.name);
+    const auction = await wallet.client.get(`/wallet/${wallet.id}/auction/${ns.name}`);
 
     // auction info returns a list of bids
     // and a list of reveals for the name
@@ -719,20 +721,20 @@ describe('Wallet HTTP', function() {
   });
 
   it('should create a redeem', async () => {
-    await wallet.createOpen({
+    await wallet.client.post(`/wallet/${wallet.id}/open`, {
       name: name
     });
 
     await mineBlocks(treeInterval + 1, cbAddress);
 
     // wallet2 wins the auction, wallet can submit redeem
-    await wallet.createBid({
+    await wallet.client.post(`/wallet/${wallet.id}/bid`, {
       name: name,
       bid: 1000,
       lockup: 2000
     });
 
-    await wallet2.createBid({
+    await wallet2.client.post(`/wallet/${wallet2.id}/bid`, {
       name: name,
       bid: 2000,
       lockup: 3000
@@ -740,24 +742,24 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(biddingPeriod + 1, cbAddress);
 
-    await wallet.createReveal({
+    await wallet.client.post(`/wallet/${wallet.id}/reveal`, {
       name: name
     });
 
-    await wallet2.createReveal({
+    await wallet2.client.post(`/wallet/${wallet2.id}/reveal`, {
       name: name
     });
 
     await mineBlocks(revealPeriod + 1, cbAddress);
 
     // wallet2 is the winner, therefore cannot redeem
-    const fn = async () => (await wallet2.createRedeem({
+    const fn = async () => (await wallet2.client.post(`/wallet/${wallet2.id}/redeem`, {
       name: name
     }));
 
     assert.rejects(fn, 'No reveals to redeem.');
 
-    const json = await wallet.createRedeem({
+    const json = await wallet.client.post(`wallet/${wallet.id}/redeem`, {
       name: name
     });
 
@@ -766,13 +768,13 @@ describe('Wallet HTTP', function() {
   });
 
   it('should create an update', async () => {
-    await wallet.createOpen({
+    await wallet.client.post(`/wallet/${wallet.id}/open`, {
       name: name
     });
 
     await mineBlocks(treeInterval + 1, cbAddress);
 
-    await wallet.createBid({
+    await wallet.client.post(`/wallet/${wallet.id}/bid`, {
       name: name,
       bid: 1000,
       lockup: 2000
@@ -780,14 +782,14 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(biddingPeriod + 1, cbAddress);
 
-    await wallet.createReveal({
+    await wallet.client.post(`/wallet/${wallet.id}/reveal`, {
       name: name
     });
 
     await mineBlocks(revealPeriod + 1, cbAddress);
 
     {
-      const json = await wallet.createUpdate({
+      const json = await wallet.client.post(`/wallet/${wallet.id}/update`, {
         name: name,
         data: {
           text: ['foobar']
@@ -803,7 +805,7 @@ describe('Wallet HTTP', function() {
     await mineBlocks(1, cbAddress);
 
     {
-      const json = await wallet.createUpdate({
+      const json = await wallet.client.post(`/wallet/${wallet.id}/update`, {
         name: name,
         data: {
           text: ['barfoo']
@@ -817,7 +819,7 @@ describe('Wallet HTTP', function() {
   });
 
   it('should get name resource', async () => {
-    const names = await wallet.getNames();
+    const names = await wallet.client.get(`/wallet/${wallet.id}/name`);
     // filter out names that have data
     // this test depends on the previous test
     const [ns] = names.filter(n => n.data.length > 0);
@@ -825,7 +827,8 @@ describe('Wallet HTTP', function() {
 
     const state = Resource.decode(Buffer.from(ns.data, 'hex'));
 
-    const resource = await wallet.getResource(ns.name);
+    const resource = await wallet.client.get(`wallet/${wallet.id}/resource/${ns.name}`);
+    assert(resource);
     const res = Resource.fromJSON(resource);
 
     assert.deepEqual(state, res);
@@ -834,18 +837,18 @@ describe('Wallet HTTP', function() {
   it('should fail to get name resource for non existent name', async () => {
     const name = await nclient.execute('grindname', [10]);
 
-    const resource = await wallet.getResource(name);
+    const resource = await wallet.client.get(`/wallet/${wallet.id}/resource/${name}`);
     assert.equal(resource, null);
   });
 
   it('should create a renewal', async () => {
-    await wallet.createOpen({
+    await wallet.client.post(`/wallet/${wallet.id}/open`, {
       name: name
     });
 
     await mineBlocks(treeInterval + 1, cbAddress);
 
-    await wallet.createBid({
+    await wallet.client.post(`/wallet/${wallet.id}/bid`, {
       name: name,
       bid: 1000,
       lockup: 2000
@@ -853,13 +856,13 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(biddingPeriod + 1, cbAddress);
 
-    await wallet.createReveal({
+    await wallet.client.post(`/wallet/${wallet.id}/reveal`, {
       name: name
     });
 
     await mineBlocks(revealPeriod + 1, cbAddress);
 
-    await wallet.createUpdate({
+    await wallet.client.post(`/wallet/${wallet.id}/update`, {
       name: name,
       data: {
         text: ['foobar']
@@ -870,7 +873,7 @@ describe('Wallet HTTP', function() {
     // can be submitted, a treeInterval into the future
     await mineBlocks(treeInterval + 1, cbAddress);
 
-    const json = await wallet.createRenewal({
+    const json = await wallet.client.post(`/wallet/${wallet.id}/renewal`, {
       name
     });
 
@@ -879,13 +882,13 @@ describe('Wallet HTTP', function() {
   });
 
   it('should create a transfer', async () => {
-    await wallet.createOpen({
+    await wallet.client.post(`/wallet/${wallet.id}/open`, {
       name: name
     });
 
     await mineBlocks(treeInterval + 1, cbAddress);
 
-    await wallet.createBid({
+    await wallet.client.post(`/wallet/${wallet.id}/bid`, {
       name: name,
       bid: 1000,
       lockup: 2000
@@ -893,13 +896,13 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(biddingPeriod + 1, cbAddress);
 
-    await wallet.createReveal({
+    await wallet.client.post(`/wallet/${wallet.id}/reveal`, {
       name: name
     });
 
     await mineBlocks(revealPeriod + 1, cbAddress);
 
-    await wallet.createUpdate({
+    await wallet.client.post(`/wallet/${wallet.id}/update`, {
       name: name,
       data: {
         text: ['foobar']
@@ -910,7 +913,7 @@ describe('Wallet HTTP', function() {
 
     const {receiveAddress} = await wallet.getAccount(accountTwo);
 
-    const json = await wallet.createTransfer({
+    const json = await wallet.client.post(`/wallet/${wallet.id}/transfer`, {
       name,
       address: receiveAddress
     });
@@ -920,13 +923,13 @@ describe('Wallet HTTP', function() {
   });
 
   it('should create a finalize', async () => {
-    await wallet.createOpen({
+    await wallet.client.post(`/wallet/${wallet.id}/open`, {
       name: name
     });
 
     await mineBlocks(treeInterval + 1, cbAddress);
 
-    await wallet.createBid({
+    await wallet.client.post(`/wallet/${wallet.id}/bid`, {
       name: name,
       bid: 1000,
       lockup: 2000
@@ -934,13 +937,13 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(biddingPeriod + 1, cbAddress);
 
-    await wallet.createReveal({
+    await wallet.client.post(`/wallet/${wallet.id}/reveal`, {
       name: name
     });
 
     await mineBlocks(revealPeriod + 1, cbAddress);
 
-    await wallet.createUpdate({
+    await wallet.client.post(`/wallet/${wallet.id}/update`, {
       name: name,
       data: {
         text: ['foobar']
@@ -951,14 +954,14 @@ describe('Wallet HTTP', function() {
 
     const {receiveAddress} = await wallet.getAccount(accountTwo);
 
-    await wallet.createTransfer({
+    await wallet.client.post(`/wallet/${wallet.id}/transfer`, {
       name,
       address: receiveAddress
     });
 
     await mineBlocks(transferLockup + 1, cbAddress);
 
-    const json = await wallet.createFinalize({
+    const json = await wallet.client.post(`/wallet/${wallet.id}/finalize`, {
       name
     });
 
@@ -974,13 +977,13 @@ describe('Wallet HTTP', function() {
   });
 
   it('should create a cancel', async () => {
-    await wallet.createOpen({
+    await wallet.client.post(`/wallet/${wallet.id}/open`, {
       name: name
     });
 
     await mineBlocks(treeInterval + 1, cbAddress);
 
-    await wallet.createBid({
+    await wallet.client.post(`/wallet/${wallet.id}/bid`, {
       name: name,
       bid: 1000,
       lockup: 2000
@@ -988,13 +991,13 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(biddingPeriod + 1, cbAddress);
 
-    await wallet.createReveal({
+    await wallet.client.post(`/wallet/${wallet.id}/reveal`, {
       name: name
     });
 
     await mineBlocks(revealPeriod + 1, cbAddress);
 
-    await wallet.createUpdate({
+    await wallet.client.post(`/wallet/${wallet.id}/update`, {
       name: name,
       data: {
         text: ['foobar']
@@ -1005,14 +1008,14 @@ describe('Wallet HTTP', function() {
 
     const {receiveAddress} = await wallet.getAccount(accountTwo);
 
-    await wallet.createTransfer({
+    await wallet.client.post(`/wallet/${wallet.id}/transfer`, {
       name,
       address: receiveAddress
     });
 
     await mineBlocks(transferLockup + 1, cbAddress);
 
-    const json = await wallet.createCancel({name});
+    const json = await wallet.client.post(`/wallet/${wallet.id}/cancel`, {name});
 
     const cancel = json.outputs.filter(({covenant}) => covenant.type === types.UPDATE);
     assert.equal(cancel.length, 1);
@@ -1030,13 +1033,13 @@ describe('Wallet HTTP', function() {
   });
 
   it('should create a revoke', async () => {
-    await wallet.createOpen({
+    await wallet.client.post(`/wallet/${wallet.id}/open`, {
       name: name
     });
 
     await mineBlocks(treeInterval + 1, cbAddress);
 
-    await wallet.createBid({
+    await wallet.client.post(`/wallet/${wallet.id}/bid`, {
       name: name,
       bid: 1000,
       lockup: 2000
@@ -1044,13 +1047,13 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(biddingPeriod + 1, cbAddress);
 
-    await wallet.createReveal({
+    await wallet.client.post(`/wallet/${wallet.id}/reveal`, {
       name: name
     });
 
     await mineBlocks(revealPeriod + 1, cbAddress);
 
-    await wallet.createUpdate({
+    await wallet.client.post(`/wallet/${wallet.id}/update`, {
       name: name,
       data: {
         text: ['foobar']
@@ -1059,7 +1062,7 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(treeInterval + 1, cbAddress);
 
-    const json = await wallet.createRevoke({name});
+    const json = await wallet.client.post(`/wallet/${wallet.id}/revoke`, {name});
 
     const final = json.outputs.filter(({covenant}) => covenant.type === types.REVOKE);
     assert.equal(final.length, 1);
