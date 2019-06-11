@@ -114,6 +114,25 @@ describe('Wallet HTTP', function() {
     assert.equal(tx.locktime, 0);
   });
 
+  it('should create a transaction with HD paths', async () => {
+    const tx = await wallet.createTX({
+      paths: true,
+      outputs: [{ address: cbAddress, value: 1e4 }]
+    });
+
+    assert.ok(tx);
+    assert.ok(tx.inputs);
+
+    for (let i = 0; i < tx.inputs.length; i++) {
+      const path = tx.inputs[i].path;
+
+      assert.ok(typeof path.name === 'string');
+      assert.ok(typeof path.account === 'number');
+      assert.ok(typeof path.change === 'boolean');
+      assert.ok(typeof path.derivation === 'string');
+    }
+  });
+
   it('should create a transaction with a locktime', async () => {
     const locktime = 8e6;
 
