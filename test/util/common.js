@@ -129,8 +129,9 @@ function serializeUndo(items) {
   const bw = bio.write();
 
   for (const item of items) {
-    bw.writeI64(item.value);
-    bw.writeVarBytes(item.script.encode());
+    bw.writeU64(item.value);
+    item.address.write(bw);
+    item.covenant.write(bw);
   }
 
   return bw.render();

@@ -1,0 +1,14 @@
+{
+  "version": 0,
+  "height": -1,
+  "value": 99997200,
+  "address": "rs1qxps2ljf5604tgyz7pvecuq6twwt4k9qsxcd27y",
+  "covenant": {
+    "type": 0,
+    "action": "NONE",
+    "items": []
+  },
+  "coinbase": false,
+  "hash": "dc73eb199e8a70f69de74aecc5a1233e3a9a6e14ea62d0a08b17aca0a7f916ad",
+  "index": 0
+}

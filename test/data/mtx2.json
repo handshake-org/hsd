@@ -1,0 +1,47 @@
+{
+  "hash": "dc73eb199e8a70f69de74aecc5a1233e3a9a6e14ea62d0a08b17aca0a7f916ad",
+  "witnessHash": "b3f4428bde7742db4c6a65b70a1a3f9b64c32cc1d061ca352db00606f9938bb4",
+  "fee": 2800,
+  "rate": 22764,
+  "mtime": 1558044979,
+  "version": 0,
+  "inputs": [{
+    "prevout": {
+      "hash": "135a7ab2b078101a4b5c74ccb13ec33aafbfe3cb08d69f79bb6a07183ed4be4d",
+      "index": 0
+    },
+    "witness": ["", "03253ea6d6486d1b9cc3ab01a9a321d65c350c6c26a9c536633e2ef36163316bf2"],
+    "sequence": 4294967295,
+    "coin": {
+      "version": 0,
+      "height": 2,
+      "value": 2000000000,
+      "address": "rs1q4rvs9pp9496qawp2zyqpz3s90fjfk362q92vq8",
+      "covenant": {
+        "type": 0,
+        "action": "NONE",
+        "items": []
+      },
+      "coinbase": true
+    }
+  }],
+  "outputs": [{
+    "value": 99997200,
+    "address": "rs1qxps2ljf5604tgyz7pvecuq6twwt4k9qsxcd27y",
+    "covenant": {
+      "type": 0,
+      "action": "NONE",
+      "items": []
+    }
+  }, {
+    "value": 1900000000,
+    "address": "rs1qsfcpg4w2qwzx6ht5aa30dj5vddwvkdfq82dlae",
+    "covenant": {
+      "type": 0,
+      "action": "NONE",
+      "items": []
+    }
+  }],
+  "locktime": 0,
+  "hex": "0000000001135a7ab2b078101a4b5c74ccb13ec33aafbfe3cb08d69f79bb6a07183ed4be4d00000000ffffffff0210d6f5050000000000143060afc934d3eab4105e0b338e034b73975b1410000000b33f7100000000001482701455ca03846d5d74ef62f6ca8c6b5ccb352000000000000002002103253ea6d6486d1b9cc3ab01a9a321d65c350c6c26a9c536633e2ef36163316bf2"
+}
