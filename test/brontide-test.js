@@ -1,14 +1,168 @@
 'use strict';
 
-const assert = require('assert');
-const {Brontide} = require('../lib/net/brontide');
+const assert = require('bsert');
+const {CipherState, Brontide} = require('../lib/net/brontide');
 
 const HELLO = Buffer.from('hello', 'ascii');
 const PROLOGUE = 'hns';
+const ROTATION_INTERVAL = 1000;
 
 /*
  * Tests
  */
+
+describe('CipherState', function() {
+  const cipher = new CipherState();
+  const key = Buffer.from(
+    '2121212121212121212121212121212121212121212121212121212121212121',
+    'hex'
+  );
+  const salt = Buffer.from(
+    '1111111111111111111111111111111111111111111111111111111111111111',
+    'hex'
+  );
+
+  it('should initalize with the key and salt', () => {
+    cipher.initSalt(key, salt);
+
+    assert.bufferEqual(cipher.key, key);
+
+    assert.bufferEqual(cipher.salt, salt);
+  });
+
+  it('should rotate the secret key', () => {
+    cipher.rotateKey();
+
+    assert.bufferEqual(
+      cipher.key,
+      Buffer.from(
+        '0b579ba44366e4d49ac7a44a8203925cb6d610e950aee7a23c47a5448173af11',
+        'hex'
+      )
+    );
+
+    assert.bufferEqual(
+      cipher.salt,
+      Buffer.from(
+        'be23775b41e7c67d1ec6dcfc21299f32461e145d4164f65943b4b99fcaff6dee',
+        'hex'
+      )
+    );
+
+    assert.strictEqual(cipher.nonce, 0);
+  });
+
+  it('should properly encrypt given text and empty ad', () => {
+    // Reset the cipher
+    const cipher = new CipherState();
+    cipher.initSalt(key, salt);
+
+    const hello = Buffer.from('hello', 'ascii');
+
+    const tag = cipher.encrypt(hello);
+
+    assert.bufferEqual(
+      tag,
+      Buffer.from('f11ae60b9df4c6ea25aea58ce1b6df83', 'hex')
+    );
+    assert.bufferEqual(hello, Buffer.from('0935b4c530', 'hex'));
+
+    // Round 2
+    const hello2 = Buffer.from('hello', 'ascii');
+
+    const tag2 = cipher.encrypt(hello2);
+
+    assert.bufferEqual(
+      tag2,
+      Buffer.from('d840242a1e817cd8374d45fb5621a5fc', 'hex')
+    );
+    assert.bufferEqual(hello2, Buffer.from('74898781da', 'hex'));
+  });
+
+  it('should properly encrypt given text and ad', () => {
+    // Reset the cipher
+    const cipher = new CipherState();
+    cipher.initSalt(key, salt);
+
+    const hello = Buffer.from('hello', 'ascii');
+    const ad = Buffer.from('222222222222222222222222222222222222', 'hex');
+
+    const tag = cipher.encrypt(hello, ad);
+
+    assert.bufferEqual(
+      tag,
+      Buffer.from('81ad416f62157481c8af8ace16b64e15', 'hex')
+    );
+    assert.bufferEqual(hello, Buffer.from('0935b4c530', 'hex'));
+
+    const hello2 = Buffer.from('hello', 'ascii');
+
+    const tag2 = cipher.encrypt(hello2, ad);
+
+    assert.bufferEqual(
+      tag2,
+      Buffer.from('df3f8257977dfb8d283c6fb149d2d49d', 'hex')
+    );
+    assert.bufferEqual(hello2, Buffer.from('74898781da', 'hex'));
+  });
+
+  it('should rotate key after encryption', () => {
+    const cipher = new CipherState();
+    cipher.initSalt(key, salt);
+
+    const hello = Buffer.from('hello', 'ascii');
+
+    cipher.nonce = 999;
+
+    cipher.encrypt(hello);
+
+    assert.strictEqual(cipher.nonce, 0);
+
+    assert.bufferEqual(
+      cipher.key,
+      Buffer.from(
+        '0b579ba44366e4d49ac7a44a8203925cb6d610e950aee7a23c47a5448173af11',
+        'hex'
+      )
+    );
+
+    assert.bufferEqual(
+      cipher.salt,
+      Buffer.from(
+        'be23775b41e7c67d1ec6dcfc21299f32461e145d4164f65943b4b99fcaff6dee',
+        'hex'
+      )
+    );
+  });
+
+  it('should decrypt encrypted text', () => {
+    const encryptionCipher = new CipherState();
+    encryptionCipher.initSalt(key, salt);
+
+    const decryptionCipher = new CipherState();
+    decryptionCipher.initSalt(key, salt);
+
+    const hello = Buffer.from('hello', 'ascii');
+
+    const tag = encryptionCipher.encrypt(hello);
+
+    assert(decryptionCipher.decrypt(hello, tag));
+  });
+
+  it('should decrypt encrypted text throughout key rotation', () => {
+    const encryptionCipher = new CipherState();
+    encryptionCipher.initSalt(key, salt);
+
+    const decryptionCipher = new CipherState();
+    decryptionCipher.initSalt(key, salt);
+
+    for (let i = 0; i <= ROTATION_INTERVAL + 1; i++) {
+      const hello = Buffer.from('hello', 'ascii');
+      const tag = encryptionCipher.encrypt(hello);
+      assert(decryptionCipher.decrypt(hello, tag));
+    }
+  });
+});
 
 describe('Brontide', function() {
   it('should test brontide exchange', () => {
