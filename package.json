@@ -57,7 +57,9 @@
     "hsd-node": "./bin/node",
     "hsd-spvnode": "./bin/spvnode",
     "hs-seeder": "./bin/hs-seeder",
-    "hs-wallet": "./bin/hsw"
+    "hs-wallet": "./bin/hsw",
+    "hsd-cli": "./bin/hsd-cli",
+    "hsw-cli": "./bin/hsw-cli"
   },
   "scripts": {
     "lint": "eslint $(cat .eslintfiles) || exit 0",

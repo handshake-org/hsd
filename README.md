@@ -20,6 +20,13 @@ Note that `node-gyp` must be installed. See the
 [node-gyp](https://github.com/nodejs/node-gyp) documentation for more
 information.
 
+## CLI
+
+HSD comes with command-line interface tools `hsd-cli` (to interact with the node
+server) and `hsw-cli` (to interact with the wallet server). These applications
+are available in `./bin` (for example the command `./bin/hsd-cli info` returns
+basic node info). CLI usage in the API docs refers to these applications.
+
 ## Documentation
 
 - Documentation Site: [https://handshake-org.github.io](https://handshake-org.github.io)
