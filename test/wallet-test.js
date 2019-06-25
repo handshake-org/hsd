@@ -99,13 +99,13 @@ describe('Wallet', function() {
     const accountIndex = 0;
     const expectedKey1 = await wallet.createReceive(accountIndex);
     const expectedKey2 = await wallet.createReceive(accountIndex);
-    const expectedKey3 = await wallet.createReceive(accountIndex);
+    const expectedKey3 = await wallet.createChange(accountIndex);
     assert(expectedKey1 && expectedKey2 && expectedKey3);
 
     const [key1, key2, key3] = await Promise.all([
       wallet.getReceive(accountIndex, 1),
       wallet.getReceive(accountIndex, 2),
-      wallet.getReceive(accountIndex, 3),
+      wallet.getChange(accountIndex, 1),
     ]);
 
     assert(key1.getAddress().equals(expectedKey1.getAddress()));
