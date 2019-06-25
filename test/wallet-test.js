@@ -93,6 +93,26 @@ describe('Wallet', function() {
     assert(addr2.equals(addr1));
   });
 
+  it('should get the correct address by index', async () => {
+    const wallet = await wdb.create();
+
+    const accountIndex = 0;
+    const expectedKey1 = await wallet.createReceive(accountIndex);
+    const expectedKey2 = await wallet.createReceive(accountIndex);
+    const expectedKey3 = await wallet.createReceive(accountIndex);
+    assert(expectedKey1 && expectedKey2 && expectedKey3);
+
+    const [key1, key2, key3] = await Promise.all([
+      wallet.getReceive(accountIndex, 1),
+      wallet.getReceive(accountIndex, 2),
+      wallet.getReceive(accountIndex, 3),
+    ]);
+
+    assert(key1.getAddress().equals(expectedKey1.getAddress()));
+    assert(key2.getAddress().equals(expectedKey2.getAddress()));
+    assert(key3.getAddress().equals(expectedKey3.getAddress()));
+  });
+
   it('should create and get wallet', async () => {
     const wallet1 = await wdb.create();
     const wallet2 = await wdb.get(wallet1.id);
