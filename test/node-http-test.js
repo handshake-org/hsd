@@ -47,6 +47,7 @@ describe('Node http', function() {
       plugins: [require('../lib/wallet/plugin')]
     });
 
+    const witnessedBlockHashes = {};
     node.on('connect', (entry, block) => {
       const blockHash = block.hash().toString('hex');
       witnessedBlockHashes[blockHash] = blockHash;
@@ -169,7 +170,7 @@ describe('Node http', function() {
         await wclient.execute('sendupdate', [NAME0, records]);
         await mineBlocks(1);
         const resource = await nclient.get(`/resource/name/${NAME0}`);
-        assert.deepEqual(resource, { ...records, name: NAME0, version: 0 });
+        assert.deepEqual(resource, Object.assign(records, { name: NAME0, version: 0 }));
       });
     });
   });
