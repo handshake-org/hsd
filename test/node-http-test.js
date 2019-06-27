@@ -47,10 +47,9 @@ describe('Node http', function() {
       plugins: [require('../lib/wallet/plugin')]
     });
 
-    const witnessedBlockHashes = {};
     node.on('connect', (entry, block) => {
       const blockHash = block.hash().toString('hex');
-      witnessedBlockHashes[blockHash] = blockHash;
+      witnessedBlocks[blockHash] = blockHash;
     });
 
     miner = node.miner;
