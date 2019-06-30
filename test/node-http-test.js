@@ -197,7 +197,7 @@ describe('Node http', function() {
   });
 
   describe('getNameProof', () => {
-    it('It should return null when an auction has not been initiated', async () => {
+    it('It should return a proof type of TYPE_DEADEND when an auction has not been initiated', async () => {
       const proof = await nclient.get(`/proof/name/${NAME0}`);
       assert.equal(proof.proof.type, 'TYPE_DEADEND');
       assert.equal(proof.name, NAME0);
@@ -238,7 +238,7 @@ describe('Node http', function() {
   });
 
   describe.only('getNameProofByHash', () => {
-    it('It should return null when an auction has not been initiated', async () => {
+    it('It should return a proof type of TYPE_DEADEND when an auction has not been initiated', async () => {
       const nameHash = rules.hashName(NAME0).toString('hex');
       const proof = await nclient.get(`/proof/hash/${nameHash}`);
       assert.equal(proof.proof.type, 'TYPE_DEADEND');
