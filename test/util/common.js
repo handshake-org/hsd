@@ -116,6 +116,20 @@ common.forValue = async function(obj, key, val, timeout = 30000) {
   });
 };
 
+common.constructBlockMiner = function (node, nclient) {
+  // take into account race conditions
+  return async function mineBlocks(count, address) {
+    for (let i = 0; i < count; i++) {
+      const obj = { complete: false };
+      node.once('block', () => {
+        obj.complete = true;
+      });
+      await nclient.execute('generatetoaddress', [1, address]);
+      await common.forValue(obj, 'complete', true);
+    }
+  };
+};
+
 function parseUndo(data) {
   const br = bio.read(data);
   const items = [];

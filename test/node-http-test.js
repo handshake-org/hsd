@@ -22,23 +22,17 @@ const wclient = new WalletClient({
   apiKey: 'foo'
 });
 
+const wallet = wclient.wallet('primary');
+
 describe('Node http', function() {
   this.timeout(10000);
   const witnessedBlocks = {};
   let NAME0, NAME1;
-  let node, miner, chain;
-
-  const mineBlocks = async (n = 1) => {
-    for (let i = 0; i < n; i++) {
-      const block = await miner.mineBlock();
-      const blockHash = block.hash().toString('hex');
-      await chain.add(block);
-      await common.forValue(witnessedBlocks, blockHash, blockHash);
-    }
-  };
+  let node, mineBlocks, cbAddress;
 
   beforeEach(async () => {
     assert.equal(network.names.auctionStart, 0);
+
     node = new FullNode({
       memory: true,
       apiKey: 'foo',
@@ -52,12 +46,15 @@ describe('Node http', function() {
       witnessedBlocks[blockHash] = blockHash;
     });
 
-    miner = node.miner;
-    chain = node.chain;
+    mineBlocks = common.constructBlockMiner(node, nclient);
     NAME0 = await rules.grindName(10, 0, network);
     NAME1 = await rules.grindName(10, 20, network);
+
     await node.open();
-    await mineBlocks(network.names.auctionStart);
+
+    cbAddress = (await wallet.createAddress('default')).address;
+
+    await mineBlocks(network.names.auctionStart, cbAddress);
   });
 
   afterEach(async () => {
@@ -67,7 +64,7 @@ describe('Node http', function() {
   describe('getNameInfo', () => {
     describe('For names that are available at height 0', () => {
       it('It should return null when there hasn\'t been an auction initiated', async () => {
-        const nameInfo = await nclient.get(`/info/name/${NAME0}`);
+        const nameInfo = await nclient.get(`/name/${NAME0}`);
         assert.deepEqual(nameInfo, {
           info: null,
             start: {
@@ -78,7 +75,7 @@ describe('Node http', function() {
         });
       });
       it('It should start an auction on the first day', async () => {
-        const nameInfo = await nclient.get(`/info/name/${NAME0}`);
+        const nameInfo = await nclient.get(`/name/${NAME0}`);
         assert.deepEqual(nameInfo, {
           info: null,
           start: {
@@ -87,13 +84,16 @@ describe('Node http', function() {
             week: 0
           }
         });
-        await mineBlocks(10);
+
+        await mineBlocks(10, cbAddress);
+
         const open = await wclient.execute('sendopen', [NAME0]);
         assert(open);
       });
       it('It should start an auction on the 2nd day', async () => {
-        await mineBlocks(40);
-        const nameInfo = await nclient.get(`/info/name/${NAME0}`);
+        await mineBlocks(40, cbAddress);
+
+        const nameInfo = await nclient.get(`/name/${NAME0}`);
         assert.deepEqual(nameInfo, {
           info: null,
             start: {
@@ -102,12 +102,16 @@ describe('Node http', function() {
               week: 0
             }
         });
+
         const open = await wclient.execute('sendopen', [NAME0]);
         assert(open);
-        const nameInfoBefore = await nclient.get(`/info/name/${NAME0}`);
+
+        const nameInfoBefore = await nclient.get(`/name/${NAME0}`);
         assert.equal(nameInfoBefore.info, null);
-        await mineBlocks(1);
-        const nameInfoAfter = await nclient.get(`/info/name/${NAME0}`);
+
+        await mineBlocks(1, cbAddress);
+
+        const nameInfoAfter = await nclient.get(`/name/${NAME0}`);
         assert.equal(nameInfoAfter.info.name, NAME0);
         assert.equal(nameInfoAfter.info.state, 'OPENING');
       });
@@ -115,10 +119,13 @@ describe('Node http', function() {
 
     describe('For names that are available at height 20', () => {
       it('It should getNameInfo for an opening name', async () => {
-        await mineBlocks(20);
+        await mineBlocks(20, cbAddress);
+
         await wclient.execute('sendopen', [NAME1]);
-        await mineBlocks(1);
-        const nameInfo = await nclient.get(`/info/name/${NAME1}`);
+
+        await mineBlocks(1, cbAddress);
+
+        const nameInfo = await nclient.get(`/name/${NAME1}`);
         assert(nameInfo.start.start < 20);
         assert.equal(nameInfo.start.reserved, false);
         assert.equal(nameInfo.info.state, 'OPENING');
@@ -129,17 +136,20 @@ describe('Node http', function() {
   describe('getNameByHash', () => {
     it('It should return null when an auction has not been initiated', async () => {
       const nameHash = rules.hashName(NAME0);
-      const name = await nclient.get(`/name/hash/${nameHash.toString('hex')}`);
+      const name = await nclient.get(`/resource/hash/${nameHash.toString('hex')}`);
       assert.equal(name, null);
     });
 
     describe('When an auction has been initiated', () => {
       it('It should return the name', async () => {
-        await mineBlocks(10);
+        await mineBlocks(10, cbAddress);
+
         await wclient.execute('sendopen', [NAME0]);
-        await mineBlocks(1);
+
+        await mineBlocks(1, cbAddress);
+ 
         const nameHash = rules.hashName(NAME0);
-        const { name } = await nclient.get(`/name/hash/${nameHash.toString('hex')}`);
+        const { name } = await nclient.get(`/resource/hash/${nameHash.toString('hex')}`);
         assert.equal(name, NAME0);
       });
     });
@@ -154,20 +164,32 @@ describe('Node http', function() {
 
     describe('When an auction has been initiated', () => {
       it('It should return the resource', async () => {
-        await mineBlocks(10);
+        await mineBlocks(10, cbAddress);
+
         await wclient.execute('sendopen', [NAME0]);
-        await mineBlocks(1);
+
+        await mineBlocks(1, cbAddress);
+
         const { stats: { blocksUntilBidding } } = await wclient.execute('getauctioninfo', [NAME0]);
-        await mineBlocks(blocksUntilBidding);
+
+        await mineBlocks(blocksUntilBidding, cbAddress);
+
         const sendBid = await wclient.execute('sendbid', [NAME0, 12, 12]);
         assert(sendBid);
+
         const { stats: { blocksUntilReveal } } = await wclient.execute('getauctioninfo', [NAME0]);
-        await mineBlocks(blocksUntilReveal);
+
+        await mineBlocks(blocksUntilReveal, cbAddress);
+
         await wclient.execute('sendreveal', [NAME0]);
         const { stats: { blocksUntilClose } } = await wclient.execute('getauctioninfo', [NAME0]);
-        await mineBlocks(blocksUntilClose);
+
+        await mineBlocks(blocksUntilClose, cbAddress);
+
         await wclient.execute('sendupdate', [NAME0, records]);
-        await mineBlocks(1);
+
+        await mineBlocks(1, cbAddress);
+
         const resource = await nclient.get(`/resource/name/${NAME0}`);
         assert.deepEqual(resource, Object.assign(records, { name: NAME0, version: 0 }));
       });
@@ -183,26 +205,79 @@ describe('Node http', function() {
 
     describe('When an auction has been initiated', () => {
       it('It should return the name\'s proof', async () => {
-        await mineBlocks(10);
+        await mineBlocks(10, cbAddress);
+
         await wclient.execute('sendopen', [NAME0]);
-        await mineBlocks(1);
+
+        await mineBlocks(1, cbAddress);
+
         const { stats: { blocksUntilBidding } } = await wclient.execute('getauctioninfo', [NAME0]);
-        await mineBlocks(blocksUntilBidding);
+
+        await mineBlocks(blocksUntilBidding, cbAddress);
+
         const sendBid = await wclient.execute('sendbid', [NAME0, 12, 12]);
         assert(sendBid);
         const { stats: { blocksUntilReveal } } = await wclient.execute('getauctioninfo', [NAME0]);
-        await mineBlocks(blocksUntilReveal);
+
+        await mineBlocks(blocksUntilReveal, cbAddress);
+
         await wclient.execute('sendreveal', [NAME0]);
         const { stats: { blocksUntilClose } } = await wclient.execute('getauctioninfo', [NAME0]);
-        await mineBlocks(blocksUntilClose);
+
+        await mineBlocks(blocksUntilClose, cbAddress);
+
         await wclient.execute('sendupdate', [NAME0, { compat: false, version: 0, ttl: 172800, ns: ['ns1.example.com.@1.2.3.4'] }]);
-        await mineBlocks(1);
+
+        await mineBlocks(1, cbAddress);
+
         const proof = await nclient.get(`/proof/name/${NAME0}`);
         assert.equal(proof.proof.type, 'TYPE_EXISTS');
         assert.equal(proof.name, NAME0);
       });
     });
   });
+
+  describe.only('getNameProofByHash', () => {
+    it('It should return null when an auction has not been initiated', async () => {
+      const nameHash = rules.hashName(NAME0).toString('hex');
+      const proof = await nclient.get(`/proof/hash/${nameHash}`);
+      assert.equal(proof.proof.type, 'TYPE_DEADEND');
+    });
+
+    describe('When an auction has been initiated', () => {
+      it('It should return the name\'s proof', async () => {
+        await mineBlocks(10, cbAddress);
+
+        await wclient.execute('sendopen', [NAME0]);
+
+        await mineBlocks(1, cbAddress);
+
+        const { stats: { blocksUntilBidding } } = await wclient.execute('getauctioninfo', [NAME0]);
+
+        await mineBlocks(blocksUntilBidding, cbAddress);
+
+        const sendBid = await wclient.execute('sendbid', [NAME0, 12, 12]);
+        assert(sendBid);
+        const { stats: { blocksUntilReveal } } = await wclient.execute('getauctioninfo', [NAME0]);
+
+        await mineBlocks(blocksUntilReveal, cbAddress);
+
+        await wclient.execute('sendreveal', [NAME0]);
+        const { stats: { blocksUntilClose } } = await wclient.execute('getauctioninfo', [NAME0]);
+
+        await mineBlocks(blocksUntilClose, cbAddress);
+
+        await wclient.execute('sendupdate', [NAME0, { compat: false, version: 0, ttl: 172800, ns: ['ns1.example.com.@1.2.3.4'] }]);
+
+        await mineBlocks(1, cbAddress);
+
+        const nameHash = rules.hashName(NAME0).toString('hex');
+        const proof = await nclient.get(`/proof/hash/${nameHash}`);
+        assert.equal(proof.proof.type, 'TYPE_EXISTS');
+      });
+    });
+  });
+
   describe('grindName', () => {
     it('It should grind a name', async () => {
       const size = 10;
