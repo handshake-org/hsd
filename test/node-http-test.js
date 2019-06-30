@@ -108,7 +108,6 @@ describe('Node http', function() {
 
         const nameInfoBefore = await nclient.get(`/name/${NAME0}`);
         assert.equal(nameInfoBefore.info, null);
-
         await mineBlocks(1, cbAddress);
 
         const nameInfoAfter = await nclient.get(`/name/${NAME0}`);
@@ -122,7 +121,6 @@ describe('Node http', function() {
         await mineBlocks(20, cbAddress);
 
         await wclient.execute('sendopen', [NAME1]);
-
         await mineBlocks(1, cbAddress);
 
         const nameInfo = await nclient.get(`/name/${NAME1}`);
@@ -145,7 +143,6 @@ describe('Node http', function() {
         await mineBlocks(10, cbAddress);
 
         await wclient.execute('sendopen', [NAME0]);
-
         await mineBlocks(1, cbAddress);
  
         const nameHash = rules.hashName(NAME0);
@@ -167,7 +164,6 @@ describe('Node http', function() {
         await mineBlocks(10, cbAddress);
 
         await wclient.execute('sendopen', [NAME0]);
-
         await mineBlocks(1, cbAddress);
 
         const { stats: { blocksUntilBidding } } = await wclient.execute('getauctioninfo', [NAME0]);
@@ -187,7 +183,6 @@ describe('Node http', function() {
         await mineBlocks(blocksUntilClose, cbAddress);
 
         await wclient.execute('sendupdate', [NAME0, records]);
-
         await mineBlocks(1, cbAddress);
 
         const resource = await nclient.get(`/resource/name/${NAME0}`);
@@ -208,7 +203,6 @@ describe('Node http', function() {
         await mineBlocks(10, cbAddress);
 
         await wclient.execute('sendopen', [NAME0]);
-
         await mineBlocks(1, cbAddress);
 
         const { stats: { blocksUntilBidding } } = await wclient.execute('getauctioninfo', [NAME0]);
@@ -227,7 +221,6 @@ describe('Node http', function() {
         await mineBlocks(blocksUntilClose, cbAddress);
 
         await wclient.execute('sendupdate', [NAME0, { compat: false, version: 0, ttl: 172800, ns: ['ns1.example.com.@1.2.3.4'] }]);
-
         await mineBlocks(1, cbAddress);
 
         const proof = await nclient.get(`/proof/name/${NAME0}`);
@@ -249,7 +242,6 @@ describe('Node http', function() {
         await mineBlocks(10, cbAddress);
 
         await wclient.execute('sendopen', [NAME0]);
-
         await mineBlocks(1, cbAddress);
 
         const { stats: { blocksUntilBidding } } = await wclient.execute('getauctioninfo', [NAME0]);
@@ -268,7 +260,6 @@ describe('Node http', function() {
         await mineBlocks(blocksUntilClose, cbAddress);
 
         await wclient.execute('sendupdate', [NAME0, { compat: false, version: 0, ttl: 172800, ns: ['ns1.example.com.@1.2.3.4'] }]);
-
         await mineBlocks(1, cbAddress);
 
         const nameHash = rules.hashName(NAME0).toString('hex');
