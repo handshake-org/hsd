@@ -102,6 +102,7 @@ common.forValue = async function(obj, key, val, timeout = 30000) {
   const ms = 10;
   let interval = null;
   let count = 0;
+
   return new Promise((resolve, reject) => {
     interval = setInterval(() => {
       if (obj[key] === val) {
