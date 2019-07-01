@@ -144,7 +144,7 @@ describe('Node http', function() {
 
         await wclient.execute('sendopen', [NAME0]);
         await mineBlocks(1, cbAddress);
- 
+
         const nameHash = rules.hashName(NAME0);
         const { name } = await nclient.get(`/resource/hash/${nameHash.toString('hex')}`);
         assert.equal(name, NAME0);
