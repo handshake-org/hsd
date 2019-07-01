@@ -230,11 +230,12 @@ describe('Node http', function() {
     });
   });
 
-  describe.only('getNameProofByHash', () => {
+  describe('getNameProofByHash', () => {
     it('It should return a proof type of TYPE_DEADEND when an auction has not been initiated', async () => {
       const nameHash = rules.hashName(NAME0).toString('hex');
       const proof = await nclient.get(`/proof/hash/${nameHash}`);
       assert.equal(proof.proof.type, 'TYPE_DEADEND');
+      assert.equal(proof.name, null);
     });
 
     describe('When an auction has been initiated', () => {
@@ -265,6 +266,7 @@ describe('Node http', function() {
         const nameHash = rules.hashName(NAME0).toString('hex');
         const proof = await nclient.get(`/proof/hash/${nameHash}`);
         assert.equal(proof.proof.type, 'TYPE_EXISTS');
+        assert.equal(proof.name, NAME0);
       });
     });
   });
