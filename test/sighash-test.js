@@ -38,15 +38,15 @@ describe('Signature Hashes', function () {
     let path, keyring, addr, receives;
 
     before(() => {
-      path = [44 | HARDENED, 5353 | HARDENED, 0 | HARDENED, 0, 0];
+      path = [harden(44), harden(5353), harden(0), 0, 0];
       keyring = newKeyRing(path);
       addr = keyring.getAddress();
 
       // generate receive addresses
       receives = [
-        newAddress([44 | HARDENED, COIN_TYPE | HARDENED, 1 | HARDENED, 0, 0]),
-        newAddress([44 | HARDENED, COIN_TYPE | HARDENED, 2 | HARDENED, 0, 0]),
-        newAddress([44 | HARDENED, COIN_TYPE | HARDENED, 3 | HARDENED, 0, 0])
+        newAddress([harden(44), harden(COIN_TYPE), harden(1), 0, 0]),
+        newAddress([harden(44), harden(COIN_TYPE), harden(2), 0, 0]),
+        newAddress([harden(44), harden(COIN_TYPE), harden(3), 0, 0])
       ];
     });
 
@@ -60,6 +60,44 @@ describe('Signature Hashes', function () {
     it('should exist in common', () => {
       assert('SINGLEREVERSE' in common.hashType);
       assert(common.hashTypeByVal[SINGLEREVERSE] === 'SINGLEREVERSE');
+    });
+
+    it('should create the correct sighash', () => {
+      // SINGLEREVERSE commits to the output at the opposite
+      // index, meaning that it is the outputs.length - 1 - i'th index,
+      // where i is the index of the input. 1 is subtracted from the
+      // outputs length to make sure that it is 0 indexed.
+
+      // create a transaction with 1 input and 2 outputs
+      // sign with SINGLEREVERSE so that only the final output
+      // is committed to
+      const mtx = new MTX();
+      mtx.addOutput(receives[0], 50000);
+      mtx.addOutput(receives[1], 20000);
+
+      const coin = new Coin({
+        height: 0,
+        value: 70000,
+        address: addr,
+        hash: ONE_HASH,
+        index: 0
+      });
+
+      mtx.addCoin(coin);
+
+      const script = Script.fromPubkeyhash(keyring.getHash());
+      // sign the 0th input, commit to the output at index 1
+      const sighash = mtx.signatureHash(0, script, 70000, SINGLEREVERSE);
+
+      // malleate in safe way by altering the output at index 0
+      mtx.outputs[0] = new Output();
+      const malleated = mtx.signatureHash(0, script, 70000, SINGLEREVERSE);
+      assert.bufferEqual(sighash, malleated);
+
+      // malleate in unsafe way by altering the output at index 1
+      mtx.outputs[1] = new Output();
+      const fail = mtx.signatureHash(0, script, 70000, SINGLEREVERSE);
+      assert.notBufferEqual(sighash, fail);
     });
 
     it('should create a valid signature', () => {
@@ -165,4 +203,10 @@ function newKeyRing(path) {
 // create an address from a path
 function newAddress(path) {
   return newKeyRing(path).getAddress();
+}
+
+// harden a uint
+function harden(uint) {
+  assert(Number.isSafeInteger(uint) && uint >= 0);
+  return (uint | HARDENED) >>> 0;
 }
