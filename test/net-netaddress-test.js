@@ -1,5 +1,14 @@
 'use strict';
 
+/* Parts of this software are based on bitcoin/bitcoin:
+ *   Copyright (c) 2009-2019, The Bitcoin Core Developers (MIT License).
+ *   Copyright (c) 2009-2019, The Bitcoin Developers (MIT License).
+ *   https://github.com/bitcoin/bitcoin
+ *
+ * Resources:
+ *   https://github.com/bitcoin/bitcoin/blob/46fc4d1a24c88e797d6080336e3828e45e39c3fd/src/test/netbase_tests.cpp
+ */
+
 const assert = require('bsert');
 const NetAddress = require('../lib/net/netaddress');
 const Network = require('../lib/protocol/network');
