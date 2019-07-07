@@ -87,11 +87,12 @@ async function dummyBlock(txs, coinbase = false) {
     merkleRoot: random.randomBytes(32),
     witnessRoot: random.randomBytes(32),
     treeRoot: random.randomBytes(32),
-    filterRoot: random.randomBytes(32),
     reservedRoot: random.randomBytes(32),
     time: time,
     bits: await chain.getTarget(time, chain.tip),
-    nonce: Buffer.alloc(consensus.NONCE_SIZE),
+    nonce: 0,
+    extraNonce: Buffer.alloc(consensus.NONCE_SIZE),
+    mask: random.randomBytes(32),
     txs: txs
   });
 

@@ -21,18 +21,15 @@ const networks = {
 
 function createGenesisBlock(options) {
   const genesis = Address.fromHash(consensus.GENESIS_KEY, 0);
+  const nonce = options.nonce >>> 0;
 
   let flags = options.flags;
-  let nonce = options.nonce;
 
   if (!flags) {
     flags = Buffer.from(
       `01/Nov/2017 EFF to ICANN: Don't Pick Up the Censor's Pen`,
       'ascii');
   }
-
-  if (!nonce)
-    nonce = Buffer.alloc(consensus.NONCE_SIZE, 0x00);
 
   const tx = new TX({
     version: 0,
@@ -61,11 +58,12 @@ function createGenesisBlock(options) {
     merkleRoot: consensus.ZERO_HASH,
     witnessRoot: consensus.ZERO_HASH,
     treeRoot: consensus.ZERO_HASH,
-    filterRoot: consensus.ZERO_HASH,
     reservedRoot: consensus.ZERO_HASH,
     time: options.time,
     bits: options.bits,
-    nonce: nonce
+    nonce: nonce,
+    extraNonce: Buffer.alloc(consensus.NONCE_SIZE, 0x00),
+    mask: consensus.ZERO_HASH
   });
 
   block.txs.push(tx);
@@ -115,16 +113,17 @@ function formatJS(name, block) {
   out += `  treeRoot: Buffer.from(\n`;
   out += `    '${block.treeRoot.toString('hex')}',\n`;
   out += `    'hex'),\n`;
-  out += `  filterRoot: Buffer.from(\n`;
-  out += `    '${block.filterRoot.toString('hex')}',\n`;
-  out += `    'hex'),\n`;
   out += `  reservedRoot: Buffer.from(\n`;
   out += `    '${block.reservedRoot.toString('hex')}',\n`;
   out += `    'hex'),\n`;
   out += `  time: ${block.time},\n`;
   out += `  bits: 0x${util.hex32(block.bits)},\n`;
-  out += `  nonce: Buffer.from(\n`;
-  out += `    '${block.nonce.toString('hex')}',\n`;
+  out += `  nonce: 0x${util.hex32(block.nonce)},\n`;
+  out += `  extraNonce: Buffer.from(\n`;
+  out += `    '${block.extraNonce.toString('hex')}',\n`;
+  out += `    'hex'),\n`;
+  out += `  mask: Buffer.from(\n`;
+  out += `    '${block.mask.toString('hex')}',\n`;
   out += `    'hex'),\n`;
   out += `  height: 0\n`;
   out += `};`;
