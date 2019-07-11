@@ -138,11 +138,12 @@ class TestUtil {
   }
 }
 
-describe('Auction RPCs', function() {
+describe.only('Auction RPCs', function() {
   this.timeout(60000);
 
   const util = new TestUtil();
   const name = rules.grindName(2, 0, Network.get('regtest'));
+  const nameToOpenTwice = rules.grindName(3, 0, Network.get('regtest'));
   let winner, loser;
 
   const mineBlocks = async (num, wallet, account = 'default') => {
@@ -313,5 +314,25 @@ describe('Auction RPCs', function() {
     const submit = true;
     const json = await util.wrpc('createrevoke', [name]);
     await processJSON(json, submit, loser, true);
+  });
+
+  it('should create another OPEN after auction close', async () => {
+    // Create, assert, submit and mine the first OPEN.
+    const submit = true;
+    const firstJson = await util.wrpc('createopen', [nameToOpenTwice]);
+    await processJSON(firstJson, submit, loser);
+
+    // Mine past OPEN period.
+    await mineBlocks(util.network.names.treeInterval, loser);
+
+    // Mine past BID period.
+    await mineBlocks(util.network.names.biddingPeriod, loser);
+
+    // Mine past REVEAL period.
+    await mineBlocks(util.network.names.revealPeriod, loser);
+
+    // Create, assert, submit and mine the second OPEN.
+    const secondJson = await util.wrpc('createopen', [nameToOpenTwice]);
+    await processJSON(secondJson, submit, loser);
   });
 });
