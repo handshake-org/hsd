@@ -138,7 +138,7 @@ class TestUtil {
   }
 }
 
-describe.only('Auction RPCs', function() {
+describe('Auction RPCs', function() {
   this.timeout(60000);
 
   const util = new TestUtil();
