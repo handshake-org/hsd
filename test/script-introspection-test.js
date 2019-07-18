@@ -73,6 +73,7 @@ describe('Script transaction introspection', function() {
   describe('OP_CHECKOUTPUT', function() {
     it('should verify TX output with specified value', async () => {
       for (let v = 1; v < 10; v++) {
+        const index = v;
         const value = 1000 * v;
         const version = v;
         const hash = Buffer.alloc(20, v);
@@ -83,6 +84,7 @@ describe('Script transaction introspection', function() {
         });
 
         const script = new Script([
+          Opcode.fromInt(index),
           Opcode.fromInt(version),
           Opcode.fromData(hash),
           Opcode.fromInt(value),
@@ -103,14 +105,23 @@ describe('Script transaction introspection', function() {
 
         const mtx = new MTX();
         mtx.addCoin(coin);
+        // Add 10 "wrong" outputs
         mtx.inputs[0].witness.fromStack(witness);
-        mtx.outputs[0] = output;
+        for (let i = 0; i < 10; i++) {
+          mtx.outputs[i] = new Output({
+            value: 1234,
+            address: new Address()
+          });
+        }
+        // Replace output at specified index with "correct" output
+        mtx.outputs[index] = output;
 
         assert(mtx.verify());
       }
     });
 
     it('should verify TX output with same-as-input value', async () => {
+      const index = 0;
       const value = 123456789;
       const version = 0;
       const hash = Buffer.alloc(20, 1);
@@ -121,6 +132,7 @@ describe('Script transaction introspection', function() {
       });
 
       const script = new Script([
+        Opcode.fromInt(index),
         Opcode.fromInt(version),
         Opcode.fromData(hash),
         Opcode.fromInt(0),
@@ -148,6 +160,7 @@ describe('Script transaction introspection', function() {
     });
 
     it('should reject TX output mismatch: value', async () => {
+      const index = 0;
       const value = 123456789;
       const version = 0;
       const hash = Buffer.alloc(20, 1);
@@ -158,6 +171,7 @@ describe('Script transaction introspection', function() {
       });
 
       const script = new Script([
+        Opcode.fromInt(index),
         Opcode.fromInt(version),
         Opcode.fromData(hash),
         Opcode.fromInt(value + 1),
@@ -185,6 +199,7 @@ describe('Script transaction introspection', function() {
     });
 
     it('should reject TX output mismatch: address', async () => {
+      const index = 0;
       const value = 123456789;
       const version = 0;
       const hash = Buffer.alloc(20, 1);
@@ -196,6 +211,7 @@ describe('Script transaction introspection', function() {
       });
 
       const script = new Script([
+        Opcode.fromInt(index),
         Opcode.fromInt(version),
         Opcode.fromData(badhash),
         Opcode.fromInt(value),
@@ -223,6 +239,7 @@ describe('Script transaction introspection', function() {
     });
 
     it('should reject TX output mismatch: version', async () => {
+      const index = 0;
       const value = 123456789;
       const version = 0;
       const hash = Buffer.alloc(20, 1);
@@ -233,7 +250,47 @@ describe('Script transaction introspection', function() {
       });
 
       const script = new Script([
+        Opcode.fromInt(index),
         Opcode.fromInt(version + 1),
+        Opcode.fromData(hash),
+        Opcode.fromInt(value),
+        Opcode.fromSymbol('OP_CHECKOUTPUT')
+      ]);
+
+      const coin = Coin.fromOptions({
+        value: value,
+        address: Address.fromScript(script)
+      });
+
+      const witness = new Witness([script.encode()]);
+
+      const output = new Output({
+        value,
+        address
+      });
+
+      const mtx = new MTX();
+      mtx.addCoin(coin);
+      mtx.inputs[0].witness.fromStack(witness);
+      mtx.outputs[0] = output;
+
+      assert(!mtx.verify());
+    });
+
+    it('should reject output check at excessive index', async () => {
+      const index = 1;
+      const value = 123456789;
+      const version = 0;
+      const hash = Buffer.alloc(20, 1);
+
+      const address = new Address({
+        version,
+        hash
+      });
+
+      const script = new Script([
+        Opcode.fromInt(index),
+        Opcode.fromInt(version),
         Opcode.fromData(hash),
         Opcode.fromInt(value),
         Opcode.fromSymbol('OP_CHECKOUTPUT')
