@@ -194,12 +194,13 @@ describe('Node http', function() {
   describe('getNameProof', () => {
     it('It should return a proof type of TYPE_DEADEND when an auction has not been initiated', async () => {
       const proof = await nclient.get(`/proof/name/${NAME0}`);
-      assert.equal(proof.proof.type, 'TYPE_DEADEND');
+      assert.equal(proof.type, 'TYPE_DEADEND');
       assert.equal(proof.name, NAME0);
     });
 
     describe('When an auction has been initiated', () => {
       it('It should return the name\'s proof', async () => {
+        const record = { compat: false, version: 0, ttl: 172800, ns: ['ns1.example.com.@1.2.3.4'] };
         await mineBlocks(10, cbAddress);
 
         await wclient.execute('sendopen', [NAME0]);
@@ -220,11 +221,11 @@ describe('Node http', function() {
 
         await mineBlocks(blocksUntilClose, cbAddress);
 
-        await wclient.execute('sendupdate', [NAME0, { compat: false, version: 0, ttl: 172800, ns: ['ns1.example.com.@1.2.3.4'] }]);
+        await wclient.execute('sendupdate', [NAME0, record]);
         await mineBlocks(1, cbAddress);
 
         const proof = await nclient.get(`/proof/name/${NAME0}`);
-        assert.equal(proof.proof.type, 'TYPE_EXISTS');
+        assert.equal(proof.type, 'TYPE_EXISTS');
         assert.equal(proof.name, NAME0);
       });
     });
@@ -234,12 +235,13 @@ describe('Node http', function() {
     it('It should return a proof type of TYPE_DEADEND when an auction has not been initiated', async () => {
       const nameHash = rules.hashName(NAME0).toString('hex');
       const proof = await nclient.get(`/proof/hash/${nameHash}`);
-      assert.equal(proof.proof.type, 'TYPE_DEADEND');
+      assert.equal(proof.type, 'TYPE_DEADEND');
       assert.equal(proof.name, null);
     });
 
     describe('When an auction has been initiated', () => {
       it('It should return the name\'s proof', async () => {
+        const record = { compat: false, version: 0, ttl: 172800, ns: ['ns1.example.com.@1.2.3.4'] };
         await mineBlocks(10, cbAddress);
 
         await wclient.execute('sendopen', [NAME0]);
@@ -260,12 +262,12 @@ describe('Node http', function() {
 
         await mineBlocks(blocksUntilClose, cbAddress);
 
-        await wclient.execute('sendupdate', [NAME0, { compat: false, version: 0, ttl: 172800, ns: ['ns1.example.com.@1.2.3.4'] }]);
+        await wclient.execute('sendupdate', [NAME0, record]);
         await mineBlocks(1, cbAddress);
 
         const nameHash = rules.hashName(NAME0).toString('hex');
         const proof = await nclient.get(`/proof/hash/${nameHash}`);
-        assert.equal(proof.proof.type, 'TYPE_EXISTS');
+        assert.equal(proof.type, 'TYPE_EXISTS');
         assert.equal(proof.name, NAME0);
       });
     });
