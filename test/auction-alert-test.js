@@ -42,13 +42,22 @@ const wallet = wclient.wallet('primary');
 
 const {wdb} = node.require('walletdb');
 
-let name, nameHash, primary;
+// TODO: add describe for websockets
+// and describe for unit
+
+let name, nameHash, primary, cbAddress;
 const alerts = [];
 describe('Auction Alerts', function() {
   this.timeout(10000);
 
   before(async () => {
     await node.open();
+
+    // create an alternative wallet to use for coinbase
+    await wclient.createWallet('secondary');
+    const secondary = wclient.wallet('secondary');
+    const {receiveAddress} = (await secondary.getAccount('default'));
+    cbAddress = receiveAddress;
 
     wclient.on('connect', async () => {
       await wclient.call('join', wallet.id);
@@ -70,7 +79,7 @@ describe('Auction Alerts', function() {
     // the primary wallet client
     primary = await wdb.get(0);
 
-    // build up an initial wallet balance
+    // build up an initial wallet balance for tx fees
     await mineBlocks(4, address);
   });
 
@@ -81,7 +90,7 @@ describe('Auction Alerts', function() {
   });
 
   it('should emit alert events', async () => {
-    await runAuction(name, wallet, nclient);
+    await runAuction(name, wallet, nclient, cbAddress);
 
     const {info} = await nclient.execute('getnameinfo', [name]);
     const height = info.height;
@@ -139,9 +148,7 @@ describe('Auction Alerts', function() {
   });
 });
 
-async function runAuction(name, wallet, node) {
-  const address = (await wallet.getAccount('default')).receiveAddress;
-
+async function runAuction(name, wallet, node, address) {
   await wallet.client.post(`/wallet/${wallet.id}/open`, {
     name: name
   });
