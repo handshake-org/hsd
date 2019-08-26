@@ -5,6 +5,12 @@
 
 **HSD** is an implementation of the [Handshake][handshake] Protocol.
 
+## Testnet
+
+Testnet4 is officially dead; breaking changes have landed on `master`.
+We recommend using `regtest` or `simnet`. However, some community members
+are keeping testnet4 alive. Use the branch `testnet4-stable` to connect.
+
 ## Install
 
 `hsd` requires Node.js v10 or higher
@@ -37,43 +43,6 @@ See the [node-gyp](https://github.com/nodejs/node-gyp) documentation for more in
 - Documentation Site: [https://handshake-org.github.io](https://handshake-org.github.io)
 - API Docs: [https://handshake-org.github.io/api-docs/index.html](https://handshake-org.github.io/api-docs/index.html)
 - JSDoc: [https://handshake-org.github.io/docs](https://handshake-org.github.io/docs)
-
-## Testnet
-
-Testnet3 is running as of January 22nd.
-
-Testnet3 seed nodes (`pubkey@ip`):
-
-- `aoihqqagbhzz6wxg43itefqvmgda4uwtky362p22kbimcyg5fdp54@172.104.214.189`
-- `ajdzrpoxsusaw4ixq4ttibxxsuh5fkkduc5qszyboidif2z25i362@173.255.209.126`
-- `ajk57wutnhfdzvqwqrgab3wwh4wxoqgnkz4avbln54pgj5jwefcts@172.104.177.177`
-- `am2lsmbzzxncaptqjo22jay3mztfwl33bxhkp7icfx7kmi5rvjaic@139.162.183.168`
-
-Testnet3 public DNS servers:
-
-- 172.104.214.189 - Recursive Server 1.
-- 173.255.209.126 - Authoritative Server 1.
-- 172.104.177.177 - Recursive Server 2.
-- 139.162.183.168 - Authoritative Server 2.
-- 74.207.247.120 - Recursive Server 3 ([hnsd] nameserver)
-- 45.79.134.225 - Authoritative Server 3 ([hnsd] nameserver)
-
-Example:
-
-``` bash
-$ dig @172.104.214.189 google.com A +short
-172.217.0.46
-```
-
-``` bash
-$ dig @173.255.209.126 com NS
-...
-;; AUTHORITY SECTION:
-com.                    86400   IN      NS      a.gtld-servers.net.
-com.                    86400   IN      NS      b.gtld-servers.net.
-com.                    86400   IN      NS      c.gtld-servers.net.
-...
-```
 
 ## Quickstart
 
