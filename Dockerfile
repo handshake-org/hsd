@@ -4,7 +4,7 @@ WORKDIR /code
 CMD "hsd"
 
 RUN apk upgrade --no-cache && \
-    apk add --no-cache bash unbound-dev
+    apk add --no-cache bash unbound-dev gmp-dev
 
 COPY package.json \
      #package-lock.json \
@@ -12,7 +12,7 @@ COPY package.json \
 
 # Install build dependencies and compile
 FROM base AS build
-RUN apk add --no-cache g++ gcc make python2 gmp-dev
+RUN apk add --no-cache g++ gcc make python2
 RUN npm install --production
 
 FROM base
@@ -20,4 +20,3 @@ ENV PATH="${PATH}:/code/bin:/code/node_modules/.bin"
 COPY --from=build /code/node_modules /code/node_modules/
 COPY bin /code/bin/
 COPY lib /code/lib/
-
