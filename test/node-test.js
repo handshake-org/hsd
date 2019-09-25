@@ -19,6 +19,7 @@ const node = new FullNode({
   memory: true,
   apiKey: 'foo',
   network: 'regtest',
+  bip37: true,
   workers: true,
   plugins: [require('../lib/wallet/plugin')]
 });
@@ -657,6 +658,14 @@ describe('Node', function() {
     // assert.strictEqual(result.transactions[0].hash, tx2.txid());
     // assert.strictEqual(result.transactions[1].hash, tx1.txid());
     assert.strictEqual(result.coinbasevalue, 2000 * consensus.COIN + fees);
+  });
+
+  it('should get service names for rpc getnetworkinfo', async () => {
+    const json = await node.rpc.call({
+      method: 'getnetworkinfo'
+    });
+
+    assert.deepEqual(json.result.localservicenames, ['NETWORK', 'BLOOM']);
   });
 
   it('should cleanup', async () => {
