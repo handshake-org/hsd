@@ -3,6 +3,7 @@
 const assert = require('bsert');
 const fs = require('bfile');
 const reserved = require('../lib/covenants/reserved');
+const rules = require('../lib/covenants/rules');
 
 describe('Reserved', function() {
   it('should get a domain', () => {
@@ -94,5 +95,36 @@ describe('Reserved', function() {
     }
 
     assert.strictEqual(total, 203999999937640 - (10200000 * 1e6));
+  });
+
+  it('should always reserve a root TLD', async () => {
+    const network = {
+      names: {
+        noReserved: false,
+        claimPeriod: 10
+      }
+    };
+
+    // Reserved names are only reserved for a limited time
+    assert(rules.isReserved(
+      rules.hashString('facebook'),
+      5,
+      network));
+
+    assert(!rules.isReserved(
+      rules.hashString('facebook'),
+      50,
+      network));
+
+    // Root names (gTLDs) are always reserved
+    assert(rules.isReserved(
+      rules.hashString('com'),
+      5,
+      network));
+
+    assert(rules.isReserved(
+      rules.hashString('com'),
+      50,
+      network));
   });
 });
