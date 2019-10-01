@@ -21,6 +21,7 @@ const Outpoint = require('../lib/primitives/outpoint');
 const Script = require('../lib/script/script');
 const policy = require('../lib/protocol/policy');
 const HDPrivateKey = require('../lib/hd/private');
+const Wallet = require('../lib/wallet/wallet');
 
 const KEY1 = 'xprv9s21ZrQH143K3Aj6xQBymM31Zb4BVc7wxqfUhMZrzewdDVCt'
   + 'qUP9iWfcHgJofs25xbaUpCps9GDXj83NiWvQCAkWQhVj5J4CorfnpKX94AZ';
@@ -1737,6 +1738,21 @@ describe('Wallet', function() {
       const credit = await wallet.txdb.getCredit(tx2.hash(), i);
       assert(credit.own);
     }
+  });
+
+  it('should throw error with missing outputs', async () => {
+    const wallet = new Wallet({});
+
+    let err = null;
+
+    try {
+       await wallet.send({outputs: []});
+    } catch (e) {
+      err = e;
+   }
+
+    assert(err);
+    assert.equal(err.message, 'At least one output required.');
   });
 
   it('should cleanup', async () => {
