@@ -4,3 +4,4 @@ docker_data/
 docs/reference/
 node_modules/
 npm-debug.log
+.vscode/
