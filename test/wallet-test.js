@@ -105,7 +105,7 @@ describe('Wallet', function() {
     const [key1, key2, key3] = await Promise.all([
       wallet.getReceive(accountIndex, 1),
       wallet.getReceive(accountIndex, 2),
-      wallet.getChange(accountIndex, 1),
+      wallet.getChange(accountIndex, 1)
     ]);
 
     assert(key1.getAddress().equals(expectedKey1.getAddress()));
