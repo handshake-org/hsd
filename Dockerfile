@@ -1,22 +1,42 @@
-FROM node:alpine AS base
-RUN mkdir -p /code
-WORKDIR /code
-CMD "hsd"
+FROM node:10-alpine AS base
 
-RUN apk upgrade --no-cache && \
-    apk add --no-cache bash unbound-dev gmp-dev
+RUN mkdir /opt/hsd
+WORKDIR /opt/hsd
 
-COPY package.json \
-     #package-lock.json \
-     /code/
+# dynamically linked deps
+RUN apk upgrade --no-cache \
+  && apk add --no-cache unbound-dev
 
-# Install build dependencies and compile
 FROM base AS build
-RUN apk add --no-cache g++ gcc make python2
-RUN npm install --production
+
+# build deps
+RUN apk upgrade --no-cache \
+  && apk add --no-cache bash \
+  git python2 g++ gcc make
+
+COPY . .
+
+RUN npm install
 
 FROM base
-ENV PATH="${PATH}:/code/bin:/code/node_modules/.bin"
-COPY --from=build /code/node_modules /code/node_modules/
-COPY bin /code/bin/
-COPY lib /code/lib/
+
+ENTRYPOINT ["hsd"]
+
+ENV PATH="${PATH}:/opt/hsd/bin:/opt/hsd/node_modules/.bin"
+COPY --from=build /opt/hsd/ /opt/hsd/
+
+# networks:
+# main testnet regtest simnet
+
+# p2p network ports
+EXPOSE 12038 13038 14038 15038
+
+# http network ports
+EXPOSE 12037 13037 14037 15037
+
+# wallet network ports
+EXPOSE 12039 13039 14039 15039
+
+# recursive dns server ports
+EXPOSE 5350 15350 25350 35350
+EXPOSE 5350/udp 15350/udp 25350/udp 35350/udp
