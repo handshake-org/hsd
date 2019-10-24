@@ -21,7 +21,7 @@ describe('Peer (Unit)', function() {
       level: 'debug',
       file: false,
       console: false
-    }),
+    })
   });
 
   beforeEach(() => {
@@ -30,10 +30,10 @@ describe('Peer (Unit)', function() {
   });
 
   it('should increase ban score', async () => {
-    peer.increaseBan(10)
+    peer.increaseBan(10);
     assert.strictEqual(peer.banScore, 10);
 
-    peer.increaseBan(10)
+    peer.increaseBan(10);
     assert.strictEqual(peer.banScore, 20);
   });
 
