@@ -326,6 +326,11 @@ The above will output a base64 string which can then be passed to the RPC:
 $ hsd-rpc sendrawclaim 'base64-string'
 ```
 
+## Docker
+
+To build and run with Docker, see the
+[docs](docs/docker.md).
+
 ## Support
 
 Join us on [freenode][freenode] in the [#handshake][irc] channel.
