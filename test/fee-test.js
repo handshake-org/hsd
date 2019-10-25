@@ -127,8 +127,7 @@ describe('Fees', function () {
     const address = wallet.getAddress();
 
     const numBlocks = 5;
-    const numOpens = 100;
-    const numUpdates = 100;
+    const numTXs = 100;
     const blocks = []
     for (let i = 0; i < numBlocks + 2; i++) {
       const entries = []
@@ -138,7 +137,7 @@ describe('Fees', function () {
     // set up estimator's mempool with
     // different prices and blocks to process
     for (let i = 0; i < numBlocks; i++) {
-      for (let j = 0; j <= numOpens; j++) {
+      for (let j = 0; j <= numTXs; j++) {
         // add low-fee tx to estimator's mempool, but it never gets confirmed.
         const lowOpenTX = covenantEntry(types.OPEN, domain, GENERATE_HASH, address, 2*lowFee, i);
         composedFeeEstimator.processTX(lowOpenTX, true)
@@ -150,7 +149,7 @@ describe('Fees', function () {
         composedFeeEstimator.processTX(medOpenTX, true)
         medOpenTX.height = medOpenTX.height + 2
         blocks[i + 2].push(medOpenTX)
-        const medRegisterTX = covenantEntry(types.OPEN, domain, GENERATE_HASH, address, medFee, i);
+        const medRegisterTX = covenantEntry(types.REGISTER, domain, GENERATE_HASH, address, medFee, i);
         composedFeeEstimator.processTX(medRegisterTX, true)
         medRegisterTX.height = medRegisterTX.height + 2
         blocks[i + 2].push(medRegisterTX)
@@ -161,10 +160,10 @@ describe('Fees', function () {
         composedFeeEstimator.processTX(highOpenTX, true)
         highOpenTX.height = highOpenTX.height + 1
         blocks[i + 1].push(highOpenTX)
-        const highRegisterTX = covenantEntry(types.OPEN, domain, GENERATE_HASH, address, highFee, i);
+        const highRegisterTX = covenantEntry(types.REGISTER, domain, GENERATE_HASH, address, highFee, i);
         composedFeeEstimator.processTX(highRegisterTX, true)
-        highRegisterTX.height = highRegisterTX.height + 2
-        blocks[i + 2].push(highRegisterTX)
+        highRegisterTX.height = highRegisterTX.height + 1
+        blocks[i + 1].push(highRegisterTX)
       }
     }
 
