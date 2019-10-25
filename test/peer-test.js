@@ -67,7 +67,7 @@ describe('Peer (Unit)', function() {
     const dosResetTime = common.DOS_RESET_TIME;
     common.DOS_RESET_TIME = 1;
 
-    await sleep(1000);
+    await sleep(1200);
 
     peer.increaseDos(10, Date.now());
     assert.strictEqual(peer.dosScore, 10);
