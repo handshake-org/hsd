@@ -43,9 +43,6 @@ describe('Peer (Unit)', function() {
 
     peer.increaseDos(10, Date.now());
     assert.strictEqual(peer.dosScore, 20);
-
-    peer.increaseDos(10, Date.now());
-    assert.strictEqual(peer.dosScore, 30);
   });
 
   it('should increase dos score with decay', async () => {
