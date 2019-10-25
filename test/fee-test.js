@@ -21,9 +21,9 @@ const lowFee = 10;
 const medFee = 1000;
 const highFee = 10000;
 
-const feeEstimator = new Fees()
+const feeEstimator = new Fees();
 
-const composedFeeEstimator = new ComposedFees()
+const composedFeeEstimator = new ComposedFees();
 
 const wallet = new MemWallet();
 
@@ -34,19 +34,19 @@ function covenantEntry(type, name, hash, addr, fee, height) {
     hash = random.randomBytes(32);
 
   const fund = new MTX();
-  fund.addCoin(dummyInput(addr, hash, fee));
+  fund.addCoin(dummyInput(addr, hash, fee, height));
   fund.addOutput(covenantOutput(type, name, addr));
 
   const [tx, view] = fund.commit();
 
   const entry = MempoolEntry.fromTX(tx, view, 0);
 
-  return entry
+  return entry;
 }
 
-function dummyInput(addr, hash, fee) {
+function dummyInput(addr, hash, fee, height) {
   const coin = new Coin();
-  coin.height = 0;
+  coin.height = height;
   coin.value = fee;
   coin.address = addr;
   coin.hash = hash;
@@ -83,33 +83,33 @@ describe('Fees', function () {
 
     const numBlocks = 5;
     const numOpens = 100;
-    const blocks = []
+    const blocks = [];
     for (let i = 0; i < numBlocks + 2; i++) {
-      const entries = []
-      blocks[i] = entries
+      const entries = [];
+      blocks[i] = entries;
     }
 
     // set up estimator's mempool with
     // different prices and blocks to process
     for (let i = 0; i < numBlocks; i++) {
-      for (let j = 0; j <= numOpens; j++){
+      for (let j = 0; j <= numOpens; j++) {
         // add low-fee tx to estimator's mempool, but it never gets confirmed.
         const lowTX = covenantEntry(types.OPEN, domain, GENERATE_HASH, address, lowFee, i);
-        feeEstimator.processTX(lowTX, true)
+        feeEstimator.processTX(lowTX, true);
 
         // add medium-fee tx to estimator's mempool and confirm it in two blocks
         const medTX = covenantEntry(types.OPEN, domain, GENERATE_HASH, address, medFee, i);
-        feeEstimator.processTX(medTX, true)
-        medTX.height = medTX.height + 2
-        blocks[i + 2].push(medTX)
+        feeEstimator.processTX(medTX, true);
+        medTX.height = medTX.height + 2;
+        blocks[i + 2].push(medTX);
 
         // add high-fee tx to estimator's mempool and confirm it in the next block
         const highTX = covenantEntry(types.OPEN, domain, GENERATE_HASH, address, highFee, i);
-        feeEstimator.processTX(highTX, true)
-        highTX.height = highTX.height + 1
-        blocks[i + 1].push(highTX)
+        feeEstimator.processTX(highTX, true);
+        highTX.height = highTX.height + 1;
+        blocks[i + 1].push(highTX);
       }
-    } 
+    }
 
     // process all the blocks
     for (let i = 0; i < numBlocks; i++) {
@@ -117,7 +117,6 @@ describe('Fees', function () {
       feeEstimator.processBlock(i, block, true);
     }
 
-   
     const estimate = feeEstimator.estimateFee();
 
     assert(estimate > 0);
@@ -128,10 +127,10 @@ describe('Fees', function () {
 
     const numBlocks = 5;
     const numTXs = 100;
-    const blocks = []
+    const blocks = [];
     for (let i = 0; i < numBlocks + 2; i++) {
-      const entries = []
-      blocks[i] = entries
+      const entries = [];
+      blocks[i] = entries;
     }
 
     // set up estimator's mempool with
@@ -140,30 +139,29 @@ describe('Fees', function () {
       for (let j = 0; j <= numTXs; j++) {
         // add low-fee tx to estimator's mempool, but it never gets confirmed.
         const lowOpenTX = covenantEntry(types.OPEN, domain, GENERATE_HASH, address, 2*lowFee, i);
-        composedFeeEstimator.processTX(lowOpenTX, true)
+        composedFeeEstimator.processTX(lowOpenTX, true);
         const lowRegisterTX = covenantEntry(types.REGISTER, domain, GENERATE_HASH, address, lowFee, i);
-        composedFeeEstimator.processTX(lowRegisterTX, true)
+        composedFeeEstimator.processTX(lowRegisterTX, true);
 
         // add medium-fee tx to estimator's mempool and confirm it in two blocks
         const medOpenTX = covenantEntry(types.OPEN, domain, GENERATE_HASH, address, 2*medFee, i);
-        composedFeeEstimator.processTX(medOpenTX, true)
-        medOpenTX.height = medOpenTX.height + 2
-        blocks[i + 2].push(medOpenTX)
+        composedFeeEstimator.processTX(medOpenTX, true);
+        medOpenTX.height = medOpenTX.height + 2;
+        blocks[i + 2].push(medOpenTX);
         const medRegisterTX = covenantEntry(types.REGISTER, domain, GENERATE_HASH, address, medFee, i);
-        composedFeeEstimator.processTX(medRegisterTX, true)
-        medRegisterTX.height = medRegisterTX.height + 2
-        blocks[i + 2].push(medRegisterTX)
-
+        composedFeeEstimator.processTX(medRegisterTX, true);
+        medRegisterTX.height = medRegisterTX.height + 2;
+        blocks[i + 2].push(medRegisterTX);
 
         // add high-fee tx to estimator's mempool and confirm it in the next block
         const highOpenTX = covenantEntry(types.OPEN, domain, GENERATE_HASH, address, 2*highFee, i);
-        composedFeeEstimator.processTX(highOpenTX, true)
-        highOpenTX.height = highOpenTX.height + 1
-        blocks[i + 1].push(highOpenTX)
+        composedFeeEstimator.processTX(highOpenTX, true);
+        highOpenTX.height = highOpenTX.height + 1;
+        blocks[i + 1].push(highOpenTX);
         const highRegisterTX = covenantEntry(types.REGISTER, domain, GENERATE_HASH, address, highFee, i);
-        composedFeeEstimator.processTX(highRegisterTX, true)
-        highRegisterTX.height = highRegisterTX.height + 1
-        blocks[i + 1].push(highRegisterTX)
+        composedFeeEstimator.processTX(highRegisterTX, true);
+        highRegisterTX.height = highRegisterTX.height + 1;
+        blocks[i + 1].push(highRegisterTX);
       }
     }
 
@@ -178,10 +176,4 @@ describe('Fees', function () {
 
     assert(openEstimate > registerEstimate);
   });
-
-
-
 });
-
-
-
