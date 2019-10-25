@@ -4,6 +4,7 @@
 'use strict';
 
 const assert = require('bsert');
+const random = require('bcrypto/lib/random');
 const ComposedFees = require('../lib/mempool/composedFees');
 const Fees = require('../lib/mempool/fees');
 const MempoolEntry = require('../lib/mempool/mempoolentry');
@@ -12,7 +13,7 @@ const Coin = require('../lib/primitives/coin');
 const MemWallet = require('./util/memwallet');
 const Output = require('../lib/primitives/output');
 const rules = require('../lib/covenants/rules');
-const random = require('bcrypto/lib/random');
+
 const {types} = rules;
 
 const domain = 'testdomain';
@@ -93,7 +94,7 @@ describe('Fees', function () {
     // different prices and blocks to process
     for (let i = 0; i < numBlocks; i++) {
       for (let j = 0; j <= numOpens; j++) {
-        // add low-fee tx to estimator's mempool, but it never gets confirmed.
+        // add low-fee tx to estimator's mempool, but never confirm it.
         const lowTX = covenantEntry(types.OPEN, domain, GENERATE_HASH, address, lowFee, i);
         feeEstimator.processTX(lowTX, true);
 
@@ -119,10 +120,11 @@ describe('Fees', function () {
 
     const estimate = feeEstimator.estimateFee();
 
+    // estimate should be non-zero because estimator saw TXs with nonzero fees
     assert(estimate > 0);
   });
 
-  it('composed wallet should estimate a fee', async () => {
+  it('composed estimator should estimate different fees for different types', async () => {
     const address = wallet.getAddress();
 
     const numBlocks = 5;
@@ -137,7 +139,7 @@ describe('Fees', function () {
     // different prices and blocks to process
     for (let i = 0; i < numBlocks; i++) {
       for (let j = 0; j <= numTXs; j++) {
-        // add low-fee tx to estimator's mempool, but it never gets confirmed.
+        // add low-fee tx to estimator's mempool, but never confirm it.
         const lowOpenTX = covenantEntry(types.OPEN, domain, GENERATE_HASH, address, 2*lowFee, i);
         composedFeeEstimator.processTX(lowOpenTX, true);
         const lowRegisterTX = covenantEntry(types.REGISTER, domain, GENERATE_HASH, address, lowFee, i);
@@ -174,6 +176,7 @@ describe('Fees', function () {
     const openEstimate = composedFeeEstimator.estimateFee(1, true, types.OPEN);
     const registerEstimate = composedFeeEstimator.estimateFee(1, true, types.REGISTER);
 
+    // Open estimate should be higher because the open fees were double the register fees
     assert(openEstimate > registerEstimate);
   });
 });
