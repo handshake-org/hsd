@@ -50,21 +50,21 @@ describe('Peer (Unit)', function() {
     assert.strictEqual(peer.dosScore, 30);
 
     await sleep(1000);
-    // (30 * 0.98) + 10
+    // (30 * 0.5) + 10
 
     peer.increaseDos(10, Date.now());
-    assert.strictEqual(peer.dosScore, 39);
+    assert.strictEqual(peer.dosScore, 25);
   });
 
   it('should reset dos score after decay', async () => {
     peer.increaseDos(10, Date.now());
     assert.strictEqual(peer.dosScore, 10);
 
-    // override reset time to 1s
+    // override reset time to 0s
     const dosResetTime = common.DOS_RESET_TIME;
-    common.DOS_RESET_TIME = 1;
+    common.DOS_RESET_TIME = 0;
 
-    await sleep(1200);
+    await sleep(1000);
 
     peer.increaseDos(10, Date.now());
     assert.strictEqual(peer.dosScore, 10);
