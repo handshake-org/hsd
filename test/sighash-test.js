@@ -23,7 +23,6 @@ const mnemonics = require('./data/mnemonic-english.json');
 const phrase = mnemonics[0][1];
 const mnemonic = Mnemonic.fromPhrase(phrase);
 
-Network.set('regtest');
 const network = Network.get('regtest');
 
 // sighash types
