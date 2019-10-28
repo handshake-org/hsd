@@ -107,4 +107,13 @@ describe('RootServer', function() {
     // Nothing was added to the cache
     assert.strictEqual(cache.size, 1);
   });
+
+  it('should resolve KEY rr', async () => {
+    const req = {question: [{name: '.', type: wire.types.KEY}]};
+    const res = await ns.resolve(req);
+    const got = res.answer.find(rr => rr.type === wire.types.KEY);
+
+    assert(got);
+    assert.equal(got.name, '.');
+  });
 });
