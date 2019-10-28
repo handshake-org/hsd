@@ -2,15 +2,20 @@
 
 'use strict';
 
+const assert = require('bsert');
 const Path = require('path');
 const fs = require('bfile');
+const {wire} = require('bns');
+const blake2b = require('bcrypto/lib/blake2b');
 const consensus = require('../lib/protocol/consensus');
 const Network = require('../lib/protocol/network');
 const TX = require('../lib/primitives/tx');
+const AirdropProof = require('../lib/primitives/airdropproof');
 const Block = require('../lib/primitives/block');
 const Address = require('../lib/primitives/address');
 const Witness = require('../lib/script/witness');
 const util = require('../lib/utils/util');
+const {KSK_2010, KSK_2017} = wire;
 
 const networks = {
   main: Network.get('main'),
@@ -19,17 +24,31 @@ const networks = {
   simnet: Network.get('simnet')
 };
 
+const genesisCommitment = Buffer.from([
+  AirdropProof.AIRDROP_ROOT,
+  AirdropProof.FAUCET_ROOT,
+  Buffer.from(KSK_2010, 'ascii'),
+  Buffer.from(KSK_2017, 'ascii')
+], 'hex');
+
 function createGenesisBlock(options) {
   const genesis = Address.fromHash(consensus.GENESIS_KEY, 0);
   const nonce = options.nonce >>> 0;
-
   let flags = options.flags;
+  let commitment = options.commitment;
 
   if (!flags) {
     flags = Buffer.from(
       `01/Nov/2017 EFF to ICANN: Don't Pick Up the Censor's Pen`,
       'ascii');
   }
+
+  if (!commitment)
+    commitment = genesisCommitment;
+
+  assert(Buffer.isBuffer(commitment));
+  const digest = blake2b.digest(commitment, 32);
+  const addr = Address.fromNulldata(digest);
 
   const tx = new TX({
     version: 0,
@@ -45,6 +64,10 @@ function createGenesisBlock(options) {
       {
         value: consensus.GENESIS_REWARD,
         address: genesis
+      },
+      {
+        value: 0,
+        address: addr
       }
     ],
     locktime: 0
