@@ -65,10 +65,10 @@ function createNode() {
   };
 }
 
-describe('Auction', function() {
+describe('Auction Reorg', function() {
   this.timeout(15000);
 
-  describe('Vickrey Auction', function() {
+  describe('Vickrey Auction Reorg', function() {
     const node = createNode();
     const orig = createNode();
     const comp = createNode();
@@ -395,7 +395,7 @@ describe('Auction', function() {
     });
   });
 
-  describe('Claim', function() {
+  describe('Claim Reorg', function() {
     const node = createNode();
     const {chain, miner, cpu} = node;
 
