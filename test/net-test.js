@@ -328,11 +328,11 @@ describe('Net', function() {
         assert.bufferEqual(pkt.items[0].merkleRoot, Buffer.alloc(32, 0x02));
         assert.bufferEqual(pkt.items[0].witnessRoot, Buffer.alloc(32, 0x03));
         assert.bufferEqual(pkt.items[0].treeRoot, Buffer.alloc(32, 0x04));
-        assert.bufferEqual(pkt.items[0].filterRoot, Buffer.alloc(32, 0x05));
         assert.bufferEqual(pkt.items[0].reservedRoot, Buffer.alloc(32, 0x06));
         assert.equal(pkt.items[0].time, 1558405603);
         assert.equal(pkt.items[0].bits, 403014710);
-        assert.bufferEqual(pkt.items[0].nonce, Buffer.alloc(consensus.NONCE_SIZE, 0x11));
+        assert.equal(pkt.items[0].nonce, 0x11);
+        assert.bufferEqual(pkt.items[0].extraNonce, Buffer.alloc(consensus.NONCE_SIZE, 0x11));
 
         if (many) {
           for (let i = 1; i < 254; i++) {
@@ -342,7 +342,8 @@ describe('Net', function() {
             assert.bufferEqual(pkt.items[1].merkleRoot, Buffer.alloc(32, 0x05));
             assert.equal(pkt.items[1].time, 1558405605);
             assert.equal(pkt.items[1].bits, 403014712);
-            assert.equal(pkt.items[1].nonce, 103);
+            assert.equal(pkt.items[1].nonce, 0x11);
+            assert.bufferEqual(pkt.items[1].extraNonce, Buffer.alloc(consensus.NONCE_SIZE, 0x11));
           }
         }
       };
@@ -354,11 +355,12 @@ describe('Net', function() {
           merkleRoot: Buffer.alloc(32, 0x02),
           witnessRoot: Buffer.alloc(32, 0x03),
           treeRoot: Buffer.alloc(32, 0x04),
-          filterRoot: Buffer.alloc(32, 0x05),
           reservedRoot: Buffer.alloc(32, 0x06),
           time: 1558405603,
           bits: 403014710,
-          nonce: Buffer.alloc(consensus.NONCE_SIZE, 0x11)
+          nonce: 0x11,
+          extraNonce: Buffer.alloc(consensus.NONCE_SIZE, 0x11),
+          mask: Buffer.alloc(32, 0x00)
         })
       ];
 
@@ -375,11 +377,12 @@ describe('Net', function() {
           merkleRoot: Buffer.alloc(32, 0x05),
           witnessRoot: Buffer.alloc(32, 0x03),
           treeRoot: Buffer.alloc(32, 0x04),
-          filterRoot: Buffer.alloc(32, 0x05),
           reservedRoot: Buffer.alloc(32, 0x06),
           time: 1558405605,
           bits: 403014712,
-          nonce: Buffer.alloc(consensus.NONCE_SIZE, 0x11)
+          nonce: 0x11,
+          extraNonce: Buffer.alloc(consensus.NONCE_SIZE, 0x11),
+          mask: Buffer.alloc(32, 0x00)
         }));
       }
 
