@@ -16,12 +16,15 @@ async function sleep(time) {
 
 describe('Peer (Unit)', function() {
   const peer = new Peer({
-    'network': network,
+    network: network,
     logger: new Logger({
       level: 'debug',
       file: false,
       console: false
-    })
+    }),
+    banScore: common.BAN_SCORE,
+    dosScore: common.DOS_SCORE,
+    p2prps: common.P2P_RPS
   });
 
   beforeEach(() => {
