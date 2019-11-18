@@ -242,7 +242,7 @@ describe('TX', function() {
 
     let raw = tx.encode();
     assert.strictEqual(encoding.readU64(raw, 46), 0xdeadbeef);
-    raw[54] = 0x7f;
+    raw[52] = 0x7f;
 
     assert.throws(() => TX.decode(raw));
 
@@ -251,7 +251,7 @@ describe('TX', function() {
 
     raw = tx.encode();
     assert.strictEqual(encoding.readU64(raw, 46), 0x00);
-    raw[54] = 0x80;
+    raw[52] = 0x80;
     assert.throws(() => TX.decode(raw));
   });
 
