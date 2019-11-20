@@ -14,7 +14,7 @@ describe('Reserved', function() {
         '525ce500322a0f4c91070eb73829b9d96b2e70d964905fa88c8b20ea573029ea',
         'hex'),
       target: 'twitter.com.',
-      value: 566471548,
+      value: 755295398,
       root: false
     });
   });
@@ -28,7 +28,7 @@ describe('Reserved', function() {
         '6292be73bdfdc4ea12bdf3018c8c553d3022b37601bb2b19153c8804bdf8da15',
         'hex'),
       target: 'google.',
-      value: 34053011272,
+      value: 45848133594,
       root: true
     });
   });
@@ -42,7 +42,7 @@ describe('Reserved', function() {
         '4b3cdfda85c576e43c848d43fdf8e901d8d02553fec8ee56289d10b8dc47d997',
         'hex'),
       target: 'eth.ens.domains.',
-      value: 10200566471548,
+      value: 136755295398,
       root: false
     });
   });
@@ -93,6 +93,6 @@ describe('Reserved', function() {
       assert(reserved.hasByName(item.name));
     }
 
-    assert.strictEqual(total, 203999999937640 - (10200000 * 1e6));
+    assert.strictEqual(total, 203392997976906);
   });
 });
