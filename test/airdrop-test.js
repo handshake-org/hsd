@@ -67,10 +67,7 @@ function createNode() {
   };
 }
 
-// Note: we skip these for now.
-// GooSig was updated and these vectors are no longer valid.
-// Will update vectors once we rebuild the tree.
-describe.skip('Airdrop', function() {
+describe('Airdrop', function() {
   this.timeout(15000);
 
   const node = createNode();
@@ -143,7 +140,7 @@ describe.skip('Airdrop', function() {
     assert(input);
     assert(input.prevout.isNull());
     assert(input.witness.length === 1);
-    assert.strictEqual(output.value, 4370322008);
+    assert.strictEqual(output.value, 4246513818);
 
     assert(await chain.add(block));
   });
@@ -234,7 +231,7 @@ describe.skip('Airdrop', function() {
       assert(input);
       assert(input.prevout.isNull());
       assert(input.witness.length === 1);
-      assert.strictEqual(output.value, 4370322008);
+      assert.strictEqual(output.value, 4246513818);
     }
 
     {
@@ -244,7 +241,7 @@ describe.skip('Airdrop', function() {
       assert(input);
       assert(input.prevout.isNull());
       assert(input.witness.length === 1);
-      assert.strictEqual(output.value, 8741644016 - 100e6);
+      assert.strictEqual(output.value, 8494027636 - 100e6);
     }
 
     assert(await chain.add(block));
