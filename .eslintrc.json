@@ -131,7 +131,6 @@
     "no-useless-escape": "off",
     "no-var": "error",
     "nonblock-statement-body-position": ["error", "below"],
-    "object-curly-spacing": ["off"],
     "padded-blocks": ["error", "never"],
     "prefer-arrow-callback": "error",
     "prefer-const": ["error", {

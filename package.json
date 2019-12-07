@@ -54,8 +54,7 @@
     "urkel": "~0.6.3"
   },
   "devDependencies": {
-    "bmocha": "^2.1.0",
-    "bslint": "^5.15.3"
+    "bmocha": "^2.1.0"
   },
   "main": "./lib/hsd.js",
   "bin": {
