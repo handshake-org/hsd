@@ -4,6 +4,13 @@ const assert = require('bsert');
 const fs = require('bfile');
 const reserved = require('../lib/covenants/reserved');
 
+// FOSS and naming projects who preferred addresses.
+const EXTRA_VALUE = (17115975 + 10200000) * 1e6;
+
+// 68000000 + 27200000 + 136000000 = 231200000
+// 0.046457 coins are burned due to rounding.
+const NAME_VALUE = 231199999953543;
+
 describe('Reserved', function() {
   it('should get a top 100 domain', () => {
     const desc = reserved.getByName('twitter');
@@ -90,8 +97,6 @@ describe('Reserved', function() {
   it('should get all names', async () => {
     const map = await fs.readJSON(`${__dirname}/../lib/covenants/names.json`);
     const zeroHash = Buffer.alloc(32, 0x00).toString('hex');
-    // FOSS and naming projects who preferred addresses.
-    const extra = (17115975 + 10200000) * 1e6;
     const [, nameValue, rootValue, topValue] = map[zeroHash];
     const names = [];
 
@@ -142,8 +147,58 @@ describe('Reserved', function() {
       assert(reserved.hasByName(item.name));
     }
 
-    // 68000000 + 27200000 + 136000000 = 231200000
-    // 0.046457 coins are burned due to rounding.
-    assert.strictEqual(total + extra, 231199999953543);
+    assert.strictEqual(total + EXTRA_VALUE, NAME_VALUE);
+  });
+
+  it('should iterate over names (entries)', async () => {
+    const map = await fs.readJSON(`${__dirname}/../lib/covenants/names.json`);
+
+    let total = 0;
+
+    for (const [hash, item] of reserved) {
+      const hex = hash.toString('hex');
+
+      assert(map[hex] != null);
+
+      delete map[hex];
+
+      total += item.value;
+    }
+
+    assert.strictEqual(total + EXTRA_VALUE, NAME_VALUE);
+    assert.strictEqual(Object.keys(map).length, 1);
+  });
+
+  it('should iterate over names (keys)', async () => {
+    const map = await fs.readJSON(`${__dirname}/../lib/covenants/names.json`);
+
+    for (const hash of reserved.keys()) {
+      const hex = hash.toString('hex');
+
+      assert(map[hex] != null);
+
+      delete map[hex];
+    }
+
+    assert.strictEqual(Object.keys(map).length, 1);
+  });
+
+  it('should iterate over names (values)', async () => {
+    const map = await fs.readJSON(`${__dirname}/../lib/covenants/names.json`);
+
+    let total = 0;
+
+    for (const item of reserved.values()) {
+      const hex = item.hash.toString('hex');
+
+      assert(map[hex] != null);
+
+      delete map[hex];
+
+      total += item.value;
+    }
+
+    assert.strictEqual(total + EXTRA_VALUE, NAME_VALUE);
+    assert.strictEqual(Object.keys(map).length, 1);
   });
 });

@@ -4,6 +4,8 @@
 
 const Path = require('path');
 const fs = require('bfile');
+const BLAKE2b = require('bcrypto/lib/blake2b');
+const merkle = require('bcrypto/lib/mrkl');
 const consensus = require('../lib/protocol/consensus');
 const Network = require('../lib/protocol/network');
 const TX = require('../lib/primitives/tx');
@@ -11,6 +13,10 @@ const Block = require('../lib/primitives/block');
 const Address = require('../lib/primitives/address');
 const Witness = require('../lib/script/witness');
 const util = require('../lib/utils/util');
+const AirdropProof = require('../lib/primitives/airdropproof');
+const reserved = require('../lib/covenants/reserved');
+const {AIRDROP_ROOT, FAUCET_ROOT} = AirdropProof;
+const NAME_ROOT = merkle.createRoot(BLAKE2b, [...reserved.keys()]);
 
 const networks = {
   main: Network.get('main'),
@@ -38,7 +44,7 @@ function createGenesisBlock(options) {
         hash: consensus.ZERO_HASH,
         index: 0xffffffff
       },
-      witness: new Witness([flags]),
+      witness: new Witness([flags, NAME_ROOT, AIRDROP_ROOT, FAUCET_ROOT]),
       sequence: 0xffffffff
     }],
     outputs: [
