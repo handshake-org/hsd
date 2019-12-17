@@ -29,7 +29,7 @@
     "bfile": "~0.2.1",
     "bfilter": "~1.0.5",
     "bheep": "~0.1.5",
-    "binet": "git+https://github.com/Handshake-Protocol/binet.git#1c3ba25dfca662b34325e05fc55b2ab0e884d8c1",
+    "binet": "git+https://github.com/Handshake-Protocol/binet.git#8c00ada147221c06e394dac7f030b2de65565225",
     "blgr": "~0.1.7",
     "blru": "~0.1.6",
     "blst": "~0.1.5",
