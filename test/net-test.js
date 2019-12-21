@@ -25,6 +25,7 @@ const genesis = require('../lib/protocol/genesis');
 const UrkelProof = require('urkel/radix').Proof;
 const blake2b = require('bcrypto/lib/blake2b');
 const AirdropProof = require('../lib/primitives/airdropproof');
+const HostList = require('../lib/net/hostlist');
 
 const AIRDROP_PROOF_FILE = resolve(__dirname, 'data', 'airdrop-proof.base64');
 const read = file => Buffer.from(fs.readFileSync(file, 'binary'), 'base64');
@@ -786,6 +787,327 @@ describe('Net', function() {
       const n = nonce();
       assert(Buffer.isBuffer(n));
       assert.equal(n.length, 8);
+    });
+  });
+
+  describe('HostList', function() {
+    let hosts;
+
+    beforeEach(async () => {
+      hosts = new HostList({
+        memory: true
+      });
+      await hosts.open();
+    });
+
+    afterEach(async () => {
+      await hosts.close();
+    });
+
+    it('should index hosts by fullname', () => {
+      const addr1 = new NetAddress({
+        host: '10.20.30.40',
+        port: 1234,
+        services: 0,
+        time: 1576942048,
+        key: Buffer.alloc(33, 0x01)
+      });
+
+      hosts.add(addr1);
+
+      assert.strictEqual(hosts.map.size, 1);
+
+      const test1 = hosts.map.get(addr1.fullname());
+      assert.deepStrictEqual(addr1.getJSON(), test1.addr.getJSON());
+    });
+
+    it('should add/remove duplicate host with different key', () => {
+      const addr1 = new NetAddress({
+        host: '10.20.30.40',
+        port: 1234,
+        services: 1,
+        time: 1576111111,
+        key: Buffer.alloc(33, 0x01)
+      });
+
+      // Different key from addr1 (same hostname, different fullname)
+      // Other differences so we can test which addr gets saved.
+      const addr2 = new NetAddress({
+        host: '10.20.30.40',
+        port: 1234,
+        services: 2,
+        time: 1576222222,
+        key: Buffer.alloc(33, 0x02)
+      });
+
+      // Add both
+      hosts.add(addr1);
+      hosts.add(addr2);
+
+      // Both are there
+      assert.strictEqual(hosts.map.size, 2);
+
+      const test1 = hosts.map.get(addr1.fullname());
+      assert.deepStrictEqual(addr1.getJSON(), test1.addr.getJSON());
+
+      const test2 = hosts.map.get(addr2.fullname());
+      assert.deepStrictEqual(addr2.getJSON(), test2.addr.getJSON());
+
+      // Remove one
+      hosts.remove(addr1.fullname());
+
+      // Only one removed
+      assert.strictEqual(hosts.map.size, 1);
+      assert.strictEqual(hosts.map.get(addr1.fullname(), null));
+      assert.deepStrictEqual(addr2.getJSON(), test2.addr.getJSON());
+    });
+
+    it('should not add duplicate host with duplicate key', () => {
+      const addr1 = new NetAddress({
+        host: '10.20.30.40',
+        port: 1234,
+        services: 1,
+        time: 1576111111,
+        key: Buffer.alloc(33, 0x01)
+      });
+
+      // Same fullname as addr1, but different services and time
+      const addr2 = new NetAddress({
+        host: '10.20.30.40',
+        port: 1234,
+        services: 2,
+        time: 1576222222,
+        key: Buffer.alloc(33, 0x01)
+      });
+
+      hosts.add(addr1);
+      hosts.add(addr2);
+
+      assert.strictEqual(hosts.map.size, 1);
+
+      const test1 = hosts.map.get(addr1.fullname());
+      assert.deepStrictEqual(addr1.getJSON(), test1.addr.getJSON());
+
+      const test2 = hosts.map.get(addr2.fullname());
+      assert.notDeepStrictEqual(addr2.getJSON(), test2.addr.getJSON());
+    });
+
+    it('should index banned hosts by IP only', () => {
+      const addr1 = new NetAddress({
+        host: '10.20.30.40',
+        port: 1234,
+        services: 1,
+        time: 1576111111,
+        key: Buffer.alloc(33, 0x01)
+      });
+
+      // Same IP as addr1, different everything else
+      const addr2 = new NetAddress({
+        host: '10.20.30.40',
+        port: 5678,
+        services: 2,
+        time: 1576222222,
+        key: Buffer.alloc(33, 0x02)
+      });
+
+      hosts.ban(addr1.host);
+
+      // One ban applies to both addresses
+      assert(hosts.banned.size, 1);
+      assert(hosts.isBanned(addr1.host));
+      assert(hosts.isBanned(addr2.host));
+    });
+
+    it('should mark attempt', () => {
+      const addr1 = new NetAddress({
+        host: '10.20.30.40',
+        port: 1234,
+        services: 1,
+        time: 1000001,
+        key: Buffer.alloc(33, 0x01)
+      });
+
+      assert(!hosts.map.get(addr1.fullname()));
+      assert(hosts.add(addr1));
+
+      const test1 = hosts.map.get(addr1.fullname());
+      assert.strictEqual(test1.attempts, 0);
+      assert.strictEqual(test1.lastAttempt, 0);
+
+      hosts.markAttempt(addr1.fullname());
+
+      const test2 = hosts.map.get(addr1.fullname());
+      assert.strictEqual(test2.attempts, 1);
+      // Bitcoin genesis block timestamp (01/03/2009 @ 6:15pm (UTC))
+      assert(test2.lastAttempt > 1231006505);
+    });
+
+    it('should mark success', () => {
+      const addr1 = new NetAddress({
+        host: '10.20.30.40',
+        port: 1234,
+        services: 1,
+        time: 1000001,
+        key: Buffer.alloc(33, 0x01)
+      });
+
+      assert(!hosts.map.get(addr1.fullname()));
+      assert(hosts.add(addr1));
+
+      const test1 = hosts.map.get(addr1.fullname());
+      assert.strictEqual(test1.addr.time, 1000001);
+
+      hosts.markSuccess(addr1.fullname());
+
+      const test2 = hosts.map.get(addr1.fullname());
+      // Bitcoin genesis block timestamp (01/03/2009 @ 6:15pm (UTC))
+      assert(test2.addr.time > 1231006505);
+    });
+
+    it('should sort hosts into used bucket by IP only', () => {
+      const addr1 = new NetAddress({
+        host: '10.20.30.40',
+        port: 1234,
+        services: 1,
+        time: 1576111111,
+        key: Buffer.alloc(33, 0x01)
+      });
+
+      // Same IP as addr1, different everything else
+      const addr2 = new NetAddress({
+        host: '10.20.30.40',
+        port: 5678,
+        services: 2,
+        time: 1576222222,
+        key: Buffer.alloc(33, 0x02)
+      });
+
+      // Different IP as addr1, same everything else
+      const addr3 = new NetAddress({
+        host: '50.60.70.80',
+        port: 1234,
+        services: 1,
+        time: 1576111111,
+        key: Buffer.alloc(33, 0x01)
+      });
+
+      // These functions expect a HostEntry, but the constructor is not exposed
+      const used1 = hosts.usedBucket({addr: addr1});
+      const used2 = hosts.usedBucket({addr: addr2});
+      const used3 = hosts.usedBucket({addr: addr3});
+
+      assert(used1 === used2);
+      assert(used1 !== used3);
+    });
+
+    it('should sort hosts into fresh bucket by IP only', () => {
+      const addr1 = new NetAddress({
+        host: '10.20.30.40',
+        port: 1234,
+        services: 1,
+        time: 1576111111,
+        key: Buffer.alloc(33, 0x01)
+      });
+
+      // Same IP as addr1, different everything else
+      const addr2 = new NetAddress({
+        host: '10.20.30.40',
+        port: 5678,
+        services: 2,
+        time: 1576222222,
+        key: Buffer.alloc(33, 0x02)
+      });
+
+      // Different IP as addr1, same everything else
+      const addr3 = new NetAddress({
+        host: '50.60.70.80',
+        port: 1234,
+        services: 1,
+        time: 1576111111,
+        key: Buffer.alloc(33, 0x01)
+      });
+
+      // These functions expect a HostEntry, but the constructor is not exposed
+      const used1 = hosts.freshBucket({addr: addr1, src: new NetAddress()});
+      const used2 = hosts.freshBucket({addr: addr2, src: new NetAddress()});
+      const used3 = hosts.freshBucket({addr: addr3, src: new NetAddress()});
+
+      assert(used1 === used2);
+      assert(used1 !== used3);
+    });
+
+    it('should index hosts by fullname within each fresh bucket', () => {
+      const addr1 = new NetAddress({
+        host: '10.20.30.40',
+        port: 1234,
+        services: 1,
+        time: 1576111111,
+        key: Buffer.alloc(33, 0x01)
+      });
+
+      // Same IP as addr1, different everything else
+      const addr2 = new NetAddress({
+        host: '10.20.30.40',
+        port: 5678,
+        services: 2,
+        time: 1576222222,
+        key: Buffer.alloc(33, 0x02)
+      });
+
+      const used1 = hosts.freshBucket({addr: addr1, src: new NetAddress()});
+
+      hosts.add(addr1);
+      hosts.add(addr2);
+
+      assert.strictEqual(used1.size, 2);
+      used1.has(addr1.fullname());
+      used1.has(addr2.fullname());
+    });
+
+    it('should mark ACK', () => {
+      const addr1 = new NetAddress({
+        host: '10.20.30.40',
+        port: 1234,
+        services: 0,
+        time: 0,
+        key: Buffer.alloc(33, 0x01)
+      });
+
+      assert(!hosts.map.get(addr1.fullname()));
+      assert(hosts.add(addr1));
+
+      const test1 = hosts.map.get(addr1.fullname());
+      assert.strictEqual(test1.addr.services, 0);
+      assert.strictEqual(test1.lastSuccess, 0);
+      assert.strictEqual(test1.lastAttempt, 0);
+      assert(!test1.used);
+
+      // All 'used' buckets are empty
+      for (const bucket of hosts.used) {
+        assert.strictEqual(bucket.size, 0);
+      }
+
+      const services = 5678;
+      hosts.markAck(addr1.fullname(), services);
+
+      const test2 = hosts.map.get(addr1.fullname());
+      // Bitcoin genesis block timestamp (01/03/2009 @ 6:15pm (UTC))
+      assert(test2.lastSuccess > 1231006505);
+      assert(test2.lastAttempt > 1231006505);
+      assert(test2.used);
+      assert.strictEqual(test2.addr.services, services);
+
+      // Addr should be in exactly one 'used' bucket
+      let count = 0;
+      for (const bucket of hosts.used) {
+        count += bucket.size;
+      }
+      assert.strictEqual(count, 1);
+
+      // Addr is in the 'used' bucket we expect it to be in
+      const bucket = hosts.usedBucket(test2);
+      const test3 = bucket.pop();
+      assert.deepStrictEqual(test3.toJSON(), test2.toJSON());
     });
   });
 });
