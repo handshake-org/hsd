@@ -417,6 +417,8 @@ describe('Mempool', function() {
       memory: true
     });
 
+    const COINBASE_MATURITY = mempool.network.coinbaseMaturity;
+
     before(async () => {
       await mempool.open();
       await chain.open();
@@ -445,6 +447,11 @@ describe('Mempool', function() {
         txs = [mtx.toTX(), ...txs];
       }
 
+      const view = new CoinView();
+      for (const tx of txs) {
+        view.addTX(tx, -1);
+      }
+
       const now = Math.floor(Date.now() / 1000);
       const time = chain.tip.time <= now ? chain.tip.time + 1 : now;
 
@@ -457,7 +464,7 @@ describe('Mempool', function() {
       // Ensure mockblocks are unique (required for reorg testing)
       block.merkleRoot = block.createMerkleRoot();
 
-      return block;
+      return [block, view];
     }
 
     it('should create coins in chain', async () => {
@@ -471,7 +478,7 @@ describe('Mempool', function() {
       }
 
       const cb = mtx.toTX();
-      const block = await getMockBlock(chain, [cb], false);
+      const [block] = await getMockBlock(chain, [cb], false);
       const entry = await chain.add(block, VERIFY_NONE);
 
       await mempool._addBlock(entry, block.txs);
@@ -479,7 +486,7 @@ describe('Mempool', function() {
       // Add 100 blocks so we don't get
       // premature spend of coinbase.
       for (let i = 0; i < 100; i++) {
-        const block = await getMockBlock(chain);
+        const [block] = await getMockBlock(chain);
         const entry = await chain.add(block, VERIFY_NONE);
 
         await mempool._addBlock(entry, block.txs);
@@ -505,7 +512,7 @@ describe('Mempool', function() {
       wallet.addTX(tx1);
 
       // Create 1 block (no need to actually add it to chain)
-      const block1 = await getMockBlock(chain, [tx1]);
+      const [block1] = await getMockBlock(chain, [tx1]);
       const entry1 = await ChainEntry.fromBlock(block1, chain.tip);
 
       // Unconfirm block into mempool
@@ -528,7 +535,7 @@ describe('Mempool', function() {
       wallet.addTX(tx2);
 
       // Create 1 block (no need to actually add it to chain)
-      const block2 = await getMockBlock(chain, [tx2]);
+      const [block2] = await getMockBlock(chain, [tx2]);
       const entry2 = await ChainEntry.fromBlock(block2, chain.tip);
 
       // Unconfirm block into mempool
@@ -538,6 +545,97 @@ describe('Mempool', function() {
       assert(mempool.hasEntry(tx2.hash()));
       assert(mempool.hasEntry(tx1.hash()));
       assert.strictEqual(mempool.map.size, 2);
+    });
+
+    it('should handle reorg: coinbase spends', async () => {
+      // Mempool is empty
+      await mempool.reset();
+      assert.strictEqual(mempool.map.size, 0);
+
+      // Create a fresh coinbase tx
+      let cb = new MTX();
+      cb.addInput(new Input());
+      const addr = chaincoins.createReceive().getAddress();
+      cb.addOutput(addr, 100000);
+      cb.locktime = chain.height + 1;
+      cb = cb.toTX();
+
+      // Add it to block, mempool and wallet
+      const [block1, view1] = await getMockBlock(chain, [cb], false);
+      const entry1 = await chain.add(block1, VERIFY_NONE);
+      await mempool._addBlock(entry1, block1.txs, view1);
+
+      // The coinbase output is a valid UTXO in the chain
+      assert(await chain.getCoin(cb.hash(), 0));
+
+      // Mempool is empty
+      assert.strictEqual(mempool.map.size, 0);
+
+      // Attempt to spend the coinbase early
+      let spend = new MTX();
+      spend.addTX(cb, 0);
+      spend.addOutput(addr, 90000);
+      chaincoins.sign(spend);
+      spend = spend.toTX();
+
+      // It's too early
+      await assert.rejects(async () => {
+        await mempool.addTX(spend, -1);
+      }, {
+        name: 'Error',
+        reason: 'bad-txns-premature-spend-of-coinbase'
+      });
+
+      // Add more blocks
+      let block2;
+      let view2;
+      let entry2;
+      for (let i = 0; i < COINBASE_MATURITY - 1; i++) {
+        [block2, view2] = await getMockBlock(chain);
+        entry2 = await chain.add(block2, VERIFY_NONE);
+
+        await mempool._addBlock(entry2, block2.txs, view2);
+      }
+
+      // Try again
+      await mempool.addTX(spend, -1);
+
+      // Coinbase spend is in the mempool
+      assert.strictEqual(mempool.map.size, 1);
+      assert(mempool.getTX(spend.hash()));
+
+      // Confirm coinbase spend in a block
+      const [block3, view3] = await getMockBlock(chain, [spend]);
+      const entry3 = await chain.add(block3, VERIFY_NONE);
+      await mempool._addBlock(entry3, block3.txs, view3);
+
+      // Coinbase spend has been removed from the mempool
+      assert.strictEqual(mempool.map.size, 0);
+      assert(!mempool.getTX(spend.hash()));
+
+      // Now the block gets disconnected
+      await chain.disconnect(entry3);
+      await mempool._removeBlock(entry3, block3.txs);
+
+      // Coinbase spend is back in the mempool
+      assert.strictEqual(mempool.map.size, 1);
+      assert(mempool.getTX(spend.hash()));
+
+      // Now remove one more block from the chain, thus
+      // making the spend TX premature
+      await chain.disconnect(entry2);
+      await mempool._removeBlock(entry2, block2.txs);
+
+      // Coinbase spend is still in the mempool
+      assert.strictEqual(mempool.map.size, 1);
+      assert(mempool.getTX(spend.hash()));
+
+      // This is normally triggered by 'reorganize' event
+      await mempool._handleReorg();
+
+      // Premature coinbase spend has been evicted
+      assert.strictEqual(mempool.map.size, 0);
+      assert(!mempool.getTX(spend.hash()));
     });
   });
 });
