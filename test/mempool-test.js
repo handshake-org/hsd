@@ -26,6 +26,10 @@ const MemWallet = require('./util/memwallet');
 const ALL = Script.hashType.ALL;
 const common = require('../lib/blockchain/common');
 const VERIFY_NONE = common.flags.VERIFY_NONE;
+const rules = require('../lib/covenants/rules');
+const {types} = rules;
+const NameState = require('../lib/covenants/namestate');
+const {states} = NameState;
 
 const ONE_HASH = Buffer.alloc(32, 0x00);
 ONE_HASH[0] = 0x01;
@@ -418,6 +422,8 @@ describe('Mempool', function() {
     });
 
     const COINBASE_MATURITY = mempool.network.coinbaseMaturity;
+    const TREE_INTERVAL = mempool.network.names.treeInterval;
+    mempool.network.names.auctionStart = 0;
 
     before(async () => {
       await mempool.open();
@@ -463,6 +469,8 @@ describe('Mempool', function() {
 
       // Ensure mockblocks are unique (required for reorg testing)
       block.merkleRoot = block.createMerkleRoot();
+
+      block.treeRoot = chain.db.treeRoot();
 
       return [block, view];
     }
@@ -715,6 +723,147 @@ describe('Mempool', function() {
       assert.strictEqual(mempool.map.size, 1);
       assert(mempool.getTX(fund.hash()));
       assert(!mempool.getTX(spend.hash()));
+    });
+
+    it('should handle reorg: covenants', async () => {
+      // Mempool is empty
+      await mempool.reset();
+      assert.strictEqual(mempool.map.size, 0);
+
+      // Create a fresh UTXO with an OPEN
+      const openCoin = chaincoins.getCoins()[0];
+      let open = new MTX();
+      open.addCoin(openCoin);
+      const addr = chaincoins.createReceive().getAddress();
+      open.addOutput(addr, 90000);
+
+      const name = rules.grindName(5, 0, mempool.network);
+      const rawName = Buffer.from(name, 'ascii');
+      const nameHash = rules.hashName(rawName);
+      open.outputs[0].covenant.type = types.OPEN;
+      open.outputs[0].covenant.pushHash(nameHash);
+      open.outputs[0].covenant.pushU32(0);
+      open.outputs[0].covenant.push(rawName);
+
+      chaincoins.sign(open);
+      open = open.toTX();
+
+      // Add it to block, mempool and wallet
+      const [block1, view1] = await getMockBlock(chain, [open]);
+      const entry1 = await chain.add(block1, VERIFY_NONE);
+      await mempool._addBlock(entry1, block1.txs, view1);
+
+      // The open TX output is a valid UTXO in the chain
+      assert(await chain.getCoin(open.hash(), 0));
+
+      // Name is OPEN
+      let ns = await chain.db.getNameStateByName(name);
+      assert.strictEqual(
+        ns.state(chain.height, mempool.network),
+        states.OPENING
+      );
+
+      // Mempool is empty
+      assert.strictEqual(mempool.map.size, 0);
+
+      // Create a BID on the name.
+      // We don't need a real blind.
+      const bidCoin = chaincoins.getCoins()[1];
+      let bid = new MTX();
+      bid.addCoin(bidCoin);
+      bid.addOutput(addr, 70000);
+
+      bid.outputs[0].covenant.type = types.BID;
+      bid.outputs[0].covenant.pushHash(nameHash);
+      bid.outputs[0].covenant.pushU32(ns.height);
+      bid.outputs[0].covenant.push(rawName);
+      bid.outputs[0].covenant.pushHash(Buffer.alloc(32, 0x01));
+
+      chaincoins.sign(bid);
+      bid = bid.toTX();
+
+      // It's too early
+      await assert.rejects(async () => {
+        await mempool.addTX(bid, -1);
+      }, {
+        name: 'Error',
+        reason: 'invalid-covenant'
+      });
+
+      // Add more blocks
+      let block2;
+      let view2;
+      let entry2;
+      for (let i = 0; i < TREE_INTERVAL; i++) {
+        [block2, view2] = await getMockBlock(chain);
+        entry2 = await chain.add(block2, VERIFY_NONE);
+
+        await mempool._addBlock(entry2, block2.txs, view2);
+      }
+
+      // BIDDING is activated in the next block
+      // Bid is allowed in mempool.
+      ns = await chain.db.getNameStateByName(name);
+      assert.strictEqual(
+        ns.state(chain.height + 1, mempool.network),
+        states.BIDDING
+      );
+
+      // Try again
+      await mempool.addTX(bid, -1);
+
+      // Bid is in the mempool
+      assert.strictEqual(mempool.map.size, 1);
+      assert(mempool.getTX(bid.hash()));
+
+      // Confirm bid into block
+      const [block3, view3] = await getMockBlock(chain, [bid]);
+      const entry3 = await chain.add(block3, VERIFY_NONE);
+      await mempool._addBlock(entry3, block3.txs, view3);
+
+      // Bid has been removed from the mempool
+      assert.strictEqual(mempool.map.size, 0);
+      assert(!mempool.getTX(bid.hash()));
+
+      // Now the block gets disconnected
+      await chain.disconnect(entry3);
+      await mempool._removeBlock(entry3, block3.txs);
+
+      // Bid is back in the mempool
+      assert.strictEqual(mempool.map.size, 1);
+      assert(mempool.getTX(bid.hash()));
+
+      // BIDDING re-activates on the next block, so bid is allowed in mempool.
+      ns = await chain.db.getNameStateByName(name);
+      assert.strictEqual(
+        ns.state(chain.height + 1, mempool.network),
+        states.BIDDING
+      );
+
+      // Now remove one more block from the chain,
+      // re-inserting the opening TX back into the mempool.
+      // This should make the bid covenant invalid
+      // because the name is no longer in the BIDDING phase.
+      await chain.disconnect(entry2);
+      await mempool._removeBlock(entry2, block2.txs);
+
+      // Bid TX is in the mempool
+      assert.strictEqual(mempool.map.size, 1);
+      assert(mempool.getTX(bid.hash()));
+
+      // ...but BIDDING does NOT activate on the next block.
+      ns = await chain.db.getNameStateByName(name);
+      assert.notStrictEqual(
+        ns.state(chain.height + 1, mempool.network),
+        states.BIDDING
+      );
+
+      // This is normally triggered by 'reorganize' event
+      await mempool._handleReorg();
+
+      // Premature bid covenant TX has been evicted
+      assert.strictEqual(mempool.map.size, 0);
+      assert(!mempool.getTX(bid.hash()));
     });
   });
 });
