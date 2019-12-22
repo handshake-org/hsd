@@ -9,11 +9,13 @@ const MempoolEntry = require('../lib/mempool/mempoolentry');
 const Mempool = require('../lib/mempool/mempool');
 const WorkerPool = require('../lib/workers/workerpool');
 const Chain = require('../lib/blockchain/chain');
+const ChainEntry = require('../lib/blockchain/chainentry');
 const MTX = require('../lib/primitives/mtx');
 const Coin = require('../lib/primitives/coin');
 const KeyRing = require('../lib/primitives/keyring');
 const Address = require('../lib/primitives/address');
 const Outpoint = require('../lib/primitives/outpoint');
+const Input = require('../lib/primitives/input');
 const Block = require('../lib/primitives/block');
 const Script = require('../lib/script/script');
 const Witness = require('../lib/script/witness');
@@ -22,6 +24,8 @@ const util = require('../lib/utils/util');
 const consensus = require('../lib/protocol/consensus');
 const MemWallet = require('./util/memwallet');
 const ALL = Script.hashType.ALL;
+const common = require('../lib/blockchain/common');
+const VERIFY_NONE = common.flags.VERIFY_NONE;
 
 const ONE_HASH = Buffer.alloc(32, 0x00);
 ONE_HASH[0] = 0x01;
@@ -394,5 +398,146 @@ describe('Mempool', function() {
     await mempool.close();
     await chain.close();
     await workers.close();
+  });
+
+  describe('Mempool disconnect and reorg handling', function () {
+    const workers = new WorkerPool({
+      enabled: true,
+      size: 2
+    });
+
+    const chain = new Chain({
+      memory: true,
+      workers
+    });
+
+    const mempool = new Mempool({
+      chain,
+      workers,
+      memory: true
+    });
+
+    before(async () => {
+      await mempool.open();
+      await chain.open();
+      await workers.open();
+    });
+
+    after(async () => {
+      await workers.close();
+      await chain.close();
+      await mempool.close();
+    });
+
+    // Number of coins available in
+    // chaincoins (100k satoshi per coin).
+    const N = 100;
+    const chaincoins = new MemWallet();
+
+    async function getMockBlock(chain, txs = [], cb = true) {
+      if (cb) {
+        const raddr = KeyRing.generate().getAddress();
+        const mtx = new MTX();
+        mtx.addInput(new Input());
+        mtx.addOutput(raddr, 0);
+        mtx.locktime = chain.height + 1;
+
+        txs = [mtx.toTX(), ...txs];
+      }
+
+      const now = Math.floor(Date.now() / 1000);
+      const time = chain.tip.time <= now ? chain.tip.time + 1 : now;
+
+      const block = new Block();
+      block.txs = txs;
+      block.prevBlock = chain.tip.hash;
+      block.time = time;
+      block.bits = await chain.getTarget(block.time, chain.tip);
+
+      // Ensure mockblocks are unique (required for reorg testing)
+      block.merkleRoot = block.createMerkleRoot();
+
+      return block;
+    }
+
+    it('should create coins in chain', async () => {
+      const mtx = new MTX();
+      mtx.locktime = chain.height + 1;
+      mtx.addInput(new Input());
+
+      for (let i = 0; i < N; i++) {
+        const addr = chaincoins.createReceive().getAddress();
+        mtx.addOutput(addr, 100000);
+      }
+
+      const cb = mtx.toTX();
+      const block = await getMockBlock(chain, [cb], false);
+      const entry = await chain.add(block, VERIFY_NONE);
+
+      await mempool._addBlock(entry, block.txs);
+
+      // Add 100 blocks so we don't get
+      // premature spend of coinbase.
+      for (let i = 0; i < 100; i++) {
+        const block = await getMockBlock(chain);
+        const entry = await chain.add(block, VERIFY_NONE);
+
+        await mempool._addBlock(entry, block.txs);
+      }
+
+      chaincoins.addTX(cb);
+    });
+
+    it('should insert unconfirmed txs from removed block', async () => {
+      await mempool.reset();
+      // Mempool is empty
+      assert.strictEqual(mempool.map.size, 0);
+
+      // Create 1 TX
+      const coin1 = chaincoins.getCoins()[0];
+      const addr = wallet.createReceive().getAddress();
+      const mtx1 = new MTX();
+      mtx1.addCoin(coin1);
+      mtx1.addOutput(addr, 90000);
+      chaincoins.sign(mtx1);
+      const tx1 = mtx1.toTX();
+      chaincoins.addTX(tx1);
+      wallet.addTX(tx1);
+
+      // Create 1 block (no need to actually add it to chain)
+      const block1 = await getMockBlock(chain, [tx1]);
+      const entry1 = await ChainEntry.fromBlock(block1, chain.tip);
+
+      // Unconfirm block into mempool
+      await mempool._removeBlock(entry1, block1.txs);
+
+      // Mempool should contain newly unconfirmed TX
+      assert(mempool.hasEntry(tx1.hash()));
+
+      // Mempool is NOT empty
+      assert.strictEqual(mempool.map.size, 1);
+
+      // Create second TX
+      const coin2 = chaincoins.getCoins()[0];
+      const mtx2 = new MTX();
+      mtx2.addCoin(coin2);
+      mtx2.addOutput(addr, 90000);
+      chaincoins.sign(mtx2);
+      const tx2 = mtx2.toTX();
+      chaincoins.addTX(tx2);
+      wallet.addTX(tx2);
+
+      // Create 1 block (no need to actually add it to chain)
+      const block2 = await getMockBlock(chain, [tx2]);
+      const entry2 = await ChainEntry.fromBlock(block2, chain.tip);
+
+      // Unconfirm block into mempool
+      await mempool._removeBlock(entry2, block2.txs);
+
+      // Mempool should contain both TXs
+      assert(mempool.hasEntry(tx2.hash()));
+      assert(mempool.hasEntry(tx1.hash()));
+      assert.strictEqual(mempool.map.size, 2);
+    });
   });
 });
