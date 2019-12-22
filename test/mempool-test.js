@@ -637,5 +637,84 @@ describe('Mempool', function() {
       assert.strictEqual(mempool.map.size, 0);
       assert(!mempool.getTX(spend.hash()));
     });
+
+    it('should handle reorg: BIP68 sequence locks', async () => {
+      // Mempool is empty
+      await mempool.reset();
+      assert.strictEqual(mempool.map.size, 0);
+
+      // Create a fresh UTXO
+      const fundCoin = chaincoins.getCoins()[0];
+      let fund = new MTX();
+      fund.addCoin(fundCoin);
+      const addr = chaincoins.createReceive().getAddress();
+      fund.addOutput(addr, 90000);
+      chaincoins.sign(fund);
+      fund = fund.toTX();
+
+      // Add it to block, mempool and wallet
+      const [block1, view1] = await getMockBlock(chain, [fund]);
+      const entry1 = await chain.add(block1, VERIFY_NONE);
+      await mempool._addBlock(entry1, block1.txs, view1);
+
+      // The fund TX output is a valid UTXO in the chain
+      const spendCoin = await chain.getCoin(fund.hash(), 0);
+      assert(spendCoin);
+
+      // Mempool is empty
+      assert.strictEqual(mempool.map.size, 0);
+
+      // Spend the coin with a sequence lock of 0x00000001.
+      // This should require the input coin to be 1 block old.
+      let spend = new MTX();
+      spend.addCoin(spendCoin);
+      spend.addOutput(addr, 70000);
+      spend.inputs[0].sequence = 1;
+      spend.version = 0;
+      chaincoins.sign(spend);
+      spend = spend.toTX();
+
+      // Valid spend into mempool
+      await mempool.addTX(spend);
+      assert.strictEqual(mempool.map.size, 1);
+      assert(mempool.getTX(spend.hash()));
+
+      // Confirm spend into block
+      const [block2, view2] = await getMockBlock(chain, [spend]);
+      const entry2 = await chain.add(block2, VERIFY_NONE);
+      await mempool._addBlock(entry2, block2.txs, view2);
+
+      // Spend has been removed from the mempool
+      assert.strictEqual(mempool.map.size, 0);
+      assert(!mempool.getTX(spend.hash()));
+
+      // Now the block gets disconnected
+      await chain.disconnect(entry2);
+      await mempool._removeBlock(entry2, block2.txs);
+
+      // Spend is back in the mempool
+      assert.strictEqual(mempool.map.size, 1);
+      assert(mempool.getTX(spend.hash()));
+
+      // Now remove one more block from the chain,
+      // re-inserting the funding TX back into the mempool.
+      // This should make the sequence-locked spend invalid
+      // because its input coin is no lnger 1 block old.
+      await chain.disconnect(entry1);
+      await mempool._removeBlock(entry1, block1.txs);
+
+      // Fund TX & spend TX are both still in the mempool
+      assert.strictEqual(mempool.map.size, 2);
+      assert(mempool.getTX(spend.hash()));
+      assert(mempool.getTX(fund.hash()));
+
+      // This is normally triggered by 'reorganize' event
+      await mempool._handleReorg();
+
+      // Premature sequence lock spend has been evicted, fund TX remains
+      assert.strictEqual(mempool.map.size, 1);
+      assert(mempool.getTX(fund.hash()));
+      assert(!mempool.getTX(spend.hash()));
+    });
   });
 });
