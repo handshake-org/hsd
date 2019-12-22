@@ -7,7 +7,7 @@ const assert = require('bsert');
 const {resolve} = require('path');
 const fs = require('fs');
 const {BloomFilter} = require('bfilter');
-const {nonce} = require('../lib/net/common');
+const {nonce, services} = require('../lib/net/common');
 const consensus = require('../lib/protocol/consensus');
 const Framer = require('../lib/net/framer');
 const packets = require('../lib/net/packets');
@@ -26,6 +26,10 @@ const UrkelProof = require('urkel/radix').Proof;
 const blake2b = require('bcrypto/lib/blake2b');
 const AirdropProof = require('../lib/primitives/airdropproof');
 const HostList = require('../lib/net/hostlist');
+const Pool = require('../lib/net/pool');
+const Peer = require('../lib/net/peer');
+const Logger = require('blgr');
+const secp256k1 = require('bcrypto/lib/secp256k1');
 
 const AIRDROP_PROOF_FILE = resolve(__dirname, 'data', 'airdrop-proof.base64');
 const read = file => Buffer.from(fs.readFileSync(file, 'binary'), 'base64');
@@ -1108,6 +1112,132 @@ describe('Net', function() {
       const bucket = hosts.usedBucket(test2);
       const test3 = bucket.pop();
       assert.deepStrictEqual(test3.toJSON(), test2.toJSON());
+    });
+  });
+
+  describe('Pool', function() {
+    let pool, dummyPeer, network;
+
+    beforeEach(async () => {
+      network = Network.get('regtest');
+
+      pool = new Pool({
+        logger: Logger.global,
+        chain: {
+          options: {
+            checkpoints: false
+          },
+          network,
+          on: () => {}
+        }
+      });
+
+      // Dummy peer that "sends" us packets
+      dummyPeer = Peer.fromOptions(pool.options);
+
+      // Create a peer but don't actually try connecting to anything
+      Peer.fromOutbound = function fromOutbound(opts, addr) {
+        const peer = Peer.fromOptions(opts);
+        peer.outbound = true;
+        peer.address = addr;
+        return peer;
+      };
+    });
+
+    afterEach(async () => {
+      if (pool.opened)
+        await pool.close();
+    });
+
+    it('should handleAddr (add addrs to hosts list)', async () => {
+      const items = [
+        // Routable and has required services
+        new NetAddress({
+          host: '5.19.5.127',
+          port: 12038,
+          services: 0 | services.NETWORK,
+          time: 1558405603,
+          key: Buffer.alloc(33, 0x01)
+        }),
+        // Routable and missing services
+        new NetAddress({
+          host: '5.29.139.120',
+          port: 12039,
+          services: 0,
+          time: 1558405603,
+          key: Buffer.alloc(33, 0x02)
+        }),
+        // Not routable
+        new NetAddress({
+          host: '127.0.0.3',
+          port: 12038,
+          services: 0 | services.NETWORK,
+          time: 1558405602,
+          key: Buffer.alloc(33, 0x03)
+        })
+      ];
+
+      const pkt = new packets.AddrPacket(items);
+
+      assert.equal(pool.hosts.totalFresh, 0);
+
+      await pool.handleAddr(dummyPeer, pkt);
+
+      assert.equal(pool.hosts.totalFresh, 1);
+    });
+
+    it('should fill outbound without duplicate host connections', async () => {
+      await pool.open();
+
+      // Actual valid secp256k1 public keys required for this test...
+      const addr1 = new NetAddress({
+        host: '50.60.70.80',
+        port: 1234,
+        services: 1,
+        time: 1576111111,
+        key: secp256k1.publicKeyCreate(Buffer.alloc(32, 0x01))
+      });
+
+      // Same IP:port as addr1, different key
+      const addr2 = new NetAddress({
+        host: '50.60.70.80',
+        port: 1234,
+        services: 3,
+        time: 1576222222,
+        key: secp256k1.publicKeyCreate(Buffer.alloc(32, 0x02))
+      });
+
+      // Different IP as addr1
+      const addr3 = new NetAddress({
+        host: '80.70.60.50',
+        port: 1234,
+        services: 1,
+        time: 1576111111,
+        key: secp256k1.publicKeyCreate(Buffer.alloc(32, 0x03))
+      });
+
+      await pool.handleAddr(
+        dummyPeer,
+        {
+          items: [
+            addr1,
+            addr2,
+            addr3
+          ]
+        }
+      );
+
+      // All three hosts are valid entries in the list
+      assert.strictEqual(pool.hosts.map.size, 3);
+
+      // ...but we only connected to two of them
+      assert.strictEqual(pool.peers.size(), 2);
+
+      // ...and their IP:port do not match.
+      assert.notEqual(
+        pool.peers.head().address.hostname,
+        pool.peers.tail().address.hostname
+      );
     });
   });
 });
