@@ -30,6 +30,7 @@ const rules = require('../lib/covenants/rules');
 const {types} = rules;
 const NameState = require('../lib/covenants/namestate');
 const {states} = NameState;
+const ownership = require('../lib/covenants/ownership');
 
 const ONE_HASH = Buffer.alloc(32, 0x00);
 ONE_HASH[0] = 0x01;
@@ -406,13 +407,13 @@ describe('Mempool', function() {
 
   describe('Mempool disconnect and reorg handling', function () {
     const workers = new WorkerPool({
-      enabled: true,
-      size: 2
+      enabled: false
     });
 
     const chain = new Chain({
       memory: true,
-      workers
+      workers,
+      network: 'regtest'
     });
 
     const mempool = new Mempool({
@@ -440,7 +441,25 @@ describe('Mempool', function() {
     // Number of coins available in
     // chaincoins (100k satoshi per coin).
     const N = 100;
-    const chaincoins = new MemWallet();
+    const chaincoins = new MemWallet({
+      network: 'regtest'
+    });
+
+    chain.on('block', (block, entry) => {
+      chaincoins.addBlock(entry, block.txs);
+    });
+
+    chain.on('disconnect', (entry, block) => {
+      chaincoins.removeBlock(entry, block.txs);
+    });
+
+    chaincoins.getNameStatus = async (nameHash) => {
+      assert(Buffer.isBuffer(nameHash));
+      const height = chain.height + 1;
+      const state = await chain.getNextState();
+      const hardened = state.hasHardening();
+      return chain.db.getNameStatus(nameHash, height, hardened);
+    };
 
     async function getMockBlock(chain, txs = [], cb = true) {
       if (cb) {
@@ -877,6 +896,76 @@ describe('Mempool', function() {
       // Premature bid covenant TX has been evicted
       assert.strictEqual(mempool.map.size, 0);
       assert(!mempool.getTX(bid.hash()));
+    });
+
+    it('should handle reorg: name claim', async () => {
+      // Mempool is empty
+      await mempool.reset();
+      assert.strictEqual(mempool.map.size, 0);
+
+      // Create a fake claim
+      const claim = await chaincoins.fakeClaim('cloudflare');
+
+      // It's too early to add this claim.
+      // Note: If the regtest genesis block time stamp is ever changed,
+      // it's possible it will conflict with the actual timestamps in the
+      // RRSIG in the actual DNSSEC proof for cloudflare and break this test.
+      await assert.rejects(async () => {
+        await mempool.addClaim(claim);
+      }, {
+        name: 'Error',
+        reason: 'bad-claim-time'
+      });
+
+      // Fast-forward the next block's timestamp to allow claim.
+      const data = claim.getData(mempool.network);
+      const [block1] = await getMockBlock(chain);
+      block1.time = data.inception + 100;
+      ownership.ignore = true;
+      const entry1 = await chain.add(block1, VERIFY_BODY);
+
+      // Now we can add it to the mempool.
+      await mempool.addClaim(claim);
+      assert.strictEqual(mempool.claims.size, 1);
+      assert(mempool.getClaim(claim.hash()));
+
+      // Confirm the claim in the next block.
+      // Note: Claim.toTX() creates a coinbase-shaped TX
+      const cb = claim.toTX(mempool.network, chain.tip.height + 1);
+      cb.locktime = chain.tip.height + 1;
+      const [block2, view2] = await getMockBlock(chain, [cb], false);
+      const entry2 = await chain.add(block2, VERIFY_BODY);
+      await mempool._addBlock(entry2, block2.txs, view2);
+
+      // Mempool is empty
+      assert.strictEqual(mempool.claims.size, 0);
+      assert.strictEqual(mempool.map.size, 0);
+
+      // Now the block gets disconnected
+      await chain.disconnect(entry2);
+      await mempool._removeBlock(entry2, block2.txs);
+      await mempool._handleReorg();
+
+      // Claim is back in the mempool
+      assert.strictEqual(mempool.claims.size, 1);
+      assert(mempool.getClaim(claim.hash()));
+
+      // Now remove one more block from the chain, making the tip
+      // way too old for the claim's inception timestamp.
+      await chain.disconnect(entry1);
+      await mempool._removeBlock(entry1, block1.txs);
+
+      // Claim is still in the mempool.
+      assert.strictEqual(mempool.claims.size, 1);
+      assert(mempool.getClaim(claim.hash()));
+
+      // This is normally triggered by 'reorganize' event
+      await mempool._handleReorg();
+
+      // Premature claim has been evicted
+      assert.strictEqual(mempool.map.size, 0);
+      assert.strictEqual(mempool.claims.size, 0);
+      assert(!mempool.getClaim(claim.hash()));
     });
   });
 });
