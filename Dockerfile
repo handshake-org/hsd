@@ -1,14 +1,13 @@
 FROM node:alpine AS base
 RUN mkdir -p /code
 WORKDIR /code
-CMD "hsd"
+CMD ["hsd"]
 
-RUN apk upgrade --no-cache && \
-    apk add --no-cache bash unbound-dev gmp-dev
+RUN apk add --no-cache bash unbound-dev gmp-dev
 
 COPY package.json \
-     #package-lock.json \
-     /code/
+  #package-lock.json \
+  /code/
 
 # Install build dependencies and compile
 FROM base AS build
