@@ -25,7 +25,7 @@ const consensus = require('../lib/protocol/consensus');
 const MemWallet = require('./util/memwallet');
 const ALL = Script.hashType.ALL;
 const common = require('../lib/blockchain/common');
-const VERIFY_NONE = common.flags.VERIFY_NONE;
+const VERIFY_BODY = common.flags.VERIFY_BODY;
 const rules = require('../lib/covenants/rules');
 const {types} = rules;
 const NameState = require('../lib/covenants/namestate');
@@ -469,7 +469,7 @@ describe('Mempool', function() {
 
       // Ensure mockblocks are unique (required for reorg testing)
       block.merkleRoot = block.createMerkleRoot();
-
+      block.witnessRoot = block.createWitnessRoot();
       block.treeRoot = chain.db.treeRoot();
 
       return [block, view];
@@ -487,7 +487,7 @@ describe('Mempool', function() {
 
       const cb = mtx.toTX();
       const [block] = await getMockBlock(chain, [cb], false);
-      const entry = await chain.add(block, VERIFY_NONE);
+      const entry = await chain.add(block, VERIFY_BODY);
 
       await mempool._addBlock(entry, block.txs);
 
@@ -495,7 +495,7 @@ describe('Mempool', function() {
       // premature spend of coinbase.
       for (let i = 0; i < 100; i++) {
         const [block] = await getMockBlock(chain);
-        const entry = await chain.add(block, VERIFY_NONE);
+        const entry = await chain.add(block, VERIFY_BODY);
 
         await mempool._addBlock(entry, block.txs);
       }
@@ -553,6 +553,12 @@ describe('Mempool', function() {
       assert(mempool.hasEntry(tx2.hash()));
       assert(mempool.hasEntry(tx1.hash()));
       assert.strictEqual(mempool.map.size, 2);
+
+      // Ensure mempool contents are valid in next block
+      const [newBlock, newView] = await getMockBlock(chain, [tx1, tx2]);
+      const newEntry = await chain.add(newBlock, VERIFY_BODY);
+      await mempool._addBlock(newEntry, newBlock.txs, newView);
+      assert.strictEqual(mempool.map.size, 0);
     });
 
     it('should handle reorg: coinbase spends', async () => {
@@ -568,9 +574,9 @@ describe('Mempool', function() {
       cb.locktime = chain.height + 1;
       cb = cb.toTX();
 
-      // Add it to block, mempool and wallet
+      // Add it to block and mempool
       const [block1, view1] = await getMockBlock(chain, [cb], false);
-      const entry1 = await chain.add(block1, VERIFY_NONE);
+      const entry1 = await chain.add(block1, VERIFY_BODY);
       await mempool._addBlock(entry1, block1.txs, view1);
 
       // The coinbase output is a valid UTXO in the chain
@@ -600,7 +606,7 @@ describe('Mempool', function() {
       let entry2;
       for (let i = 0; i < COINBASE_MATURITY - 1; i++) {
         [block2, view2] = await getMockBlock(chain);
-        entry2 = await chain.add(block2, VERIFY_NONE);
+        entry2 = await chain.add(block2, VERIFY_BODY);
 
         await mempool._addBlock(entry2, block2.txs, view2);
       }
@@ -614,7 +620,7 @@ describe('Mempool', function() {
 
       // Confirm coinbase spend in a block
       const [block3, view3] = await getMockBlock(chain, [spend]);
-      const entry3 = await chain.add(block3, VERIFY_NONE);
+      const entry3 = await chain.add(block3, VERIFY_BODY);
       await mempool._addBlock(entry3, block3.txs, view3);
 
       // Coinbase spend has been removed from the mempool
@@ -659,10 +665,11 @@ describe('Mempool', function() {
       fund.addOutput(addr, 90000);
       chaincoins.sign(fund);
       fund = fund.toTX();
+      chaincoins.addTX(fund);
 
-      // Add it to block, mempool and wallet
+      // Add it to block and mempool
       const [block1, view1] = await getMockBlock(chain, [fund]);
-      const entry1 = await chain.add(block1, VERIFY_NONE);
+      const entry1 = await chain.add(block1, VERIFY_BODY);
       await mempool._addBlock(entry1, block1.txs, view1);
 
       // The fund TX output is a valid UTXO in the chain
@@ -689,7 +696,7 @@ describe('Mempool', function() {
 
       // Confirm spend into block
       const [block2, view2] = await getMockBlock(chain, [spend]);
-      const entry2 = await chain.add(block2, VERIFY_NONE);
+      const entry2 = await chain.add(block2, VERIFY_BODY);
       await mempool._addBlock(entry2, block2.txs, view2);
 
       // Spend has been removed from the mempool
@@ -723,6 +730,12 @@ describe('Mempool', function() {
       assert.strictEqual(mempool.map.size, 1);
       assert(mempool.getTX(fund.hash()));
       assert(!mempool.getTX(spend.hash()));
+
+      // Ensure mempool contents are valid in next block
+      const [newBlock, newView] = await getMockBlock(chain, [fund]);
+      const newEntry = await chain.add(newBlock, VERIFY_BODY);
+      await mempool._addBlock(newEntry, newBlock.txs, newView);
+      assert.strictEqual(mempool.map.size, 0);
     });
 
     it('should handle reorg: covenants', async () => {
@@ -748,9 +761,9 @@ describe('Mempool', function() {
       chaincoins.sign(open);
       open = open.toTX();
 
-      // Add it to block, mempool and wallet
+      // Add it to block and mempool
       const [block1, view1] = await getMockBlock(chain, [open]);
-      const entry1 = await chain.add(block1, VERIFY_NONE);
+      const entry1 = await chain.add(block1, VERIFY_BODY);
       await mempool._addBlock(entry1, block1.txs, view1);
 
       // The open TX output is a valid UTXO in the chain
@@ -796,7 +809,7 @@ describe('Mempool', function() {
       let entry2;
       for (let i = 0; i < TREE_INTERVAL; i++) {
         [block2, view2] = await getMockBlock(chain);
-        entry2 = await chain.add(block2, VERIFY_NONE);
+        entry2 = await chain.add(block2, VERIFY_BODY);
 
         await mempool._addBlock(entry2, block2.txs, view2);
       }
@@ -818,7 +831,7 @@ describe('Mempool', function() {
 
       // Confirm bid into block
       const [block3, view3] = await getMockBlock(chain, [bid]);
-      const entry3 = await chain.add(block3, VERIFY_NONE);
+      const entry3 = await chain.add(block3, VERIFY_BODY);
       await mempool._addBlock(entry3, block3.txs, view3);
 
       // Bid has been removed from the mempool
