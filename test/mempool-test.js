@@ -567,6 +567,7 @@ describe('Mempool', function() {
 
       // Unconfirm block into mempool
       await mempool._removeBlock(entry2, block2.txs);
+      await mempool._handleReorg();
 
       // Mempool should contain both TXs
       assert(mempool.hasEntry(tx2.hash()));
@@ -649,6 +650,7 @@ describe('Mempool', function() {
       // Now the block gets disconnected
       await chain.disconnect(entry3);
       await mempool._removeBlock(entry3, block3.txs);
+      await mempool._handleReorg();
 
       // Coinbase spend is back in the mempool
       assert.strictEqual(mempool.map.size, 1);
@@ -725,6 +727,7 @@ describe('Mempool', function() {
       // Now the block gets disconnected
       await chain.disconnect(entry2);
       await mempool._removeBlock(entry2, block2.txs);
+      await mempool._handleReorg();
 
       // Spend is back in the mempool
       assert.strictEqual(mempool.map.size, 1);
@@ -860,6 +863,7 @@ describe('Mempool', function() {
       // Now the block gets disconnected
       await chain.disconnect(entry3);
       await mempool._removeBlock(entry3, block3.txs);
+      await mempool._handleReorg();
 
       // Bid is back in the mempool
       assert.strictEqual(mempool.map.size, 1);
