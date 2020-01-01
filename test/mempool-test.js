@@ -925,11 +925,21 @@ describe('Mempool', function() {
       const data = claim.getData(mempool.network);
       const [block1] = await getMockBlock(chain);
       block1.time = data.inception + 100;
-      ownership.ignore = true;
-      const entry1 = await chain.add(block1, VERIFY_BODY);
+      let entry1;
+      try {
+        ownership.ignore = true;
+        entry1 = await chain.add(block1, VERIFY_BODY);
+      } finally {
+        ownership.ignore = false;
+      }
 
       // Now we can add it to the mempool.
-      await mempool.addClaim(claim);
+      try {
+        ownership.ignore = true;
+        await mempool.addClaim(claim);
+      } finally {
+        ownership.ignore = false;
+      }
       assert.strictEqual(mempool.claims.size, 1);
       assert(mempool.getClaim(claim.hash()));
 
@@ -938,8 +948,14 @@ describe('Mempool', function() {
       const cb = claim.toTX(mempool.network, chain.tip.height + 1);
       cb.locktime = chain.tip.height + 1;
       const [block2, view2] = await getMockBlock(chain, [cb], false);
-      const entry2 = await chain.add(block2, VERIFY_BODY);
-      await mempool._addBlock(entry2, block2.txs, view2);
+      let entry2;
+      try {
+        ownership.ignore = true;
+        entry2 = await chain.add(block2, VERIFY_BODY);
+        await mempool._addBlock(entry2, block2.txs, view2);
+      } finally {
+        ownership.ignore = false;
+      }
 
       // Mempool is empty
       assert.strictEqual(mempool.claims.size, 0);
