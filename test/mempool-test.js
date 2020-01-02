@@ -902,7 +902,7 @@ describe('Mempool', function() {
       assert(!mempool.getTX(bid.hash()));
     });
 
-    it('should handle reorg: name claim', async () => {
+    it('should handle reorg: name claim - DNSSEC timestamp', async () => {
       // Mempool is empty
       await mempool.reset();
       assert.strictEqual(mempool.map.size, 0);
@@ -974,6 +974,100 @@ describe('Mempool', function() {
       // way too old for the claim's inception timestamp.
       await chain.disconnect(entry1);
       await mempool._removeBlock(entry1, block1.txs);
+
+      // Claim is still in the mempool.
+      assert.strictEqual(mempool.claims.size, 1);
+      assert(mempool.getClaim(claim.hash()));
+
+      // This is normally triggered by 'reorganize' event
+      await mempool._handleReorg();
+
+      // Premature claim has been evicted
+      assert.strictEqual(mempool.map.size, 0);
+      assert.strictEqual(mempool.claims.size, 0);
+      assert(!mempool.getClaim(claim.hash()));
+    });
+
+    it('should handle reorg: name claim - block commitment', async () => {
+      // Mempool is empty
+      await mempool.reset();
+      assert.strictEqual(mempool.map.size, 0);
+
+      // Create a fake claim - just to get the correct timestamps
+      let claim = await chaincoins.fakeClaim('cloudflare');
+
+      // Fast-forward the next block's timestamp to allow claim.
+      const data = claim.getData(mempool.network);
+      const [block1] = await getMockBlock(chain);
+      block1.time = data.inception + 100;
+      try {
+        ownership.ignore = true;
+        await chain.add(block1, VERIFY_BODY);
+      } finally {
+        ownership.ignore = false;
+      }
+
+      // Add a few more blocks
+      let block2;
+      let view2;
+      let entry2;
+      for (let i = 0; i < 10; i++) {
+        [block2, view2] = await getMockBlock(chain);
+        entry2 = await chain.add(block2, VERIFY_BODY);
+
+        await mempool._addBlock(entry2, block2.txs, view2);
+      }
+
+      // Get *very* recent block for commitment
+      const options = {
+        commitHeight: chain.tip.height,
+        commitHash: chain.tip.hash
+      };
+
+      // Update the claim with the new block commitment
+      claim = await chaincoins.fakeClaim('cloudflare', options);
+
+      // Now we can add it to the mempool.
+      try {
+        ownership.ignore = true;
+        await mempool.addClaim(claim);
+      } finally {
+        ownership.ignore = false;
+      }
+      assert.strictEqual(mempool.claims.size, 1);
+      assert(mempool.getClaim(claim.hash()));
+
+      // Confirm the claim in the next block.
+      // Note: Claim.toTX() creates a coinbase-shaped TX
+      const cb = claim.toTX(mempool.network, chain.tip.height + 1);
+      cb.locktime = chain.tip.height + 1;
+      const [block3, view3] = await getMockBlock(chain, [cb], false);
+      let entry3;
+      try {
+        ownership.ignore = true;
+        entry3 = await chain.add(block3, VERIFY_BODY);
+        await mempool._addBlock(entry3, block3.txs, view3);
+      } finally {
+        ownership.ignore = false;
+      }
+
+      // Mempool is empty
+      assert.strictEqual(mempool.claims.size, 0);
+      assert.strictEqual(mempool.map.size, 0);
+
+      // Now the block gets disconnected
+      await chain.disconnect(entry3);
+      await mempool._removeBlock(entry3, block3.txs);
+      await mempool._handleReorg();
+
+      // Claim is back in the mempool
+      assert.strictEqual(mempool.claims.size, 1);
+      assert(mempool.getClaim(claim.hash()));
+
+      // Now remove one more block from the chain, making the tip
+      // too old for the claim's block commitment.
+      await chain.disconnect(entry2);
+      await mempool._removeBlock(entry2, block2.txs);
 
       // Claim is still in the mempool.
       assert.strictEqual(mempool.claims.size, 1);
