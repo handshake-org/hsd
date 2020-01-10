@@ -129,8 +129,8 @@ describe('Auction', function() {
       assert(await chain.add(block));
     });
 
-    it('should mine 10 blocks', async () => {
-      for (let i = 0; i < 10; i++) {
+    it('should mine through the bidding period', async () => {
+      for (let i = 0; i < network.names.biddingPeriod; i++) {
         const block = await cpu.mineBlock();
         assert(block);
         assert(await chain.add(block));
@@ -151,8 +151,8 @@ describe('Auction', function() {
       assert(await chain.add(block));
     });
 
-    it('should mine 20 blocks', async () => {
-      for (let i = 0; i < 20; i++) {
+    it('should mine through the reveal period', async () => {
+      for (let i = 0; i < network.names.revealPeriod; i++) {
         const block = await cpu.mineBlock();
         assert(block);
         assert(await chain.add(block));
@@ -361,6 +361,14 @@ describe('Auction', function() {
       const block = await job.mineAsync();
 
       assert(await chain.add(block));
+    });
+
+    it('should mine past tree interval', async () => {
+      if ((chain.height % network.names.treeInterval) === 0) {
+        const block = await cpu.mineBlock();
+        assert(block);
+        assert(await chain.add(block));
+      }
     });
 
     it('should have the same DB root', async () => {
