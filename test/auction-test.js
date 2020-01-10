@@ -137,8 +137,8 @@ describe('Auction', function() {
       assert(await chain.add(block));
     });
 
-    it('should mine 10 blocks', async () => {
-      for (let i = 0; i < 10; i++) {
+    it('should mine through the bidding period', async () => {
+      for (let i = 0; i < network.names.biddingPeriod; i++) {
         const block = await cpu.mineBlock();
         assert(block);
         assert(await chain.add(block));
@@ -159,8 +159,8 @@ describe('Auction', function() {
       assert(await chain.add(block));
     });
 
-    it('should mine 20 blocks', async () => {
-      for (let i = 0; i < 20; i++) {
+    it('should mine through the reveal period', async () => {
+      for (let i = 0; i < network.names.revealPeriod; i++) {
         const block = await cpu.mineBlock();
         assert(block);
         assert(await chain.add(block));
@@ -184,8 +184,8 @@ describe('Auction', function() {
       assert(await chain.add(block));
     });
 
-    it('should mine 10 blocks', async () => {
-      for (let i = 0; i < 10; i++) {
+    it('should mine a tree interval', async () => {
+      for (let i = 0; i < network.names.treeInterval; i++) {
         const block = await cpu.mineBlock();
         assert(block);
         assert(await chain.add(block));
@@ -249,8 +249,8 @@ describe('Auction', function() {
       assert.strictEqual(err.reason, 'bad-renewal-premature');
     });
 
-    it('should mine 10 blocks', async () => {
-      for (let i = 0; i < 10; i++) {
+    it('should mine a tree interval', async () => {
+      for (let i = 0; i < network.names.treeInterval; i++) {
         const block = await cpu.mineBlock();
         assert(block);
         assert(await chain.add(block));
@@ -500,8 +500,8 @@ describe('Auction', function() {
       miner.addAddress(wallet.getReceive());
     });
 
-    it('should mine 20 blocks', async () => {
-      for (let i = 0; i < 20; i++) {
+    it('should mine a tree interval', async () => {
+      for (let i = 0; i < network.names.treeInterval; i++) {
         const block = await cpu.mineBlock();
         assert(block);
         assert(await chain.add(block));
@@ -725,8 +725,8 @@ describe('Auction', function() {
     });
     */
 
-    it('should mine 20 blocks', async () => {
-      for (let i = 0; i < 20; i++) {
+    it('should mine a tree interval', async () => {
+      for (let i = 0; i < network.names.treeInterval; i++) {
         const block = await cpu.mineBlock();
         assert(block);
         assert(await chain.add(block));
@@ -799,8 +799,8 @@ describe('Auction', function() {
       assert.strictEqual(err.reason, 'bad-finalize-maturity');
     });
 
-    it('should mine 20 blocks', async () => {
-      for (let i = 0; i < 20; i++) {
+    it('should mine through the transfer lockup period', async () => {
+      for (let i = 0; i < network.names.transferLockup; i++) {
         const block = await cpu.mineBlock();
         assert(block);
         assert(await chain.add(block));
