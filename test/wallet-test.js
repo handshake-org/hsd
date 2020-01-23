@@ -10,6 +10,7 @@ const Network = require('../lib/protocol/network');
 const util = require('../lib/utils/util');
 const blake2b = require('bcrypto/lib/blake2b');
 const random = require('bcrypto/lib/random');
+const FullNode = require('../lib/node/fullnode');
 const WalletDB = require('../lib/wallet/walletdb');
 const WorkerPool = require('../lib/workers/workerpool');
 const Address = require('../lib/primitives/address');
@@ -22,6 +23,7 @@ const Script = require('../lib/script/script');
 const policy = require('../lib/protocol/policy');
 const HDPrivateKey = require('../lib/hd/private');
 const Wallet = require('../lib/wallet/wallet');
+const {forValue} = require('./util/common');
 
 const KEY1 = 'xprv9s21ZrQH143K3Aj6xQBymM31Zb4BVc7wxqfUhMZrzewdDVCt'
   + 'qUP9iWfcHgJofs25xbaUpCps9GDXj83NiWvQCAkWQhVj5J4CorfnpKX94AZ';
@@ -1816,6 +1818,8 @@ describe('Wallet', function() {
         wallet.network.txStart = ACTUAL_TXSTART;
         wdb.height = ACTUAL_HEIGHT;
       }
+    });
+  });
 
   describe('Corruption', function() {
     let workers = null;
@@ -2172,6 +2176,63 @@ describe('Wallet', function() {
       assert.strictEqual(bal.unconfirmed, 10e6 - (3 * fee));
       assert.strictEqual(bal.ulocked, value);
       assert.strictEqual(bal.clocked, value);
+    });
+  });
+
+  describe('Node Integration', function() {
+    const ports = {p2p: 49331, node: 49332, wallet: 49333};
+    let node, chain, miner, wdb = null;
+
+    beforeEach(async () => {
+      node = new FullNode({
+        memory: true,
+        network: 'regtest',
+        workers: true,
+        workersSize: 2,
+        plugins: [require('../lib/wallet/plugin')],
+        port: ports.p2p,
+        httpPort: ports.node,
+        env: {
+          'HSD_WALLET_HTTP_PORT': ports.wallet.toString()
+        }
+      });
+
+      chain = node.chain;
+      miner = node.miner;
+      wdb = node.require('walletdb').wdb;
+      await node.open();
+    });
+
+    afterEach(async () => {
+      await node.close();
+    });
+
+    async function mineBlock(tip) {
+      const job = await miner.createJob(tip);
+      const block = await job.mineAsync();
+      chain.add(block);
+    }
+
+    it('should not stack in-memory block queue (oom)', async () => {
+      let height = 0;
+
+      const addBlock = wdb.addBlock.bind(wdb);
+      wdb.addBlock = async (entry, txs) => {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await addBlock(entry, txs);
+      };
+
+      async function raceForward() {
+        await mineBlock();
+
+        await forValue(node.chain, 'height', height + 1);
+        assert.equal(wdb.height, height);
+
+        height += 1;
+      }
+
+      for (let i = 0; i < 10; i++)
+        await raceForward();
     });
   });
 });
