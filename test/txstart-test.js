@@ -159,13 +159,15 @@ describe('txStart', function() {
   });
 
   it('Should add blocks until txStart is reached', async() => {
-    for (let i = node.chain.height; i < node.network.txStart; i++) {
+    for (let i = node.chain.height; i < node.network.txStart - 1; i++) {
       const block = await node.miner.mineBlock();
       assert(await node.chain.add(block));
     }
+    // The NEXT block is the txStart height
+    assert.strictEqual(node.chain.height + 1, node.network.txStart);
   });
 
-  it('Should allow TX in mempool after txStart', async () => {
+  it('Should allow TX in mempool at txStart height', async () => {
     lastTX = new TX({
       inputs: [new Input()],
       outputs: [new Output()]
@@ -180,7 +182,7 @@ describe('txStart', function() {
     assert(node.mempool.has(lastTX.hash()));
   });
 
-  it('Should allow Claim in mempool after txStart', async () => {
+  it('Should allow Claim in mempool at txStart height', async () => {
     const claim = await wallet.fakeClaim('cloudflare');
 
     try {
@@ -193,13 +195,13 @@ describe('txStart', function() {
     assert(node.mempool.hasClaim(claim.hash()));
   });
 
-  it('Should allow Airdrop in mempool after txStart', async () => {
+  it('Should allow Airdrop in mempool at txStart height', async () => {
     await node.mempool.addAirdrop(proof);
     assert.strictEqual(node.mempool.airdrops.size, 1);
     assert(node.mempool.hasAirdrop(proof.hash()));
   });
 
-  it('Should accept a block full of goodies after txStart', async() => {
+  it('Should accept a block full of goodies at txStart height', async() => {
     const block = await node.miner.mineBlock();
     try {
       ownership.ignore = true;
@@ -207,6 +209,9 @@ describe('txStart', function() {
     } finally {
       ownership.ignore = false;
     }
+
+    // This is the first block where transactions are allowed
+    assert.strictEqual(node.chain.height, node.network.txStart);
 
     assert.strictEqual(block.txs.length, 2);
     assert.bufferEqual(block.txs[1].hash(), lastTX.hash());
