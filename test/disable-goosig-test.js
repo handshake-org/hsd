@@ -165,6 +165,9 @@ describe('Disable GooSig', function() {
 
       await assert.rejects(node.chain.add(block),
         {reason: 'bad-goosig-disabled'});
+      // Block was added to invalid cache to
+      // prevent a revalidation attempt.
+      assert(node.chain.hasInvalid(block));
     });
   });
 
