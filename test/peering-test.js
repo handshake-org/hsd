@@ -200,6 +200,7 @@ describe('Peering', function() {
     });
 
     it('should gossip blocks over standard and brontide', async () => {
+      // Keep track of seen blocks for each node.
       const seen = {
         standard: false,
         encrypted: false,

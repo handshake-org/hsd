@@ -59,17 +59,18 @@ describe('SlidingWindow (Unit)', function() {
 describe('SlidingWindow (Functional)', function() {
   it('should rate limit getproof to max-proof-rps ', async () => {
     const maxProofRPS = 20;
+    const seen = {count: 0};
 
     const one = new FullNode({
       'memory': true,
       'network': 'regtest',
       'listen': true,
       'max-proof-rps': maxProofRPS,
-      'host': '127.0.1.1',
-      'http-host': '127.0.1.1',
-      'rs-host': '127.0.1.1',
-      'ns-host': '127.0.1.1',
       'seeds': []
+    });
+
+    one.pool.on('peer open', () => {
+      seen.count++;
     });
 
     assert.equal(one.pool.options.maxProofRPS, 20);
@@ -79,12 +80,15 @@ describe('SlidingWindow (Functional)', function() {
     const two = new FullNode({
       'memory': true,
       'network': 'regtest',
-      'host': '127.0.0.2',
-      'http-host': '127.0.0.2',
-      'rs-host': '127.0.0.2',
-      'ns-host': '127.0.0.2',
+      'http-port': 10000,
+      'rs-port': 10001,
+      'ns-port': 10002,
       'seeds': [],
-      'only': [`${key}@127.0.1.1`]
+      'only': [`${key}@127.0.0.1`] // one is using default ports.
+    });
+
+    two.pool.on('peer open', () => {
+      seen.count++;
     });
 
     await one.open();
@@ -93,7 +97,7 @@ describe('SlidingWindow (Functional)', function() {
     await two.open();
     await two.connect();
 
-    await common.event(one.pool, 'peer open');
+    await common.forValue(seen, 'count', 2);
 
     assert.equal(one.pool.peers.size(), 1);
     assert.equal(one.pool.peers.brontide.inbound, 1);
@@ -102,9 +106,9 @@ describe('SlidingWindow (Functional)', function() {
 
     const hash = rules.hashString('handshake');
 
-    let seen = false;
+    let banned = false;
     one.pool.on('ban', () => {
-      seen = true;
+      banned = true;
     });
 
     let packets = 0;
@@ -114,15 +118,18 @@ describe('SlidingWindow (Functional)', function() {
     });
 
     let count = 0;
-    while (!seen) {
+    let err;
+    while (!banned) {
       count++;
       try {
         await two.pool.resolve(hash) ;
       } catch (e) {
+        err = e;
         break;
       }
     }
 
+    assert.equal(err.message, 'Timed out.');
     assert.strictEqual(packets, maxProofRPS);
     assert.strictEqual(count, maxProofRPS);
 
