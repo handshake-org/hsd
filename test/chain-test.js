@@ -768,7 +768,8 @@ describe('Chain', function() {
 
   describe('Checkpoints', function() {
     before(async () => {
-      const entry = await chain.getEntry(chain.tip.height - 5);
+      const CHECKPOINT = chain.tip.height - 5;
+      const entry = await chain.getEntry(CHECKPOINT);
       assert(Buffer.isBuffer(entry.hash));
       assert(Number.isInteger(entry.height));
 
@@ -782,7 +783,8 @@ describe('Chain', function() {
     });
 
     it('will reject blocks before last checkpoint', async () => {
-      const entry = await chain.getEntry(chain.tip.height - 10);
+      const BEFORE_CHECKPOINT = chain.tip.height - 10;
+      const entry = await chain.getEntry(BEFORE_CHECKPOINT);
       const block = await cpu.mineBlock(entry);
 
       let err = null;
@@ -800,9 +802,9 @@ describe('Chain', function() {
     });
 
     it('will accept blocks after last checkpoint', async () => {
-      const entry = await chain.getEntry(chain.tip.height - 4);
+      const AFTER_CHECKPOINT = chain.tip.height - 4;
+      const entry = await chain.getEntry(AFTER_CHECKPOINT);
       const block = await cpu.mineBlock(entry);
-
       assert(await chain.add(block));
     });
   });
