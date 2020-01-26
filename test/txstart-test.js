@@ -110,6 +110,7 @@ describe('Disable TXs', function() {
 
     await assert.rejects(node.chain.add(block, VERIFY_NONE),
       {reason: 'no-tx-allowed-yet'});
+    assert(node.chain.hasInvalid(block));
   });
 
   it('should reject non-empty block before txStart', async () => {
@@ -133,6 +134,7 @@ describe('Disable TXs', function() {
 
     await assert.rejects(node.chain.add(block, VERIFY_NONE),
       {reason: 'no-tx-allowed-yet'});
+    assert(node.chain.hasInvalid(block));
   });
 
   it('should accept empty block before txStart', async () => {
@@ -152,7 +154,7 @@ describe('Disable TXs', function() {
     block.time = node.chain.tip.time + 3;
     block.bits = await node.chain.getTarget(block.time, node.chain.tip);
 
-    await node.chain.add(block, VERIFY_NONE);
+    assert(await node.chain.add(block, VERIFY_NONE));
 
     // Spend this output later
     utxo = block.txs[0].hash();
