@@ -131,8 +131,17 @@ describe('Disable GooSig', function() {
       }
 
       assert.strictEqual(node.chain.height - 1, node.network.goosigStop);
-      await assert.rejects(node.mempool.addAirdrop(proof),
-        {reason: 'bad-goosig-disabled'});
+
+      let err;
+      try {
+        await node.mempool.addAirdrop(proof);
+      } catch (e) {
+        err = e;
+      }
+
+      assert.equal(err.type, 'VerifyError');
+      assert.equal(err.reason, 'bad-goosig-disabled');
+      assert.equal(err.score, 0);
     });
 
     it('should reject GooSig based airdrop in block', async () => {
@@ -163,8 +172,17 @@ describe('Disable GooSig', function() {
         block = template.commit(proof);
       }
 
-      await assert.rejects(node.chain.add(block),
-        {reason: 'bad-goosig-disabled'});
+      let err;
+      try {
+        await node.chain.add(block);
+      } catch (e) {
+        err = e;
+      }
+
+      assert.equal(err.type, 'VerifyError');
+      assert.equal(err.reason, 'bad-goosig-disabled');
+      assert.equal(err.score, 100);
+
       // Block was added to invalid cache to
       // prevent a revalidation attempt.
       assert(node.chain.hasInvalid(block));
