@@ -50,7 +50,7 @@ wallet.getNameStatus = async (nameHash) => {
   return node.chain.db.getNameStatus(nameHash, height, hardened);
 };
 
-describe('txStart', function() {
+describe('Disable TXs', function() {
   let utxo, lastTX;
 
   before(async () => {
@@ -67,7 +67,7 @@ describe('txStart', function() {
     node.network.txStart = RESET_TXSTART;
   });
 
-  it('Should reject TX from mempool before txStart', async () => {
+  it('should reject TX from mempool before txStart', async () => {
     const tx = new TX({
       inputs: [new Input()],
       outputs: [new Output()]
@@ -78,7 +78,7 @@ describe('txStart', function() {
       {reason: 'no-tx-allowed-yet'});
   });
 
-  it('Should reject Claim from mempool before txStart', async () => {
+  it('should reject claim from mempool before txStart', async () => {
     const claim = await wallet.fakeClaim('cloudflare');
 
     try {
@@ -90,12 +90,12 @@ describe('txStart', function() {
     }
   });
 
-  it('Should reject Airdrop from mempool before txStart', async () => {
+  it('should reject airdrop from mempool before txStart', async () => {
     await assert.rejects(node.mempool.addAirdrop(proof),
       {reason: 'no-tx-allowed-yet'});
   });
 
-  it('Should reject block with >1 coinbase output before txStart', async () => {
+  it('should reject block with >1 coinbase output before txStart', async () => {
     const tx1 = new TX({
       inputs: [new Input()],
       outputs: [new Output(), new Output()]
@@ -112,7 +112,7 @@ describe('txStart', function() {
       {reason: 'no-tx-allowed-yet'});
   });
 
-  it('Should reject non-empty block before txStart', async () => {
+  it('should reject non-empty block before txStart', async () => {
     const tx1 = new TX({
       inputs: [new Input()],
       outputs: [new Output()]
@@ -135,7 +135,7 @@ describe('txStart', function() {
       {reason: 'no-tx-allowed-yet'});
   });
 
-  it('Should accept empty block before txStart', async () => {
+  it('should accept empty block before txStart', async () => {
     // Create an address that takes literally nothing to spend
     const addr = Address.fromScript(new Script());
 
@@ -158,7 +158,7 @@ describe('txStart', function() {
     utxo = block.txs[0].hash();
   });
 
-  it('Should add blocks until txStart is reached', async() => {
+  it('should add blocks until txStart is reached', async() => {
     for (let i = node.chain.height; i < node.network.txStart - 1; i++) {
       const block = await node.miner.mineBlock();
       assert(await node.chain.add(block));
@@ -167,7 +167,7 @@ describe('txStart', function() {
     assert.strictEqual(node.chain.height + 1, node.network.txStart);
   });
 
-  it('Should allow TX in mempool at txStart height', async () => {
+  it('should allow TX in mempool at txStart height', async () => {
     lastTX = new TX({
       inputs: [new Input()],
       outputs: [new Output()]
@@ -182,7 +182,7 @@ describe('txStart', function() {
     assert(node.mempool.has(lastTX.hash()));
   });
 
-  it('Should allow Claim in mempool at txStart height', async () => {
+  it('should allow claim in mempool at txStart height', async () => {
     const claim = await wallet.fakeClaim('cloudflare');
 
     try {
@@ -195,13 +195,13 @@ describe('txStart', function() {
     assert(node.mempool.hasClaim(claim.hash()));
   });
 
-  it('Should allow Airdrop in mempool at txStart height', async () => {
+  it('should allow airdrop in mempool at txStart height', async () => {
     await node.mempool.addAirdrop(proof);
     assert.strictEqual(node.mempool.airdrops.size, 1);
     assert(node.mempool.hasAirdrop(proof.hash()));
   });
 
-  it('Should accept a block full of goodies at txStart height', async() => {
+  it('should accept a block full of goodies at txStart height', async() => {
     const block = await node.miner.mineBlock();
     try {
       ownership.ignore = true;
@@ -210,16 +210,17 @@ describe('txStart', function() {
       ownership.ignore = false;
     }
 
-    // This is the first block where transactions are allowed
+    // This is the first block where transactions are allowed.
     assert.strictEqual(node.chain.height, node.network.txStart);
 
+    // The first output is the coinbase reward. The second output
+    // is the claim, and the third output is the airdrop redemption.
     assert.strictEqual(block.txs.length, 2);
     assert.bufferEqual(block.txs[1].hash(), lastTX.hash());
     assert.strictEqual(block.txs[0].outputs.length, 3);
     assert(block.txs[0].outputs[0].covenant.isNone());
     assert(block.txs[0].outputs[1].covenant.isClaim());
     assert(block.txs[0].outputs[2].covenant.isNone());
-
     assert.strictEqual(block.txs[0].outputs[2].value, proof.getValue() - proof.fee);
   });
 });
