@@ -46,10 +46,10 @@ describe('Peering', function() {
   });
 
   describe('Node `only` option', function() {
-    this.timeout(4000);
+    this.timeout(5000);
 
     it('should create peers (standard)', async () => {
-      let seenOne = false, seenTwo = false;
+      const seen = {count: 0};
 
       const one = await factory.new({
         listen: true,
@@ -71,12 +71,11 @@ describe('Peering', function() {
         // Peer one has a single inbound connection.
         assert.equal(one.node.pool.peers.standard.inbound, 1);
         assert.equal(one.node.pool.peers.brontide.inbound, 0);
-
         // The peer is not connected over brontide
         assert.equal(peer.isBrontide(), false);
         // The peer's address does not have a key.
         assert.equal(peer.address.hasKey(), false);
-        seenOne = true;
+        seen.count++;
       });
 
       two.node.pool.on('peer open', (peer) => {
@@ -90,18 +89,15 @@ describe('Peering', function() {
         assert.equal(peer.address.hasKey(), false);
         // The expected peer has connected.
         assert.equal(peer.fullname(), addr);
-        seenTwo = true;
+        seen.count++;
       });
 
-      await common.event(one.node.pool, 'peer open');
-      await common.event(two.node.pool, 'peer open');
-
-      assert.equal(seenOne, true);
-      assert.equal(seenTwo, true);
+      await common.forValue(seen, 'count', 2);
+      assert.equal(seen.count, 2);
     });
 
     it('should create peers (encrypted)', async () => {
-      let seenOne = false, seenTwo = false;
+      const seen = {count: 0};
 
       const one = await factory.new({
         listen: true,
@@ -128,7 +124,7 @@ describe('Peering', function() {
         assert.equal(peer.isBrontide(), true);
         // The peer's address does have a key.
         assert.equal(peer.address.hasKey(), true);
-        seenOne = true;
+        seen.count++;
       });
 
       two.node.pool.on('peer open', (peer) => {
@@ -142,17 +138,16 @@ describe('Peering', function() {
         assert.equal(peer.address.hasKey(), true);
         // The expected peer has connected.
         assert.equal(peer.fullname(), addr);
-        seenTwo = true;
+        seen.count++;
       });
 
-      await common.event(two.node.pool, 'peer open');
-      await common.event(one.node.pool, 'peer open');
-
-      assert.equal(seenOne, true);
-      assert.equal(seenTwo, true);
+      await common.forValue(seen, 'count', 2);
+      assert.equal(seen.count, 2);
     });
 
     it('should create both standard and encrypted peers', async () => {
+      const seen = {standard: false, encrypted: false};
+
       const one = await factory.new({
         listen: true,
         seeds: [],
@@ -168,7 +163,12 @@ describe('Peering', function() {
         agent: 'two'
       });
 
-      await common.event(two.node.pool, 'peer open');
+      two.node.pool.on('peer open', (peer) => {
+        seen.standard = true;
+      });
+
+      await common.forValue(seen, 'standard', true);
+      assert.ok(seen.standard);
 
       // Connecting via standard
       const three = await factory.new({
@@ -176,7 +176,12 @@ describe('Peering', function() {
         agent: 'three'
       });
 
-      await common.event(three.node.pool, 'peer connect');
+      three.node.pool.on('peer connect', (peer) => {
+        seen.encrypted = true;
+      });
+
+      await common.forValue(seen, 'encrypted', true);
+      assert.ok(seen.encrypted);
 
       nodes.push(one, two, three);
 
@@ -195,6 +200,14 @@ describe('Peering', function() {
     });
 
     it('should gossip blocks over standard and brontide', async () => {
+      const seen = {
+        standard: false,
+        encrypted: false,
+        one: 0,
+        two: 0,
+        three: 0
+      };
+
       const one = await factory.new({
         listen: true,
         seeds: [],
@@ -209,19 +222,26 @@ describe('Peering', function() {
         agent: 'two'
       });
 
-      await common.event(two.node.pool, 'peer open');
+      two.node.pool.on('peer open', (peer) => {
+        seen.standard = true;
+      });
+
+      await common.forValue(seen, 'standard', true);
+      assert.ok(seen.standard);
 
       const three = await factory.new({
         only: [`127.0.0.1:${one.ports.p2p}`],
         agent: 'three'
       });
 
-      await common.event(three.node.pool, 'peer connect');
+      three.node.pool.on('peer connect', (peer) => {
+        seen.encrypted = true;
+      });
+
+      await common.forValue(seen, 'encrypted', true);
+      assert.ok(seen.encrypted);
 
       nodes.push(one, two, three);
-
-      // Keep track of seen blocks for each node.
-      const seen = {one: 0, two: 0, three: 0};
 
       three.node.chain.on('connect', (block) => {
         seen.one++;
