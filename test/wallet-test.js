@@ -1584,7 +1584,7 @@ describe('Wallet', function() {
     await wdb.close();
   });
 
-  describe('txStart', function() {
+  describe('Disable TXs', function() {
     const network = Network.get('regtest');
     const workers = new WorkerPool({ enabled });
     const wdb = new WalletDB({ network, workers });
@@ -1597,7 +1597,7 @@ describe('Wallet', function() {
       await wdb.close();
     });
 
-    it('should only send a TX after network txStart', async () => {
+    it('should only send a tx after network txStart', async () => {
       // Create wallet and get one address
       const wallet = await wdb.create();
       const addr1 = await wallet.receiveAddress();
