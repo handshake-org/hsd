@@ -67,7 +67,7 @@ describe('Disable TXs', function() {
     node.network.txStart = RESET_TXSTART;
   });
 
-  it('should reject TX from mempool before txStart', async () => {
+  it('should reject tx from mempool before txStart', async () => {
     const tx = new TX({
       inputs: [new Input()],
       outputs: [new Output()]
@@ -160,7 +160,7 @@ describe('Disable TXs', function() {
     utxo = block.txs[0].hash();
   });
 
-  it('should add blocks until txStart is reached', async() => {
+  it('should add blocks until one block before txStart', async() => {
     for (let i = node.chain.height; i < node.network.txStart - 1; i++) {
       const block = await node.miner.mineBlock();
       assert(await node.chain.add(block));
@@ -169,7 +169,7 @@ describe('Disable TXs', function() {
     assert.strictEqual(node.chain.height + 1, node.network.txStart);
   });
 
-  it('should allow TX in mempool at txStart height', async () => {
+  it('should allow tx in mempool one block before txStart', async () => {
     lastTX = new TX({
       inputs: [new Input()],
       outputs: [new Output()]
@@ -182,9 +182,10 @@ describe('Disable TXs', function() {
     await node.mempool.addTX(lastTX);
     assert.strictEqual(node.mempool.map.size, 1);
     assert(node.mempool.has(lastTX.hash()));
+    assert.strictEqual(node.chain.height + 1, node.network.txStart);
   });
 
-  it('should allow claim in mempool at txStart height', async () => {
+  it('should allow claim in mempool one block before txStart', async () => {
     const claim = await wallet.fakeClaim('cloudflare');
 
     try {
@@ -195,15 +196,17 @@ describe('Disable TXs', function() {
     }
     assert.strictEqual(node.mempool.claims.size, 1);
     assert(node.mempool.hasClaim(claim.hash()));
+    assert.strictEqual(node.chain.height + 1, node.network.txStart);
   });
 
-  it('should allow airdrop in mempool at txStart height', async () => {
+  it('should allow airdrop in mempool one block before txStart', async () => {
     await node.mempool.addAirdrop(proof);
     assert.strictEqual(node.mempool.airdrops.size, 1);
     assert(node.mempool.hasAirdrop(proof.hash()));
+    assert.strictEqual(node.chain.height + 1, node.network.txStart);
   });
 
-  it('should accept a block full of goodies at txStart height', async() => {
+  it('should accept a block full of goodies at txStart', async() => {
     const block = await node.miner.mineBlock();
     try {
       ownership.ignore = true;
