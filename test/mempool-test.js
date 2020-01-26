@@ -31,6 +31,7 @@ const workers = new WorkerPool({
 });
 
 const chain = new Chain({
+  network: 'regtest',
   memory: true,
   workers
 });

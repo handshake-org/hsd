@@ -82,6 +82,13 @@ describe('Wallet', function() {
     await wdb.open();
   });
 
+  it('should add blocks to wdb to pass txStart', async () => {
+    // Because these tests are written for mainnet.
+    while (wdb.height < network.txStart) {
+      await wdb.addBlock(nextBlock(wdb), []);
+    }
+  });
+
   it('should generate new key and address', async () => {
     const wallet = await wdb.create();
 
@@ -1575,5 +1582,64 @@ describe('Wallet', function() {
   it('should cleanup', async () => {
     network.coinbaseMaturity = 2;
     await wdb.close();
+  });
+
+  describe('Disable TXs', function() {
+    const network = Network.get('regtest');
+    const workers = new WorkerPool({ enabled });
+    const wdb = new WalletDB({ network, workers });
+
+    before(async () => {
+      await wdb.open();
+    });
+
+    after(async () => {
+      await wdb.close();
+    });
+
+    it('should only send a tx after network txStart', async () => {
+      // Create wallet and get one address
+      const wallet = await wdb.create();
+      const addr1 = await wallet.receiveAddress();
+
+      // Dummy address for outputs
+      const recAddr = Address.fromHash(Buffer.alloc(20, 1));
+
+      // Add one single, unconfirmed coin to wallet
+      const mtx1 = new MTX();
+      mtx1.addInput(dummyInput());
+      mtx1.addOutput(addr1, 10 * 1e8);
+      const tx1 = mtx1.toTX();
+      await wallet.txdb.add(tx1, null);
+
+      const ACTUAL_TXSTART = wallet.network.txStart;
+      const ACTUAL_HEIGHT = wdb.height;
+
+      try {
+        wallet.network.txStart = 6;
+        wdb.height = 4;
+
+        await assert.rejects(
+          wallet.send({outputs: [{address: recAddr, value: 10000}]}),
+          {message: 'Transactions are not allowed on network yet.'}
+        );
+      } finally {
+        wallet.network.txStart = ACTUAL_TXSTART;
+        wdb.height = ACTUAL_HEIGHT;
+      }
+
+      try {
+        // Transactions are allowed in the NEXT block
+        wallet.network.txStart = 6;
+        wdb.height = 5;
+
+        assert(
+          await wallet.send({outputs: [{address: recAddr, value: 10000}]})
+        );
+      } finally {
+        wallet.network.txStart = ACTUAL_TXSTART;
+        wdb.height = ACTUAL_HEIGHT;
+      }
+    });
   });
 });
