@@ -75,8 +75,6 @@ describe('SlidingWindow (Functional)', function() {
 
     assert.equal(one.pool.options.maxProofRPS, 20);
 
-    const key = base32.encode(one.pool.hosts.address.key);
-
     const two = new FullNode({
       'memory': true,
       'network': 'regtest',
