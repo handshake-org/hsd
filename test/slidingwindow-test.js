@@ -57,7 +57,7 @@ describe('SlidingWindow (Unit)', function() {
 });
 
 describe('SlidingWindow (Functional)', function() {
-  it('should rate limit getproof to max-proof-rps ', async () => {
+  it('should rate limit getproof to max-proof-rps', async () => {
     const maxProofRPS = 20;
     const seen = {count: 0};
 
@@ -84,7 +84,7 @@ describe('SlidingWindow (Functional)', function() {
       'rs-port': 10001,
       'ns-port': 10002,
       'seeds': [],
-      'only': [`${key}@127.0.0.1`] // one is using default ports.
+      'only': ['127.0.0.1'] // one is using default ports.
     });
 
     two.pool.on('peer open', () => {
@@ -100,9 +100,9 @@ describe('SlidingWindow (Functional)', function() {
     await common.forValue(seen, 'count', 2);
 
     assert.equal(one.pool.peers.size(), 1);
-    assert.equal(one.pool.peers.brontide.inbound, 1);
+    assert.equal(one.pool.peers.inbound, 1);
     assert.equal(two.pool.peers.size(), 1);
-    assert.equal(two.pool.peers.brontide.outbound, 1);
+    assert.equal(two.pool.peers.outbound, 1);
 
     const hash = rules.hashString('handshake');
 
@@ -122,7 +122,7 @@ describe('SlidingWindow (Functional)', function() {
     while (!banned) {
       count++;
       try {
-        await two.pool.resolve(hash) ;
+        await two.pool.resolve(hash);
       } catch (e) {
         err = e;
         break;
