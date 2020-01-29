@@ -4,8 +4,6 @@
 'use strict';
 
 const assert = require('bsert');
-const base32 = require('bs32');
-
 const rules = require('../lib/covenants/rules');
 const SlidingWindow = require('../lib/net/slidingwindow');
 const FullNode = require('../lib/node/fullnode');
