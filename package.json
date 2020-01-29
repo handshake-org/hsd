@@ -59,6 +59,7 @@
   "main": "./lib/hsd.js",
   "bin": {
     "hsd": "./bin/hsd",
+    "hsd-genesis": "./bin/genesis",
     "hsd-node": "./bin/node",
     "hsd-spvnode": "./bin/spvnode",
     "hs-wallet": "./bin/hsw"
