@@ -61,7 +61,7 @@ const {
 // TODO: convert to using hs-client methods
 // when the new version is published
 describe('Wallet HTTP', function() {
-  this.timeout(15000);
+  this.timeout(20000);
 
   before(async () => {
     await node.open();
