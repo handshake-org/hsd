@@ -39,12 +39,8 @@ describe('Resource', function() {
         address: '::2'
       },
       {
-        type: 'A',
-        address: '127.0.0.3'
-      },
-      {
-        type: 'AAAA',
-        address: '::3'
+        type: 'TXT',
+        txt: ['hello world']
       }
     ]
   };
@@ -92,5 +88,23 @@ describe('Resource', function() {
     assert.bufferEqual(ds.data.digest, json.records[0].digest);
     assert.strictEqual(glue4.data.address, '127.0.0.1');
     assert.strictEqual(glue6.data.address, '::1');
+  });
+
+  it('should synthesize an answer', () => {
+    const res = Resource.fromJSON(json);
+    const msg = res.toDNS('hns.', types.TXT);
+
+    assert(msg.aa);
+    assert(msg.answer.length === 2);
+
+    const [txt, sig] = msg.answer;
+
+    assert.strictEqual(txt.type, types.TXT);
+    assert.strictEqual(txt.name, 'hns.');
+    assert.strictEqual(sig.type, types.RRSIG);
+    assert.strictEqual(sig.name, 'hns.');
+
+    assert.strictEqual(txt.data.txt.length, 1);
+    assert.strictEqual(txt.data.txt[0], 'hello world');
   });
 });
