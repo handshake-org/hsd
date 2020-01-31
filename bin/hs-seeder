@@ -1,0 +1,41 @@
+#!/usr/bin/env node
+
+'use strict';
+
+const execPath = process.execPath || process.argv[0];
+const execArgv = process.execArgv || [];
+const {argv, exit, stdout} = process;
+
+/*
+ * Main
+ */
+
+function main() {
+  if (!argv.includes('--daemon')) {
+    require('./_seeder');
+    return;
+  }
+
+  const {spawn} = require('child_process');
+  const {resolve} = require('path');
+  const args = [];
+
+  args.push(...execArgv);
+  args.push(resolve(__dirname, '_seeder'));
+  args.push(...argv.slice(2));
+
+  const ps = spawn(execPath, args, {
+    stdio: 'ignore',
+    detached: true
+  });
+
+  stdout.write(ps.pid + '\n');
+
+  exit(0);
+}
+
+/*
+ * Execute
+ */
+
+main();

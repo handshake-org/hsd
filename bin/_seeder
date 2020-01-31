@@ -1,0 +1,36 @@
+#!/usr/bin/env node
+
+'use strict';
+
+const assert = require('bsert');
+const path = require('path');
+const os = require('os');
+const Config = require('bcfg');
+const Seeder = require('../lib/node/seeder');
+const config = new Config('hs-seeder');
+
+config.load({
+  argv: true
+});
+
+const network = config.str(['-n', '--network'], 'main');
+const prefix = path.join(os.homedir(), '.hsd',
+                         network === 'main' ? '' : network);
+
+(async () => {
+  const seeder = new Seeder({
+    network,
+    prefix,
+    filename: config.str(['-f', '--filename']),
+    zone: config.str(['--zone']),
+    ns: config.str(['--ns']),
+    ip: config.str(['--ip']),
+    host: config.str(['-h', '--host']),
+    port: config.uint(['-p', '--port'])
+  });
+
+  await seeder.open();
+})().catch((err) => {
+  console.error(err.stack);
+  process.exit(1);
+});

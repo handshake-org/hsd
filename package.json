@@ -62,6 +62,7 @@
     "hsd-genesis": "./bin/genesis",
     "hsd-node": "./bin/node",
     "hsd-spvnode": "./bin/spvnode",
+    "hs-seeder": "./bin/hs-seeder",
     "hs-wallet": "./bin/hsw"
   },
   "scripts": {
