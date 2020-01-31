@@ -283,8 +283,15 @@ describe('Airdrop', function() {
     job.refresh();
 
     const block = await job.mineAsync();
+    const [tx] = block.txs;
 
     assert(await chain.add(block));
+
+    assert.strictEqual(tx.outputs.length, 2);
+    assert.strictEqual(tx.outputs[0].value, 2100e6);
+    assert.strictEqual(tx.outputs[1].value, 8393988628);
+    assert.strictEqual(tx.outputs[1].address.toString(),
+                       'hs1qmjpjjgpz7dmg37paq9uksx4yjp675690dafg3q');
   });
 
   it('should prevent double spend with bitfield', async () => {
