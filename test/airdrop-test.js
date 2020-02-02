@@ -141,6 +141,8 @@ describe('Airdrop', function() {
     assert(input.prevout.isNull());
     assert(input.witness.length === 1);
     assert.strictEqual(output.value, 4246894314);
+    assert.strictEqual(output.address.toString(),
+                       'hs1qlpj3rwvtz83fvk6z0nm2rw57f3cwdczmc2j6a2');
 
     assert(await chain.add(block));
   });
@@ -275,7 +277,7 @@ describe('Airdrop', function() {
       { reason: 'bad-txns-bits-missingorspent' });
   });
 
-  it('should prevent mine faucet proof', async () => {
+  it('should mine faucet proof', async () => {
     const proof = AirdropProof.decode(rawFaucetProof);
 
     const job = await cpu.createJob();
