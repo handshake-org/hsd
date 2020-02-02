@@ -8,8 +8,8 @@ const reserved = require('../lib/covenants/reserved');
 const EXTRA_VALUE = (16608510 + 10200000) * 1e6;
 
 // 68000000 + 27200000 + 136000000 = 231200000
-// 0.005032 coins are burned due to rounding.
-const NAME_VALUE = 231199999994968;
+// 0.046054 coins are burned due to rounding.
+const NAME_VALUE = 231199999953946;
 
 describe('Reserved', function() {
   it('should get a top 100 domain', () => {
@@ -23,7 +23,7 @@ describe('Reserved', function() {
         '525ce500322a0f4c91070eb73829b9d96b2e70d964905fa88c8b20ea573029ea',
         'hex'),
       target: 'twitter.com.',
-      value: 630133148709,
+      value: 630133143116,
       root: false
     });
   });
@@ -38,7 +38,7 @@ describe('Reserved', function() {
         '4475619b1fc842831f9af645b268fcd49b20113060f97b9fc49355a69bd0413a',
         'hex'),
       target: 'craigslist.org.',
-      value: 503519080,
+      value: 503513487,
       root: false
     });
   });
@@ -53,7 +53,7 @@ describe('Reserved', function() {
         '6292be73bdfdc4ea12bdf3018c8c553d3022b37601bb2b19153c8804bdf8da15',
         'hex'),
       target: 'google.',
-      value: 660195040839,
+      value: 660214983416,
       root: true
     });
   });
@@ -68,7 +68,7 @@ describe('Reserved', function() {
         '4b3cdfda85c576e43c848d43fdf8e901d8d02553fec8ee56289d10b8dc47d997',
         'hex'),
       target: 'eth.ens.domains.',
-      value: 136503519080,
+      value: 136503513487,
       root: false
     });
   });
