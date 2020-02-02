@@ -3,13 +3,7 @@
 [![Build Status][circleci-status-img]][circleci-status-url]
 [![Coverage Status][coverage-status-img]][coverage-status-url]
 
-**HSD** is an implementation of the [Handshake][handshake] Protocol.
-
-## Testnet
-
-Testnet4 is officially dead; breaking changes have landed on `master`.
-We recommend using `regtest` or `simnet`. However, some community members
-are keeping testnet4 alive. Use the branch `testnet4-stable` to connect.
+__HSD__ is an implementation of the [Handshake][handshake] Protocol.
 
 ## Install
 
@@ -22,21 +16,9 @@ $ npm install --production
 $ ./bin/hsd
 ```
 
-`node-gyp` is used to compile native code and requires
-Python 2.7. If your machine natively supports Python 3,
-configure `npm` using the command:
-
-```
-$ npm config set python /path/to/executable/python2.7
-```
-
-You can determine the native version of Python using:
-
-```
-$ python --version
-```
-
-See the [node-gyp](https://github.com/nodejs/node-gyp) documentation for more information.
+Note that `node-gyp` must be installed. See the
+[node-gyp](https://github.com/nodejs/node-gyp) documentation for more
+information.
 
 ## Documentation
 
@@ -157,7 +139,7 @@ If we won, we can now register and update the name using `sendupdate`.
 
 ``` bash
 $ hsw-rpc sendupdate handshake \
-  '{"ttl":172800,"ns":["ns1.example.com.@1.2.3.4"]}'
+  '{"records":[{"type":"GLUE4","ns":"ns1.example.com.","address":"127.0.0.1"}]}'
 ```
 
 Note that the `ns` field's `domain@ip` format symbolizes glue.
