@@ -408,6 +408,7 @@ describe('Mempool', function() {
 
   describe('Mempool disconnect and reorg handling', function () {
     const workers = new WorkerPool({
+      // Must be disabled for `ownership.ignore`.
       enabled: false
     });
 

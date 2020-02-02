@@ -23,7 +23,7 @@ const {
 } = network.names;
 
 const workers = new WorkerPool({
-  enabled: false
+  enabled: true
 });
 
 const chain = new Chain({
