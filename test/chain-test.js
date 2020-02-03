@@ -112,9 +112,14 @@ chain.on('disconnect', (entry, block) => {
 describe('Chain', function() {
   this.timeout(45000);
 
-  it('should open chain and miner', async () => {
+  before(async () => {
     await chain.open();
     await miner.open();
+  });
+
+  after(async () => {
+    await miner.close();
+    await chain.close();
   });
 
   it('should add addrs to miner', async () => {
@@ -761,8 +766,46 @@ describe('Chain', function() {
       'mandatory-script-verify-flag-failed');
   });
 
-  it('should cleanup', async () => {
-    await miner.close();
-    await chain.close();
+  describe('Checkpoints', function() {
+    before(async () => {
+      const CHECKPOINT = chain.tip.height - 5;
+      const entry = await chain.getEntry(CHECKPOINT);
+      assert(Buffer.isBuffer(entry.hash));
+      assert(Number.isInteger(entry.height));
+
+      network.checkpointMap[entry.height] = entry.hash;
+      network.lastCheckpoint = entry.height;
+    });
+
+    after(async () => {
+      network.checkpointMap = {};
+      network.lastCheckpoint = 0;
+    });
+
+    it('will reject blocks before last checkpoint', async () => {
+      const BEFORE_CHECKPOINT = chain.tip.height - 10;
+      const entry = await chain.getEntry(BEFORE_CHECKPOINT);
+      const block = await cpu.mineBlock(entry);
+
+      let err = null;
+
+      try {
+        await chain.add(block);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.equal(err.type, 'VerifyError');
+      assert.equal(err.reason, 'bad-fork-prior-to-checkpoint');
+      assert.equal(err.score, 100);
+    });
+
+    it('will accept blocks after last checkpoint', async () => {
+      const AFTER_CHECKPOINT = chain.tip.height - 4;
+      const entry = await chain.getEntry(AFTER_CHECKPOINT);
+      const block = await cpu.mineBlock(entry);
+      assert(await chain.add(block));
+    });
   });
 });

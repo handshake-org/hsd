@@ -140,7 +140,7 @@ describe('Airdrop', function() {
     assert(input);
     assert(input.prevout.isNull());
     assert(input.witness.length === 1);
-    assert.strictEqual(output.value, 4370322008);
+    assert.strictEqual(output.value, 4246894314);
 
     assert(await chain.add(block));
   });
@@ -231,7 +231,7 @@ describe('Airdrop', function() {
       assert(input);
       assert(input.prevout.isNull());
       assert(input.witness.length === 1);
-      assert.strictEqual(output.value, 4370322008);
+      assert.strictEqual(output.value, 4246894314);
     }
 
     {
@@ -241,7 +241,7 @@ describe('Airdrop', function() {
       assert(input);
       assert(input.prevout.isNull());
       assert(input.witness.length === 1);
-      assert.strictEqual(output.value, 8741644016 - 100e6);
+      assert.strictEqual(output.value, 8493988628 - 100e6);
     }
 
     assert(await chain.add(block));
