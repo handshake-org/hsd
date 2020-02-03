@@ -40,6 +40,7 @@ class TestUtil {
     this.node.use(plugin);
 
     this.nclient = new NodeClient({
+      timeout: 15000,
       host: options.host,
       port: options.nport
     });
@@ -259,10 +260,12 @@ describe('Auction RPCs', function() {
     await util.wrpc('selectwallet', [winner.id]);
     const submit = true;
     const json = await util.wrpc('createupdate', [name, {
-      version: 0,
-      ttl: 6000,
-      compat: true,
-      canonical: 'example.com'
+      records: [
+        {
+          type: 'NS',
+          ns: 'example.com.'
+        }
+      ]
     }]);
     await processJSON(json, submit);
 

@@ -15,7 +15,7 @@ const Network = require('../lib/protocol/network');
 const FullNode = require('../lib/node/fullnode');
 const MTX = require('../lib/primitives/mtx');
 const {isSignatureEncoding, isKeyEncoding} = require('../lib/script/common');
-const Resource = require('../lib/dns/resource');
+const {Resource} = require('../lib/dns/resource');
 const Address = require('../lib/primitives/address');
 const Output = require('../lib/primitives/output');
 const HD = require('../lib/hd/hd');
@@ -61,7 +61,7 @@ const {
 // TODO: convert to using hs-client methods
 // when the new version is published
 describe('Wallet HTTP', function() {
-  this.timeout(15000);
+  this.timeout(20000);
 
   before(async () => {
     await node.open();
@@ -831,7 +831,12 @@ describe('Wallet HTTP', function() {
       const json = await wallet.client.post(`/wallet/${wallet.id}/update`, {
         name: name,
         data: {
-          text: ['foobar']
+          records: [
+            {
+              type: 'TXT',
+              txt: ['foobar']
+            }
+          ]
         }
       });
 
@@ -847,7 +852,12 @@ describe('Wallet HTTP', function() {
       const json = await wallet.client.post(`/wallet/${wallet.id}/update`, {
         name: name,
         data: {
-          text: ['barfoo']
+          records: [
+            {
+              type: 'TXT',
+              txt: ['barfoo']
+            }
+          ]
         }
       });
 
@@ -904,7 +914,12 @@ describe('Wallet HTTP', function() {
     await wallet.client.post(`/wallet/${wallet.id}/update`, {
       name: name,
       data: {
-        text: ['foobar']
+        records: [
+          {
+            type: 'TXT',
+            txt: ['foobar']
+          }
+        ]
       }
     });
 
@@ -944,7 +959,12 @@ describe('Wallet HTTP', function() {
     await wallet.client.post(`/wallet/${wallet.id}/update`, {
       name: name,
       data: {
-        text: ['foobar']
+        records: [
+          {
+            type: 'TXT',
+            txt: ['foobar']
+          }
+        ]
       }
     });
 
@@ -985,7 +1005,12 @@ describe('Wallet HTTP', function() {
     await wallet.client.post(`/wallet/${wallet.id}/update`, {
       name: name,
       data: {
-        text: ['foobar']
+        records: [
+          {
+            type: 'TXT',
+            txt: ['foobar']
+          }
+        ]
       }
     });
 
@@ -1039,7 +1064,12 @@ describe('Wallet HTTP', function() {
     await wallet.client.post(`/wallet/${wallet.id}/update`, {
       name: name,
       data: {
-        text: ['foobar']
+        records: [
+          {
+            type: 'TXT',
+            txt: ['foobar']
+          }
+        ]
       }
     });
 
@@ -1095,7 +1125,12 @@ describe('Wallet HTTP', function() {
     await wallet.client.post(`/wallet/${wallet.id}/update`, {
       name: name,
       data: {
-        text: ['foobar']
+        records: [
+          {
+            type: 'TXT',
+            txt: ['foobar']
+          }
+        ]
       }
     });
 

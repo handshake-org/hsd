@@ -17,7 +17,7 @@ const AirdropProof = require('../lib/primitives/airdropproof');
 const network = Network.get('regtest');
 
 const workers = new WorkerPool({
-  enabled: false
+  enabled: true
 });
 
 const AIRDROP_PROOF_FILE = resolve(__dirname, 'data', 'airdrop-proof.base64');
@@ -141,6 +141,8 @@ describe('Airdrop', function() {
     assert(input.prevout.isNull());
     assert(input.witness.length === 1);
     assert.strictEqual(output.value, 4246894314);
+    assert.strictEqual(output.address.toString(),
+                       'hs1qlpj3rwvtz83fvk6z0nm2rw57f3cwdczmc2j6a2');
 
     assert(await chain.add(block));
   });
@@ -275,7 +277,7 @@ describe('Airdrop', function() {
       { reason: 'bad-txns-bits-missingorspent' });
   });
 
-  it('should prevent mine faucet proof', async () => {
+  it('should mine faucet proof', async () => {
     const proof = AirdropProof.decode(rawFaucetProof);
 
     const job = await cpu.createJob();
@@ -283,8 +285,15 @@ describe('Airdrop', function() {
     job.refresh();
 
     const block = await job.mineAsync();
+    const [tx] = block.txs;
 
     assert(await chain.add(block));
+
+    assert.strictEqual(tx.outputs.length, 2);
+    assert.strictEqual(tx.outputs[0].value, 2100e6);
+    assert.strictEqual(tx.outputs[1].value, 8393988628);
+    assert.strictEqual(tx.outputs[1].address.toString(),
+                       'hs1qmjpjjgpz7dmg37paq9uksx4yjp675690dafg3q');
   });
 
   it('should prevent double spend with bitfield', async () => {

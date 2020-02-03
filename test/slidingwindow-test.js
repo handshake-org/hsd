@@ -4,8 +4,6 @@
 'use strict';
 
 const assert = require('bsert');
-const base32 = require('bs32');
-
 const rules = require('../lib/covenants/rules');
 const SlidingWindow = require('../lib/net/slidingwindow');
 const FullNode = require('../lib/node/fullnode');
@@ -57,7 +55,9 @@ describe('SlidingWindow (Unit)', function() {
 });
 
 describe('SlidingWindow (Functional)', function() {
-  it('should rate limit getproof to max-proof-rps ', async () => {
+  this.timeout(3000);
+
+  it('should rate limit getproof to max-proof-rps', async () => {
     const maxProofRPS = 20;
     const seen = {count: 0};
 
@@ -75,8 +75,6 @@ describe('SlidingWindow (Functional)', function() {
 
     assert.equal(one.pool.options.maxProofRPS, 20);
 
-    const key = base32.encode(one.pool.hosts.address.key);
-
     const two = new FullNode({
       'memory': true,
       'network': 'regtest',
@@ -84,7 +82,7 @@ describe('SlidingWindow (Functional)', function() {
       'rs-port': 10001,
       'ns-port': 10002,
       'seeds': [],
-      'only': [`${key}@127.0.0.1`] // one is using default ports.
+      'only': ['127.0.0.1'] // one is using default ports.
     });
 
     two.pool.on('peer open', () => {
@@ -100,9 +98,9 @@ describe('SlidingWindow (Functional)', function() {
     await common.forValue(seen, 'count', 2);
 
     assert.equal(one.pool.peers.size(), 1);
-    assert.equal(one.pool.peers.brontide.inbound, 1);
+    assert.equal(one.pool.peers.inbound, 1);
     assert.equal(two.pool.peers.size(), 1);
-    assert.equal(two.pool.peers.brontide.outbound, 1);
+    assert.equal(two.pool.peers.outbound, 1);
 
     const hash = rules.hashString('handshake');
 
@@ -122,7 +120,7 @@ describe('SlidingWindow (Functional)', function() {
     while (!banned) {
       count++;
       try {
-        await two.pool.resolve(hash) ;
+        await two.pool.resolve(hash);
       } catch (e) {
         err = e;
         break;
@@ -132,6 +130,74 @@ describe('SlidingWindow (Functional)', function() {
     assert.equal(err.message, 'Timed out.');
     assert.strictEqual(packets, maxProofRPS);
     assert.strictEqual(count, maxProofRPS);
+
+    await one.close();
+    await two.close();
+  });
+
+  it('should reset getproof counter on window timeout', async () => {
+    const maxProofRPS = 20;
+    const seen = {count: 0};
+
+    const one = new FullNode({
+      'memory': true,
+      'network': 'regtest',
+      'listen': true,
+      'max-proof-rps': maxProofRPS,
+      'seeds': []
+    });
+
+    one.pool.on('peer open', () => {
+      seen.count++;
+    });
+
+    assert.equal(one.pool.options.maxProofRPS, 20);
+
+    const two = new FullNode({
+      'memory': true,
+      'network': 'regtest',
+      'http-port': 10000,
+      'rs-port': 10001,
+      'ns-port': 10002,
+      'seeds': [],
+      'only': ['127.0.0.1'] // one is using default ports.
+    });
+
+    two.pool.on('peer open', () => {
+      seen.count++;
+    });
+
+    await one.open();
+    await one.connect();
+
+    await two.open();
+    await two.connect();
+
+    await common.forValue(seen, 'count', 2);
+
+    assert.equal(one.pool.peers.size(), 1);
+    assert.equal(one.pool.peers.inbound, 1);
+    assert.equal(two.pool.peers.size(), 1);
+    assert.equal(two.pool.peers.outbound, 1);
+
+    const hash = rules.hashString('handshake');
+
+    let packets = 0;
+    one.pool.on('packet', (packet) => {
+      if (packet.type === packetTypes.GETPROOF)
+        packets++;
+    });
+
+    let count = 0;
+    while (count < 25) {
+      count++;
+      await two.pool.resolve(hash);
+      if (count % 10 === 0)
+        await sleep(1000);
+    }
+
+    assert.strictEqual(packets, 25);
+    assert.strictEqual(count, 25);
 
     await one.close();
     await two.close();

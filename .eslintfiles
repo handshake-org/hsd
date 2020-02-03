@@ -1,7 +1,8 @@
 bin/cli
+bin/genesis
+bin/hsd
 bin/node
 bin/spvnode
 bin/wallet
 lib/
-scripts/
 test/

@@ -18,6 +18,7 @@ const NAME1 = rules.grindName(10, 20, network);
 const NAME2 = rules.grindName(10, 20, network);
 
 const workers = new WorkerPool({
+  // Must be disabled for `ownership.ignore`.
   enabled: false
 });
 
