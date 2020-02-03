@@ -7225,7 +7225,7 @@
     "locktime": 0,
     "sequence": 4294967295,
     "flags": [],
-    "result": "INVALID_STACK_OPERATION"
+    "result": "BAD_OPCODE"
   },
   {
     "comments": null,
@@ -7237,7 +7237,7 @@
     "locktime": 0,
     "sequence": 4294967295,
     "flags": [],
-    "result": "INVALID_STACK_OPERATION"
+    "result": "BAD_OPCODE"
   },
   {
     "comments": null,

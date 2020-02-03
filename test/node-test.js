@@ -438,14 +438,14 @@ describe('Node', function() {
         height: 20,
         previousblockhash: chain.tip.hash.toString('hex'),
         treeroot: network.genesis.treeRoot.toString('hex'),
-        filterroot: consensus.ZERO_HASH.toString('hex'),
         reservedroot: consensus.ZERO_HASH.toString('hex'),
+        mask: json.result.mask,
         target:
           '7fffff0000000000000000000000000000000000000000000000000000000000',
         bits: '207fffff',
         noncerange: ''
-          + '0000000000000000000000000000000000000000000000000000000000000000'
-          + 'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff',
+          + '000000000000000000000000000000000000000000000000'
+          + 'ffffffffffffffffffffffffffffffffffffffffffffffff',
         curtime: json.result.curtime,
         mintime: json.result.mintime,
         maxtime: json.result.maxtime,

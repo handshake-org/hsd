@@ -18,6 +18,7 @@ const {isSignatureEncoding, isKeyEncoding} = require('../lib/script/common');
 const Resource = require('../lib/dns/resource');
 const Address = require('../lib/primitives/address');
 const Output = require('../lib/primitives/output');
+const HD = require('../lib/hd/hd');
 const rules = require('../lib/covenants/rules');
 const {types} = rules;
 const secp256k1 = require('bcrypto/lib/secp256k1');
@@ -84,6 +85,25 @@ describe('Wallet HTTP', function() {
 
   afterEach(async () => {
     await node.mempool.reset();
+  });
+
+  it('should get key by address from watch-only', async () => {
+    const phrase = 'abandon abandon abandon abandon abandon abandon '
+      + 'abandon abandon abandon abandon abandon about';
+    const master = HD.HDPrivateKey.fromPhrase(phrase);
+    const xprv = master.deriveAccount(44, 5355, 5);
+    const xpub = xprv.toPublic();
+    const pubkey = xpub.derive(0).derive(0);
+    const addr = Address.fromPubkey(pubkey.publicKey);
+    const wallet = wclient.wallet('watchonly');
+    await wclient.createWallet('watchonly', {
+      watchOnly: true,
+      accountKey: xpub.xpubkey('regtest')
+    });
+    const key = await wallet.getKey(addr.toString('regtest'));
+    assert.equal(xpub.childIndex ^ HD.common.HARDENED, key.account);
+    assert.equal(0, key.branch);
+    assert.equal(0, key.index);
   });
 
   it('should mine to the primary/default wallet', async () => {
