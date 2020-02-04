@@ -4,11 +4,9 @@
 
 'use strict';
 
-const bio = require('bufio');
 const fs = require('bfile');
 const Path = require('path');
 const BLAKE2b = require('bcrypto/lib/blake2b');
-const hash256 = require('bcrypto/lib/hash256');
 const merkle = require('bcrypto/lib/mrkl');
 const consensus = require('../lib/protocol/consensus');
 const Network = require('../lib/protocol/network');
@@ -19,7 +17,6 @@ const TX = require('../lib/primitives/tx');
 const Witness = require('../lib/script/witness');
 const util = require('../lib/utils/util');
 const reserved = require('../lib/covenants/reserved');
-const pkg = require('../package.json');
 const {AIRDROP_ROOT, FAUCET_ROOT} = AirdropProof;
 const NAME_ROOT = merkle.createRoot(BLAKE2b, [...reserved.keys()]);
 
@@ -29,28 +26,6 @@ const networks = {
   regtest: Network.get('regtest'),
   simnet: Network.get('simnet')
 };
-
-function readHeader(str) {
-  if (str.length !== 160)
-    throw new Error('Invalid hex string.');
-
-  const data = Buffer.from(str, 'hex');
-
-  if (data.length !== 80)
-    throw new Error('Invalid header length.');
-
-  const br = bio.read(data);
-
-  return {
-    hash: hash256.digest(data),
-    version: br.readU32(),
-    prevBlock: br.readHash(),
-    merkleRoot: br.readHash(),
-    time: br.readU32(),
-    bits: br.readU32(),
-    nonce: br.readU32()
-  };
-}
 
 function createGenesis(options) {
   const genesis = Address.fromHash(consensus.GENESIS_KEY, 0);
@@ -228,16 +203,12 @@ function writeC(blocks) {
   fs.writeFileSync(file, code.join('\n'));
 }
 
-function generate(str) {
-  let time = Math.floor(Date.now() / 1000);
-  let flags = null;
-
-  if (str != null) {
-    const hdr = readHeader(str);
-
-    time = hdr.time;
-    flags = hdr.hash;
-  }
+function generate() {
+  // From Bitcoin block 615817.
+  const time = 1580745078;
+  const flags = Buffer.from(
+    '50b8937fc5def08f9f3cbda7e5f08c706edb80aba5880c000000000000000000',
+    'hex');
 
   return {
     main: createGenesis({
@@ -263,51 +234,8 @@ function generate(str) {
   };
 }
 
-const USAGE = `hsd-genesis
-
-Usage:
-
-  $ hsd-genesis [string]
-
-Where [string] is the Bitcoin block header at height
-615817 serialized as a hexadecimal string.
-
-This script will create the Handshake genesis block
-using Bitcoin block 615817 as a commitment and inject
-it into the codebase.
-
-Please be sure the block header you pass is height
-615817. Any other block will result in you forking
-off to your own network!
-
-At Bitcoin height 615823, block 615817 is considered
-"final", meaning no deep reorgs after this should
-affect the Handshake genesis block. If there is a
-reorganization on Bitcoin sooner than this, you will
-need to regenerate the genesis block by running this
-script again with the *new* block 615817 header.
-
-It is not recommended to run this script before height
-615823 is reached on Bitcoin.`;
-
 function main(argv) {
-  let str = argv[2];
-
-  if (argv[2] === '--force') {
-    str = null;
-  } else {
-    if (pkg.version !== '2.0.0') {
-      console.error('Not enabled yet.');
-      return 1;
-    }
-
-    if (argv.length !== 3 || argv[2].length !== 160) {
-      console.error(USAGE);
-      return 1;
-    }
-  }
-
-  const blocks = generate(str);
+  const blocks = generate();
 
   writeJS(blocks);
   writeJSON(blocks);
