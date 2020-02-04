@@ -2187,7 +2187,6 @@ describe('Wallet', function() {
     beforeEach(async () => {
       node = new FullNode({
         memory: true,
-        apiKey: 'foo',
         network: 'regtest',
         workers: true,
         workersSize: 2,
@@ -2238,7 +2237,7 @@ describe('Wallet', function() {
     });
 
     it('should emit details with correct confirmation', async () => {
-      const wclient = new WalletClient({port: ports.wallet, apiKey: 'foo'});
+      const wclient = new WalletClient({port: ports.wallet});
       await wclient.open();
 
       const info = await wclient.createWallet('test');
