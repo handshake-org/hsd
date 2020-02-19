@@ -141,4 +141,11 @@ describe('BIP9 activation', function() {
     assert.strictEqual(state2, thresholdStates.ACTIVE);
     assert(await hasHardening());
   });
+
+  it('should throw error if not STARTED', async () => {
+    await assert.rejects(
+      chain.getBIP9Stats(chain.tip, deployments.hardening),
+      {message: 'Deployment "hardening" not in STARTED state.'}
+    );
+  });
 });
