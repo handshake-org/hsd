@@ -86,23 +86,36 @@ describe('BIP9 activation', function() {
   });
 
   it('should add blocks: does not reach LOCKED_IN', async () => {
-    // Not enough miner support signaled.
-    await addBIP9Blocks(minerWindow - activationThreshold, true);
-    await addBIP9Blocks(activationThreshold - 1, false);
+    // Not enough miner support will be signaled this period.
+    await addBIP9Blocks(minerWindow - activationThreshold, false);
     const state1 = await getHardeningState(chain.tip);
     assert.strictEqual(state1, thresholdStates.STARTED);
 
-    // Activation is impossible this period
+    // Activation is still possible
     const stats1 = await chain.getBIP9Stats(chain.tip, deployments.hardening);
     assert.deepStrictEqual(stats1, {
       period: minerWindow,
       threshold: activationThreshold,
-      elapsed: minerWindow - 1,
-      count: minerWindow - activationThreshold,
+      elapsed: minerWindow - activationThreshold,
+      count: 0,
+      possible: true
+    });
+
+    // Add one more non-signaling block
+    await addBIP9Blocks(1, false);
+
+    // Activation is no longer possible this period
+    const stats2 = await chain.getBIP9Stats(chain.tip, deployments.hardening);
+    assert.deepStrictEqual(stats2, {
+      period: minerWindow,
+      threshold: activationThreshold,
+      elapsed: minerWindow - activationThreshold + 1,
+      count: 0,
       possible: false
     });
 
-    await addBIP9Blocks(1, false);
+    // Finish the window, signaling won't matter but we will anyway
+    await addBIP9Blocks(activationThreshold - 1, true);
     const state2 = await getHardeningState(chain.tip);
     assert.strictEqual(state2, thresholdStates.STARTED);
     assert(!await hasHardening());
