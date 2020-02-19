@@ -2,7 +2,6 @@
 
 'use strict';
 
-const assert = require('bsert');
 const path = require('path');
 const os = require('os');
 const Config = require('bcfg');

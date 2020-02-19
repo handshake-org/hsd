@@ -1,8 +1,11 @@
 bin/cli
-bin/genesis
 bin/hsd
 bin/node
+bin/hs-seeder
+bin/node
+bin/_seeder
 bin/spvnode
 bin/wallet
+etc/genesis
 lib/
 test/
