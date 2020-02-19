@@ -10,6 +10,7 @@ const consensus = require('../lib/protocol/consensus');
 const Network = require('../lib/protocol/network');
 const Address = require('../lib/primitives/address');
 const TX = require('../lib/primitives/tx');
+const MTX = require('../lib/primitives/mtx');
 const Output = require('../lib/primitives/output');
 const Outpoint = require('../lib/primitives/outpoint');
 const Script = require('../lib/script/script');
@@ -413,5 +414,30 @@ describe('TX', function() {
     const ctx = sigopContext(witness, addr);
 
     assert.strictEqual(ctx.spend.getSigops(ctx.view, 0), 2);
+  });
+
+  it('should have standard inputs', () => {
+    const key = KeyRing.generate();
+    const pub = key.publicKey;
+    const addr = Address.fromPubkey(pub, 0);
+    const mprev = new MTX();
+
+    mprev.addOutput(addr, 1000);
+
+    const prev = mprev.toTX();
+    const view = new CoinView();
+
+    view.addTX(prev, -1);
+
+    const mtx = new MTX();
+    mtx.view = view;
+
+    mtx.addOutpoint({ hash: prev.hash(), index: 0 });
+    mtx.addOutput(addr, 1000);
+    mtx.sign(key);
+
+    const tx = mtx.toTX();
+
+    assert(tx.hasStandardInputs(view));
   });
 });

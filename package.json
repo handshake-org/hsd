@@ -1,7 +1,7 @@
 {
   "name": "hsd",
-  "version": "2.0.0",
-  "private": false,
+  "version": "2.0.2",
+  "private": true,
   "description": "Cryptocurrency bike-shed",
   "license": "MIT",
   "repository": "git://github.com/namebasehq/hsd.git",
@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "bcfg": "~0.1.6",
-    "bcrypto": "~5.0.2",
+    "bcrypto": "~5.0.3",
     "bdb": "~1.1.7",
     "bdns": "~0.1.5",
     "bevent": "~0.1.5",
@@ -45,7 +45,7 @@
     "bval": "~0.1.6",
     "bweb": "~0.1.10",
     "goosig": "~0.6.0",
-    "hs-client": "~0.0.6",
+    "hs-client": "~0.0.8",
     "n64": "~0.2.10",
     "namebase-hs-client": "=0.0.5",
     "urkel": "~0.6.3"
@@ -56,7 +56,6 @@
   "main": "./lib/hsd.js",
   "bin": {
     "hsd": "./bin/hsd",
-    "hsd-genesis": "./bin/genesis",
     "hsd-node": "./bin/node",
     "hsd-spvnode": "./bin/spvnode",
     "hs-seeder": "./bin/hs-seeder",

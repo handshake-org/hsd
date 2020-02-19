@@ -17,7 +17,7 @@ const AirdropProof = require('../lib/primitives/airdropproof');
 const network = Network.get('regtest');
 
 const workers = new WorkerPool({
-  enabled: true
+  enabled: false
 });
 
 const AIRDROP_PROOF_FILE = resolve(__dirname, 'data', 'airdrop-proof.base64');
