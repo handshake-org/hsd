@@ -64,6 +64,7 @@ describe('SlidingWindow (Functional)', function() {
     const one = new FullNode({
       'memory': true,
       'network': 'regtest',
+      'public-host': '192.0.2.1',
       'listen': true,
       'max-proof-rps': maxProofRPS,
       'seeds': []
@@ -142,6 +143,7 @@ describe('SlidingWindow (Functional)', function() {
     const one = new FullNode({
       'memory': true,
       'network': 'regtest',
+      'public-host': '192.0.2.1',
       'listen': true,
       'max-proof-rps': maxProofRPS,
       'seeds': []
