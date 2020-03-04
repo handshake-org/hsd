@@ -65,7 +65,6 @@ describe('SlidingWindow (Functional)', function() {
       'memory': true,
       'network': 'regtest',
       'listen': true,
-      'public-host': '127.0.0.1',
       'max-proof-rps': maxProofRPS,
       'seeds': []
     });
@@ -144,7 +143,6 @@ describe('SlidingWindow (Functional)', function() {
       'memory': true,
       'network': 'regtest',
       'listen': true,
-      'public-host': '127.0.0.1',
       'max-proof-rps': maxProofRPS,
       'seeds': []
     });
