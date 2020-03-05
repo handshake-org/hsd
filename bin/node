@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
-Buffer.poolSize = 0;
-
 'use strict';
+
+Buffer.poolSize = 0;
 
 process.title = 'hsd';
 
