@@ -60,7 +60,15 @@ $ dig @127.0.0.1 -p 5300 org +dnssec
 To accept inbound connections, add the `--listen` flag.
 
 ```
-$ hsd --listen --max-inbound=20
+$ hsd --listen --max-inbound 50
+```
+
+Note that this will not advertise your address on the p2p network by default.
+In order to notify peers that you are accepting inbound, you _must_ pass
+`--public-host`.
+
+```
+$ hsd --listen --public-host [my-public-ip-address] --max-inbound 50
 ```
 
 ### Mining
