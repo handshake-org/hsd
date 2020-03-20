@@ -333,4 +333,37 @@ describe('Multiple accounts participating in same auction', function() {
       assert.strictEqual(node.mempool.map.size, 0);
     });
   });
+
+  describe('CANCEL', function() {
+    it('should reject CANCEL from wrong account', async () => {
+      await assert.rejects(async () => {
+        await wallet.sendCancel(name, {account: 'bob'});
+      }, {
+        name: 'Error',
+        message: `Account does not own: "${name}".`
+      });
+    });
+
+    it('should send CANCEL from correct account', async () => {
+      const tx = await wallet.sendCancel(name, {account: 0});
+      assert(tx);
+
+      await wallet.abandon(tx.hash());
+
+      assert.strictEqual(node.mempool.map.size, 1);
+      await node.mempool.reset();
+      assert.strictEqual(node.mempool.map.size, 0);
+    });
+
+    it('should send CANCEL from correct account automatically', async () => {
+      const tx = await wallet.sendCancel(name);
+      assert(tx);
+
+      await wallet.abandon(tx.hash());
+
+      assert.strictEqual(node.mempool.map.size, 1);
+      await node.mempool.reset();
+      assert.strictEqual(node.mempool.map.size, 0);
+    });
+  });
 });
