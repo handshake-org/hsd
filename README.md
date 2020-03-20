@@ -27,6 +27,19 @@ server) and `hsw-cli` (to interact with the wallet server). These applications
 are available in `./bin` (for example the command `./bin/hsd-cli info` returns
 basic node info). CLI usage in the API docs refers to these applications.
 
+When `hsd` is installed globally, CLI commands are available without the path:
+
+```
+$ hsd-cli info
+```
+
+RPC commands are available with `hsd-cli rpc <command>` and `hsw-cli rpc <command>`.
+The shortcuts `hsd-rpc` and `hsw-rpc` are available if you install hs-client globally:
+
+```
+$ npm install -g hs-client
+```
+
 ## Documentation
 
 - Documentation Site: [https://handshake-org.github.io](https://handshake-org.github.io)
