@@ -14,15 +14,15 @@ jobs:
       - checkout
       - restore_cache:
           keys:
-          - v2.1.2-dependencies-{{ checksum "package.json" }}
+          - v2.1.3-dependencies-{{ checksum "package.json" }}
           # fallback to using the latest cache if no exact match is found
-          - v2.1.2-dependencies-
+          - v2.1.3-dependencies-
       - run: npm install
       - run: npm install bslint istanbul@1.1.0-alpha.1 codecov
       - save_cache:
           paths:
             - node_modules
-          key: v2.1.2-dependencies-{{ checksum "package.json" }}
+          key: v2.1.3-dependencies-{{ checksum "package.json" }}
       - persist_to_workspace:
           root: .
           paths: .
