@@ -48,7 +48,8 @@ const wclient = new WalletClient({
 const wallet = wclient.wallet('primary');
 const wallet2 = wclient.wallet('secondary');
 
-let name, cbAddress;
+let name, cbAddress, blind;
+const bidValue = 1000;
 const accountTwo = 'foobar';
 
 const {
@@ -407,7 +408,7 @@ describe('Wallet HTTP', function() {
 
     const json = await wallet.client.post(`/wallet/${wallet.id}/bid`, {
       name: name,
-      bid: 1000,
+      bid: bidValue,
       lockup: 2000
     });
 
@@ -417,7 +418,8 @@ describe('Wallet HTTP', function() {
     const [bid] = bids;
     assert.equal(bid.covenant.items.length, 4);
 
-    const [nameHash, start, rawName, blind] = bid.covenant.items;
+    const [nameHash, start, rawName] = bid.covenant.items;
+    blind = bid.covenant.items[3];
     assert.equal(nameHash, rules.hashName(name).toString('hex'));
 
     // initially opened in the first block mined, so chain.height + 1
@@ -452,6 +454,32 @@ describe('Wallet HTTP', function() {
       bid: bid,
       name: name,
       nameHash: nameHash.toString('hex')
+    });
+  });
+
+  it('should be able to get known BlindValue', async () => {
+    const response = await wallet.client.get(
+      `/wallet/${wallet.id}/blindvalue/${blind}`
+    );
+
+    assert.strictEqual(response.value, bidValue);
+    assert.strictEqual(
+      blind,
+      rules.blind(bidValue, Buffer.from(response.nonce, 'hex')).toString('hex')
+    );
+  });
+
+  it('should fail to get unknown BlindValue', async () => {
+    // Genesis block hash is very unlikely a blind in the walletDB
+    const fakeBlind =
+      '5b6ef2d3c1f3cdcadfd9a030ba1811efdd17740f14e166489760741d075992e0';
+
+    await assert.rejects(async () => {
+      await wallet.client.get(
+        `/wallet/${wallet.id}/blindvalue/${fakeBlind}`
+      );
+    }, {
+      message: 'Status code: 400.'
     });
   });
 

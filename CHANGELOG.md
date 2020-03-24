@@ -4,8 +4,8 @@
 
 ### Wallet API changes
 
-- Adds new wallet rpc `getblindvalue` which accepts a blind (hash) and returns a
-`BlindValue` in JSON format if it is found in the txdb.
+- Adds new wallet rpc `getblindvalue` and HTTP endpoint `GET /wallet/:id/blindvalue/:blind`
+which accept a blind (hash) and returns a `BlindValue` in JSON format if it is found in the txdb.
 
 ## v2.0.0
 
