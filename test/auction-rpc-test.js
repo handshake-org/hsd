@@ -8,7 +8,7 @@ const bio = require('bufio');
 const plugin = require('../lib/wallet/plugin');
 const rules = require('../lib/covenants/rules');
 const common = require('./util/common');
-const {ChainEntry, FullNode, KeyRing, MTX, Network, Path} = require('..');
+const {ChainEntry, FullNode, KeyRing, TX, MTX, Network, Path} = require('..');
 const {NodeClient, WalletClient} = require('hs-client');
 
 class TestUtil {
@@ -144,7 +144,9 @@ describe('Auction RPCs', function() {
 
   const util = new TestUtil();
   const name = rules.grindName(2, 0, Network.get('regtest'));
-  let winner, loser;
+  let winner, loser, bidTX;
+  const losingBid = 4;
+  const winningBid = 5;
 
   const mineBlocks = async (num, wallet, account = 'default') => {
     const address = (await wallet.createAddress(account)).address;
@@ -220,16 +222,50 @@ describe('Auction RPCs', function() {
   it('should create BID with signing paths', async () => {
     // Create loser's BID.
     await util.wrpc('selectwallet', [loser.id]);
-    assert(await util.wrpc('sendbid', [name, 4, 10]));
+    bidTX = await util.wrpc('sendbid', [name, losingBid, 10]);
+    assert(bidTX);
 
     // Create, assert, submit and mine winner's BID.
     await util.wrpc('selectwallet', [winner.id]);
     const submit = true;
-    const json = await util.wrpc('createbid', [name, 5, 10]);
+    const json = await util.wrpc('createbid', [name, winningBid, 10]);
     await processJSON(json, submit);
 
     // Mine past BID period.
     await mineBlocks(util.network.names.biddingPeriod, winner);
+  });
+
+  it('should retrieve BlindValue for sent bid', async () => {
+    const tx = TX.fromJSON(bidTX);
+    let blind;
+    for (const output of tx.outputs) {
+      if (output.covenant.type === rules.types.BID)
+        blind = output.covenant.items[3];
+    }
+
+    await util.wrpc('selectwallet', [loser.id]);
+    const bv = await util.wrpc('getblindvalue', [blind.toString('hex')]);
+
+    // Match values from actual bid.
+    assert.strictEqual(bv.value, losingBid * 1e6);
+    assert.bufferEqual(
+      blind,
+      rules.blind(bv.value, Buffer.from(bv.nonce, 'hex'))
+    );
+  });
+
+  it('should not find BlindValue for incorrect blind', async () => {
+    // Genesis block hash is very unlikely a blind in the walletDB
+    const fakeBlind =
+      '5b6ef2d3c1f3cdcadfd9a030ba1811efdd17740f14e166489760741d075992e0';
+
+    await util.wrpc('selectwallet', [loser.id]);
+
+    await assert.rejects(async () => {
+      await util.wrpc('getblindvalue', [fakeBlind.toString('hex')]);
+    }, {
+      message: 'Error: Blind value not found.'
+    });
   });
 
   it('should create REVEAL with signing paths', async () => {
