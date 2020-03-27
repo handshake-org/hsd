@@ -268,7 +268,7 @@ describe('Wallet', function() {
     const wallet = doubleSpendWallet;
 
     // Reorg and unconfirm all previous txs.
-    await wdb.removeBlock(curBlock(wdb));
+    await wdb.removeBlock(curBlock(wdb), []);
 
     {
       const txs = await wallet.getHistory();
