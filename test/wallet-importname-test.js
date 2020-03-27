@@ -8,13 +8,26 @@ const Network = require('../lib/protocol/network');
 const FullNode = require('../lib/node/fullnode');
 const Address = require('../lib/primitives/address');
 const rules = require('../lib/covenants/rules');
+const {WalletClient} = require('hs-client');
 
 const network = Network.get('regtest');
 
+const ports = {
+  p2p: 14331,
+  node: 14332,
+  wallet: 14333
+};
 const node = new FullNode({
   memory: true,
   network: 'regtest',
-  plugins: [require('../lib/wallet/plugin')]
+  plugins: [require('../lib/wallet/plugin')],
+  env: {
+    'HSD_WALLET_HTTP_PORT': ports.wallet.toString()
+  }
+});
+
+const wclient = new WalletClient({
+  port: ports.wallet
 });
 
 const {wdb} = node.require('walletdb');
@@ -25,6 +38,7 @@ const wrongName = rules.grindName(5, 1, network);
 const wrongNameHash = rules.hashName(wrongName);
 
 let alice, bob, aliceReceive, bobReceive;
+let charlie;
 
 async function mineBlocks(n, addr) {
   addr = addr ? addr : new Address().toString('regtest');
@@ -37,15 +51,18 @@ async function mineBlocks(n, addr) {
 describe('Wallet Import Name', function() {
   before(async () => {
     await node.open();
+    await wclient.open();
 
     alice = await wdb.create();
     bob = await wdb.create();
+    charlie = await wdb.create({id: 'charlie'});
 
     aliceReceive = await alice.receiveAddress();
     bobReceive = await bob.receiveAddress();
   });
 
   after(async () => {
+    await wclient.close();
     await node.close();
   });
 
@@ -185,5 +202,25 @@ describe('Wallet Import Name', function() {
     assert(ns3 === null);
     const ns4 = await alice.getNameStateByName(wrongName);
     assert(ns4);
+  });
+
+  describe('rpc importname', function() {
+    it('should not have name data in Charlie\'s wallet', async () => {
+      const ns1 = await charlie.getNameStateByName(name);
+      assert(ns1 === null);
+    });
+
+    it('should import name with rescan', async () => {
+      await wclient.execute('selectwallet', ['charlie']);
+      await wclient.execute('importname', [name, 0]);
+
+      const ns1 = await charlie.getNameStateByName(name);
+      assert(ns1);
+
+      const charlieBids = await bob.getBidsByName(name);
+      assert.strictEqual(charlieBids.length, 6);
+      for (const bid of charlieBids)
+        assert(!bid.own);
+    });
   });
 });
