@@ -48,7 +48,7 @@ const wclient = new WalletClient({
 const wallet = wclient.wallet('primary');
 const wallet2 = wclient.wallet('secondary');
 
-let name, cbAddress;
+let name, cbAddress, mineBlocks;
 const accountTwo = 'foobar';
 
 const {
@@ -80,6 +80,7 @@ describe('Wallet HTTP', function() {
   });
 
   beforeEach(async () => {
+    mineBlocks = common.constructBlockMiner(node, nclient);
     name = await nclient.execute('grindname', [5]);
   });
 
@@ -1151,18 +1152,6 @@ describe('Wallet HTTP', function() {
 
 async function sleep(time) {
   return new Promise(resolve => setTimeout(resolve, time));
-}
-
-// take into account race conditions
-async function mineBlocks(count, address) {
-  for (let i = 0; i < count; i++) {
-    const obj = { complete: false };
-    node.once('block', () => {
-      obj.complete = true;
-    });
-    await nclient.execute('generatetoaddress', [1, address]);
-    await common.forValue(obj, 'complete', true);
-  }
 }
 
 // create an OPEN output

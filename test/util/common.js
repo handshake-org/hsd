@@ -91,6 +91,10 @@ common.event = async function event(obj, name) {
   });
 };
 
+common.sleep = function sleep(time) {
+  return new Promise(resolve => setTimeout(resolve, time));
+};
+
 common.forValue = async function(obj, key, val, timeout = 30000) {
   assert(typeof obj === 'object');
   assert(typeof key === 'string');
@@ -111,6 +115,20 @@ common.forValue = async function(obj, key, val, timeout = 30000) {
       count += 1;
     }, ms);
   });
+};
+
+common.constructBlockMiner = function (node, nclient) {
+  // take into account race conditions
+  return async function mineBlocks(count, address) {
+    for (let i = 0; i < count; i++) {
+      const obj = { complete: false };
+      node.once('block', () => {
+        obj.complete = true;
+      });
+      await nclient.execute('generatetoaddress', [1, address]);
+      await common.forValue(obj, 'complete', true);
+    }
+  };
 };
 
 function parseUndo(data) {
