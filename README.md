@@ -9,6 +9,9 @@ __HSD__ is an implementation of the [Handshake][handshake] Protocol.
 
 `hsd` requires Node.js v10 or higher
 
+
+### Building From Source
+
 ```
 $ git clone git://github.com/handshake-org/hsd.git
 $ cd hsd
@@ -19,6 +22,36 @@ $ ./bin/hsd
 Note that `node-gyp` must be installed. See the
 [node-gyp](https://github.com/nodejs/node-gyp) documentation for more
 information.
+
+### npm
+
+It is not recommended to install `hsd` from npm's repositories
+but it is still possible to install with `npm` using a remote
+`git` repository.
+
+```
+$ npm install -g https://github.com/handshake-org/hsd.git
+```
+
+A `git` ref can be used to install a particular version by appending
+a `#` and the name of the `git` ref to the URL. For example,
+`https://github.com/handshake-org/hsd.git#v2.1.3`. It is recommended
+to use the [latest tagged release](https://github.com/handshake-org/hsd/releases).
+
+If adding `hsd` as a dependency to a project, use the command:
+
+```
+$ npm install https://github.com/handshake-org/hsd.git
+```
+
+### macOS
+
+`hsd` is available via [Homebrew](https://brew.sh). This will
+install all required dependencies as well as `unbound`.
+
+```
+$ brew install hsd
+```
 
 ## CLI
 
