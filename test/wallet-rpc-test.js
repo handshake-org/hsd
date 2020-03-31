@@ -318,5 +318,11 @@ describe('Wallet RPC Methods', function() {
 
       assert.strictEqual(verify, true);
     });
+
+    it('should get wallet info', async () => {
+      const info = await wclient.execute('getwalletinfo', []);
+      assert.strictEqual(info.walletid, 'primary');
+      assert.strictEqual(info.height, node.chain.height);
+    });
   });
 });
