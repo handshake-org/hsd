@@ -5,11 +5,13 @@
 'use strict';
 
 const assert = require('bsert');
+const {WalletClient} = require('hs-client');
 const consensus = require('../lib/protocol/consensus');
 const Network = require('../lib/protocol/network');
 const util = require('../lib/utils/util');
 const blake2b = require('bcrypto/lib/blake2b');
 const random = require('bcrypto/lib/random');
+const FullNode = require('../lib/node/fullnode');
 const WalletDB = require('../lib/wallet/walletdb');
 const WorkerPool = require('../lib/workers/workerpool');
 const Address = require('../lib/primitives/address');
@@ -22,6 +24,7 @@ const Script = require('../lib/script/script');
 const policy = require('../lib/protocol/policy');
 const HDPrivateKey = require('../lib/hd/private');
 const Wallet = require('../lib/wallet/wallet');
+const {forValue} = require('./util/common');
 
 const KEY1 = 'xprv9s21ZrQH143K3Aj6xQBymM31Zb4BVc7wxqfUhMZrzewdDVCt'
   + 'qUP9iWfcHgJofs25xbaUpCps9GDXj83NiWvQCAkWQhVj5J4CorfnpKX94AZ';
@@ -1819,6 +1822,70 @@ describe('Wallet', function() {
     });
   });
 
+  describe('Corruption', function() {
+    let workers = null;
+    let wdb = null;
+
+    beforeEach(async () => {
+      workers = new WorkerPool({
+        enabled: true,
+        size: 2
+      });
+
+      wdb = new WalletDB({ workers });
+      await workers.open();
+      await wdb.open();
+    });
+
+    afterEach(async () => {
+      await wdb.close();
+      await workers.close();
+    });
+
+    it('should not write tip with error in txs', async () => {
+      const alice = await wdb.create();
+      const addr = await alice.receiveAddress();
+
+      const fund = new MTX();
+      fund.addInput(dummyInput());
+      fund.addOutput(addr, 5460 * 10);
+
+      wdb._addTX = async () => {
+        throw new Error('Some assertion.');
+      };
+
+      await assert.rejects(async () => {
+        await wdb.addBlock(nextBlock(wdb), [fund.toTX()]);
+      }, {
+        message: 'Some assertion.'
+      });
+
+      assert.equal(wdb.height, 0);
+
+      const bal = await alice.getBalance();
+      assert.equal(bal.confirmed, 0);
+      assert.equal(bal.unconfirmed, 0);
+    });
+
+    it('should write tip without error in txs', async () => {
+      const alice = await wdb.create();
+      const addr = await alice.receiveAddress();
+
+      const fund = new MTX();
+      fund.addInput(dummyInput());
+      const amount = 5460 * 10;
+      fund.addOutput(addr, amount);
+
+      await wdb.addBlock(nextBlock(wdb), [fund.toTX()]);
+
+      assert.equal(wdb.height, 1);
+
+      const bal = await alice.getBalance();
+      assert.equal(bal.confirmed, amount);
+      assert.equal(bal.unconfirmed, amount);
+    });
+  });
+
   describe('TXDB locked balance', function() {
     const network = Network.get('regtest');
     const workers = new WorkerPool({ enabled });
@@ -2110,6 +2177,106 @@ describe('Wallet', function() {
       assert.strictEqual(bal.unconfirmed, 10e6 - (3 * fee));
       assert.strictEqual(bal.ulocked, value);
       assert.strictEqual(bal.clocked, value);
+    });
+  });
+
+  describe('Node Integration', function() {
+    const ports = {p2p: 49331, node: 49332, wallet: 49333};
+    let node, chain, miner, wdb = null;
+
+    beforeEach(async () => {
+      node = new FullNode({
+        memory: true,
+        network: 'regtest',
+        workers: true,
+        workersSize: 2,
+        plugins: [require('../lib/wallet/plugin')],
+        port: ports.p2p,
+        httpPort: ports.node,
+        env: {
+          'HSD_WALLET_HTTP_PORT': ports.wallet.toString()
+        }
+      });
+
+      chain = node.chain;
+      miner = node.miner;
+      wdb = node.require('walletdb').wdb;
+      await node.open();
+    });
+
+    afterEach(async () => {
+      await node.close();
+    });
+
+    async function mineBlock(tip) {
+      const job = await miner.createJob(tip);
+      const block = await job.mineAsync();
+      return chain.add(block);
+    }
+
+    it('should not stack in-memory block queue (oom)', async () => {
+      let height = 0;
+
+      const addBlock = wdb.addBlock.bind(wdb);
+      wdb.addBlock = async (entry, txs) => {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        await addBlock(entry, txs);
+      };
+
+      async function raceForward() {
+        await mineBlock();
+
+        await forValue(node.chain, 'height', height + 1);
+        assert.equal(wdb.height, height + 1);
+
+        height += 1;
+      }
+
+      for (let i = 0; i < 10; i++)
+        await raceForward();
+    });
+
+    it('should emit details with correct confirmation', async () => {
+      const wclient = new WalletClient({port: ports.wallet});
+      await wclient.open();
+
+      const info = await wclient.createWallet('test');
+      const wallet = wclient.wallet('test', info.token);
+      await wallet.open();
+
+      const acct = await wallet.getAccount('default');
+      const waddr = acct.receiveAddress;
+
+      miner.addresses.length = 0;
+      miner.addAddress(waddr);
+
+      let txCount = 0;
+      let txConfirmedCount = 0;
+      let confirmedCount = 0;
+
+      wallet.on('tx', (details) => {
+        if (details.confirmations === 1)
+          txConfirmedCount += 1;
+        else if (details.confirmations === 0)
+          txCount += 1;
+      });
+
+      wallet.on('confirmed', (details) => {
+        assert.equal(details.confirmations, 1);
+        confirmedCount += 1;
+      });
+
+      for (let i = 0; i < 101; i++)
+        await mineBlock();
+
+      await wallet.send({outputs: [{address: waddr, value: 1 * 1e8}]});
+      await mineBlock();
+
+      await wclient.close();
+
+      assert.equal(txConfirmedCount, 102);
+      assert.equal(txCount, 1);
+      assert.equal(confirmedCount, 1);
     });
   });
 });
