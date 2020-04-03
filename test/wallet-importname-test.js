@@ -222,5 +222,14 @@ describe('Wallet Import Name', function() {
       for (const bid of charlieBids)
         assert(!bid.own);
     });
+
+    it('should not re-import name', async () => {
+      await wclient.execute('selectwallet', ['charlie']);
+
+      await assert.rejects(
+        wclient.execute('importname', [name, 0]),
+        {message: 'Name already exists.'}
+      );
+    });
   });
 });
