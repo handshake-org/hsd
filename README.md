@@ -23,6 +23,50 @@ Note that `node-gyp` must be installed. See the
 [node-gyp](https://github.com/nodejs/node-gyp) documentation for more
 information.
 
+### Docker
+#### Building an image
+
+To build a Docker image with the name `hsd:<version>-<commit>`, run:
+
+```bash
+$ VERSION=$(cat package.json | grep version | sed 's/.*"\([0-9]*\.[0-9]*\.[0-9]*\)".*/\1/')
+$ COMMIT=$(git rev-parse --short HEAD)
+$ docker build -t hsd:$VERSION-$COMMIT .
+```
+
+#### Running a container
+
+To start a container named `hsd` on a `regtest` network with an exposed
+node API server, run:
+
+```bash
+$ docker run --name hsd -p 14037:14037 hsd:$VERSION-$COMMIT \
+    --network regtest \
+    --http-host 0.0.0.0 \
+    --api-key=foo
+```
+
+To test connectivity, curl the info endpoint:
+```bash
+$ curl http://x:foo@localhost:14037/
+```
+
+>Note: by default, none of the container's ports are exposed. Depending
+on the network used for your node, you will need to expose the correct ports
+for the node's various services (node http api, wallet http api, recursive
+name server, authoritative name server, p2p protocol, encrypted p2p protocol).
+The default ports can be found [here](./lib/protocol/networks.js). The DNS
+servers must also expose a UDP port. The syntax is different from TCP and can
+be found [here](https://docs.docker.com/config/containers/container-networking/#published-ports).
+
+#### Stopping a container
+
+To stop a container named `hsd`, run:
+
+```bash
+$ docker stop hsd
+```
+
 ### npm
 
 It is not recommended to install `hsd` from npm's repositories
