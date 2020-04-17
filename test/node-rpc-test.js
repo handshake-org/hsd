@@ -154,59 +154,63 @@ describe('RPC', function() {
         [
           // No trailing dot
           [{type: 'NS', ns: 'ns1.handshake.org'}],
-          'Invalid NS record. Property "ns" must be a valid name.'
+          'Invalid NS record. ns must be a valid name.'
         ],
         [
           [{type: 'DS', keyTag: 0xffffff}],
-          'Invalid DS record. Property "keyTag" must be a uint16.'
+          'Invalid DS record. KeyTag must be a uint16.'
         ],
         [
           [{type: 'DS', keyTag: 0xffff, algorithm: 0xffff}],
-          'Invalid DS record. Property "algorithm" must be a uint8.'
+          'Invalid DS record. Algorithm must be a uint8.'
         ],
         [
           [{type: 'DS', keyTag: 0xffff, algorithm: 0xff, digestType: 0xffff}],
-          'Invalid DS record. Property "digestType" must be a uint8.'
+          'Invalid DS record. DigestType must be a uint8.'
         ],
         [
           [{type: 'DS', keyTag: 0xffff, algorithm: 0xff, digestType: 0xff, digest: Buffer.alloc(0)}],
-          'Invalid DS record. Property "digest" must be a String.'
+          'Invalid DS record. Digest must be a String.'
         ],
         [
           [{type: 'DS', keyTag: 0xffff, algorithm: 0xff, digestType: 0xff, digest: '00'.repeat(256)}],
-          'Invalid DS record. Property "digest" is too large.'
+          'Invalid DS record. Digest is too large.'
         ],
         [
           [{type: 'TXT', txt: 'foobar'}],
-          'Invalid TXT record. Property "txt" must be an Array.'
+          'Invalid TXT record. txt must be an Array.'
+        ],
+        [
+          [{type: 'TXT', txt: [{}]}],
+          'Invalid TXT record. Entries in txt Array must be type String.'
         ],
         [
           [{type: 'TXT', txt: ['0'.repeat(256)]}],
-          'Invalid TXT record. Entries in "txt" Array must be <= 255 in length.'
+          'Invalid TXT record. Entries in txt Array must be <= 255 in length.'
         ],
         [
           [{type: 'GLUE4', ns: 'ns1.nam.ek', address: '192.168.0.1'}],
-          'Invalid GLUE4 record. Property "ns" must be a valid name.'
+          'Invalid GLUE4 record. ns must be a valid name.'
         ],
         [
           [{type: 'GLUE4', ns: 'ns1.nam.ek.', address: '::'}],
-          'Invalid GLUE4 record. Property "address" must be a IPv4 address.'
+          'Invalid GLUE4 record. Address must be a valid IPv4 address.'
         ],
         [
           [{type: 'GLUE6', ns: 'ns1.nam.ek', address: '::'}],
-          'Invalid GLUE6 record. Property "ns" must be a valid name.'
+          'Invalid GLUE6 record. ns must be a valid name.'
         ],
         [
           [{type: 'GLUE6', ns: 'ns1.nam.ek.', address: '0.0.0.0'}],
-          'Invalid GLUE6 record. Property "address" must be a IPv6 address.'
+          'Invalid GLUE6 record. Address must be a valid IPv6 address.'
         ],
         [
           [{type: 'SYNTH4', address: '::'}],
-          'Invalid SYNTH4 record. Property "address" must be a IPv4 address.'
+          'Invalid SYNTH4 record. Address must be a valid IPv4 address.'
         ],
         [
           [{type: 'SYNTH6', address: '127.0.0.1'}],
-          'Invalid SYNTH6 record. Property "address" must be a IPv6 address.'
+          'Invalid SYNTH6 record. Address must be a valid IPv6 address.'
         ]
       ];
 
