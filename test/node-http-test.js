@@ -23,9 +23,11 @@ const HDPrivateKey = require('../lib/hd/private');
 const Output = require('../lib/primitives/output');
 const Coin = require('../lib/primitives/coin');
 const MTX = require('../lib/primitives/mtx');
+const KeyRing = require('../lib/primitives/keyring');
 const rules = require('../lib/covenants/rules');
 const common = require('./util/common');
 const mnemonics = require('./data/mnemonic-english.json');
+const consensus = require('../lib/protocol/consensus');
 // Commonly used test mnemonic
 const phrase = mnemonics[0][1];
 
@@ -94,10 +96,137 @@ describe('Node HTTP', function() {
     await node.close();
   });
 
+  describe('JSON API', function () {
+    it('should get balance by address', async () => {
+      // Generate new cbAddress.
+      const cType = network.keyPrefix.coinType;
+      const nType = network.type;
+      const master = HDPrivateKey.generate();
+      const key = master.derivePath(`m/44'/${cType}'/0'/0/0`);
+      const cbAddress = Address.fromPubkey(key.publicKey).toString(nType);
+      const keyring = KeyRing.fromPrivate(key.privateKey);
+
+      {
+        // Get balance & verify balance is zero.
+        const balance = await nclient.get(`/balance/${cbAddress}`);
+        assert.equal(node.chain.height, balance.height);
+        assert.equal(0, balance.balance);
+        assert.equal(0, balance.coins.length);
+        assert.equal(0, balance.lockedBalance);
+        assert.equal(0, balance.lockedCoins.length);
+      }
+
+      {
+        // Fund address & verify balance.
+        const nextInterval = treeInterval;
+        const addedReward = nextInterval * consensus.BASE_REWARD;
+
+        const oBalance = await nclient.get(`/balance/${cbAddress}`);
+        await mineBlocks(nextInterval, cbAddress);
+        const nBalance = await nclient.get(`/balance/${cbAddress}`);
+
+        assert.equal(oBalance.height + nextInterval, nBalance.height);
+        assert.equal(oBalance.balance + addedReward, nBalance.balance);
+        assert.equal(oBalance.coins.length + nextInterval, nBalance.coins.length);
+        assert.equal(oBalance.lockedBalance, nBalance.lockedBalance);
+        assert.equal(oBalance.lockedCoins.length, nBalance.lockedCoins.length);
+      }
+
+      const name = await nclient.execute('grindname', [5]);
+      const rawName = Buffer.from(name, 'ascii');
+      const nameHash = rules.hashName(rawName);
+
+      {
+        // Create open.
+        const coins = await nclient.getCoinsByAddresses([cbAddress]);
+        coins.sort((a, b) => a.height - b.height);
+        const mtx = new MTX();
+        mtx.addCoin(Coin.fromJSON(coins[0]));
+        mtx.addOutput(new Output({
+          address: cbAddress,
+          value: 0,
+          covenant: {
+            type: types.OPEN,
+            items: [nameHash, Buffer.alloc(4), rawName]
+          }
+        }));
+        mtx.addOutput(new Output({
+          address: cbAddress,
+          value: 1999986000,
+          covenant: {
+            type: types.NONE,
+            items: []
+          }
+        }));
+        mtx.sign(keyring);
+        assert(mtx.verify());
+
+        // Mine to next interval & verify balance.
+        const nextInterval = treeInterval + 1;
+        const addedReward = nextInterval * consensus.BASE_REWARD;
+
+        const oBalance = await nclient.get(`/balance/${cbAddress}`);
+        await node.sendTX(mtx.toTX());
+        await mineBlocks(nextInterval, cbAddress);
+        const nBalance = await nclient.get(`/balance/${cbAddress}`);
+
+        assert.equal(oBalance.height + nextInterval, nBalance.height);
+        assert.equal(oBalance.balance + addedReward, nBalance.balance);
+        assert.equal(oBalance.coins.length + nextInterval, nBalance.coins.length);
+        assert.equal(oBalance.lockedBalance, nBalance.lockedBalance);
+        assert.equal(oBalance.lockedCoins.length + 1, nBalance.lockedCoins.length);
+      }
+
+      {
+        // Create bid.
+        const coins = await nclient.getCoinsByAddresses([cbAddress])
+        coins.sort((a, b) => a.height - b.height);
+        const covenants = coins.filter((coin) => {
+          return coin.covenant.type === types.OPEN;
+        });
+        const mtx = new MTX();
+        const ns = await mtx.view.getNameState(node.chain.db, nameHash);
+        const height = Buffer.from([ns.height, 0x00, 0x00, 0x00]);
+        const hash = Buffer.alloc(32);
+        const lockup = 1999986000;
+
+        mtx.addCoin(Coin.fromJSON(covenants[0]));
+        mtx.addCoin(Coin.fromJSON(coins[0]));
+        mtx.addOutput(new Output({
+          address: cbAddress,
+          value: lockup,
+          covenant: {
+            type: types.BID,
+            items: [nameHash, height, rawName, hash]
+          }
+        }));
+        mtx.sign(keyring);
+        assert(mtx.verify());
+
+        // Mine to next interval & verify balance.
+        const nextInterval = treeInterval;
+        const addedReward = nextInterval * consensus.BASE_REWARD;
+
+        const oBalance = await nclient.get(`/balance/${cbAddress}`);
+        await node.sendTX(mtx.toTX());
+        await mineBlocks(nextInterval, cbAddress);
+        const nBalance = await nclient.get(`/balance/${cbAddress}`);
+
+        assert.equal(oBalance.height + nextInterval, nBalance.height);
+        assert.equal(oBalance.balance + addedReward - lockup, nBalance.balance);
+        assert.equal(oBalance.coins.length + nextInterval - 1, nBalance.coins.length);
+        assert.equal(oBalance.lockedBalance + lockup, nBalance.lockedBalance);
+        assert.equal(oBalance.lockedCoins.length, nBalance.lockedCoins.length);
+      }
+
+    });
+  });
+
   describe('Websockets', function () {
     describe('tree commit', () => {
       it('should mine 1 tree interval', async () => {
-        await mineBlocks(treeInterval, cbAddress);
+        const nextInterval = treeInterval - (node.chain.height % treeInterval);
+        await mineBlocks(nextInterval, cbAddress);
         assert.equal(socketData.length, 1);
       });
 
