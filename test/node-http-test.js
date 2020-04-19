@@ -120,7 +120,6 @@ describe('Node HTTP', function() {
         // Fund address & verify balance.
         const nextInterval = treeInterval;
         const addedReward = nextInterval * consensus.BASE_REWARD;
-
         const oBalance = await nclient.get(`/balance/${cbAddress}`);
         await mineBlocks(nextInterval, cbAddress);
         const nBalance = await nclient.get(`/balance/${cbAddress}`);
@@ -164,7 +163,6 @@ describe('Node HTTP', function() {
         // Mine to next interval & verify balance.
         const nextInterval = treeInterval + 1;
         const addedReward = nextInterval * consensus.BASE_REWARD;
-
         const oBalance = await nclient.get(`/balance/${cbAddress}`);
         await node.sendTX(mtx.toTX());
         await mineBlocks(nextInterval, cbAddress);
@@ -179,7 +177,7 @@ describe('Node HTTP', function() {
 
       {
         // Create bid.
-        const coins = await nclient.getCoinsByAddresses([cbAddress])
+        const coins = await nclient.getCoinsByAddresses([cbAddress]);
         coins.sort((a, b) => a.height - b.height);
         const covenants = coins.filter((coin) => {
           return coin.covenant.type === types.OPEN;
@@ -206,7 +204,6 @@ describe('Node HTTP', function() {
         // Mine to next interval & verify balance.
         const nextInterval = treeInterval;
         const addedReward = nextInterval * consensus.BASE_REWARD;
-
         const oBalance = await nclient.get(`/balance/${cbAddress}`);
         await node.sendTX(mtx.toTX());
         await mineBlocks(nextInterval, cbAddress);
@@ -218,7 +215,6 @@ describe('Node HTTP', function() {
         assert.equal(oBalance.lockedBalance + lockup, nBalance.lockedBalance);
         assert.equal(oBalance.lockedCoins.length, nBalance.lockedCoins.length);
       }
-
     });
   });
 
