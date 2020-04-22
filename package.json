@@ -29,7 +29,7 @@
     "bfilter": "~1.0.5",
     "bheep": "~0.1.5",
     "binet": "~0.3.5",
-    "blgr": "~0.1.7",
+    "blgr": "ssh://git@github.com:Handshake-Protocol/blgr.git#v0.1.8",
     "blru": "~0.1.6",
     "blst": "~0.1.5",
     "bmutex": "~0.1.6",
