@@ -2301,6 +2301,8 @@ describe('Wallet', function() {
   });
 
   describe('Wallet Name Claims', function() {
+    // 'it' blocks in this 'describe' create state
+    // that later 'it' blocks depend on.
     let wallet, update;
     const network = Network.get('regtest');
     const workers = new WorkerPool({enabled: false});
@@ -2317,15 +2319,6 @@ describe('Wallet', function() {
         const entry = nextEntry(wdb);
         await wdb.addBlock(entry, []);
       }
-
-      // Use a fresh wallet.
-      const bal = await wallet.getBalance();
-      assert.equal(bal.tx, 0);
-      assert.equal(bal.coin, 0);
-      assert.equal(bal.unconfirmed, 0);
-      assert.equal(bal.confirmed, 0);
-      assert.equal(bal.ulocked, 0);
-      assert.equal(bal.clocked, 0);
     });
 
     after(async () => {
@@ -2338,6 +2331,15 @@ describe('Wallet', function() {
     });
 
     it('should confirm cloudflare CLAIM', async () => {
+      // Use a fresh wallet.
+      const pre = await wallet.getBalance();
+      assert.equal(pre.tx, 0);
+      assert.equal(pre.coin, 0);
+      assert.equal(pre.unconfirmed, 0);
+      assert.equal(pre.confirmed, 0);
+      assert.equal(pre.ulocked, 0);
+      assert.equal(pre.clocked, 0);
+
       const claim = await wallet.sendFakeClaim('cloudflare');
       assert(claim);
 
@@ -2350,16 +2352,16 @@ describe('Wallet', function() {
       assert.equal(json.name, 'cloudflare');
       assert.equal(json.state, 'LOCKED');
 
-      const bal = await wallet.getBalance();
-      assert.equal(bal.tx, 1);
-      assert.equal(bal.coin, 1);
-      assert.equal(bal.unconfirmed, lockup);
-      assert.equal(bal.confirmed, lockup);
-      assert.equal(bal.ulocked, lockup);
-      assert.equal(bal.clocked, lockup);
+      const post = await wallet.getBalance();
+      assert.equal(post.tx, 1);
+      assert.equal(post.coin, 1);
+      assert.equal(post.unconfirmed, lockup);
+      assert.equal(post.confirmed, lockup);
+      assert.equal(post.ulocked, lockup);
+      assert.equal(post.clocked, lockup);
     });
 
-    it('should close the auction', async () => {
+    it('should advance past lockup period', async () => {
       const ns = await wallet.getNameState(nameHash);
       const json = ns.getJSON(wdb.state.height, network);
       const {blocksUntilClosed} = json.stats;
@@ -2378,6 +2380,14 @@ describe('Wallet', function() {
     });
 
     it('should send an update for cloudflare', async () => {
+      const pre = await wallet.getBalance();
+      assert.equal(pre.tx, 1);
+      assert.equal(pre.coin, 1);
+      assert.equal(pre.unconfirmed, lockup);
+      assert.equal(pre.confirmed, lockup);
+      assert.equal(pre.ulocked, lockup);
+      assert.equal(pre.clocked, lockup);
+
       const records = Resource.fromJSON({
         records: [{type: 'NS', ns: 'ns1.easyhandshake.com.'}]
       });
@@ -2397,33 +2407,71 @@ describe('Wallet', function() {
       // take into account the transaction fee. Assert
       // against the value of the newly created output.
       const val = update.output(1).value;
-      const bal = await wallet.getBalance();
-      assert.equal(bal.tx, 2);
-      assert.equal(bal.coin, 2);
-      assert.equal(bal.unconfirmed, val);
-      assert.equal(bal.confirmed, val);
-      assert.equal(bal.ulocked, 0);
-      assert.equal(bal.clocked, 0);
+      const post = await wallet.getBalance();
+      assert.equal(post.tx, 2);
+      assert.equal(post.coin, 2);
+      assert.equal(post.unconfirmed, val);
+      assert.equal(post.confirmed, val);
+      assert.equal(post.ulocked, 0);
+      assert.equal(post.clocked, 0);
     });
 
     it('should remove a block and update balances correctly', async () => {
+      const val = update.output(1).value;
+      const pre = await wallet.getBalance();
+      assert.equal(pre.tx, 2);
+      assert.equal(pre.coin, 2);
+      assert.equal(pre.unconfirmed, val);
+      assert.equal(pre.confirmed, val);
+      assert.equal(pre.ulocked, 0);
+      assert.equal(pre.clocked, 0);
+
       const cur = curEntry(wdb);
       await wdb.removeBlock(cur);
 
-      const bal = await wallet.getBalance();
-      const val = update.output(1).value;
-      assert.equal(bal.tx, 2);
-      assert.equal(bal.coin, 2);
-
+      const post = await wallet.getBalance();
+      assert.equal(post.tx, 2);
+      assert.equal(post.coin, 2);
       // The unconfirmed balance includes value in the mempool
       // and the chain itself. The reorg'd tx can be included
       // in another block so the unconfirmed total does not
       // include the tx fee. That value has been effectively
       // spent already.
-      assert.equal(bal.unconfirmed, val);
-      assert.equal(bal.confirmed, lockup);
-      assert.equal(bal.ulocked, 0);
-      assert.equal(bal.clocked, lockup);
+      assert.equal(post.unconfirmed, val);
+      assert.equal(post.confirmed, lockup);
+      assert.equal(post.ulocked, 0);
+      assert.equal(post.clocked, lockup);
+    });
+
+    it('should update balances correctly after abandon', async () => {
+      const val = update.output(1).value;
+      const pre = await wallet.getBalance();
+      assert.equal(pre.tx, 2);
+      assert.equal(pre.coin, 2);
+      assert.equal(pre.unconfirmed, val);
+      assert.equal(pre.confirmed, lockup);
+      assert.equal(pre.ulocked, 0);
+      assert.equal(pre.clocked, lockup);
+
+      assert(await wallet.txdb.hasTX(update.hash()));
+      await wallet.abandon(update.hash());
+
+      // The UPDATE was abandoned and now the wallet
+      // reflects only the CLAIM, so these values
+      // should match the wallet balance post
+      // 'should confirm cloudflare CLAIM'
+      const post = await wallet.getBalance();
+      assert.equal(post.tx, 1);
+      assert.equal(post.coin, 1);
+      assert.equal(post.unconfirmed, lockup);
+      assert.equal(post.confirmed, lockup);
+      assert.equal(post.ulocked, lockup);
+      assert.equal(post.clocked, lockup);
+
+      const coins = await wallet.getCoins();
+      assert.equal(coins.length, 1);
+      const [claim] = coins;
+      assert.equal(claim.covenant.isClaim(), true);
     });
   });
 });
