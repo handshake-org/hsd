@@ -16,6 +16,9 @@ const WalletDB = require('../lib/wallet/walletdb');
 const WorkerPool = require('../lib/workers/workerpool');
 const Address = require('../lib/primitives/address');
 const MTX = require('../lib/primitives/mtx');
+const ChainEntry = require('../lib/blockchain/chainentry');
+const {Resource} = require('../lib/dns/resource');
+const Block = require('../lib/primitives/block');
 const Coin = require('../lib/primitives/coin');
 const KeyRing = require('../lib/primitives/keyring');
 const Input = require('../lib/primitives/input');
@@ -24,6 +27,7 @@ const Script = require('../lib/script/script');
 const policy = require('../lib/protocol/policy');
 const HDPrivateKey = require('../lib/hd/private');
 const Wallet = require('../lib/wallet/wallet');
+const rules = require('../lib/covenants/rules');
 const {forValue} = require('./util/common');
 
 const KEY1 = 'xprv9s21ZrQH143K3Aj6xQBymM31Zb4BVc7wxqfUhMZrzewdDVCt'
@@ -70,8 +74,24 @@ function fakeBlock(height) {
     time: 500000000 + (height * (10 * 60)),
     bits: 0,
     nonce: 0,
-    height: height
+    height: height,
+    version: 0,
+    witnessRoot: Buffer.alloc(32),
+    treeRoot: Buffer.alloc(32),
+    reservedRoot: Buffer.alloc(32),
+    extraNonce: Buffer.alloc(24),
+    mask: Buffer.alloc(32)
   };
+}
+
+function curEntry(wdb) {
+  return new ChainEntry(curBlock(wdb));
+}
+
+function nextEntry(wdb) {
+  const cur = curEntry(wdb);
+  const next = new Block(nextBlock(wdb));
+  return ChainEntry.fromBlock(next, cur);
 }
 
 function dummyInput() {
@@ -2277,6 +2297,181 @@ describe('Wallet', function() {
       assert.equal(txConfirmedCount, 102);
       assert.equal(txCount, 1);
       assert.equal(confirmedCount, 1);
+    });
+  });
+
+  describe('Wallet Name Claims', function() {
+    // 'it' blocks in this 'describe' create state
+    // that later 'it' blocks depend on.
+    let wallet, update;
+    const network = Network.get('regtest');
+    const workers = new WorkerPool({enabled: false});
+    const wdb = new WalletDB({network, workers});
+    const lockup = 6800503496047;
+    const name = 'cloudflare';
+    const nameHash = rules.hashString(name);
+
+    before(async () => {
+      await wdb.open();
+      wallet = await wdb.create();
+
+      for (let i = 0; i < 3; i++) {
+        const entry = nextEntry(wdb);
+        await wdb.addBlock(entry, []);
+      }
+    });
+
+    after(async () => {
+      await wdb.close();
+    });
+
+    it('should not have any cloudflare state', async () => {
+      const nameinfo = await wallet.getNameState(nameHash);
+      assert.deepEqual(nameinfo, null);
+    });
+
+    it('should confirm cloudflare CLAIM', async () => {
+      // Use a fresh wallet.
+      const pre = await wallet.getBalance();
+      assert.equal(pre.tx, 0);
+      assert.equal(pre.coin, 0);
+      assert.equal(pre.unconfirmed, 0);
+      assert.equal(pre.confirmed, 0);
+      assert.equal(pre.ulocked, 0);
+      assert.equal(pre.clocked, 0);
+
+      const claim = await wallet.sendFakeClaim('cloudflare');
+      assert(claim);
+
+      const tx = claim.toTX(network, wdb.state.height + 1);
+      const entry = nextEntry(wdb);
+      await wdb.addBlock(entry, [tx]);
+
+      const ns = await wallet.getNameState(nameHash);
+      const json = ns.getJSON(wdb.state.height, network);
+      assert.equal(json.name, 'cloudflare');
+      assert.equal(json.state, 'LOCKED');
+
+      const post = await wallet.getBalance();
+      assert.equal(post.tx, 1);
+      assert.equal(post.coin, 1);
+      assert.equal(post.unconfirmed, lockup);
+      assert.equal(post.confirmed, lockup);
+      assert.equal(post.ulocked, lockup);
+      assert.equal(post.clocked, lockup);
+    });
+
+    it('should advance past lockup period', async () => {
+      const ns = await wallet.getNameState(nameHash);
+      const json = ns.getJSON(wdb.state.height, network);
+      const {blocksUntilClosed} = json.stats;
+
+      for (let i = 0; i < blocksUntilClosed; i++) {
+        const entry = nextEntry(wdb);
+        await wdb.addBlock(entry, []);
+      }
+
+      {
+        const ns = await wallet.getNameState(nameHash);
+        const json = ns.getJSON(wdb.state.height, network);
+        assert.equal(json.name, 'cloudflare');
+        assert.equal(json.state, 'CLOSED');
+      }
+    });
+
+    it('should send an update for cloudflare', async () => {
+      const pre = await wallet.getBalance();
+      assert.equal(pre.tx, 1);
+      assert.equal(pre.coin, 1);
+      assert.equal(pre.unconfirmed, lockup);
+      assert.equal(pre.confirmed, lockup);
+      assert.equal(pre.ulocked, lockup);
+      assert.equal(pre.clocked, lockup);
+
+      const records = Resource.fromJSON({
+        records: [{type: 'NS', ns: 'ns1.easyhandshake.com.'}]
+      });
+
+      update = await wallet.sendUpdate('cloudflare', records);
+      const entry = nextEntry(wdb);
+      await wdb.addBlock(entry, [update]);
+
+      const ns = await wallet.getNameState(nameHash);
+      const json = ns.getJSON(wdb.state.height, network);
+      assert.equal(json.name, 'cloudflare');
+
+      const resource = Resource.decode(ns.data);
+      assert.deepEqual(records.toJSON(), resource.toJSON());
+
+      // The unconfirmed and confirmed values should
+      // take into account the transaction fee. Assert
+      // against the value of the newly created output.
+      const val = update.output(1).value;
+      const post = await wallet.getBalance();
+      assert.equal(post.tx, 2);
+      assert.equal(post.coin, 2);
+      assert.equal(post.unconfirmed, val);
+      assert.equal(post.confirmed, val);
+      assert.equal(post.ulocked, 0);
+      assert.equal(post.clocked, 0);
+    });
+
+    it('should remove a block and update balances correctly', async () => {
+      const val = update.output(1).value;
+      const pre = await wallet.getBalance();
+      assert.equal(pre.tx, 2);
+      assert.equal(pre.coin, 2);
+      assert.equal(pre.unconfirmed, val);
+      assert.equal(pre.confirmed, val);
+      assert.equal(pre.ulocked, 0);
+      assert.equal(pre.clocked, 0);
+
+      const cur = curEntry(wdb);
+      await wdb.removeBlock(cur);
+
+      const post = await wallet.getBalance();
+      assert.equal(post.tx, 2);
+      assert.equal(post.coin, 2);
+      // The unconfirmed balance includes value in the mempool
+      // and the chain itself. The reorg'd tx can be included
+      // in another block so the unconfirmed total does not
+      // include the tx fee. That value has been effectively
+      // spent already.
+      assert.equal(post.unconfirmed, val);
+      assert.equal(post.confirmed, lockup);
+      assert.equal(post.ulocked, 0);
+      assert.equal(post.clocked, lockup);
+    });
+
+    it('should update balances correctly after abandon', async () => {
+      const val = update.output(1).value;
+      const pre = await wallet.getBalance();
+      assert.equal(pre.tx, 2);
+      assert.equal(pre.coin, 2);
+      assert.equal(pre.unconfirmed, val);
+      assert.equal(pre.confirmed, lockup);
+      assert.equal(pre.ulocked, 0);
+      assert.equal(pre.clocked, lockup);
+
+      assert(await wallet.txdb.hasTX(update.hash()));
+      await wallet.abandon(update.hash());
+
+      // The UPDATE was abandoned and now the wallet
+      // reflects only the CLAIM, so these values
+      // should match the wallet balance post
+      // 'should confirm cloudflare CLAIM'
+      const post = await wallet.getBalance();
+      assert.equal(post.tx, 1);
+      assert.equal(post.coin, 1);
+      assert.equal(post.unconfirmed, lockup);
+      assert.equal(post.confirmed, lockup);
+      assert.equal(post.ulocked, lockup);
+      assert.equal(post.clocked, lockup);
+
+      const coins = await wallet.getCoins();
+      assert.equal(coins.length, 1);
+      const [claim] = coins;
+      assert.equal(claim.covenant.isClaim(), true);
     });
   });
 });
