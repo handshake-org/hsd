@@ -2,6 +2,10 @@
 
 ## unreleased
 
+### Node API Changes
+
+- Adds a new node rpc `resetrootcache` that clears the root name server cache.
+
 ### Wallet API changes
 
 - Adds new wallet rpc `importname` that enables user to "watch" a name and track
