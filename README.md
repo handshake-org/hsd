@@ -122,6 +122,7 @@ $ npm install -g hs-client
 - Documentation Site: [https://handshake-org.github.io](https://handshake-org.github.io)
 - API Docs: [https://handshake-org.github.io/api-docs/index.html](https://handshake-org.github.io/api-docs/index.html)
 - JSDoc: [https://handshake-org.github.io/docs](https://handshake-org.github.io/docs)
+- Roadmap: [https://hackmd.io/@handshake/HytzQwmcL](https://hackmd.io/@handshake/HytzQwmcL)
 
 ## Quickstart
 
