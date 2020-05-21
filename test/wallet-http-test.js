@@ -483,6 +483,20 @@ describe('Wallet HTTP', function() {
     await assert.rejects(fn, {message: 'Lockup is required.'});
   });
 
+  it('should send bid with 0 value and 0 lockup', async () => {
+    await wallet.client.post(`/wallet/${wallet.id}/open`, {
+      name: name
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    await wallet.client.post(`/wallet/${wallet.id}/bid`, {
+      name: name,
+      bid: 0,
+      lockup: 0
+    });
+  });
+
   it('should get all bids (single player)', async () => {
     await wallet.client.post(`/wallet/${wallet.id}/open`, {
       name: name
