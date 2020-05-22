@@ -588,4 +588,87 @@ describe('Wallet RPC Methods', function() {
       await nclient.execute('generatetoaddress', [1, addr]);
     });
   });
+
+  describe('Wallet RPC Auction', function() {
+    let addr1, addr2, name1, name2;
+
+    it('should create wallets', async () => {
+      await wclient.createWallet('wallet1');
+      await wclient.createWallet('wallet2');
+    });
+
+    it('should get wallet addresses', async () => {
+      await wclient.execute('selectwallet', ['wallet1']);
+      addr1 = await wclient.execute('getnewaddress', []);
+      await wclient.execute('selectwallet', ['wallet2']);
+      addr2 = await wclient.execute('getnewaddress', []);
+    });
+
+    it('should fund wallets', async () => {
+      await nclient.execute('generatetoaddress', [10, addr1]);
+      await nclient.execute('generatetoaddress', [10, addr2]);
+    });
+
+    it('should open names', async () => {
+      name1 = await nclient.execute('grindname', [5]);
+      name2 = await nclient.execute('grindname', [5]);
+
+      await wclient.execute('selectwallet', ['wallet1']);
+      await wclient.execute('sendopen', [name1]);
+      await wclient.execute('sendopen', [name2]);
+
+      // confirm and advance to bidding phase
+      await nclient.execute('generatetoaddress', [treeInterval + 1, addr1]);
+    });
+
+    it('should bid on names', async () => {
+      // wallet1 will win name1
+      await wclient.execute('selectwallet', ['wallet1']);
+      await wclient.execute('sendbid', [name1, 10, 10]);
+      await wclient.execute('sendbid', [name2, 5, 5]);
+
+      // wallet2 will win name2
+      await wclient.execute('selectwallet', ['wallet2']);
+      await wclient.execute('sendbid', [name1, 5, 5]);
+      await wclient.execute('sendbid', [name2, 10, 10]);
+
+      // confirm and advance to reveal phase
+      await nclient.execute('generatetoaddress', [biddingPeriod + 1, addr1]);
+    });
+
+    it('should reveal names', async () => {
+      await wclient.execute('selectwallet', ['wallet1']);
+      await wclient.execute('sendreveal', []);
+
+      await wclient.execute('selectwallet', ['wallet2']);
+      await wclient.execute('sendreveal', []);
+
+      // confirm and advance to close auction
+      await nclient.execute('generatetoaddress', [revealPeriod + 1, addr1]);
+    });
+
+    it('should get all wallet names', async () => {
+      await wclient.execute('selectwallet', ['wallet1']);
+      const wallet1AllNames = await wclient.execute('getnames', []);
+
+      await wclient.execute('selectwallet', ['wallet2']);
+      const wallet2AllNames = await wclient.execute('getnames', []);
+
+      assert.strictEqual(wallet1AllNames.length, 2);
+      assert.deepStrictEqual(wallet1AllNames, wallet2AllNames);
+    });
+
+    it('should only get wallet-owned names', async () => {
+      await wclient.execute('selectwallet', ['wallet1']);
+      const wallet1OwnedNames = await wclient.execute('getnames', [true]);
+
+      await wclient.execute('selectwallet', ['wallet2']);
+      const wallet2OwnedNames = await wclient.execute('getnames', [true]);
+
+      assert.strictEqual(wallet1OwnedNames.length, 1);
+      assert.strictEqual(wallet2OwnedNames.length, 1);
+      assert.strictEqual(wallet1OwnedNames[0].name, name1);
+      assert.strictEqual(wallet2OwnedNames[0].name, name2);
+    });
+  });
 });
