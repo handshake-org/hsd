@@ -9,6 +9,7 @@ const MempoolEntry = require('../lib/mempool/mempoolentry');
 const Mempool = require('../lib/mempool/mempool');
 const WorkerPool = require('../lib/workers/workerpool');
 const Chain = require('../lib/blockchain/chain');
+const BlockStore = require('../lib/blockstore/level');
 const ChainEntry = require('../lib/blockchain/chainentry');
 const MTX = require('../lib/primitives/mtx');
 const Coin = require('../lib/primitives/coin');
@@ -39,9 +40,15 @@ const workers = new WorkerPool({
   enabled: true
 });
 
+const blocks = new BlockStore({
+  memory: true,
+  network: 'regtest'
+});
+
 const chain = new Chain({
   network: 'regtest',
   memory: true,
+  blocks,
   workers
 });
 
@@ -114,6 +121,7 @@ describe('Mempool', function() {
 
   it('should open mempool', async () => {
     await workers.open();
+    await blocks.open();
     await chain.open();
     await mempool.open();
   });
@@ -403,6 +411,7 @@ describe('Mempool', function() {
   it('should destroy mempool', async () => {
     await mempool.close();
     await chain.close();
+    await blocks.close();
     await workers.close();
   });
 
@@ -412,8 +421,14 @@ describe('Mempool', function() {
       enabled: false
     });
 
+    const blocks = new BlockStore({
+      memory: true,
+      network: 'regtest'
+    });
+
     const chain = new Chain({
       memory: true,
+      blocks,
       workers,
       network: 'regtest'
     });
@@ -430,6 +445,7 @@ describe('Mempool', function() {
 
     before(async () => {
       await mempool.open();
+      await blocks.open();
       await chain.open();
       await workers.open();
     });
@@ -437,6 +453,7 @@ describe('Mempool', function() {
     after(async () => {
       await workers.close();
       await chain.close();
+      await blocks.close();
       await mempool.close();
     });
 

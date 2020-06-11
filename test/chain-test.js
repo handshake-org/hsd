@@ -8,6 +8,7 @@ const consensus = require('../lib/protocol/consensus');
 const Address = require('../lib/primitives/address');
 const Coin = require('../lib/primitives/coin');
 const Script = require('../lib/script/script');
+const BlockStore = require('../lib/blockstore/level');
 const Chain = require('../lib/blockchain/chain');
 const WorkerPool = require('../lib/workers/workerpool');
 const Miner = require('../lib/mining/miner');
@@ -38,8 +39,14 @@ const workers = new WorkerPool({
   enabled: true
 });
 
+const blocks = new BlockStore({
+  memory: true,
+  network
+});
+
 const chain = new Chain({
   memory: true,
+  blocks,
   network,
   workers
 });
@@ -113,6 +120,7 @@ describe('Chain', function() {
   this.timeout(45000);
 
   before(async () => {
+    await blocks.open();
     await chain.open();
     await miner.open();
   });
@@ -120,6 +128,7 @@ describe('Chain', function() {
   after(async () => {
     await miner.close();
     await chain.close();
+    await blocks.close();
   });
 
   it('should add addrs to miner', async () => {

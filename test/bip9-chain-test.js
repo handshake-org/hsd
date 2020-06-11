@@ -5,6 +5,7 @@
 
 const assert = require('bsert');
 const Chain = require('../lib/blockchain/chain');
+const BlockStore = require('../lib/blockstore/level');
 const Miner = require('../lib/mining/miner');
 const Network = require('../lib/protocol/network');
 const common = require('../lib/blockchain/common');
@@ -18,8 +19,14 @@ const minerWindow = network.minerWindow;
 const ACTUAL_START = deployments.hardening.startTime;
 const ACTUAL_TIMEOUT = deployments.hardening.timeout;
 
+const blocks = new BlockStore({
+  memory: true,
+  network
+});
+
 const chain = new Chain({
   memory: true,
+  blocks,
   network
 });
 const miner = new Miner({
@@ -56,12 +63,14 @@ describe('BIP9 activation', function() {
     deployments.hardening.startTime = 0;
     deployments.hardening.timeout = 0xffffffff;
 
+    await blocks.open();
     await chain.open();
     await miner.cpu.open();
   });
 
   after(async () => {
     await chain.close();
+    await blocks.close();
     await miner.cpu.close();
 
     deployments.hardening.startTime = ACTUAL_START;
