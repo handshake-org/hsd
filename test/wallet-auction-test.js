@@ -5,6 +5,7 @@
 'use strict';
 
 const assert = require('bsert');
+const BlockStore = require('../lib/blockstore/level');
 const Chain = require('../lib/blockchain/chain');
 const {states} = require('../lib/covenants/namestate');
 const WorkerPool = require('../lib/workers/workerpool');
@@ -20,15 +21,20 @@ const {
   treeInterval,
   biddingPeriod,
   revealPeriod
-
 } = network.names;
 
 const workers = new WorkerPool({
   enabled: false
 });
 
+const blocks = new BlockStore({
+  memory: true,
+  network
+});
+
 const chain = new Chain({
   memory: true,
+  blocks,
   network,
   workers
 });
@@ -50,6 +56,7 @@ describe('Wallet Auction', function() {
 
   before(async () => {
     // Open
+    await blocks.open();
     await chain.open();
     await miner.open();
     await wdb.open();
@@ -73,6 +80,7 @@ describe('Wallet Auction', function() {
     await wdb.close();
     await miner.close();
     await chain.close();
+    await blocks.close();
   });
 
   it('should open auction', async () => {

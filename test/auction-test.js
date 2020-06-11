@@ -6,6 +6,7 @@
 
 const assert = require('bsert');
 const Chain = require('../lib/blockchain/chain');
+const BlockStore = require('../lib/blockstore/level');
 const WorkerPool = require('../lib/workers/workerpool');
 const Miner = require('../lib/mining/miner');
 const MemWallet = require('./util/memwallet');
@@ -23,8 +24,14 @@ const workers = new WorkerPool({
 });
 
 function createNode() {
+  const blocks = new BlockStore({
+    memory: true,
+    network
+  });
+
   const chain = new Chain({
     memory: true,
+    blocks,
     network,
     workers
   });
@@ -36,6 +43,7 @@ function createNode() {
 
   return {
     chain,
+    blocks,
     miner,
     cpu: miner.cpu,
     wallet: () => {
@@ -70,7 +78,7 @@ describe('Auction', function() {
     const orig = createNode();
     const comp = createNode();
 
-    const {chain, miner, cpu} = node;
+    const {chain, miner, cpu, blocks} = node;
 
     const winner = node.wallet();
     const runnerup = node.wallet();
@@ -80,6 +88,7 @@ describe('Auction', function() {
     let transferBlock, transferLockupEnd, blocksUntilValidFinalize;
 
     it('should open chain and miner', async () => {
+      await blocks.open();
       await chain.open();
       await miner.open();
     });
@@ -258,8 +267,10 @@ describe('Auction', function() {
     });
 
     it('should open other nodes', async () => {
+      await orig.blocks.open();
       await orig.chain.open();
       await orig.miner.open();
+      await comp.blocks.open();
       await comp.chain.open();
       await comp.miner.open();
     });
@@ -326,8 +337,10 @@ describe('Auction', function() {
     it('should close other nodes', async () => {
       await orig.miner.close();
       await orig.chain.close();
+      await orig.blocks.close();
       await comp.miner.close();
       await comp.chain.close();
+      await comp.blocks.close();
     });
 
     it('should mine 10 blocks', async () => {
@@ -467,17 +480,19 @@ describe('Auction', function() {
     it('should cleanup', async () => {
       await miner.close();
       await chain.close();
+      await blocks.close();
     });
   });
 
   describe('Claim', function() {
     const node = createNode();
-    const {chain, miner, cpu} = node;
+    const {chain, miner, cpu, blocks} = node;
 
     const wallet = node.wallet();
     const recip = node.wallet();
 
     it('should open chain and miner', async () => {
+      await blocks.open();
       await chain.open();
       await miner.open();
     });
@@ -809,6 +824,7 @@ describe('Auction', function() {
     it('should cleanup', async () => {
       await miner.close();
       await chain.close();
+      await blocks.close();
     });
   });
 });

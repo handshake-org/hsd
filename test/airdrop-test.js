@@ -8,6 +8,7 @@ const fs = require('fs');
 const {resolve} = require('path');
 const assert = require('bsert');
 const Chain = require('../lib/blockchain/chain');
+const BlockStore = require('../lib/blockstore/level');
 const WorkerPool = require('../lib/workers/workerpool');
 const Miner = require('../lib/mining/miner');
 const MemWallet = require('./util/memwallet');
@@ -36,8 +37,14 @@ const rawProof = read(AIRDROP_PROOF_FILE);
 const rawFaucetProof = read(FAUCET_PROOF_FILE); // hs1qmjpjjgpz7dmg37paq9uksx4yjp675690dafg3q
 
 function createNode() {
+  const blocks = new BlockStore({
+    memory: true,
+    network
+  });
+
   const chain = new Chain({
     memory: true,
+    blocks,
     network,
     workers
   });
@@ -49,6 +56,7 @@ function createNode() {
 
   return {
     chain,
+    blocks,
     miner,
     cpu: miner.cpu,
     wallet: () => {
@@ -74,13 +82,14 @@ describe('Airdrop', function() {
   const orig = createNode();
   const comp = createNode();
 
-  const {chain, miner, cpu} = node;
+  const {chain, miner, cpu, blocks} = node;
 
   const wallet = node.wallet();
 
   let snapshot = null;
 
-  it('should open chain and miner', async () => {
+  it('should open chain, blocks and miner', async () => {
+    await blocks.open();
     await chain.open();
     await miner.open();
   });
@@ -171,8 +180,10 @@ describe('Airdrop', function() {
   });
 
   it('should open other nodes', async () => {
+    await orig.blocks.open();
     await orig.chain.open();
     await orig.miner.open();
+    await comp.blocks.open();
     await comp.chain.open();
     await comp.miner.open();
   });
@@ -310,7 +321,9 @@ describe('Airdrop', function() {
   });
 
   it('should close and open', async () => {
+    await blocks.close();
     await chain.close();
+    await blocks.open();
     await chain.open();
   });
 
@@ -330,12 +343,15 @@ describe('Airdrop', function() {
   it('should close other nodes', async () => {
     await orig.miner.close();
     await orig.chain.close();
+    await orig.blocks.close();
     await comp.miner.close();
     await comp.chain.close();
+    await comp.blocks.close();
   });
 
   it('should cleanup', async () => {
     await miner.close();
     await chain.close();
+    await blocks.close();
   });
 });
