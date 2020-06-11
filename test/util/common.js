@@ -102,6 +102,7 @@ common.rimraf = async function(p) {
 
   return await fs.rimraf(p);
 };
+
 common.event = async function event(obj, name) {
   return new Promise((resolve) => {
     obj.once(name, resolve);
