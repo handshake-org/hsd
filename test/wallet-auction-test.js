@@ -12,6 +12,7 @@ const Miner = require('../lib/mining/miner');
 const WalletDB = require('../lib/wallet/walletdb');
 const Network = require('../lib/protocol/network');
 const rules = require('../lib/covenants/rules');
+const Address = require('../lib/primitives/address');
 
 const network = Network.get('regtest');
 const NAME1 = rules.grindName(5, 2, network);
@@ -121,6 +122,17 @@ describe('Wallet Auction', function() {
       assert(block);
       assert(await chain.add(block));
     }
+  });
+
+  it('should fail to send bid to null address', async () => {
+    const mtx = await winner.makeBid(NAME1, 1000, 2000, 0);
+    mtx.outputs[0].address = new Address();
+    await winner.fill(mtx);
+    await winner.finalize(mtx);
+
+    const fn = async () => await winner.sendMTX(mtx);
+
+    await assert.rejects(fn, {message: 'Cannot send to null address.'});
   });
 
   it('should fail to re-open auction during BIDDING phase', async () => {
