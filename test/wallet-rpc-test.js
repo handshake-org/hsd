@@ -255,4 +255,74 @@ describe('Wallet RPC Methods', function() {
       await assert.rejects(fn, 'Invalid address.');
     });
   });
+
+  describe('signmessage', function() {
+    const nonWalletAddress = 'rs1q7q3h4chglps004u3yn79z0cp9ed24rfrhvrxnx';
+    const message = 'This is just a test message';
+
+    it('should signmessage with address', async () => {
+      await wclient.execute('selectwallet', ['primary']);
+      const address = await wclient.execute('getnewaddress');
+
+      const signature = await wclient.execute('signmessage', [
+        address,
+        message
+      ]);
+
+      const verify = await nclient.execute('verifymessage', [
+        address,
+        signature,
+        message
+      ]);
+
+      assert.strictEqual(verify, true);
+    });
+
+    it('should fail with invalid address', async () => {
+      await assert.rejects(async () => {
+        await wclient.execute('signmessage', [
+          'invalid address format',
+          message
+        ]);
+      }, {
+        type: 'RPCError',
+        message: 'Invalid address.'
+      });
+    });
+
+    it('should fail with non-wallet address.', async () => {
+      await assert.rejects(async () => {
+        await wclient.execute('signmessage', [
+          nonWalletAddress,
+          message
+        ]);
+      }, {
+        type: 'RPCError',
+        message: 'Address not found.'
+      });
+    });
+
+    it('should verify an externally signed message', async () => {
+      // Created with node RPC signmessagewithprivkey, private key:
+      // ERYZra8yTpNWNXsd1b3YdnRbZByykPg62TFM7KeXMqF7C2x4EvyW
+      const address = 'rs1qapm5cx5j60nhyp6mmzx23xrk66yj3atpvj63ek';
+      const message = 'Handshake is for friends!';
+      const signature = 'ymnS7vTpo+IBWliXWnubTD7UX2aTbzLT5qg5btFxNlYBq' +
+        'kdCJyji19FcpkINo+JQvJWgIwIq0IPybTPMBTlrJA==';
+
+      const verify = await nclient.execute('verifymessage', [
+        address,
+        signature,
+        message
+      ]);
+
+      assert.strictEqual(verify, true);
+    });
+
+    it('should get wallet info', async () => {
+      const info = await wclient.execute('getwalletinfo', []);
+      assert.strictEqual(info.walletid, 'primary');
+      assert.strictEqual(info.height, node.chain.height);
+    });
+  });
 });

@@ -352,7 +352,7 @@ describe('Wallet HTTP', function() {
       sign: false
     }));
 
-    assert.rejects(fn, 'Must sign when broadcasting.');
+    await assert.rejects(fn, {message: 'Must sign when broadcasting.'});
   });
 
   it('should fail to create open for account with no monies', async () => {
@@ -365,7 +365,7 @@ describe('Wallet HTTP', function() {
       account: accountTwo
     }));
 
-    assert.rejects(fn, 'Not enough funds.');
+    await assert.rejects(fn, {message: /Not enough funds./});
   });
 
   it('should mine to the account with no monies', async () => {
@@ -471,7 +471,7 @@ describe('Wallet HTTP', function() {
       name: name
     }));
 
-    assert.rejects(fn, 'Bid is required.');
+    await assert.rejects(fn, {message: 'Bid is required.'});
   });
 
   it('should fail to open a bid without a lockup value', async () => {
@@ -480,7 +480,21 @@ describe('Wallet HTTP', function() {
       bid: 1000
     }));
 
-    assert.rejects(fn, 'Lockup is required.');
+    await assert.rejects(fn, {message: 'Lockup is required.'});
+  });
+
+  it('should send bid with 0 value and 0 lockup', async () => {
+    await wallet.client.post(`/wallet/${wallet.id}/open`, {
+      name: name
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    await wallet.client.post(`/wallet/${wallet.id}/bid`, {
+      name: name,
+      bid: 0,
+      lockup: 0
+    });
   });
 
   it('should get all bids (single player)', async () => {
@@ -796,7 +810,7 @@ describe('Wallet HTTP', function() {
       name: name
     }));
 
-    assert.rejects(fn, 'No reveals to redeem.');
+    await assert.rejects(fn, {message: 'No reveals to redeem.'});
 
     const json = await wallet.client.post(`wallet/${wallet.id}/redeem`, {
       name: name

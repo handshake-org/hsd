@@ -9,6 +9,9 @@ __HSD__ is an implementation of the [Handshake][handshake] Protocol.
 
 `hsd` requires Node.js v10 or higher
 
+
+### Building From Source
+
 ```
 $ git clone git://github.com/handshake-org/hsd.git
 $ cd hsd
@@ -19,6 +22,100 @@ $ ./bin/hsd
 Note that `node-gyp` must be installed. See the
 [node-gyp](https://github.com/nodejs/node-gyp) documentation for more
 information.
+
+### Docker
+#### Building an image
+
+To build a Docker image with the name `hsd:<version>-<commit>`, run:
+
+```bash
+$ VERSION=$(cat package.json | grep version | sed 's/.*"\([0-9]*\.[0-9]*\.[0-9]*\)".*/\1/')
+$ COMMIT=$(git rev-parse --short HEAD)
+$ docker build -t hsd:$VERSION-$COMMIT .
+```
+
+#### Running a container
+
+To start a container named `hsd` on a `regtest` network with an exposed
+node API server, run:
+
+```bash
+$ docker run --name hsd -p 14037:14037 hsd:$VERSION-$COMMIT \
+    --network regtest \
+    --http-host 0.0.0.0 \
+    --api-key=foo
+```
+
+To test connectivity, curl the info endpoint:
+```bash
+$ curl http://x:foo@localhost:14037/
+```
+
+>Note: by default, none of the container's ports are exposed. Depending
+on the network used for your node, you will need to expose the correct ports
+for the node's various services (node http api, wallet http api, recursive
+name server, authoritative name server, p2p protocol, encrypted p2p protocol).
+The default ports can be found [here](./lib/protocol/networks.js). The DNS
+servers must also expose a UDP port. The syntax is different from TCP and can
+be found [here](https://docs.docker.com/config/containers/container-networking/#published-ports).
+
+#### Stopping a container
+
+To stop a container named `hsd`, run:
+
+```bash
+$ docker stop hsd
+```
+
+### npm
+
+It is not recommended to install `hsd` from npm's repositories
+but it is still possible to install with `npm` using a remote
+`git` repository.
+
+```
+$ npm install -g https://github.com/handshake-org/hsd.git
+```
+
+A `git` ref can be used to install a particular version by appending
+a `#` and the name of the `git` ref to the URL. For example,
+`https://github.com/handshake-org/hsd.git#v2.1.3`. It is recommended
+to use the [latest tagged release](https://github.com/handshake-org/hsd/releases).
+
+If adding `hsd` as a dependency to a project, use the command:
+
+```
+$ npm install https://github.com/handshake-org/hsd.git
+```
+
+### macOS
+
+`hsd` is available via [Homebrew](https://brew.sh). This will
+install all required dependencies as well as `unbound`.
+
+```
+$ brew install hsd
+```
+
+## CLI
+
+HSD comes with command-line interface tools `hsd-cli` (to interact with the node
+server) and `hsw-cli` (to interact with the wallet server). These applications
+are available in `./bin` (for example the command `./bin/hsd-cli info` returns
+basic node info). CLI usage in the API docs refers to these applications.
+
+When `hsd` is installed globally, CLI commands are available without the path:
+
+```
+$ hsd-cli info
+```
+
+RPC commands are available with `hsd-cli rpc <command>` and `hsw-cli rpc <command>`.
+The shortcuts `hsd-rpc` and `hsw-rpc` are available if you install hs-client globally:
+
+```
+$ npm install -g hs-client
+```
 
 ## Documentation
 
@@ -283,7 +380,7 @@ $ hsw-rpc sendclaim example
 
 This will create and broadcast the proof to all of your peers, ultimately
 ending up in a miner's mempool. Your claim should be mined within 5-20 minutes.
-Once mined, you must wait several blocks before your claim is considered
+Once the transaction is mined, you must wait about 30 days (4,320 blocks) before your claim is considered
 "mature".
 
 Once the claim has reached maturity, you are able to bypass the auction process

@@ -1,6 +1,13 @@
 # HSD Release Notes & Changelog
 
-## vX.Y.Z
+## unreleased
+
+### Wallet API changes
+
+- Adds new wallet rpc `importname` that enables user to "watch" a name and track
+its auction progress without bidding on it directly.
+
+## v2.0.0
 
 ### Wallet API changes
 

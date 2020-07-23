@@ -6,6 +6,8 @@ bin/node
 bin/_seeder
 bin/spvnode
 bin/wallet
+bin/hsd-cli
+bin/hsw-cli
 etc/genesis
 lib/
 test/

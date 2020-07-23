@@ -19,6 +19,7 @@ const node = new FullNode({
   memory: true,
   apiKey: 'foo',
   network: 'regtest',
+  bip37: true,
   workers: true,
   plugins: [require('../lib/wallet/plugin')]
 });
@@ -615,6 +616,27 @@ describe('Node', function() {
     assert.strictEqual(tx.txid(), tx2.txid());
   });
 
+  it('should get raw transaction (verbose=true)', async () => {
+    const json = await node.rpc.call({
+      method: 'getrawtransaction',
+      params: [tx2.txid(), true],
+      id: '1'
+    }, {});
+
+    assert(!json.error);
+    const tx = TX.fromHex(json.result.hex);
+
+    assert.equal(json.result.vin.length, tx.inputs.length);
+    assert.equal(json.result.vout.length, tx.outputs.length);
+
+    for (const [i, vout] of json.result.vout.entries()) {
+      const output = tx.output(i);
+      assert.equal(vout.address.version, output.address.version);
+      assert.equal(vout.address.string, output.address.toString(node.network));
+      assert.equal(vout.address.hash, output.address.hash.toString('hex'));
+    }
+  });
+
   it('should prioritise transaction', async () => {
     const json = await node.rpc.call({
       method: 'prioritisetransaction',
@@ -657,6 +679,14 @@ describe('Node', function() {
     // assert.strictEqual(result.transactions[0].hash, tx2.txid());
     // assert.strictEqual(result.transactions[1].hash, tx1.txid());
     assert.strictEqual(result.coinbasevalue, 2000 * consensus.COIN + fees);
+  });
+
+  it('should get service names for rpc getnetworkinfo', async () => {
+    const json = await node.rpc.call({
+      method: 'getnetworkinfo'
+    });
+
+    assert.deepEqual(json.result.localservicenames, ['NETWORK', 'BLOOM']);
   });
 
   it('should cleanup', async () => {
