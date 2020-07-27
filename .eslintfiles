@@ -10,4 +10,5 @@ bin/hsd-cli
 bin/hsw-cli
 etc/genesis
 lib/
+migrate/
 test/
