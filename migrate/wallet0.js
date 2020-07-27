@@ -15,7 +15,7 @@ const Logger = require('blgr');
   let level = 'info';
 
   while (args.length > 0) {
-    const arg = args.shift()
+    const arg = args.shift();
     switch (arg) {
       case '-n':
       case '--network':
@@ -31,7 +31,7 @@ const Logger = require('blgr');
   }
 
   const logger = new Logger(level);
-  await logger.open
+  await logger.open();
 
   const wdb = new WalletDB({
     network: network,
@@ -42,9 +42,8 @@ const Logger = require('blgr');
 
   await wdb.open();
   await wdb.migrateChange();
-  await wdb.close()
-
-})().catch(err => {
-  console.log(err)
+  await wdb.close();
+})().catch((err) => {
+  console.log(err);
   process.exit(1);
 });
