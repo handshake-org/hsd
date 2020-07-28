@@ -12,6 +12,15 @@ object is the format expected by `rpc sendupdate`.
 proof used for reserved name claims. This can be used to test if a reserved
 name is ready for a CLAIM.
 
+- RPC calls that return tx outputs in JSON now include output addresses as a string
+in addition to the version/hash pair.
+
+- RPC methods `getblock` and `getblockheader` now return `confirmations: -1` if
+the block is not in the main chain.
+
+- A new HTTP endpoint `/header/:block` was added to retrieve a block header
+by its hash or height.
+
 ### Wallet API changes
 
 - Adds new wallet rpc `importname` that enables user to "watch" a name and track
