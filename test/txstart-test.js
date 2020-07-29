@@ -21,8 +21,7 @@ const VERIFY_NONE = common.flags.VERIFY_NONE;
 
 const node = new FullNode({
   memory: true,
-  network: 'regtest',
-  plugins: [require('../lib/wallet/plugin')]
+  network: 'regtest'
 });
 
 const RESET_TXSTART = node.network.txStart;
