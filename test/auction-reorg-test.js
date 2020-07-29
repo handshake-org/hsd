@@ -67,7 +67,7 @@ function createNode() {
 }
 
 describe('Auction Reorg', function() {
-  this.timeout(15000);
+  this.timeout(20000);
 
   describe('Vickrey Auction Reorg', function() {
     const node = createNode();

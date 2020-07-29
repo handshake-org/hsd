@@ -51,6 +51,8 @@ wallet.getNameStatus = async (nameHash) => {
 };
 
 describe('Disable TXs', function() {
+  this.timeout(20000);
+
   let utxo, lastTX;
 
   before(async () => {
