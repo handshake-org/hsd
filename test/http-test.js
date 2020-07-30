@@ -44,7 +44,7 @@ let addr = null;
 let hash = null;
 
 describe('HTTP', function() {
-  this.timeout(15000);
+  this.timeout(20000);
 
   it('should open node', async () => {
     await node.open();
