@@ -4,6 +4,8 @@
 
 ### Node API changes
 
+- Adds a new node rpc `resetrootcache` that clears the root name server cache.
+
 - A new RPC call `validateresource` was added to validate Handshake `Resource`
 JSON and will return an error message on an invalid `Resource`. The input JSON
 object is the format expected by `rpc sendupdate`.
