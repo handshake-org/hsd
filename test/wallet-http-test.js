@@ -50,6 +50,7 @@ const wallet2 = wclient.wallet('secondary');
 
 let name, cbAddress;
 const accountTwo = 'foobar';
+const ownedNames = [];
 
 const {
   treeInterval,
@@ -750,6 +751,9 @@ describe('Wallet HTTP', function() {
       const reveals = await wallet.getRevealsByName(name);
       assert.equal(reveals.length, 1);
     }
+
+    ownedNames.push(name);
+    ownedNames.push(name2);
   });
 
   // this test creates namestate to use duing the
@@ -977,6 +981,8 @@ describe('Wallet HTTP', function() {
       name: name
     });
 
+    ownedNames.push(name);
+
     await mineBlocks(revealPeriod + 1, cbAddress);
 
     {
@@ -1033,6 +1039,24 @@ describe('Wallet HTTP', function() {
     const res = Resource.fromJSON(resource);
 
     assert.deepEqual(state, res);
+  });
+
+  it('should get all wallet names', async () => {
+    const names = await wallet.getNames();
+
+    assert.equal(names.length, 11);
+  });
+
+  it('should only get wallet-owned names', async () => {
+    // TODO: convert to using hs-client method
+    // when wallet.getNames() allows `options`
+    const names = await wallet.client.get(`/wallet/${wallet.id}/name`, {own: true});
+
+    assert.equal(names.length, 3);
+
+    for (const {name} of names) {
+      assert(ownedNames.includes(name));
+    }
   });
 
   it('should fail to get name resource for non existent name', async () => {
