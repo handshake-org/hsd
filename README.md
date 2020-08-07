@@ -1,6 +1,6 @@
 # HSD
 
-[![Build Status][circleci-status-img]][circleci-status-url]
+[![Build Status][ci-status-img]][ci-status-url]
 [![Coverage Status][coverage-status-img]][coverage-status-url]
 
 __HSD__ is an implementation of the [Handshake][handshake] Protocol.
@@ -458,7 +458,7 @@ See LICENSE for more info.
 [unbound]: https://www.nlnetlabs.nl/projects/unbound/download/
 [hnsd]: https://github.com/handshake-org/hnsd
 [airdrop]: https://github.com/handshake-org/hs-airdrop
-[coverage-status-img]: https://codecov.io/gh/handshake-org/hsd/badge.svg?branch=master
-[coverage-status-url]: https://codecov.io/gh/handshake-org/hsd?branch=master
-[circleci-status-img]: https://circleci.com/gh/handshake-org/hsd/tree/master.svg?style=shield
-[circleci-status-url]: https://circleci.com/gh/handshake-org/hsd/tree/master
+[coverage-status-img]: https://coveralls.io/repos/github/handshake-org/hsd/badge.svg?branch=master
+[coverage-status-url]: https://coveralls.io/github/handshake-org/hsd?branch=master
+[ci-status-img]: https://github.com/handshake-org/hsd/workflows/Build/badge.svg
+[ci-status-url]: https://github.com/handshake-org/hsd/tree/master
