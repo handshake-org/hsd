@@ -508,7 +508,7 @@ describe('Wallet HTTP', function() {
     await assert.rejects(fn, {message: 'Lockup is required.'});
   });
 
-  it('should send bid with 0 value and 0 lockup', async () => {
+  it('should send bid with 0 value and non-dust lockup', async () => {
     await wallet.client.post(`/wallet/${wallet.id}/open`, {
       name: name
     });
@@ -518,8 +518,24 @@ describe('Wallet HTTP', function() {
     await wallet.client.post(`/wallet/${wallet.id}/bid`, {
       name: name,
       bid: 0,
+      lockup: 1000
+    });
+  });
+
+  it('should fail to send bid with 0 value and 0 lockup', async () => {
+    await wallet.client.post(`/wallet/${wallet.id}/open`, {
+      name: name
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    const fn = async () => await wallet.client.post(`/wallet/${wallet.id}/bid`, {
+      name: name,
+      bid: 0,
       lockup: 0
     });
+
+    await assert.rejects(fn, {message: 'Output is dust.'});
   });
 
   it('should get all bids (single player)', async () => {
