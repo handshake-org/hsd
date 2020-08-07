@@ -136,7 +136,21 @@ describe('Derive and save change addresses', function() {
     // Fake an old db state
     await wdb.db.del(layout.M.encode(0));
 
-    // Run migration script
+    // Run migration script without flag -- throws
+    await assert.rejects(
+      wdb.migrateChange(),
+      {
+        message: 'Wallet is corrupted.\n' +
+          'Back up wallet and then restart with\n' +
+          '`hsd --wallet-migrate=0` or `hs-wallet --migrate=0`\n' +
+          '(Full node required)'
+      }
+    );
+
+    // Add flag
+    wdb.options.migrate = 0;
+
+    // Run migration script again
     await wdb.migrateChange();
 
     // Fixed
