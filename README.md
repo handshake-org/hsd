@@ -1,3 +1,5 @@
+Just testing to make sure CircleCI is now disabled.
+
 # HSD
 
 [![Build Status][ci-status-img]][ci-status-url]
