@@ -119,11 +119,20 @@ $ npm install -g hs-client
 
 ## Documentation
 
-- Documentation Site: [https://handshake-org.github.io](https://handshake-org.github.io)
-- API Docs: [https://handshake-org.github.io/api-docs/index.html](https://handshake-org.github.io/api-docs/index.html)
-- JSDoc: [https://handshake-org.github.io/docs](https://handshake-org.github.io/docs)
+- Documentation Site: [https://hsd-dev.org](https://hsd-dev.org)
+- API Docs: [https://hsd-dev.org/api-docs](https://hsd-dev.org/api-docs)
+- JSDoc: [https://hsd-dev.org/docs](https://hsd-dev.org/docs)
 
 ## Quickstart
+
+### API
+
+Several RPC calls have been exposed in addition to the standard bitcoind-style
+RPC. There is also a RESTful HTTP API with different features. The full node
+and wallet node each run their own API servers on different ports.
+
+For more details and a complete list of API calls, review the documentation
+at https://hsd-dev.org/api-docs
 
 ### Unbound support
 
@@ -254,51 +263,6 @@ Expiration on testnet is around 30 days, so be sure to send a renewal soon!
 ``` bash
 $ hsw-rpc sendrenewal handshake
 ```
-
-### RPC Calls
-
-Several RPC calls have been exposed in addition to the standard bitcoind-style
-RPC.
-
-#### Node Calls
-
-All node calls should be made with `$ hsd-rpc [call] [arguments...]`.
-
-- `getnames` - List all names (debugging).
-- `getnameinfo [name]` - Returns name and auction status.
-- `getnameresource [name]` - Returns parsed DNS-style resource.
-- `getnameproof [name]` - Returns a JSON-ified [urkel] proof of a name.
-- `getnamebyhash [hex-hash]` - Returns the name hash preimage.
-- `sendrawclaim [base64-string]` - Send a raw serialized claim.
-- `grindname [size]` - Grind a name which satisifies the rollout.
-- `sendrawairdrop [base64-string]` - Send a raw serialized [airdrop] proof.
-
-#### Wallet Calls
-
-All wallet calls should be made with `$ hsw-rpc [call] [arguments...]`.
-
-- `getbids [name] [own]` - List own bids on a name.
-- `getreveals [name] [own]` - List own reveals on a name.
-- `getnames` - List all watched names and their statuses.
-- `getnameinfo [name]` - Returns name info, similar to the node call above.
-- `getauctioninfo [name]` - Returns auction info, along with all bids and
-  reveals.
-- `getnameresource [name]` - Returns parsed DNS-style resource.
-- `getnamebyhash [hex-hash]` - Returns the name hash preimage.
-- `createclaim [name]` - Create a to-be-signed claim.
-- `sendclaim [name]` - Claim a name by publishing a DNSSEC ownership proof.
-- `sendopen [name]` - Open an auction.
-- `sendbid [name] [bid-value] [lockup-value]` - Bid on a name.
-- `sendreveal [name]` - Reveal bids for name.
-- `sendredeem [name]` - Redeem reveals in the case of an auction loss.
-- `sendupdate [name] [json-data]` - Register or update a name.
-- `sendrenewal [name]` - Renew a name.
-- `sendtransfer [name] [address]` - Transfer name to another address.
-- `sendcancel [name]` - Cancel an in-progress transfer.
-- `sendfinalize [name]` - Finalize a transfer.
-- `sendrevoke [name]` - Revoke a name.
-- `importnonce [name] [address] [bid-value]` - Deterministically regenerate a
-  bid's nonce.
 
 ### Claiming a name
 
