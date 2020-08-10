@@ -123,6 +123,12 @@ $ npm install -g hs-client
 - API Docs: [https://hsd-dev.org/api-docs](https://hsd-dev.org/api-docs)
 - JSDoc: [https://hsd-dev.org/docs](https://hsd-dev.org/docs)
 
+## Contributing
+
+Handshake is a community project, we welcome contributions of all kinds from
+everyone. Before opening a pull request, please review the style guide and
+workflow tips in [CONTRIBUTING.md](CONTRIBUTING.md).
+
 ## Quickstart
 
 ### API
