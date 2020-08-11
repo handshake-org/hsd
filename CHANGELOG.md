@@ -2,6 +2,29 @@
 
 ## unreleased
 
+### Upgrading
+
+This version fixes a bug in the wallet that would corrupt the database if a user
+manually generated change addresses using API commands. Upon running the updated
+software for the first time, hsd will check for corruption and if there is none,
+proceed with normal operation (no user interaction is required, although this
+process may take a few minutes for a "busy" wallet). If the bug is detected,
+hsd will throw an error and quit. To repair the wallet, the user must launch hsd
+with an extra command-line flag, in addition to whatever parameters
+they normally use:
+
+`$ hsd --wallet-migrate=0` (for most users)
+
+or `$ hs-wallet --migrate=0` (for remote wallet node)
+
+These flags may be added to environment variables or a config file if desired,
+following the pattern described in the
+[configuration guide](https://hsd-dev.org/guides/config.html).
+
+The repair may take a few minutes **and will automatically initiate a rescan**.
+For this reason, the user's wallet MUST be connected to a full node (not a
+pruned node or SPV node).
+
 ### Node API changes
 
 - Adds a new node rpc `resetrootcache` that clears the root name server cache.
