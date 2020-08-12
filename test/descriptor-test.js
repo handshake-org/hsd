@@ -30,7 +30,6 @@ describe('Descriptor', function() {
     assert(desc.test(address));
   });
 
-
   it('should create wpkh', () => {
     const privkey = secp256k1.privateKeyGenerate();
     const pubkey = secp256k1.publicKeyCreate(privkey, true);
