@@ -1,5 +1,12 @@
 # HSD Release Notes & Changelog
 
+## unreleased
+
+### Wallet API changes
+
+- Wallet RPC `getnames` (and HTTP endpoint `/wallet/:id/name`) now accept a
+boolean parameter "own" (default: `false`) that filters out names the wallet does not own.
+
 ## v2.4.0
 
 ### Chain & Consensus changes
