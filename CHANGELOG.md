@@ -8,7 +8,7 @@
   - **When upgrading to this version of hsd you must pass `--chain-migrate=1 --wallet-migrate=1`
   when you run it for the first time**
 
-### Wallet changes
+### Wallet API changes
 
 - New RPC methods:
   - `signmessagewithname`: Like `signmessage` but uses a name instead of an address. The owner's address will be used to sign the message.
@@ -22,6 +22,9 @@ of that coin is added to the JSON response. This is useful for wallet recovery s
 when users need to call `rpc importnonce` to repair unknown blinds. The complete usage is now
 `rpc getbids name (own) (unrevealed)` so for example a wallet-recovering user would execute
 `rpc getbids null true true`.
+
+- Wallet RPC `getnames` (and HTTP endpoint `/wallet/:id/name`) now accept a
+boolean parameter "own" (default: `false`) that filters out names the wallet does not own.
 
 ## v2.4.0
 
