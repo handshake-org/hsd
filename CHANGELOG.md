@@ -35,6 +35,13 @@ REGISTERing. If unpatched software was used to CLAIM a name already, that wallet
 database is irreversibly corrupted and must be replaced.
 See https://github.com/handshake-org/hsd/issues/454
 
+- By default the wallet will now send OPEN covenants to an unspendable `nullData`
+address (witness program version `31`, with minimum required data `0x0000`). This
+will prevent 0-value coins from bloating the UTXO set in chainDB and walletDB.
+It will also reduce the size of OPEN outputs in the blockchain by 18 bytes.
+Applications that relied on the output address to detect when a user has sent an
+OPEN must now rely on the input coins to an OPEN transaction for this purpose.
+
 ## v2.0.0
 
 ### Wallet API changes
