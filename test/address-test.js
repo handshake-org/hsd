@@ -14,4 +14,39 @@ describe('Address', function() {
     const expect = 'hs1qd42hrldu5yqee58se4uj6xctm7nk28r70e84vx';
     assert.strictEqual(addr.toString('main'), expect);
   });
+
+  it('should check standardness of address', () => {
+    const addr = new Address();
+
+    // Standard p2wpkh
+    addr.version = 0;
+    addr.hash = Buffer.alloc(20);
+    assert(!addr.isUnknown());
+
+    // Standard p2wsh
+    addr.version = 0;
+    addr.hash = Buffer.alloc(32);
+    assert(!addr.isUnknown());
+
+    // nullData, any valid length
+    for (let i = 2; i <= 40; i++) {
+      addr.version = 31;
+      addr.hash = Buffer.alloc(i);
+      assert(!addr.isUnknown());
+    }
+
+    // Non-Standard address
+    addr.version = 0;
+    addr.hash = Buffer.alloc(19);
+    assert(addr.isUnknown());
+
+    addr.version = 0;
+    addr.hash = Buffer.alloc(33);
+    assert(addr.isUnknown());
+
+    // Undefined version
+    addr.version = 1;
+    addr.hash = Buffer.alloc(32);
+    assert(addr.isUnknown());
+  });
 });
