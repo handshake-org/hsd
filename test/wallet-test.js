@@ -1962,7 +1962,7 @@ describe('Wallet', function() {
       // Check
       let bal = await wallet.getBalance();
       assert.strictEqual(bal.tx, 2);
-      assert.strictEqual(bal.coin, 2);
+      assert.strictEqual(bal.coin, 1); // OPENs are sent to a null address
       assert.strictEqual(bal.confirmed, 10e6);
       assert.strictEqual(bal.unconfirmed, 10e6 - fee);
       assert.strictEqual(bal.ulocked, 0);
@@ -1979,7 +1979,7 @@ describe('Wallet', function() {
       // Check
       bal = await wallet.getBalance();
       assert.strictEqual(bal.tx, 2);
-      assert.strictEqual(bal.coin, 2);
+      assert.strictEqual(bal.coin, 1);
       assert.strictEqual(bal.confirmed, 10e6 - (1 * fee));
       assert.strictEqual(bal.unconfirmed, 10e6 - (1 * fee));
       assert.strictEqual(bal.ulocked, 0);
@@ -1995,7 +1995,7 @@ describe('Wallet', function() {
       // Check
       let bal = await wallet.getBalance();
       assert.strictEqual(bal.tx, 3);
-      assert.strictEqual(bal.coin, 3);
+      assert.strictEqual(bal.coin, 2);
       assert.strictEqual(bal.confirmed, 10e6 - (1 * fee));
       assert.strictEqual(bal.unconfirmed, 10e6 - (2 * fee));
       assert.strictEqual(bal.ulocked, lockup);
@@ -2012,7 +2012,7 @@ describe('Wallet', function() {
       // Check
       bal = await wallet.getBalance();
       assert.strictEqual(bal.tx, 3);
-      assert.strictEqual(bal.coin, 3);
+      assert.strictEqual(bal.coin, 2);
       assert.strictEqual(bal.confirmed, 10e6 - (2 * fee));
       assert.strictEqual(bal.unconfirmed, 10e6 - (2 * fee));
       assert.strictEqual(bal.ulocked, lockup);
@@ -2028,7 +2028,7 @@ describe('Wallet', function() {
       // Check
       let bal = await wallet.getBalance();
       assert.strictEqual(bal.tx, 4);
-      assert.strictEqual(bal.coin, 4);
+      assert.strictEqual(bal.coin, 3);
       assert.strictEqual(bal.confirmed, 10e6 - (2 * fee));
       assert.strictEqual(bal.unconfirmed, 10e6 - (3 * fee));
       assert.strictEqual(bal.ulocked, value);
@@ -2045,7 +2045,7 @@ describe('Wallet', function() {
       // Check
       bal = await wallet.getBalance();
       assert.strictEqual(bal.tx, 4);
-      assert.strictEqual(bal.coin, 4);
+      assert.strictEqual(bal.coin, 3);
       assert.strictEqual(bal.confirmed, 10e6 - (3 * fee));
       assert.strictEqual(bal.unconfirmed, 10e6 - (3 * fee));
       assert.strictEqual(bal.ulocked, value);
@@ -2126,7 +2126,7 @@ describe('Wallet', function() {
       // Check
       bal = await wallet.getBalance();
       assert.strictEqual(bal.tx, 2);
-      assert.strictEqual(bal.coin, 2);
+      assert.strictEqual(bal.coin, 1);
       assert.strictEqual(bal.confirmed, 10e6 - (1 * fee));
       assert.strictEqual(bal.unconfirmed, 10e6 - (1 * fee));
       assert.strictEqual(bal.ulocked, 0);
@@ -2142,7 +2142,7 @@ describe('Wallet', function() {
       // Check
       let bal = await wallet.getBalance();
       assert.strictEqual(bal.tx, 2);
-      assert.strictEqual(bal.coin, 2);
+      assert.strictEqual(bal.coin, 1);
       assert.strictEqual(bal.confirmed, 10e6 - (1 * fee));
       assert.strictEqual(bal.unconfirmed, 10e6 - (1 * fee));
       assert.strictEqual(bal.ulocked, 0);
@@ -2159,7 +2159,7 @@ describe('Wallet', function() {
       // Check
       bal = await wallet.getBalance();
       assert.strictEqual(bal.tx, 3);
-      assert.strictEqual(bal.coin, 3);
+      assert.strictEqual(bal.coin, 2);
       assert.strictEqual(bal.confirmed, 10e6 - (2 * fee));
       assert.strictEqual(bal.unconfirmed, 10e6 - (2 * fee));
       assert.strictEqual(bal.ulocked, lockup);
@@ -2175,7 +2175,7 @@ describe('Wallet', function() {
       // Check
       let bal = await wallet.getBalance();
       assert.strictEqual(bal.tx, 3);
-      assert.strictEqual(bal.coin, 3);
+      assert.strictEqual(bal.coin, 2);
       assert.strictEqual(bal.confirmed, 10e6 - (2 * fee));
       assert.strictEqual(bal.unconfirmed, 10e6 - (2 * fee));
       assert.strictEqual(bal.ulocked, lockup);
@@ -2192,7 +2192,7 @@ describe('Wallet', function() {
       // Check
       bal = await wallet.getBalance();
       assert.strictEqual(bal.tx, 4);
-      assert.strictEqual(bal.coin, 4);
+      assert.strictEqual(bal.coin, 3);
       assert.strictEqual(bal.confirmed, 10e6 - (3 * fee));
       assert.strictEqual(bal.unconfirmed, 10e6 - (3 * fee));
       assert.strictEqual(bal.ulocked, value);
