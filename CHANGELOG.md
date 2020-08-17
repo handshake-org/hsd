@@ -1,6 +1,6 @@
 # HSD Release Notes & Changelog
 
-## unreleased
+## v2.2.0
 
 ### Upgrading
 
