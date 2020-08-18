@@ -100,11 +100,8 @@ describe('Wallet Import Name', function() {
     assert(ns4 === null);
   });
 
-  it('should not re-import an existing name', async () => {
-    await assert.rejects(
-      alice.importName(name),
-      {message: 'Name already exists.'}
-    );
+  it('should ignore re-importing existing name', async () => {
+    await alice.importName(name);
   });
 
   it('should bid on names from Alice\'s wallet', async () => {
@@ -223,13 +220,9 @@ describe('Wallet Import Name', function() {
         assert(!bid.own);
     });
 
-    it('should not re-import name', async () => {
+    it('should ignore re-importing name', async () => {
       await wclient.execute('selectwallet', ['charlie']);
-
-      await assert.rejects(
-        wclient.execute('importname', [name, 0]),
-        {message: 'Name already exists.'}
-      );
+      await wclient.execute('importname', [name, 0]);
     });
   });
 });
