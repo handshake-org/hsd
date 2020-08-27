@@ -2497,23 +2497,23 @@ describe('Wallet', function() {
   });
 
   describe('Idempotency caching', () => {
-    it.only('should have a generic mechanism for hitting a cache', async () => {
+    it('should have a generic mechanism for hitting a cache', async () => {
       const testCache = new LRU(10);
       const testKey = 'idempotency-key';
       let counter = 0;
-      let action = () => {
-        counter++
-        return counter
-      }
+      const action = () => {
+        counter++;
+        return counter;
+      };
 
-      const result1 = Wallet.doWithCache(testCache, testKey, action)
-      assert.equal(result1, counter)
+      const result1 = Wallet.doWithCache(testCache, testKey, action);
+      assert.equal(result1, counter);
 
-      const result2 = Wallet.doWithCache(testCache, testKey, action)
-      assert.equal(result1, result2)
+      const result2 = Wallet.doWithCache(testCache, testKey, action);
+      assert.equal(result1, result2);
 
-      Wallet.doWithCache(testCache, null, action)
-      assert.equal(2, counter)
-    })
-  })
+      Wallet.doWithCache(testCache, null, action);
+      assert.equal(2, counter);
+    });
+  });
 });
