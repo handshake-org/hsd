@@ -10,6 +10,7 @@ const Mnemonic = require('../lib/hd/mnemonic');
 const HDPrivateKey = require('../lib/hd/private');
 const Script = require('../lib/script/script');
 const Address = require('../lib/primitives/address');
+const rules = require('../lib/covenants/rules');
 const network = Network.get('regtest');
 const mnemonics = require('./data/mnemonic-english.json');
 // Commonly used test mnemonic
@@ -44,6 +45,16 @@ const wclient = new WalletClient({
   port: ports.wallet,
   apiKey: 'bar'
 });
+
+const name = rules.grindName(5, 1, network);
+
+async function mineBlocks(n, addr) {
+  addr = addr ? addr : new Address().toString('regtest');
+  for (let i = 0; i < n; i++) {
+    const block = await node.miner.mineBlock(null, addr);
+    await node.chain.add(block);
+  }
+}
 
 describe('Wallet RPC Methods', function() {
   this.timeout(15000);
@@ -323,6 +334,20 @@ describe('Wallet RPC Methods', function() {
       const info = await wclient.execute('getwalletinfo', []);
       assert.strictEqual(info.walletid, 'primary');
       assert.strictEqual(info.height, node.chain.height);
+    });
+
+    it('should get spendable balance in wallet info', async () => {
+      const address = await wclient.execute('getnewaddress');
+      await mineBlocks(2, address);
+
+      await wclient.execute('sendopen', [name]);
+      await mineBlocks(network.names.treeInterval + 2);
+
+      await wclient.execute('sendbid', [name, 1000, 2000]);
+
+      const info = await wclient.execute('getwalletinfo', []);
+
+      assert.strictEqual(info.spendable_balance, info.unconfirmed_balance - 2000);
     });
   });
 });
