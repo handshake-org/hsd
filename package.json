@@ -52,7 +52,9 @@
     "urkel": "~0.6.3"
   },
   "devDependencies": {
-    "bmocha": "^2.1.4"
+    "babel-eslint": "^10.1.0",
+    "bmocha": "^2.1.4",
+    "eslint": "^7.7.0"
   },
   "main": "./lib/hsd.js",
   "bin": {

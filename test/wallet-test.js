@@ -5,6 +5,7 @@
 'use strict';
 
 const assert = require('bsert');
+const LRU = require('blru');
 const {WalletClient} = require('hs-client');
 const consensus = require('../lib/protocol/consensus');
 const Network = require('../lib/protocol/network');
@@ -2492,6 +2493,27 @@ describe('Wallet', function() {
       assert.equal(coins.length, 1);
       const [claim] = coins;
       assert.equal(claim.covenant.isClaim(), true);
+    });
+  });
+
+  describe('Idempotency caching', () => {
+    it('should have a generic mechanism for hitting a cache', async () => {
+      const testCache = new LRU(10);
+      const testKey = 'idempotency-key';
+      let counter = 0;
+      const action = () => {
+        counter++;
+        return counter;
+      };
+
+      const result1 = Wallet.doWithCache(testCache, testKey, action);
+      assert.equal(result1, counter);
+
+      const result2 = Wallet.doWithCache(testCache, testKey, action);
+      assert.equal(result1, result2);
+
+      Wallet.doWithCache(testCache, null, action);
+      assert.equal(2, counter);
     });
   });
 });
