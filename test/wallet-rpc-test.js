@@ -14,6 +14,8 @@ const network = Network.get('regtest');
 const mnemonics = require('./data/mnemonic-english.json');
 // Commonly used test mnemonic
 const phrase = mnemonics[0][1];
+// First 200 addresses derived from watch only wallet
+const addresses = require('./data/addresses.json');
 
 const ports = {
   p2p: 14331,
@@ -195,20 +197,6 @@ describe('Wallet RPC Methods', function() {
       const info = await wclient.getAccount(watchOnlyWalletId, 'default');
       await wclient.execute('selectwallet', [watchOnlyWalletId]);
 
-      const addresses = [
-        'rs1q4rvs9pp9496qawp2zyqpz3s90fjfk362q92vq8', // 0/0
-        'rs1qwkzdtg56m5zqu4wuwtwuqltn4s9uxd3s93ec2n', // 0/1
-        'rs1q9atns2u4ayv2hsug0xuha3acqxz450mgvaer4z', // 0/2
-        'rs1qve2kd3lyhnm6r7knzvl3s5pkgem9a25xk42y5d', // 0/3
-        'rs1q799vpn8u7524p54kaumclcfuayxxkuga84xle2', // 0/4
-        'rs1q748rcdq767cxla4d0gkpc35r4cl6kk72z47qdq', // 0/5
-        'rs1qq7fkaj2ruwcdsdr4l2f4jx0a8nqyg9qdr7y6am', // 0/6
-        'rs1qm8jx0q9y2tq990tswes08gnjhfhej9vfjcql92', // 0/7
-        'rs1qf3zef3m8tnl8el5wurtrg5qgt6c2aepu7pqeqc', // 0/8
-        'rs1qermzxwthx9tz2h64fgmmxwc8k05zhxhfhx5khm', // 0/9
-        'rs1qlvysusse4qgym5s7mv8ddaatgvgfq6g6vcjhvf'  // 0/10
-      ];
-
       // Assert that the lookahead is configured as expected
       // subtract one from addresses.length, it is 0 indexed
       assert.equal(addresses.length - 1, info.lookahead);
@@ -221,9 +209,9 @@ describe('Wallet RPC Methods', function() {
         assert.equal(response.ismine, true);
       }
 
-      // m/44'/5355'/0'/11
+      // m/44'/5355'/0'/201
       // This address is outside of the lookahead range
-      const failed = 'rs1qg8h0n5mrdt5u8jaxq9jequ3nekj8fg820lr5xg';
+      const failed = 'rs1qs2a5lthdy8uxh7d7faeqzuwlandyn0kg2lylqp';
 
       const response = await wclient.execute('getaddressinfo', [failed]);
       assert.equal(response.ismine, false);
