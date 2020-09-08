@@ -19,10 +19,23 @@ const node = new FullNode({
 
 const {wdb} = node.require('walletdb');
 
+const nullBalance = {
+  account: -1,
+  tx: 0,
+  coin: 0,
+  unconfirmed: 0,
+  confirmed: 0,
+  lockedUnconfirmed: 0,
+  lockedConfirmed: 0
+};
+
 let alice, aliceReceive, aliceAcct0;
 let aliceAcct0Info, aliceNames, aliceBalance, aliceHistory;
 let bob, bobReceive, bobAcct0;
 let bobAcct0Info, bobNames, bobBalance, bobHistory;
+
+const aliceBlinds = [];
+const bobBlinds = [];
 
 async function mineBlocks(n, addr) {
   addr = addr ? addr : new Address().toString('regtest');
@@ -63,13 +76,16 @@ describe('Wallet deep rescan', function() {
     for (let i = 0; i < 10; i++) {
       const w = i < 5 ? alice : bob;
       const name = i < 5 ? `alice${i}` : `bob${i}`;
+      const array = i < 5 ? aliceBlinds : bobBlinds;
 
       await w.sendOpen(name, false, {account: 0});
       await mineBlocks(network.names.treeInterval + 2);
 
       // Send two bids so there is a winner/loser and name gets a value
-      await w.sendBid(name, 100000 + i, 200000 + i, {account: 0});
-      await w.sendBid(name, 100000 - i, 200000 - i, {account: 0});
+      const bid1 = await w.sendBid(name, 100000 + i, 200000 + i, {account: 0});
+      const bid2 = await w.sendBid(name, 100000 - i, 200000 - i, {account: 0});
+      saveBlindValue(bid1, array);
+      saveBlindValue(bid2, array);
       await mineBlocks(network.names.biddingPeriod);
 
       await w.sendReveal(name, {account: 0});
@@ -137,7 +153,44 @@ describe('Wallet deep rescan', function() {
     bobAcct0Info = await bob.getAccount(0);
   });
 
-  it('should DEEP RESCAN', async () => {
+  it('should DEEP RESCAN - wipe only', async () => {
+    // Just do the erasing part first
+    await wdb.deepRescan(false);
+  });
+
+  it('should have erased wallet data', async () => {
+    const aliceBalance2 = await alice.getBalance();
+    const aliceNames2 = await alice.getNames();
+    const aliceHistory2 = await alice.getHistory();
+    const aliceAcct0Info2 = await alice.getAccount(0);
+
+    const bobBalance2 = await bob.getBalance();
+    const bobNames2 = await bob.getNames();
+    const bobHistory2 = await bob.getHistory();
+    const bobAcct0Info2 = await bob.getAccount(0);
+
+    // Account metadata is fine
+    assert.deepStrictEqual(aliceAcct0Info, aliceAcct0Info2);
+    assert.deepStrictEqual(bobAcct0Info, bobAcct0Info2);
+
+    // Blind values are fine
+    for (const blind of aliceBlinds) {
+      assert(await alice.getBlind(blind));
+    }
+    for (const blind of bobBlinds) {
+      assert(await bob.getBlind(blind));
+    }
+
+    // Everything else is wiped
+    assert.deepStrictEqual(aliceBalance2.getJSON(), nullBalance);
+    assert.deepStrictEqual(bobBalance2.getJSON(), nullBalance);
+    compareNames(aliceNames2, []);
+    compareHistories(aliceHistory2, []);
+    compareNames(bobNames2, []);
+    compareHistories(bobHistory2, []);
+  });
+
+  it('should DEEP RESCAN - with recovery', async () => {
     await wdb.deepRescan();
   });
 
@@ -192,5 +245,15 @@ function compareNames(a, b) {
 
       assert.deepStrictEqual(objA[prop], objB[prop]);
     }
+  }
+}
+
+function saveBlindValue(tx, array) {
+  for (const output of tx.outputs) {
+    const cov = output.covenant;
+    if (!cov.isBid())
+      continue;
+
+    array.push(cov.getHash(3));
   }
 }
