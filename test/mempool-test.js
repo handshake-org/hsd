@@ -1243,5 +1243,63 @@ describe('Mempool', function() {
         }
       }
     });
+
+    it('should evict old transactions', async () => {
+      // Clear mempool. Note that TXs in last test were not
+      // added to the wallet: we can re-spend those coins.
+      await mempool.reset();
+
+      let now = 0;
+      const original = util.now;
+      try {
+        util.now = () => {
+          return now;
+        };
+
+        // After we cross the expiry threshold, one TX at a time
+        // will start to expire, starting with the oldest.
+        const sent = [];
+        let evicted = 0;
+        mempool.on('remove entry', (entry) => {
+          const expected = sent.shift();
+          assert.bufferEqual(entry.tx.hash(), expected);
+          evicted++;
+        });
+
+        for (let i = 0; i < N; i++) {
+          // Spend a different coin each time to avoid exceeding max ancestors.
+          const coin = chaincoins.getCoins()[i];
+          const addr = wallet.createReceive().getAddress();
+
+          const mtx = new MTX();
+          mtx.addCoin(coin);
+          mtx.addOutput(addr, 90000);
+          chaincoins.sign(mtx);
+          const tx = mtx.toTX();
+
+          sent.push(tx.hash());
+
+          // mempool size is not a factor
+          assert(mempool.size  + (txMemUsage * 2) < maxSize);
+
+          await mempool.addTX(tx);
+
+          // Time travel forward ten minutes
+          now += 60 * 10;
+
+          // The first 6 TXs are added without incident.
+          // After that, a virtual hour will have passed, and
+          // each new TX will trigger the eviction of one old TX.
+          if (i < 6) {
+            assert(mempool.map.size === i + 1);
+          } else {
+            assert(mempool.map.size === 6);
+            assert.strictEqual(evicted, (i + 1) - 6);
+          }
+        }
+      } finally {
+        util.now = original;
+      }
+    });
   });
 });
