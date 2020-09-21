@@ -2529,7 +2529,7 @@ describe('Wallet', function() {
     const network = Network.get('regtest');
     const workers = new WorkerPool({enabled: false});
     const wdb = new WalletDB({network, workers});
-    const lockup = 6800503496047;
+    const lockup = 6800503496047 + 0;
     const name = 'cloudflare';
     const nameHash = rules.hashString(name);
 
