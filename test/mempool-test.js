@@ -904,7 +904,7 @@ describe('Mempool', function() {
       assert(!mempool.getTX(bid.hash()));
     });
 
-    it.skip('should handle reorg: name claim - DNSSEC timestamp', async () => {
+    it('should handle reorg: name claim - DNSSEC timestamp', async () => {
       // Mempool is empty
       await mempool.reset();
       assert.strictEqual(mempool.map.size, 0);
@@ -990,7 +990,7 @@ describe('Mempool', function() {
       assert(!mempool.getClaim(claim.hash()));
     });
 
-    it.skip('should handle reorg: name claim - block commitment', async () => {
+    it('should handle reorg: name claim - block commitment', async () => {
       // Mempool is empty
       await mempool.reset();
       assert.strictEqual(mempool.map.size, 0);
