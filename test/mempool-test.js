@@ -1001,7 +1001,7 @@ describe('Mempool', function() {
       // Fast-forward the next block's timestamp to allow claim.
       const data = claim.getData(mempool.network);
       const [block1] = await getMockBlock(chain);
-      block1.time = data.inception + 100;
+      block1.time = data.inception + 10000;
       try {
         ownership.ignore = true;
         await chain.add(block1, VERIFY_BODY);
