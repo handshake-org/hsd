@@ -1,5 +1,12 @@
 # HSD Release Notes & Changelog
 
+## unreleased
+
+### Wallet changes
+
+- Fixes a bug that ignored the effect of sending or receiving a FINALIZE on a
+wallet's `lockedConfirmed` and `lockedUnconfirmed` balance. 
+
 ## v2.2.0
 
 ### Upgrading
