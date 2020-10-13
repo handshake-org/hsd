@@ -2,6 +2,16 @@
 
 ## unreleased
 
+### Node API changes
+
+- Adds new wallet HTTP endpoint `/deeprescan` that requires a parameter
+`I_HAVE_BACKED_UP_MY_WALLET=true`. This action wipes out balance and transaction
+history in the wallet DB but retains key hashes and name maps. It should be used
+only if the wallet state has been corrupted by issues like the
+[reserved name registration bug](https://github.com/handshake-org/hsd/issues/454)
+or the
+[locked coins balance after FINALIZE bug](https://github.com/handshake-org/hsd/pull/464).
+
 ### Wallet changes
 
 - Fixes a bug that ignored the effect of sending or receiving a FINALIZE on a
