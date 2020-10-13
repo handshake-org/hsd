@@ -22,8 +22,8 @@
   },
   "dependencies": {
     "bcfg": "~0.1.6",
-    "bcrypto": "~5.2.0",
-    "bdb": "~1.2.2",
+    "bcrypto": "~5.3.0",
+    "bdb": "~1.3.0",
     "bdns": "~0.1.5",
     "bevent": "~0.1.5",
     "bfile": "~0.2.2",
@@ -34,7 +34,7 @@
     "blru": "~0.1.6",
     "blst": "~0.1.5",
     "bmutex": "~0.1.6",
-    "bns": "~0.12.0",
+    "bns": "~0.13.0",
     "bsert": "~0.0.10",
     "bsock": "~0.1.9",
     "bsocks": "~0.2.5",
@@ -44,8 +44,8 @@
     "bupnp": "~0.2.6",
     "bval": "~0.1.6",
     "bweb": "~0.1.10",
-    "goosig": "~0.8.0",
-    "hs-client": "~0.0.8",
+    "goosig": "~0.9.0",
+    "hs-client": "~0.0.9",
     "n64": "~0.2.10",
     "mrmr": "~0.1.8",
     "namebase-hs-client": "=0.0.5",
@@ -53,7 +53,7 @@
   },
   "devDependencies": {
     "babel-eslint": "^10.1.0",
-    "bmocha": "^2.1.4",
+    "bmocha": "^2.1.5",
     "eslint": "^7.7.0"
   },
   "main": "./lib/hsd.js",
@@ -67,14 +67,13 @@
     "hsw-cli": "./bin/hsw-cli"
   },
   "scripts": {
-    "lint": "eslint $(cat .eslintfiles) || exit 0",
-    "lint-ci": "eslint $(cat .eslintfiles)",
+    "lint": "eslint $(cat .eslintfiles)",
     "lint-file": "eslint",
     "test": "bmocha --reporter spec test/*.js",
     "test-browser": "NODE_BACKEND=js bmocha --reporter spec test/*.js",
     "test-file": "bmocha --reporter spec",
     "test-file-browser": "NODE_BACKEND=js bmocha --reporter spec",
-    "test-ci": "istanbul cover --report lcovonly node_modules/.bin/bmocha -- --reporter spec test/*.js"
+    "test-ci": "nyc --reporter lcov bmocha -- --reporter spec test/*.js"
   },
   "browser": {
     "./lib/covenants/reserved": "./lib/covenants/reserved-browser.js",

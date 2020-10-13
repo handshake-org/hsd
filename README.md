@@ -1,6 +1,6 @@
 # HSD
 
-[![Build Status][circleci-status-img]][circleci-status-url]
+[![Build Status][ci-status-img]][ci-status-url]
 [![Coverage Status][coverage-status-img]][coverage-status-url]
 
 __HSD__ is an implementation of the [Handshake][handshake] Protocol.
@@ -79,7 +79,7 @@ $ npm install -g https://github.com/handshake-org/hsd.git
 
 A `git` ref can be used to install a particular version by appending
 a `#` and the name of the `git` ref to the URL. For example,
-`https://github.com/handshake-org/hsd.git#v2.1.3`. It is recommended
+`https://github.com/handshake-org/hsd.git#v2.2.0`. It is recommended
 to use the [latest tagged release](https://github.com/handshake-org/hsd/releases).
 
 If adding `hsd` as a dependency to a project, use the command:
@@ -119,11 +119,26 @@ $ npm install -g hs-client
 
 ## Documentation
 
-- Documentation Site: [https://handshake-org.github.io](https://handshake-org.github.io)
-- API Docs: [https://handshake-org.github.io/api-docs/index.html](https://handshake-org.github.io/api-docs/index.html)
-- JSDoc: [https://handshake-org.github.io/docs](https://handshake-org.github.io/docs)
+- Documentation Site: [https://hsd-dev.org](https://hsd-dev.org)
+- API Docs: [https://hsd-dev.org/api-docs](https://hsd-dev.org/api-docs)
+- JSDoc: [https://hsd-dev.org/docs](https://hsd-dev.org/docs)
+
+## Contributing
+
+Handshake is a community project, we welcome contributions of all kinds from
+everyone. Before opening a pull request, please review the style guide and
+workflow tips in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Quickstart
+
+### API
+
+Several RPC calls have been exposed in addition to the standard bitcoind-style
+RPC. There is also a RESTful HTTP API with different features. The full node
+and wallet node each run their own API servers on different ports.
+
+For more details and a complete list of API calls, review the documentation
+at https://hsd-dev.org/api-docs
 
 ### Unbound support
 
@@ -254,51 +269,6 @@ Expiration on testnet is around 30 days, so be sure to send a renewal soon!
 ``` bash
 $ hsw-rpc sendrenewal handshake
 ```
-
-### RPC Calls
-
-Several RPC calls have been exposed in addition to the standard bitcoind-style
-RPC.
-
-#### Node Calls
-
-All node calls should be made with `$ hsd-rpc [call] [arguments...]`.
-
-- `getnames` - List all names (debugging).
-- `getnameinfo [name]` - Returns name and auction status.
-- `getnameresource [name]` - Returns parsed DNS-style resource.
-- `getnameproof [name]` - Returns a JSON-ified [urkel] proof of a name.
-- `getnamebyhash [hex-hash]` - Returns the name hash preimage.
-- `sendrawclaim [base64-string]` - Send a raw serialized claim.
-- `grindname [size]` - Grind a name which satisifies the rollout.
-- `sendrawairdrop [base64-string]` - Send a raw serialized [airdrop] proof.
-
-#### Wallet Calls
-
-All wallet calls should be made with `$ hsw-rpc [call] [arguments...]`.
-
-- `getbids [name] [own]` - List own bids on a name.
-- `getreveals [name] [own]` - List own reveals on a name.
-- `getnames` - List all watched names and their statuses.
-- `getnameinfo [name]` - Returns name info, similar to the node call above.
-- `getauctioninfo [name]` - Returns auction info, along with all bids and
-  reveals.
-- `getnameresource [name]` - Returns parsed DNS-style resource.
-- `getnamebyhash [hex-hash]` - Returns the name hash preimage.
-- `createclaim [name]` - Create a to-be-signed claim.
-- `sendclaim [name]` - Claim a name by publishing a DNSSEC ownership proof.
-- `sendopen [name]` - Open an auction.
-- `sendbid [name] [bid-value] [lockup-value]` - Bid on a name.
-- `sendreveal [name]` - Reveal bids for name.
-- `sendredeem [name]` - Redeem reveals in the case of an auction loss.
-- `sendupdate [name] [json-data]` - Register or update a name.
-- `sendrenewal [name]` - Renew a name.
-- `sendtransfer [name] [address]` - Transfer name to another address.
-- `sendcancel [name]` - Cancel an in-progress transfer.
-- `sendfinalize [name]` - Finalize a transfer.
-- `sendrevoke [name]` - Revoke a name.
-- `importnonce [name] [address] [bid-value]` - Deterministically regenerate a
-  bid's nonce.
 
 ### Claiming a name
 
@@ -458,7 +428,7 @@ See LICENSE for more info.
 [unbound]: https://www.nlnetlabs.nl/projects/unbound/download/
 [hnsd]: https://github.com/handshake-org/hnsd
 [airdrop]: https://github.com/handshake-org/hs-airdrop
-[coverage-status-img]: https://codecov.io/gh/handshake-org/hsd/badge.svg?branch=master
-[coverage-status-url]: https://codecov.io/gh/handshake-org/hsd?branch=master
-[circleci-status-img]: https://circleci.com/gh/handshake-org/hsd/tree/master.svg?style=shield
-[circleci-status-url]: https://circleci.com/gh/handshake-org/hsd/tree/master
+[coverage-status-img]: https://coveralls.io/repos/github/handshake-org/hsd/badge.svg?branch=master
+[coverage-status-url]: https://coveralls.io/github/handshake-org/hsd?branch=master
+[ci-status-img]: https://github.com/handshake-org/hsd/workflows/Build/badge.svg
+[ci-status-url]: https://github.com/handshake-org/hsd/tree/master
