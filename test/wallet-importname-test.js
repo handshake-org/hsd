@@ -111,7 +111,7 @@ describe('Wallet Import Name', function() {
     // Sanity check: bids are allowed starting in the NEXT block
     await assert.rejects(
       alice.sendBid(name, 100001, 200001),
-      {message: 'Name has not reached the bidding phase yet.'}
+      {message: `Name has not reached the bidding phase yet: "${name}".`}
     );
     await mineBlocks(1);
     await wdb.rescan(0);

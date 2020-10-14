@@ -38,6 +38,8 @@ async function mineBlocks(n, addr) {
 }
 
 describe('Derive and save change addresses', function() {
+  this.timeout(10000);
+
   before(async () => {
     await node.ensure();
     await node.open();
