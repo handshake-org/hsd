@@ -34,6 +34,19 @@ let aliceAcct0Info, aliceNames, aliceBalance, aliceHistory;
 let bob, bobReceive, bobAcct0;
 let bobAcct0Info, bobNames, bobBalance, bobHistory;
 
+// note: these were brute forced to be available on week 0
+const immediatelyReleasedNames = [
+  'alice110',
+  'alice152',
+  'alice240',
+  'alice300',
+  'alice509',
+  'bob30',
+  'bob67',
+  'bob160',
+  'bob258',
+  'bob278'
+];
 const aliceBlinds = [];
 const bobBlinds = [];
 
@@ -73,10 +86,12 @@ describe('Wallet deep rescan', function() {
   });
 
   it('should open 10 auctions and REGISTER names', async () => {
-    for (let i = 0; i < 10; i++) {
-      const w = i < 5 ? alice : bob;
-      const name = i < 5 ? `alice${i}` : `bob${i}`;
-      const array = i < 5 ? aliceBlinds : bobBlinds;
+    for (let i = 0; i < immediatelyReleasedNames.length; i++) {
+      // alternately win names to alice and bob
+      const isAlice = i % 2 === 0;
+      const w = isAlice ? alice : bob;
+      const name = immediatelyReleasedNames[i];
+      const array = isAlice ? aliceBlinds : bobBlinds;
 
       await w.sendOpen(name, false, {account: 0});
       await mineBlocks(network.names.treeInterval + 2);
@@ -107,18 +122,19 @@ describe('Wallet deep rescan', function() {
   });
 
   it('should TRANSFER and FINALIZE some names', async () => {
+    // note: transfer the most recently won names to avoid expiry issues
     const bobReceiveName = await bobAcct0.receiveAddress();
-    await alice.sendTransfer('alice0', bobReceiveName);
+    await alice.sendTransfer(immediatelyReleasedNames[8], bobReceiveName);
     await mineBlocks(network.names.transferLockup + 1);
 
-    await alice.sendFinalize('alice0');
+    await alice.sendFinalize(immediatelyReleasedNames[8]);
     await mineBlocks(10);
 
     const aliceReceiveName = await aliceAcct0.receiveAddress();
-    await bob.sendTransfer('bob9', aliceReceiveName);
+    await bob.sendTransfer(immediatelyReleasedNames[9], aliceReceiveName);
     await mineBlocks(network.names.transferLockup + 1);
 
-    await bob.sendFinalize('bob9');
+    await bob.sendFinalize(immediatelyReleasedNames[9]);
     await mineBlocks(10);
   });
 
