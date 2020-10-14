@@ -37,14 +37,14 @@ let bobAcct0Info, bobNames, bobBalance, bobHistory;
 // note: these were brute forced to be available on week 0
 const immediatelyReleasedNames = [
   'alice110',
-  'alice152',
-  'alice240',
-  'alice300',
-  'alice509',
   'bob30',
+  'alice152',
   'bob67',
+  'alice240',
   'bob160',
+  'alice300',
   'bob258',
+  'alice509',
   'bob278'
 ];
 const aliceBlinds = [];
