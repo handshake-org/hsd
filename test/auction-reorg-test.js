@@ -17,7 +17,12 @@ const rules = require('../lib/covenants/rules');
 const ownership = require('../lib/covenants/ownership');
 
 const network = Network.get('regtest');
-const {treeInterval} = network.names;
+const {
+  biddingPeriod,
+  revealPeriod,
+  transferLockup,
+  treeInterval
+} = network.names;
 const NAME1 = rules.grindName(10, 20, network);
 const NAME2 = rules.grindName(10, 20, network);
 
@@ -134,8 +139,8 @@ describe('Auction Reorg', function() {
       assert(await chain.add(block));
     });
 
-    it('should mine 10 blocks', async () => {
-      for (let i = 0; i < 10; i++) {
+    it(`should mine ${biddingPeriod} blocks`, async () => {
+      for (let i = 0; i < biddingPeriod; i++) {
         const block = await cpu.mineBlock();
         assert(block);
         assert(await chain.add(block));
@@ -156,8 +161,8 @@ describe('Auction Reorg', function() {
       assert(await chain.add(block));
     });
 
-    it('should mine 20 blocks', async () => {
-      for (let i = 0; i < 20; i++) {
+    it(`should mine ${revealPeriod} blocks`, async () => {
+      for (let i = 0; i < revealPeriod; i++) {
         const block = await cpu.mineBlock();
         assert(block);
         assert(await chain.add(block));
@@ -181,8 +186,8 @@ describe('Auction Reorg', function() {
       assert(await chain.add(block));
     });
 
-    it('should mine 10 blocks', async () => {
-      for (let i = 0; i < 10; i++) {
+    it(`should mine ${treeInterval} blocks`, async () => {
+      for (let i = 0; i < treeInterval; i++) {
         const block = await cpu.mineBlock();
         assert(block);
         assert(await chain.add(block));
@@ -607,8 +612,8 @@ describe('Auction Reorg', function() {
       assert.strictEqual(err.reason, 'bad-finalize-maturity');
     });
 
-    it('should mine 20 blocks', async () => {
-      for (let i = 0; i < 20; i++) {
+    it(`should mine ${transferLockup} blocks`, async () => {
+      for (let i = 0; i < transferLockup; i++) {
         const block = await cpu.mineBlock();
         assert(block);
         assert(await chain.add(block));
