@@ -196,7 +196,7 @@ describe('Multiple accounts participating in same auction', function() {
         await wallet.sendRedeem(name, {account: 0});
       }, {
         name: 'Error',
-        message: 'No reveals to redeem.'
+        message: `No reveals to redeem: "${name}".`
       });
     });
 

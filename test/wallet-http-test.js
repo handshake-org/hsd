@@ -849,7 +849,7 @@ describe('Wallet HTTP', function() {
       name: name
     }));
 
-    await assert.rejects(fn, {message: 'No reveals to redeem.'});
+    await assert.rejects(fn, {message: `No reveals to redeem: "${name}".`});
 
     const json = await wallet.createRedeem({
       name: name

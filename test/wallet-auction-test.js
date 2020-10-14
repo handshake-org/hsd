@@ -116,7 +116,7 @@ describe('Wallet Auction', function() {
     }
 
     assert(err);
-    assert.strictEqual(err.message, 'Name is already opening.');
+    assert.strictEqual(err.message, `Name is already opening: "${NAME1}".`);
   });
 
   it('should mine enough blocks to enter BIDDING phase', async () => {
@@ -151,7 +151,7 @@ describe('Wallet Auction', function() {
     }
 
     assert(err);
-    assert.strictEqual(err.message, 'Name is not available.');
+    assert.strictEqual(err.message, `Name is not available: "${NAME1}".`);
   });
 
   it('should mine enough blocks to expire auction', async () => {
