@@ -1490,11 +1490,27 @@ describe('Wallet', function() {
   });
 
   it('should remove a wallet', async () => {
-    await wdb.create({
+    const wallet = await wdb.create({
       id: 'alice100'
     });
+    const addr1 = await wallet.receiveAddress();
+    const b = wdb.db.batch();
+    const wid = await wdb.getWID('alice100');
     assert(await wdb.get('alice100'));
+
+    // Add one single, unconfirmed coin to wallet
+    const mtx = new MTX();
+    mtx.addInput(dummyInput());
+    mtx.addOutput(addr1, 10 * 1e8);
+    await wdb.addTXMap(b, mtx.hash(), wid);
+
+    // Should return tx from TX Map
+    assert(await wdb.getWalletsByTX(mtx));
+
     await wdb.remove('alice100');
+
+    // Should not return tx from TX Map after wallet is removed
+    assert(!await wdb.getWalletsByTX(mtx));
     assert(!await wdb.get('alice100'));
   });
 
