@@ -29,7 +29,7 @@ const policy = require('../lib/protocol/policy');
 const HDPrivateKey = require('../lib/hd/private');
 const Wallet = require('../lib/wallet/wallet');
 const rules = require('../lib/covenants/rules');
-const {types} = rules;
+const {types, hashName} = rules;
 const {forValue} = require('./util/common');
 
 const KEY1 = 'xprv9s21ZrQH143K3Aj6xQBymM31Zb4BVc7wxqfUhMZrzewdDVCt'
@@ -1504,13 +1504,28 @@ describe('Wallet', function() {
     mtx.addOutput(addr1, 10 * 1e8);
     await wdb.addTXMap(b, mtx.hash(), wid);
 
+    // Add one name to NameMap
+    await wdb.addNameMap(b, hashName('test123'), wid);
+
+    await b.write();
+
     // Should return tx from TX Map
     assert(await wdb.getWalletsByTX(mtx));
 
+    // Should have wid in NameMap
+    const map = await wdb.getNameMap(hashName('test123'));
+    assert(map[wid]);
+
+    // Remove wallet
     await wdb.remove('alice100');
+
+    // Should not wid from NameMap after wid is removed
+    assert(!await wdb.getNameMap(hashName('test123')));
 
     // Should not return tx from TX Map after wallet is removed
     assert(!await wdb.getWalletsByTX(mtx));
+
+    // Should not return wallet after it is removed
     assert(!await wdb.get('alice100'));
   });
 
