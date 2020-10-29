@@ -1514,12 +1514,12 @@ describe('Wallet', function() {
 
     // Should have wid in NameMap
     const map = await wdb.getNameMap(hashName('test123'));
-    assert(map.wids[wid]);
+    assert(map.wids.has(wid));
 
     // Remove wallet
     await wdb.remove('alice100');
 
-    // Should not wid from NameMap after wid is removed
+    // Should not return wid from NameMap after wid is removed
     assert(!await wdb.getNameMap(hashName('test123')));
 
     // Should not return tx from TX Map after wallet is removed
