@@ -1514,7 +1514,7 @@ describe('Wallet', function() {
 
     // Should have wid in NameMap
     const map = await wdb.getNameMap(hashName('test123'));
-    assert(map[wid]);
+    assert(map.wids[wid]);
 
     // Remove wallet
     await wdb.remove('alice100');
