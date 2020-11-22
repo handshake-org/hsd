@@ -2,6 +2,15 @@
 
 ## unreleased
 
+### Node changes
+
+- `FullNode` now parses option `--min-weight=<number>` (`min-weight: <number>` in
+hsd.conf or `minWeight: <number>` in JavaScript object instantiation).
+When assembling a block template, if there are not enough fee-paying transactions available,
+the miner will add transactions up to the minimum weight that would normally be
+ignored for being "free" (paying a fee below policy limit). The default value is
+raised from `0` to `5000` (a 1-in, 2-out BID transaction has a weight of about `889`).
+
 ### Wallet changes
 
 - Fixes a bug that ignored the effect of sending or receiving a FINALIZE on a
