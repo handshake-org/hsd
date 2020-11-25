@@ -9,8 +9,7 @@
 /* eslint no-return-assign: "off" */
 
 'use strict';
-
-const {NodeClient, WalletClient} = require('hs-client');
+const {NodeClient, WalletClient} = require('namebase-hs-client');
 const Network = require('../lib/protocol/network');
 const FullNode = require('../lib/node/fullnode');
 const MTX = require('../lib/primitives/mtx');
@@ -48,7 +47,7 @@ const wclient = new WalletClient({
 const wallet = wclient.wallet('primary');
 const wallet2 = wclient.wallet('secondary');
 
-let name, cbAddress;
+let name, cbAddress, name2;
 const accountTwo = 'foobar';
 
 const {
@@ -79,6 +78,7 @@ describe('Wallet HTTP', function() {
 
   beforeEach(async () => {
     name = await nclient.execute('grindname', [5]);
+    name2 = await nclient.execute('grindname', [5]);
   });
 
   afterEach(async () => {
@@ -1200,6 +1200,159 @@ describe('Wallet HTTP', function() {
     assert.equal(ns.info.name, name);
     assert.equal(ns.info.state, 'REVOKED');
   });
+
+  it('should create a batch open transaction (multiple outputs) for valid names', async () => {
+
+    // add funds to account, these are necessary to run test individually
+    // const height = 2;
+    // await mineBlocks(height, cbAddress);
+
+    const NAMES_LEN = 200;
+    const validNames = [];
+    for (let i =0; i<NAMES_LEN; i++) {
+      validNames.push(await nclient.execute('grindname', [5]));
+    }
+
+    await mineBlocks(treeInterval, cbAddress);
+    
+    const json = await wclient.createBatchOpen('primary', {
+      passphrase: "", 
+      names: validNames, 
+      sign: true, 
+      broadcast: true});
+
+    const transaction = json['tx'];
+    const errors = json['errors'];
+
+    await sleep(500);
+  
+    const mempool = await nclient.getMempool();
+    assert.ok(mempool.includes(transaction.hash));
+    assert.ok(errors.length === 0);
+    assert.ok(transaction['outputs'] && transaction['outputs'].length === NAMES_LEN + 1); // NAMES_LEN OPEN + 1 NONE
+  });
+
+  it('should create a batch open transaction (multiple outputs) for partially valid names', async () => {
+
+    // add funds to account, these are necessary to run test individually
+    // const height = 2;
+    // await mineBlocks(height, cbAddress);
+
+    const singleOpenJson = await wallet.createOpen({
+      name: name,
+      broadcast: true,
+      sign: true
+    });
+    const firstNameHash = singleOpenJson["hash"];
+
+    const batchOpenJson = await wclient.createBatchOpen('primary', {
+      passphrase: "", 
+      names: [name, name2], 
+      sign: true, 
+      broadcast: true
+    });
+
+    const batchOpenTransaction = batchOpenJson['tx'];
+    const batchOpenTransactionHash = batchOpenTransaction['hash'];
+    const errors = batchOpenJson['errors'];
+
+    await sleep(500);
+    
+    // tx should be in mempool
+    const mempool = await nclient.getMempool();
+    assert.ok(mempool.includes(firstNameHash));
+    assert.ok(mempool.includes(batchOpenTransactionHash));
+
+    assert.ok(errors.length === 1);
+    assert.ok(batchOpenTransaction['outputs'] && batchOpenTransaction['outputs'].length === 2); // 1 OPEN, 1 NONE
+  });
+
+  it('should reject a batch open transaction (multiple outputs) for names already open', async () => {
+
+    // add funds to account, required for individual test run
+    // const height = 2;
+    // await mineBlocks(height, cbAddress);
+
+    await wclient.createBatchOpen('primary', {
+      passphrase: "", 
+      names: [name, name2], 
+      sign: true, 
+      broadcast: true
+    });
+
+    await sleep(500);
+
+    try {
+
+      await wclient.createBatchOpen('primary', {
+        passphrase: "", 
+        names: invalidNames, 
+        sign: true, 
+        broadcast: true
+      });
+
+    } catch (err) {
+      assert.ok(err);
+    }
+    
+    // valid tx should not be in mempool
+    const mempool = await nclient.getMempool();
+    assert.ok(mempool.length === 1);
+  });
+
+  it('should reject a batch open transaction (multiple outputs) for more than 200 names', async () => {
+
+    // add funds to account, required for individual test run
+    // const height = 2;
+    // await mineBlocks(height, cbAddress);
+
+    try {
+      const tooManyNames = [...Array(201).keys()];
+      await wclient.createBatchOpen('primary', {
+        passphrase: "", 
+        names: tooManyNames, 
+        sign: true, 
+        broadcast: true
+      });
+
+    } catch (err) {
+      assert.ok(err);
+    }
+    
+    // valid tx should not be in mempool
+    const mempool = await nclient.getMempool();
+    assert.ok(mempool.length === 0);
+  });
+
+  it('should reject a batch open transaction (multiple outputs) for invalid names', async () => {
+
+    // add funds to account, required for individual test run
+    // const height = 2;
+    // await mineBlocks(height, cbAddress);
+
+    const invalidNames = [ '长城', '大鸟' ];
+
+    try {
+
+      await wclient.createBatchOpen('primary', {
+        passphrase: "", 
+        names: invalidNames, 
+        sign: true, 
+        broadcast: true
+      });
+
+    } catch (err) {
+      assert.ok(err);
+    }
+
+    await sleep(500);
+    
+    // tx should not be in mempool
+    const mempool = await nclient.getMempool();
+    assert.ok(mempool.length === 0);
+
+  });
+
 });
 
 async function sleep(time) {
