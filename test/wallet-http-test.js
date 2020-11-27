@@ -1203,9 +1203,6 @@ describe('Wallet HTTP', function() {
   });
 
   it('should create a batch open transaction (multiple outputs) for valid names', async () => {
-    // add funds to account, these are necessary to run test individually
-    // const height = 2;
-    // await mineBlocks(height, cbAddress);
     const NAMES_LEN = 200;
     const validNames = [];
     for (let i =0; i<NAMES_LEN; i++) {
@@ -1232,10 +1229,6 @@ describe('Wallet HTTP', function() {
   });
 
   it('should create a batch open transaction (multiple outputs) for partially valid names', async () => {
-    // add funds to account, these are necessary to run test individually
-    // const height = 2;
-    // await mineBlocks(height, cbAddress);
-
     const singleOpenJson = await wallet.createOpen({
       name: name,
       broadcast: true,
