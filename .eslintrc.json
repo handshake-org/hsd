@@ -144,6 +144,7 @@
       "exceptions": ["!"]
     }],
     "space-before-blocks": "error",
+    "space-in-parens": ["error", "never"],
     "strict": "error",
     "unicode-bom": ["error", "never"],
     "valid-jsdoc": "error",
