@@ -48,7 +48,7 @@
     "hs-client": "~0.0.9",
     "n64": "~0.2.10",
     "mrmr": "~0.1.8",
-    "namebase-hs-client": "=0.0.5",
+    "namebase-hs-client": "github:namebasehq/hs-client#2769501",
     "urkel": "~0.6.3"
   },
   "devDependencies": {
