@@ -2,7 +2,6 @@
 
 const util = require('../../lib/utils/util');
 const assert = require('bsert');
-const { italics } = require('bns/lib/roothints');
 
 describe('util', function() {
   describe('createBatch', function() {
