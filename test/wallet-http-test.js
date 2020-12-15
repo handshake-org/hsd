@@ -644,7 +644,6 @@ describe('Wallet HTTP', function() {
   });
 
   it('should create a reveal', async () => {
-    // await mineBlocks(10, cbAddress);
     await wallet.createOpen({
       name: name
     });
@@ -1366,8 +1365,7 @@ describe('Wallet HTTP', function() {
       broadcast: true
     });
 
-    const transaction = json['tx'];
-    const errors = json['errors'];
+    const { tx: transaction, errors } = json;
     assert.ok(errors.length === INVALID_NAMES_LEN);
 
     await sleep(500);
