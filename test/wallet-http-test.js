@@ -1378,9 +1378,9 @@ describe('Wallet HTTP', function() {
   });
 
   it('should create a batch reveal transaction with an output limit of 200 (+1 for NONE)', async function() {
-    const BID_COUNT = 10;
-    const VALID_NAMES_LEN = 21;
-    const OUTPUT_LIMIT_EXCEEDING_NAMES_LEN = 1;
+    const BID_COUNT = 2;
+    const VALID_NAMES_LEN = 105;
+    const OUTPUT_LIMIT_EXCEEDING_NAMES_LEN = 5;
     const validNames = [];
     for (let i = 0; i < VALID_NAMES_LEN; i++) {
       validNames.push(await nclient.execute('grindname', [5]));
@@ -1417,8 +1417,8 @@ describe('Wallet HTTP', function() {
       broadcast: true
     });
 
-    const transaction = json['tx'];
-    const errors = json['errors'];
+    const {tx: transaction, errors} = json;
+
     assert.ok(errors.length === OUTPUT_LIMIT_EXCEEDING_NAMES_LEN);
     assert.ok(errors[0].name != null);
 
@@ -1432,22 +1432,6 @@ describe('Wallet HTTP', function() {
     ); // BIDS LEN + 1 NONE
   });
 
-  it('should reject a batch reveal transaction (multiple outputs) for more than 200 names', async function() {
-    try {
-      const tooManyNames = [...Array(201).keys()];
-      await wclient.createBatchReveal('primary', {
-        passphrase: '',
-        names: tooManyNames,
-        sign: true,
-        broadcast: true
-      });
-    } catch (err) {
-      assert.ok(err);
-    }
-    // valid tx should not be in mempool
-    const mempool = await nclient.getMempool();
-    assert.ok(mempool.length === 0);
-  });
   it('should reject a batch reveal transaction (multiple outputs) for invalid names', async function() {
     const invalidNames = ['长城', '大鸟'];
     try {
