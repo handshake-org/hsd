@@ -69,7 +69,7 @@
   "scripts": {
     "lint": "eslint $(cat .eslintfiles)",
     "lint-file": "eslint",
-    "test": "bmocha --reporter spec test/*.js",
+    "test": "bmocha --recursive --reporter spec test/*.js",
     "test-browser": "NODE_BACKEND=js bmocha --reporter spec test/*.js",
     "test-file": "bmocha --reporter spec",
     "test-file-browser": "NODE_BACKEND=js bmocha --reporter spec",

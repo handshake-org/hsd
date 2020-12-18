@@ -1386,7 +1386,7 @@ describe('Wallet HTTP', function() {
       validNames.push(await nclient.execute('grindname', [5]));
     }
 
-    await mineBlocks(1, cbAddress);
+    await mineBlocks(100, cbAddress);
 
     await wclient.createBatchOpen('primary', {
       names: validNames,
@@ -1398,14 +1398,15 @@ describe('Wallet HTTP', function() {
     await mineBlocks(treeInterval + 1, cbAddress);
 
     // TODO Promise.All is failing ?
-    for (const domainName of validNames) {
-      for (let i =0; i<BID_COUNT; i++) {
+    for (let i =0; i<BID_COUNT; i++) {
+      for (const domainName of validNames) {
         await wallet.createBid({
           name: domainName,
           bid: 1000 + i,
           lockup: 2000
         });
       }
+      await mineBlocks(1, cbAddress);
     }
 
     await mineBlocks(biddingPeriod + 1, cbAddress);
@@ -1422,7 +1423,7 @@ describe('Wallet HTTP', function() {
     assert.ok(errors.length === OUTPUT_LIMIT_EXCEEDING_NAMES_LEN);
     assert.ok(errors[0].name != null);
 
-    await sleep(100);
+    await sleep(50);
 
     const mempool = await nclient.getMempool();
     assert.ok(mempool.includes(transaction.hash));
@@ -1460,7 +1461,7 @@ describe('Wallet HTTP', function() {
           bid: 999 + i,
           lockup: 2000
         });
-        if (i % 100 === 0) {
+        if (i % 50 === 0) {
            await mineBlocks(1, cbAddress);
         }
       }
