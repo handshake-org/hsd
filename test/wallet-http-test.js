@@ -25,6 +25,7 @@ const secp256k1 = require('bcrypto/lib/secp256k1');
 const network = Network.get('regtest');
 const assert = require('bsert');
 const common = require('./util/common');
+const { italics } = require('bns/lib/roothints');
 
 const node = new FullNode({
   network: 'regtest',
@@ -1530,6 +1531,104 @@ describe('Wallet HTTP', function() {
     const mempool = await nclient.getMempool();
     assert.ok(mempool.length === 0);
   });
+
+  /* eslint-disable */
+  it('should create a batch bid transaction (multiple outputs) for valid names', async function() {
+    const BID_COUNT = 2;
+    const VALID_NAMES_LEN = 100;
+    const validNames = [];
+    for (let i = 0; i < VALID_NAMES_LEN; i++) {
+      validNames.push(await nclient.execute('grindname', [6]));
+    }
+
+    await mineBlocks(1, cbAddress);
+
+    await wclient.createBatchOpen('primary', {
+      names: validNames,
+      passphrase: '',
+      broadcast: true,
+      sign: true
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    const bids = [];
+    let counter = 0;
+    for (const domainName of validNames) {
+      for (let i =0; i<BID_COUNT; i++) {
+        bids.push({
+          name: domainName, 
+          bid: 999 + i, 
+          lockup: 2000, 
+          idempotencyKey: "" + counter++ 
+        });
+      }
+    }
+
+    const {tx, errorMessages} = await wclient.createBatchBid('primary', { 
+      passphrase: '', 
+      bids: bids
+    });
+
+    assert.ok(tx);
+    assert.equal(errorMessages.length, 0);
+    const expectedOutputCount = BID_COUNT * VALID_NAMES_LEN + 1 // NONE;
+    assert.equal(tx.outputs.length, expectedOutputCount);
+
+    await sleep(100);
+
+    const mempool = await nclient.getMempool();
+    assert.ok(mempool.includes(tx.hash));
+  });
+
+  it('should reject a batch bid transaction that exceeds the total number of bid limit of 200 or not permitted 0 bid', async function() {
+    const BID_COUNT = 4;
+    const VALID_NAMES_LEN = 100;
+    const validNames = [];
+    for (let i = 0; i < VALID_NAMES_LEN; i++) {
+      validNames.push(await nclient.execute('grindname', [6]));
+    }
+
+    await mineBlocks(1, cbAddress);
+
+    await wclient.createBatchOpen('primary', {
+      names: validNames,
+      passphrase: '',
+      broadcast: true,
+      sign: true
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    const bids = [];
+    let counter = 0;
+    for (const domainName of validNames) {
+      for (let i =0; i<BID_COUNT; i++) {
+        bids.push({
+          name: domainName, 
+          bid: 999 + i, 
+          lockup: 2000, 
+          idempotencyKey: "" + counter++ 
+        });
+      }
+    }
+
+    assert.rejects(async () => {
+      await wclient.createBatchBid('primary', { 
+        passphrase: '', 
+        bids: bids
+      });
+    });
+
+    assert.rejects(async () => {
+      await wclient.createBatchBid('primary', { 
+        passphrase: '', 
+        bids: []
+      });
+    });
+
+  })
+  /* eslint-enable */
 });
 
 async function sleep(time) {
