@@ -11,6 +11,7 @@ const WorkerPool = require('../lib/workers/workerpool');
 const Chain = require('../lib/blockchain/chain');
 const ChainEntry = require('../lib/blockchain/chainentry');
 const MTX = require('../lib/primitives/mtx');
+const Claim = require('../lib/primitives/claim');
 const Coin = require('../lib/primitives/coin');
 const KeyRing = require('../lib/primitives/keyring');
 const Address = require('../lib/primitives/address');
@@ -1020,14 +1021,24 @@ describe('Mempool', function() {
         await mempool._addBlock(entry2, block2.txs, view2);
       }
 
-      // Get *very* recent block for commitment
-      const options = {
-        commitHeight: chain.tip.height,
-        commitHash: chain.tip.hash
-      };
-
-      // Update the claim with the new block commitment
-      claim = await chaincoins.fakeClaim('cloudflare', options);
+      // Update the claim with a *very recent* block commitment
+      // but keep the RRSIG and its timestamps.
+      // For reference:
+      // createData(address, fee, commitHash, commitHeight, network)
+      const newData = ownership.createData(
+        {
+          version: data.version,
+          hash: data.hash
+        },
+        data.fee,
+        chain.tip.hash,
+        chain.tip.height,
+        mempool.network
+      );
+      const newProof = claim.getProof();
+      ownership.removeData(newProof);
+      newProof.addData([newData]);
+      claim = Claim.fromProof(newProof);
 
       // Now we can add it to the mempool.
       try {
@@ -1082,6 +1093,10 @@ describe('Mempool', function() {
       assert.strictEqual(mempool.map.size, 0);
       assert.strictEqual(mempool.claims.size, 0);
       assert(!mempool.getClaim(claim.hash()));
+
+      // Sanity-check that the claim wasn't removed due to timestamps
+      assert(chain.tip.time > data.inception);
+      assert(chain.tip.time < data.expiration);
     });
   });
 });
