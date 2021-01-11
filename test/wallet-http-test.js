@@ -669,6 +669,33 @@ describe('Wallet HTTP', function() {
     assert.equal(reveals.length, 1);
   });
 
+  it('should create all reveals', async () => {
+    await wallet.createOpen({
+      name: name
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    for (let i = 0; i < 3; i++) {
+      await wallet.createBid({
+        name: name,
+        bid: 1000,
+        lockup: 2000
+      });
+    }
+
+    await mineBlocks(biddingPeriod + 1, cbAddress);
+
+    const {info} = await nclient.execute('getnameinfo', [name]);
+    assert.equal(info.name, name);
+    assert.equal(info.state, 'REVEAL');
+
+    const json = await wallet.createReveal();
+
+    const reveals = json.outputs.filter(output => output.covenant.type === types.REVEAL);
+    assert.equal(reveals.length, 3);
+  });
+
   it('should get all reveals (single player)', async () => {
     await wallet.createOpen({
       name: name
