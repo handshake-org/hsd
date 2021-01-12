@@ -12,6 +12,10 @@ the miner will add transactions up to the minimum weight that would normally be
 ignored for being "free" (paying a fee below policy limit). The default value is
 raised from `0` to `5000` (a 1-in, 2-out BID transaction has a weight of about `889`).
 
+- Transactions that have sat unconfirmed in the mempool for 3 days will be evicted.
+This is the default `MEMPOOL_EXPIRY_TIME` value set in `policy.js` but can be
+configured (in seconds) with the `FullNode` option `--mempool-expiry-time`.
+
 ### Wallet API changes
 
 - Adds new wallet HTTP endpoint `/deepclean` that requires a parameter
