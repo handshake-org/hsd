@@ -44,20 +44,4 @@ describe('util', function() {
       assert.deepStrictEqual(rejectedDomains, expectedRejectedDomains);
     });
   });
-
-  /* eslint-disable */
-  describe('validator', function() {
-    describe('validate unknown parameters', function() {
-      it('should do sth', function() {
-
-        const testObject = {name: 'roo', age: 14};
-        const validator = new Validator(testObject);
-        validator.str('name');
-        validator.int('age');
-        const result = validator.str('not_present');
-        assert.ok(result);
-      });
-    });
-  });
-  /* eslint-enable */
 });
