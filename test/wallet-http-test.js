@@ -25,7 +25,6 @@ const secp256k1 = require('bcrypto/lib/secp256k1');
 const network = Network.get('regtest');
 const assert = require('bsert');
 const common = require('./util/common');
-const { italics } = require('bns/lib/roothints');
 
 const node = new FullNode({
   network: 'regtest',
@@ -1533,7 +1532,9 @@ describe('Wallet HTTP', function() {
   });
 
   /* eslint-disable */
-  it('should create a batch bid transaction (multiple outputs) for valid names', async function() {
+
+  it('should return from cache when same idempotency_key is used in a bid request', async function() {
+    
     const BID_COUNT = 2;
     const VALID_NAMES_LEN = 100;
     const validNames = [];
@@ -1565,20 +1566,86 @@ describe('Wallet HTTP', function() {
       }
     }
 
-    const {tx, errorMessages} = await wclient.createBatchBid('primary', { 
+    const uniqueBids = bids.splice(198, 2)
+
+    await wclient.createBatchBid('primary', { 
       passphrase: '', 
       bids: bids
     });
 
-    assert.ok(tx);
+    bids.push(uniqueBids[0]);
+    bids.push(uniqueBids[1]);
+
+    // Duplicate request with 2 unique bids at the end
+    const {processedBids, errorMessages} = await wclient.createBatchBid('primary', { 
+      passphrase: '', 
+      bids: bids
+    });
+
+    assert.ok(processedBids);
     assert.equal(errorMessages.length, 0);
-    const expectedOutputCount = BID_COUNT * VALID_NAMES_LEN + 1 // NONE;
-    assert.equal(tx.outputs.length, expectedOutputCount);
+    const expectedOutputCount = BID_COUNT * VALID_NAMES_LEN;
+    assert.equal(bids.length, expectedOutputCount);
+
+    const allFromCache = processedBids.every(element => element.fromCache === true);
+    assert.equal(allFromCache, false);
 
     await sleep(100);
 
-    const mempool = await nclient.getMempool();
-    assert.ok(mempool.includes(tx.hash));
+    const mempool = await nclient.getMempool();  
+    // should have 2 unique transactions within
+    assert.equal(mempool.length, 2);
+    assert.ok(mempool.includes(processedBids[0].tx_hash));
+    assert.ok(mempool.includes(processedBids[198].tx_hash));
+  });
+
+
+  it('should create a batch bid transaction (multiple outputs) for valid names', async function() {
+    const BID_COUNT = 2;
+    const VALID_NAMES_LEN = 100;
+    const validNames = [];
+    for (let i = 0; i < VALID_NAMES_LEN; i++) {
+      validNames.push(await nclient.execute('grindname', [6]));
+    }
+
+    await mineBlocks(1, cbAddress);
+
+    await wclient.createBatchOpen('primary', {
+      names: validNames,
+      passphrase: '',
+      broadcast: true,
+      sign: true
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    const bids = [];
+    let counter = 0;
+    for (const domainName of validNames) {
+      for (let i =0; i<BID_COUNT; i++) {
+        bids.push({
+          name: domainName, 
+          bid: 999 + i, 
+          lockup: 2000, 
+          idempotencyKey: "key_" + counter++ 
+        });
+      }
+    }
+
+    const {processedBids, errorMessages} = await wclient.createBatchBid('primary', { 
+      passphrase: '', 
+      bids: bids
+    });
+
+    assert.ok(processedBids);
+    assert.equal(errorMessages.length, 0);
+    const expectedOutputCount = BID_COUNT * VALID_NAMES_LEN;
+    assert.equal(bids.length, expectedOutputCount);
+
+    await sleep(100);
+
+    const mempool = await nclient.getMempool();  
+    assert.ok(mempool.includes(processedBids[0].tx_hash));
   });
 
   it('should reject a batch bid transaction that exceeds the total number of bid limit of 200 or not permitted 0 bid', async function() {
