@@ -1432,7 +1432,6 @@ describe('Wallet HTTP', function() {
   });
 
   it('should create a batch reveal transaction with partial outputs for domains that exceeds the output limit of 200 (+1 for NONE)', async function() {
-    await mineBlocks(5, cbAddress);
     const MAX_BID_COUNT = 200;
     const BID_COUNT = 250;
     const VALID_NAMES_LEN = 1;
