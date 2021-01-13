@@ -1432,8 +1432,9 @@ describe('Wallet HTTP', function() {
   });
 
   it('should create a batch reveal transaction with partial outputs for domains that exceeds the output limit of 200 (+1 for NONE)', async function() {
+    await mineBlocks(5, cbAddress);
     const MAX_BID_COUNT = 200;
-    const BID_COUNT = 201;
+    const BID_COUNT = 250;
     const VALID_NAMES_LEN = 1;
     const validNames = [];
     for (let i = 0; i < VALID_NAMES_LEN; i++) {
@@ -1451,16 +1452,24 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(treeInterval + 1, cbAddress);
 
-    // TODO Promise.All is failing ?
+    // using batch bids to speed up the test
+    const bids = [];
     for (const domainName of validNames) {
-      for (let i =0; i<BID_COUNT; i++) {
-        await wallet.createBid({
+      for (let i=1; i<=BID_COUNT; i++) {
+        bids.push({
           name: domainName,
           bid: 999 + i,
-          lockup: 2000
+          lockup: 2000,
+          idempotencyKey: domainName + '_' + i
         });
-        if (i % 50 === 0) {
-           await mineBlocks(1, cbAddress);
+
+        if ( i % 50 == 0) {
+          await wclient.createBatchBid('primary', {
+            passphrase: '',
+            bids: bids
+          });
+          await mineBlocks(1, cbAddress);
+          bids.splice(0, bids.length);
         }
       }
     }
@@ -1531,10 +1540,7 @@ describe('Wallet HTTP', function() {
     assert.ok(mempool.length === 0);
   });
 
-  /* eslint-disable */
-
   it('should return from cache when same idempotency_key is used in a bid request', async function() {
-    
     const BID_COUNT = 2;
     const VALID_NAMES_LEN = 100;
     const validNames = [];
@@ -1558,18 +1564,18 @@ describe('Wallet HTTP', function() {
     for (const domainName of validNames) {
       for (let i =0; i<BID_COUNT; i++) {
         bids.push({
-          name: domainName, 
-          bid: 999 + i, 
-          lockup: 2000, 
-          idempotencyKey: "" + counter++ 
+          name: domainName,
+          bid: 999 + i,
+          lockup: 2000,
+          idempotencyKey: String(counter++)
         });
       }
     }
 
-    const uniqueBids = bids.splice(198, 2)
+    const uniqueBids = bids.splice(198, 2);
 
-    await wclient.createBatchBid('primary', { 
-      passphrase: '', 
+    await wclient.createBatchBid('primary', {
+      passphrase: '',
       bids: bids
     });
 
@@ -1577,8 +1583,8 @@ describe('Wallet HTTP', function() {
     bids.push(uniqueBids[1]);
 
     // Duplicate request with 2 unique bids at the end
-    const {processedBids, errorMessages} = await wclient.createBatchBid('primary', { 
-      passphrase: '', 
+    const {processedBids, errorMessages} = await wclient.createBatchBid('primary', {
+      passphrase: '',
       bids: bids
     });
 
@@ -1592,13 +1598,12 @@ describe('Wallet HTTP', function() {
 
     await sleep(100);
 
-    const mempool = await nclient.getMempool();  
+    const mempool = await nclient.getMempool();
     // should have 2 unique transactions within
     assert.equal(mempool.length, 2);
     assert.ok(mempool.includes(processedBids[0].tx_hash));
     assert.ok(mempool.includes(processedBids[198].tx_hash));
   });
-
 
   it('should create a batch bid transaction (multiple outputs) for valid names', async function() {
     const BID_COUNT = 2;
@@ -1624,16 +1629,16 @@ describe('Wallet HTTP', function() {
     for (const domainName of validNames) {
       for (let i =0; i<BID_COUNT; i++) {
         bids.push({
-          name: domainName, 
-          bid: 999 + i, 
-          lockup: 2000, 
-          idempotencyKey: "key_" + counter++ 
+          name: domainName,
+          bid: 999 + i,
+          lockup: 2000,
+          idempotencyKey: 'key_' + counter++
         });
       }
     }
 
-    const {processedBids, errorMessages} = await wclient.createBatchBid('primary', { 
-      passphrase: '', 
+    const {processedBids, errorMessages} = await wclient.createBatchBid('primary', {
+      passphrase: '',
       bids: bids
     });
 
@@ -1644,7 +1649,7 @@ describe('Wallet HTTP', function() {
 
     await sleep(100);
 
-    const mempool = await nclient.getMempool();  
+    const mempool = await nclient.getMempool();
     assert.ok(mempool.includes(processedBids[0].tx_hash));
   });
 
@@ -1672,30 +1677,28 @@ describe('Wallet HTTP', function() {
     for (const domainName of validNames) {
       for (let i =0; i<BID_COUNT; i++) {
         bids.push({
-          name: domainName, 
-          bid: 999 + i, 
-          lockup: 2000, 
-          idempotencyKey: "" + counter++ 
+          name: domainName,
+          bid: 999 + i,
+          lockup: 2000,
+          idempotencyKey: String(counter++)
         });
       }
     }
 
     assert.rejects(async () => {
-      await wclient.createBatchBid('primary', { 
-        passphrase: '', 
+      await wclient.createBatchBid('primary', {
+        passphrase: '',
         bids: bids
       });
     });
 
     assert.rejects(async () => {
-      await wclient.createBatchBid('primary', { 
-        passphrase: '', 
+      await wclient.createBatchBid('primary', {
+        passphrase: '',
         bids: []
       });
     });
-
-  })
-  /* eslint-enable */
+  });
 });
 
 async function sleep(time) {
