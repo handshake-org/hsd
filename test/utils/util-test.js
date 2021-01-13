@@ -2,7 +2,6 @@
 
 const util = require('../../lib/utils/util');
 const assert = require('bsert');
-const Validator = require('bval');
 
 describe('util', function() {
   describe('createBatch', function() {
