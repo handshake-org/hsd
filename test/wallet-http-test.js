@@ -1452,7 +1452,7 @@ describe('Wallet HTTP', function() {
     await mineBlocks(treeInterval + 1, cbAddress);
 
     // using batch bids to speed up the test
-    const bids = [];
+    let bids = [];
     for (const domainName of validNames) {
       for (let i=1; i<=BID_COUNT; i++) {
         bids.push({
@@ -1468,7 +1468,7 @@ describe('Wallet HTTP', function() {
             bids: bids
           });
           await mineBlocks(1, cbAddress);
-          bids.splice(0, bids.length);
+          bids = [];
         }
       }
     }
