@@ -252,8 +252,8 @@ describe('Wallet HTTP', function() {
   });
 
   it('should create an open and broadcast the tx', async () => {
-    let entered = false;
-    const handler = () => entered = true;
+    let emitted = 0;
+    const handler = () => emitted++;
     node.mempool.on('tx', handler);
 
     const json = await wallet.createOpen({
@@ -263,13 +263,14 @@ describe('Wallet HTTP', function() {
     // wait for tx event on mempool
     await common.event(node.mempool, 'tx');
 
-    assert.equal(entered, true);
     const mempool = await nclient.getMempool();
 
     assert.ok(mempool.includes(json.hash));
 
     const opens = json.outputs.filter(output => output.covenant.type === types.OPEN);
     assert.equal(opens.length, 1);
+
+    assert.equal(emitted, 1);
 
     // reset for next test
     node.mempool.removeListener('tx', handler);
