@@ -252,12 +252,13 @@ describe('Wallet HTTP', function() {
   });
 
   it('should create an open and broadcast the tx', async () => {
+    let entered = false;
+    const handler = () => entered = true;
+    node.mempool.on('tx', handler);
+
     const json = await wallet.createOpen({
       name: name
     });
-
-    let entered = false;
-    node.mempool.on('tx', () => entered = true);
 
     // wait for tx event on mempool
     await common.event(node.mempool, 'tx');
@@ -269,18 +270,19 @@ describe('Wallet HTTP', function() {
 
     const opens = json.outputs.filter(output => output.covenant.type === types.OPEN);
     assert.equal(opens.length, 1);
+
+    // reset for next test
+    node.mempool.removeListener('tx', handler);
   });
 
   it('should create an open and not broadcast the transaction', async () => {
+    let entered = false;
+    const handler = () => entered = true;
+    node.mempool.on('tx', handler);
+
     const json = await wallet.createOpen({
       name: name,
       broadcast: false
-    });
-
-    let entered = false;
-    node.mempool.on('tx', () => {
-      entered = true;
-      assert.ok(false);
     });
 
     await sleep(500);
@@ -305,19 +307,20 @@ describe('Wallet HTTP', function() {
 
     const opens = mtx.outputs.filter(output => output.covenant.type === types.OPEN);
     assert.equal(opens.length, 1);
+
+    // reset for next test
+    node.mempool.removeListener('tx', handler);
   });
 
   it('should create an open and not sign the transaction', async () => {
+    let entered = false;
+    const handler = () => entered = true;
+    node.mempool.on('tx', handler);
+
     const json = await wallet.createOpen({
       name: name,
       broadcast: false,
       sign: false
-    });
-
-    let entered = false;
-    node.mempool.on('tx', () => {
-      entered = true;
-      assert.ok(false);
     });
 
     await sleep(500);
@@ -341,6 +344,9 @@ describe('Wallet HTTP', function() {
 
     // transaction not valid
     assert.equal(mtx.verify(), false);
+
+    // reset for next test
+    node.mempool.removeListener('tx', handler);
   });
 
   it('should throw error with incompatible broadcast and sign options', async () => {
