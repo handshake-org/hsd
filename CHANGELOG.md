@@ -1,7 +1,6 @@
 # HSD Release Notes & Changelog
 
-## unreleased
-
+## v2.3.0
 
 ### Node changes
 
