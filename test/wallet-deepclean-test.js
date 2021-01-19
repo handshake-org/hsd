@@ -8,6 +8,7 @@ const Network = require('../lib/protocol/network');
 const FullNode = require('../lib/node/fullnode');
 const Address = require('../lib/primitives/address');
 const Resource = require('../lib/dns/resource');
+const {forValue} = require('./util/common');
 
 const network = Network.get('regtest');
 
@@ -43,6 +44,7 @@ async function mineBlocks(n, addr) {
     const block = await node.miner.mineBlock(null, addr);
     await node.chain.add(block);
   }
+  await forValue(wdb, 'height', node.chain.height);
 }
 
 describe('Wallet Deep Clean', function() {

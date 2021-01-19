@@ -1243,6 +1243,11 @@ async function mineBlocks(count, address) {
     await nclient.execute('generatetoaddress', [1, address]);
     await common.forValue(obj, 'complete', true);
   }
+  await common.forValue(
+    node.plugins.walletdb.wdb,
+    'height',
+    node.chain.height
+  );
 }
 
 // create an OPEN output

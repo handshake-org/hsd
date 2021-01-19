@@ -10,6 +10,7 @@ const Address = require('../lib/primitives/address');
 const rules = require('../lib/covenants/rules');
 const Resource = require('../lib/dns/resource');
 const {WalletClient} = require('hs-client');
+const {forValue} = require('./util/common');
 
 const network = Network.get('regtest');
 
@@ -39,6 +40,7 @@ async function mineBlocks(n, addr) {
     const block = await node.miner.mineBlock(null, addr);
     await node.chain.add(block);
   }
+  await forValue(wdb, 'height', node.chain.height);
 }
 
 describe('Multiple accounts participating in same auction', function() {

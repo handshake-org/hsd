@@ -11,6 +11,7 @@ const {randomBytes} = require('bcrypto/lib/random');
 const Path = require('path');
 const layouts = require('../lib/wallet/layout');
 const layout = layouts.wdb;
+const {forValue} = require('./util/common');
 
 const uniq = randomBytes(4).toString('hex');
 const path = Path.join(tmpdir(), `hsd-test-${uniq}`);
@@ -35,6 +36,7 @@ async function mineBlocks(n, addr) {
     const block = await node.miner.mineBlock(null, addr);
     await node.chain.add(block);
   }
+  await forValue(wdb, 'height', node.chain.height);
 }
 
 describe('Derive and save change addresses', function() {

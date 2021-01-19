@@ -2619,7 +2619,8 @@ describe('Wallet', function() {
     async function mineBlock(tip) {
       const job = await miner.createJob(tip);
       const block = await job.mineAsync();
-      return chain.add(block);
+      await chain.add(block);
+      await forValue(wdb, 'height', chain.height);
     }
 
     it('should not stack in-memory block queue (oom)', async () => {

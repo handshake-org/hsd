@@ -150,6 +150,11 @@ describe('Auction RPCs', function() {
     const address = (await wallet.createAddress(account)).address;
     const hashes = await util.nrpc('generatetoaddress', [num, address]);
     await util.confirmBlock(hashes.pop());
+    await common.forValue(
+      util.node.plugins.walletdb.wdb,
+      'height',
+      util.node.chain.height
+    );
   };
 
   // This function is a helper which:
