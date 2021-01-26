@@ -1,7 +1,6 @@
 # HSD Release Notes & Changelog
 
-## unreleased
-
+## v2.3.0
 
 ### Node changes
 
@@ -30,7 +29,7 @@ After the corrupt data has been cleared, **a walletDB rescan is required**.
 ### Wallet changes
 
 - Fixes a bug that ignored the effect of sending or receiving a FINALIZE on a
-wallet's `lockedConfirmed` and `lockedUnconfirmed` balance. 
+wallet's `lockedConfirmed` and `lockedUnconfirmed` balance.
 
 ## v2.2.0
 
