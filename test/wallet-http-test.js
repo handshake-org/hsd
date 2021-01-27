@@ -1433,7 +1433,7 @@ describe('Wallet HTTP', function() {
 
   it('should create a batch reveal transaction with partial outputs for domains that exceeds the output limit of 200 (+1 for NONE)', async function() {
     const MAX_BID_COUNT = 200;
-    const BID_COUNT = 201;
+    const BID_COUNT = 250;
     const VALID_NAMES_LEN = 1;
     const validNames = [];
     for (let i = 0; i < VALID_NAMES_LEN; i++) {
@@ -1451,16 +1451,24 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(treeInterval + 1, cbAddress);
 
-    // TODO Promise.All is failing ?
+    // using batch bids to speed up the test
+    let bids = [];
     for (const domainName of validNames) {
-      for (let i =0; i<BID_COUNT; i++) {
-        await wallet.createBid({
+      for (let i=1; i<=BID_COUNT; i++) {
+        bids.push({
           name: domainName,
           bid: 999 + i,
-          lockup: 2000
+          lockup: 2000,
+          idempotencyKey: domainName + '_' + i
         });
+
         if (i % 50 === 0) {
-           await mineBlocks(1, cbAddress);
+          await wclient.createBatchBid('primary', {
+            passphrase: '',
+            bids: bids
+          });
+          await mineBlocks(1, cbAddress);
+          bids = [];
         }
       }
     }
@@ -1529,6 +1537,176 @@ describe('Wallet HTTP', function() {
     // tx should not be in mempool
     const mempool = await nclient.getMempool();
     assert.ok(mempool.length === 0);
+  });
+
+  it('should return from cache when same idempotency_key is used in a bid request', async function() {
+    await mineBlocks(5, cbAddress);
+
+    const BID_COUNT = 2;
+    const VALID_NAMES_LEN = 100;
+    const validNames = [];
+    for (let i = 0; i < VALID_NAMES_LEN; i++) {
+      validNames.push(await nclient.execute('grindname', [6]));
+    }
+
+    await mineBlocks(1, cbAddress);
+
+    await wclient.createBatchOpen('primary', {
+      names: validNames,
+      passphrase: '',
+      broadcast: true,
+      sign: true
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    const bids = [];
+    let counter = 0;
+    for (const domainName of validNames) {
+      for (let i =0; i<BID_COUNT; i++) {
+        bids.push({
+          name: domainName,
+          bid: 999 + i,
+          lockup: 2000,
+          idempotencyKey: String(counter++)
+        });
+      }
+    }
+
+    const UNIQUE_BID_COUNT = 2;
+    const TOTAL_BID_COUNT = VALID_NAMES_LEN * BID_COUNT;
+
+    const uniqueBids = bids.splice(TOTAL_BID_COUNT - UNIQUE_BID_COUNT, UNIQUE_BID_COUNT);
+
+    await wclient.createBatchBid('primary', {
+      passphrase: '',
+      bids: bids
+    });
+
+    for (let i=0; i<UNIQUE_BID_COUNT; i++) {
+      bids.push(uniqueBids[i]);
+    }
+
+    // Duplicate request with UNIQUE_BID_COUNT unique bids at the end
+    const {processedBids, errorMessages} = await wclient.createBatchBid('primary', {
+      passphrase: '',
+      bids: bids
+    });
+
+    assert.ok(processedBids);
+    assert.equal(errorMessages.length, 0);
+    assert.equal(bids.length, TOTAL_BID_COUNT);
+
+    const allFromCache = processedBids.every(element => element.fromCache === true);
+    assert.equal(allFromCache, false);
+
+    await sleep(100);
+
+    const mempool = await nclient.getMempool();
+    //
+    const uniqueTxs = new Set();
+    processedBids.forEach(bid => uniqueTxs.add(bid.tx_hash));
+    // should have 2 unique transactions within
+    assert.equal(uniqueTxs.size, 2);
+    assert.equal(mempool.length, uniqueTxs.size);
+    for (const txHash of uniqueTxs.values()) {
+      assert.ok(mempool.includes(txHash));
+    }
+  });
+
+  it('should create a batch bid transaction (multiple outputs) for valid names', async function() {
+    const BID_COUNT = 2;
+    const VALID_NAMES_LEN = 100;
+    const validNames = [];
+    for (let i = 0; i < VALID_NAMES_LEN; i++) {
+      validNames.push(await nclient.execute('grindname', [6]));
+    }
+
+    await mineBlocks(1, cbAddress);
+
+    await wclient.createBatchOpen('primary', {
+      names: validNames,
+      passphrase: '',
+      broadcast: true,
+      sign: true
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    const bids = [];
+    let counter = 0;
+    for (const domainName of validNames) {
+      for (let i =0; i<BID_COUNT; i++) {
+        bids.push({
+          name: domainName,
+          bid: 999 + i,
+          lockup: 2000,
+          idempotencyKey: 'key_' + counter++
+        });
+      }
+    }
+
+    const {processedBids, errorMessages} = await wclient.createBatchBid('primary', {
+      passphrase: '',
+      bids: bids
+    });
+
+    assert.ok(processedBids);
+    assert.equal(errorMessages.length, 0);
+    const expectedOutputCount = BID_COUNT * VALID_NAMES_LEN;
+    assert.equal(bids.length, expectedOutputCount);
+
+    await sleep(100);
+
+    const mempool = await nclient.getMempool();
+    assert.ok(mempool.includes(processedBids[0].tx_hash));
+  });
+
+  it('should reject a batch bid transaction that exceeds the total number of bid limit of 200 or not permitted 0 bid', async function() {
+    const BID_COUNT = 4;
+    const VALID_NAMES_LEN = 100;
+    const validNames = [];
+    for (let i = 0; i < VALID_NAMES_LEN; i++) {
+      validNames.push(await nclient.execute('grindname', [6]));
+    }
+
+    await mineBlocks(1, cbAddress);
+
+    await wclient.createBatchOpen('primary', {
+      names: validNames,
+      passphrase: '',
+      broadcast: true,
+      sign: true
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    const bids = [];
+    let counter = 0;
+    for (const domainName of validNames) {
+      for (let i =0; i<BID_COUNT; i++) {
+        bids.push({
+          name: domainName,
+          bid: 999 + i,
+          lockup: 2000,
+          idempotencyKey: String(counter++)
+        });
+      }
+    }
+
+    assert.rejects(async () => {
+      await wclient.createBatchBid('primary', {
+        passphrase: '',
+        bids: bids
+      });
+    });
+
+    assert.rejects(async () => {
+      await wclient.createBatchBid('primary', {
+        passphrase: '',
+        bids: []
+      });
+    });
   });
 });
 
