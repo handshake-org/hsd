@@ -77,6 +77,8 @@ describe('Auction', function() {
 
     let snapshot = null;
 
+    let transferBlock, transferLockupEnd, blocksUntilValidFinalize;
+
     it('should open chain and miner', async () => {
       await chain.open();
       await miner.open();
@@ -370,6 +372,94 @@ describe('Auction', function() {
       await chain.close();
       await chain.open();
       assert.bufferEqual(root, chain.db.txn.rootHash());
+    });
+
+    it('should not have transfer stats in JSON yet', async () => {
+      const ns = await chain.db.getNameStateByName(NAME1);
+      const {stats} = ns.getJSON(chain.height, network);
+      assert.ok(stats.renewalPeriodStart);
+      assert.ok(stats.renewalPeriodEnd);
+      assert.ok(stats.blocksUntilExpire);
+      assert.ok(stats.daysUntilExpire);
+      assert.ok(!stats.transferLockupStart);
+      assert.ok(!stats.transferLockupEnd);
+      assert.ok(!stats.blocksUntilValidFinalize);
+      assert.ok(!stats.hoursUntilValidFinalize);
+    });
+
+    it('should transfer a name', async () => {
+      const mtx = await winner.createTransfer(NAME1, runnerup.getReceive());
+
+      const job = await cpu.createJob();
+      job.addTX(mtx.toTX(), mtx.view);
+      job.refresh();
+      const block = await job.mineAsync();
+      const entry = await chain.add(block);
+      assert(entry);
+      transferBlock = entry.height;
+    });
+
+    it('should be in a transfer state', async () => {
+      const ns = await chain.db.getNameStateByName(NAME1);
+      assert.strictEqual(ns.transfer, transferBlock);
+      assert(ns.transfer !== 0);
+    });
+
+    it('should have transfer stats', async () => {
+      const ns = await chain.db.getNameStateByName(NAME1);
+      const {stats} = ns.getJSON(chain.height, network);
+      assert.ok(stats.renewalPeriodStart);
+      assert.ok(stats.renewalPeriodEnd);
+      assert.ok(stats.blocksUntilExpire);
+      assert.ok(stats.daysUntilExpire);
+      assert.ok(stats.transferLockupStart);
+      assert.ok(stats.transferLockupEnd);
+      assert.ok(stats.blocksUntilValidFinalize);
+      assert.ok(stats.hoursUntilValidFinalize);
+
+      transferLockupEnd = stats.transferLockupEnd;
+      blocksUntilValidFinalize = stats.blocksUntilValidFinalize;
+    });
+
+    it('should finalize at expected height', async () => {
+      const mtx = await winner.createFinalize(NAME1);
+
+      // Attempt to confirm the FINALIZE in a block.
+      // If it fails, mine an empty block instead.
+      // Repeat until the chain height completes the
+      // transfer lockup period and the FINALIZE is valid.
+      let count = 0;
+      let entry;
+      for (;;) {
+        try {
+          const job = await cpu.createJob();
+          job.addTX(mtx.toTX(), mtx.view);
+          job.refresh();
+          const block = await job.mineAsync();
+          entry = await chain.add(block);
+
+          // exit loop when FINALIZE is finally confirmed without error
+          assert.strictEqual(block.txs.length, 2);
+          count++;
+          break;
+        } catch(e) {
+          assert.strictEqual(e.reason, 'bad-finalize-maturity');
+
+          // Ok, fine - mine a block without the FINALIZE
+          const job = await cpu.createJob();
+          job.refresh();
+          const block = await job.mineAsync();
+          entry = await chain.add(block);
+
+          // just a coinbase
+          assert.strictEqual(block.txs.length, 1);
+
+          count++;
+        }
+      }
+
+      assert.strictEqual(count, blocksUntilValidFinalize);
+      assert.strictEqual(transferLockupEnd, entry.height);
     });
 
     it('should cleanup', async () => {
