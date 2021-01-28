@@ -49,7 +49,8 @@
     "urkel": "~0.7.0"
   },
   "devDependencies": {
-    "bmocha": "^2.1.5"
+    "bmocha": "^2.1.5",
+    "jsdoc": "^3.6.6"
   },
   "main": "./lib/hsd.js",
   "bin": {
@@ -62,6 +63,7 @@
     "hsw-cli": "./bin/hsw-cli"
   },
   "scripts": {
+    "build-docs": "jsdoc -c jsdoc.json",
     "lint": "eslint $(cat .eslintfiles)",
     "lint-file": "eslint",
     "test": "bmocha --reporter spec test/*.js",
