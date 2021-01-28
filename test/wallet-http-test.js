@@ -839,6 +839,71 @@ describe('Wallet HTTP', function() {
     matchTxId(auction.reveals, state.reveals[1].hash);
   });
 
+  it('should create a bid and a reveal (reveal in advance)', async () => {
+    const balanceBeforeTest = await wallet.getBalance();
+    const lockConfirmedBeforeTest = balanceBeforeTest.lockedConfirmed;
+    const lockUnconfirmedBeforeTest = balanceBeforeTest.lockedUnconfirmed;
+
+    await wallet.createOpen({ name: name });
+
+    await mineBlocks(treeInterval + 2, cbAddress);
+
+    const balanceBeforeBid = await wallet.getBalance();
+    assert.equal(balanceBeforeBid.lockedConfirmed - lockConfirmedBeforeTest, 0);
+    assert.equal(
+      balanceBeforeBid.lockedUnconfirmed - lockUnconfirmedBeforeTest,
+      0
+    );
+
+    const bidValue = 1000000;
+    const lockupValue = 5000000;
+
+    const auctionTxs = await wallet.client.post(
+      `/wallet/${wallet.id}/auction`,
+      {
+        name: name,
+        bid: 1000000,
+        lockup: 5000000,
+        broadcastBid: true
+      }
+    );
+
+    await mineBlocks(biddingPeriod + 1, cbAddress);
+
+    let walletAuction = await wallet.getAuctionByName(name);
+    const bidFromWallet = walletAuction.bids.find(
+      b => b.prevout.hash === auctionTxs.bid.hash
+    );
+    assert(bidFromWallet);
+
+    const { info } = await nclient.execute('getnameinfo', [name]);
+    assert.equal(info.name, name);
+    assert.equal(info.state, 'REVEAL');
+
+    const b5 = await wallet.getBalance();
+    assert.equal(b5.lockedConfirmed - lockConfirmedBeforeTest, lockupValue);
+    assert.equal(b5.lockedUnconfirmed - lockUnconfirmedBeforeTest, lockupValue);
+
+    await nclient.broadcast(auctionTxs.reveal.hex);
+    await mineBlocks(1, cbAddress);
+
+    walletAuction = await wallet.getAuctionByName(name);
+    const revealFromWallet = walletAuction.reveals.find(
+      b => b.prevout.hash === auctionTxs.reveal.hash
+    );
+    assert(revealFromWallet);
+
+    const b6 = await wallet.getBalance();
+    assert.equal(b6.lockedConfirmed - lockConfirmedBeforeTest, bidValue);
+    assert.equal(b6.lockedUnconfirmed - lockUnconfirmedBeforeTest, bidValue);
+
+    await mineBlocks(revealPeriod + 1, cbAddress);
+
+    const ns = await nclient.execute('getnameinfo', [name]);
+    const coin = await wallet.getCoin(ns.info.owner.hash, ns.info.owner.index);
+    assert.ok(coin);
+  });
+
   it('should create a redeem', async () => {
     await wallet.createOpen({
       name: name
