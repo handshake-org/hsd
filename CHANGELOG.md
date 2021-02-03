@@ -1,5 +1,16 @@
 # HSD Release Notes & Changelog
 
+## unreleased
+
+- Adds new wallet HTTP endpoint `/wallet/:id/auction` based on `POST /wallet/:id/bid`.
+It requires an additional parameter `broadcastBid` set to either true or false.
+This action returns a bid and its corresponding reveal, the reveal being prepared in advance.
+The bid will be broadcasted either during the creation (`broadcastBid=true`) or at a later time
+(`broadcastBid=false`).
+The reveal will have to be broadcasted at a later time, during the REVEAL phase.
+The lockup must include a blind big enough to ensure the BID will be the only input of the REVEAL
+transaction. 
+
 ## v2.3.0
 
 ### Node changes
