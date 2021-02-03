@@ -417,7 +417,9 @@ describe('Auction', function() {
       assert.ok(stats.blocksUntilValidFinalize);
       assert.ok(stats.hoursUntilValidFinalize);
 
+      // The height of the first block that can contain a valid FINALIZE
       transferLockupEnd = stats.transferLockupEnd;
+      // The number of blocks (inclusive) until that height will be reached
       blocksUntilValidFinalize = stats.blocksUntilValidFinalize;
     });
 
@@ -459,7 +461,7 @@ describe('Auction', function() {
       }
 
       assert.strictEqual(count, blocksUntilValidFinalize);
-      assert.strictEqual(transferLockupEnd, entry.height);
+      assert.strictEqual(entry.height, transferLockupEnd);
     });
 
     it('should cleanup', async () => {
