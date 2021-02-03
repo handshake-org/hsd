@@ -1510,20 +1510,23 @@ describe('Wallet', function() {
     await b.write();
 
     // Should return tx from TX Map
-    assert(await wdb.getWalletsByTX(mtx));
+    let wids = await wdb.getWalletsByTX(mtx);
+    assert(wids.has(wid));
 
     // Should have wid in NameMap
-    const map = await wdb.getNameMap(hashName('test123'));
+    let map = await wdb.getNameMap(hashName('test123'));
     assert(map.wids.has(wid));
 
     // Remove wallet
     await wdb.remove('alice100');
 
-    // Should not return wid from NameMap after wid is removed
-    assert(!await wdb.getNameMap(hashName('test123')));
-
     // Should not return tx from TX Map after wallet is removed
-    assert(!await wdb.getWalletsByTX(mtx));
+    wids = await wdb.getWalletsByTX(mtx);
+    assert.strictEqual(wids, null);
+
+    // Should not return wid from NameMap after wid is removed
+    map = await wdb.getNameMap(hashName('test123'));
+    assert.strictEqual(map, null);
 
     // Should not return wallet after it is removed
     assert(!await wdb.get('alice100'));
