@@ -2,6 +2,23 @@
 
 ## unreleased
 
+### Wallet API changes
+
+- Adds new wallet HTTP endpoint `/wallet/:id/auction` based on `POST /wallet/:id/bid`.
+It requires an additional parameter `broadcastBid` set to either true or false.
+This action returns a bid and its corresponding reveal, the reveal being prepared in advance.
+The bid will be broadcasted either during the creation (`broadcastBid=true`) or at a later time
+(`broadcastBid=false`).
+The reveal will have to be broadcasted at a later time, during the REVEAL phase.
+The lockup must include a blind big enough to ensure the BID will be the only input of the REVEAL
+transaction. 
+
+### Node & Wallet API changes
+
+- The `stats` field included in `namestate.toJSON()` includes extra data if the name
+is in a TRANSFER state.
+
+## v2.3.0
 
 ### Node changes
 
@@ -30,7 +47,7 @@ After the corrupt data has been cleared, **a walletDB rescan is required**.
 ### Wallet changes
 
 - Fixes a bug that ignored the effect of sending or receiving a FINALIZE on a
-wallet's `lockedConfirmed` and `lockedUnconfirmed` balance. 
+wallet's `lockedConfirmed` and `lockedUnconfirmed` balance.
 
 ## v2.2.0
 
