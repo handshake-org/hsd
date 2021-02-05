@@ -1,11 +1,22 @@
 # HSD Release Notes & Changelog
 
 ## unreleased
-### RPC Changes
 
-- New methods:
+### Wallet changes
+
+- New RPC methods:
   - `signmessagewithname`: Like `signmessage` but uses a name instead of an address. The owner's address will be used to sign the message.
   - `verifymessagewithname`: Like `verifymessage` but uses a name instead of an address. The owner's address will be used to verify the message.
+
+- New wallet creation accepts parameter `language` to generate the mnemonic phrase.
+
+- `rpc getbids` accepts a third parameter `unrevealed` _(bool)_ which filters the response by checking
+the wallet's unspent coins database for each bid. If an unspent coin is found, the output address
+of that coin is added to the JSON response. This is useful for wallet recovery scenarios
+when users need to call `rpc importnonce` to repair unknown blinds. The complete usage is now
+`rpc getbids name (own) (unrevealed)` so for example a wallet-recovering user would execute
+`rpc getbids null true true`.
+
 ## v2.4.0
 
 ### Chain & Consensus changes
