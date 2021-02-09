@@ -3,6 +3,9 @@
 const assert = require('bsert');
 const {wire} = require('bns');
 const {RootServer} = require('../lib/dns/server');
+const {Resource} = require('../lib/dns/resource');
+const NameState = require('../lib/covenants/namestate');
+const rules = require('../lib/covenants/rules');
 
 describe('RootServer', function() {
   const ns = new RootServer({
@@ -106,5 +109,69 @@ describe('RootServer', function() {
 
     // Nothing was added to the cache
     assert.strictEqual(cache.size, 1);
+  });
+});
+
+describe('RootServer Blacklist', function() {
+  const ns = new RootServer({
+    port: 25349, // regtest
+    lookup: (hash) => {
+      // Normally an Urkel Tree goes here.
+      // Blacklisted names should never get this far.
+      if (hash.equals(rules.hashName('bit')))
+        throw new Error('Blacklisted name!');
+
+      // For this test all other names have the same record
+      const namestate = new NameState();
+      namestate.data = Resource.fromJSON({
+        records: [
+          {
+            type: 'NS',
+            ns: 'ns1.handshake.'
+          }
+        ]
+      }).encode();
+      return namestate.encode();
+    }
+  });
+
+  before(async () => {
+    await ns.open();
+  });
+
+  after(async () => {
+    await ns.close();
+  });
+
+  it('should look up non-blacklisted name', async () => {
+    const name = 'icecream.';
+    const req = {
+      question: [{
+        name,
+        type: wire.types.NS
+      }]
+    };
+
+    const res = await ns.resolve(req);
+    const authority = res.authority;
+    const rec = authority[0];
+
+    assert.strictEqual(rec.name, name);
+    assert.strictEqual(rec.type, wire.types.NS);
+    assert.strictEqual(rec.data.ns, 'ns1.handshake.');
+  });
+
+  it('should not look up blacklisted name', async () => {
+    const name = 'bit.';
+    const req = {
+      question: [{
+        name,
+        type: wire.types.NS
+      }]
+    };
+
+    const res = await ns.resolve(req);
+    assert.strictEqual(res.code, wire.codes.NXDOMAIN);
+    assert.strictEqual(res.answer.length, 0);
   });
 });
