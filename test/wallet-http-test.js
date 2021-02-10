@@ -48,7 +48,7 @@ const wclient = new WalletClient({
 const wallet = wclient.wallet('primary');
 const wallet2 = wclient.wallet('secondary');
 
-let name, name2, cbAddress;
+let name, name2, cbAddress, cb2Address;
 const accountTwo = 'foobar';
 
 const {
@@ -68,6 +68,7 @@ describe('Wallet HTTP', function() {
 
     await wclient.createWallet('secondary');
     cbAddress = (await wallet.createAddress('default')).address;
+    cb2Address = (await wallet2.createAddress('default')).address;
     await wallet.createAccount(accountTwo);
   });
 
@@ -1708,6 +1709,86 @@ describe('Wallet HTTP', function() {
       });
     });
   });
+
+  /* eslint-disable */
+  it('should redeem lost auctions and register(update) won auctions', async function() {
+
+    // for funding remove later
+    await mineBlocks(5, cbAddress);
+    await mineBlocks(5, cb2Address);
+
+    const name1 = await nclient.execute('grindname', [6]);
+    const name2 = await nclient.execute('grindname', [6]);
+
+    await mineBlocks(1, cbAddress);
+
+    await wclient.createBatchOpen('primary', {
+      names: [name1, name2],
+      passphrase: '',
+      broadcast: true,
+      sign: true
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    // wallet1(primary) wins name1, wallet2(secondary) wins name2
+    const wallet1Name1Bid = createBid(name1, 1000001, 'wallet-1-bid-1');
+    const wallet1Name2Bid = createBid(name1, 1000000, 'wallet-1-bid-2');
+    const wallet2Name1Bid = createBid(name2, 1000000, 'wallet-2-bid-1');
+    const wallet2Name2Bid = createBid(name2, 1000001, 'wallet-2-bid-2');
+   
+    await wclient.createBatchBid('primary', {
+      passphrase: '',
+      bids: [wallet1Name1Bid, wallet1Name2Bid]
+    });
+
+    await mineBlocks(1, cbAddress);
+
+    await wclient.createBatchBid('secondary', {
+      passphrase: '',
+      bids: [wallet2Name1Bid, wallet2Name2Bid]
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    await wclient.createBatchReveal('primary', {
+      passphrase: '',
+      names: [name1, name2],
+      sign: true,
+      broadcast: true
+    });
+
+    await mineBlocks(1, cbAddress);
+
+    await wclient.createBatchReveal('secondary', {
+      passphrase: '',
+      names: [name1, name2],
+      sign: true,
+      broadcast: true
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    const wallet2Finish = await wclient.createBatchFinish('secondary', {
+      passphrase: '',
+      names: [name1, name2]
+    });
+
+    // await mineBlocks(1, cbAddress);
+
+    const wallet1Finish = await wclient.createBatchFinish('primary', {
+      passphrase: '',
+      names: [name1, name2]
+    });
+
+    await sleep(500);
+
+    const mempool = await nclient.getMempool();
+    assert.ok(mempool.length === 2);
+
+  });
+
+  /* eslint-enable */
 });
 
 async function sleep(time) {
@@ -1740,4 +1821,14 @@ function openOutput(name, address) {
   output.covenant.push(rawName);
 
   return output;
+}
+
+// create bid
+function createBid(name, bid, idempotencyKey) {
+  return {
+      name: name,
+      bid: bid,
+      lockup: bid + 1000000,
+      idempotencyKey: idempotencyKey
+  };
 }
