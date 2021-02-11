@@ -1711,7 +1711,7 @@ describe('Wallet HTTP', function() {
   });
 
   /* eslint-disable */
-  it('should redeem lost auctions and register(update) won auctions', async function() {
+  it('should redeem lost bid and register won bid', async function() {
 
     // for funding remove later
     await mineBlocks(5, cbAddress);
@@ -1732,21 +1732,21 @@ describe('Wallet HTTP', function() {
     await mineBlocks(treeInterval + 1, cbAddress);
 
     // wallet1(primary) wins name1, wallet2(secondary) wins name2
-    const wallet1Name1Bid = createBid(name1, 1000001, 'wallet-1-bid-1');
-    const wallet1Name2Bid = createBid(name1, 1000000, 'wallet-1-bid-2');
-    const wallet2Name1Bid = createBid(name2, 1000000, 'wallet-2-bid-1');
-    const wallet2Name2Bid = createBid(name2, 1000001, 'wallet-2-bid-2');
+    const wallet1Name1WinningBid = createBid(name1, 1000001, 'wallet-1-bid-1');
+    const wallet1Name2LosingBid = createBid(name2, 1000000, 'wallet-1-bid-2');
+    const wallet2Name1LosingBid = createBid(name1, 1000000, 'wallet-2-bid-1');
+    const wallet2Name2WinningBid = createBid(name2, 1000001, 'wallet-2-bid-2');
    
     await wclient.createBatchBid('primary', {
       passphrase: '',
-      bids: [wallet1Name1Bid, wallet1Name2Bid]
+      bids: [wallet1Name1WinningBid, wallet1Name2LosingBid]
     });
 
     await mineBlocks(1, cbAddress);
 
     await wclient.createBatchBid('secondary', {
       passphrase: '',
-      bids: [wallet2Name1Bid, wallet2Name2Bid]
+      bids: [wallet2Name1LosingBid, wallet2Name2WinningBid]
     });
 
     await mineBlocks(treeInterval + 1, cbAddress);
@@ -1774,17 +1774,22 @@ describe('Wallet HTTP', function() {
       names: [name1, name2]
     });
 
-    // await mineBlocks(1, cbAddress);
+    assert.deepStrictEqual(wallet2Finish.errorMessages, []);
+    assert.equal(wallet2Finish.processedFinishes.length, 2); // one redeem one finish
 
     const wallet1Finish = await wclient.createBatchFinish('primary', {
       passphrase: '',
       names: [name1, name2]
     });
 
-    await sleep(500);
+    assert.deepStrictEqual(wallet1Finish.errorMessages, []);
+    assert.equal(wallet1Finish.processedFinishes.length, 2);
+
+    await sleep(100);
 
     const mempool = await nclient.getMempool();
-    assert.ok(mempool.length === 2);
+    assert.ok(mempool.includes(wallet2Finish.processedFinishes[0].tx_hash));
+    assert.ok(mempool.includes(wallet1Finish.processedFinishes[0].tx_hash));
 
   });
 
