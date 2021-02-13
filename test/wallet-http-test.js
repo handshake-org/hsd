@@ -25,6 +25,7 @@ const secp256k1 = require('bcrypto/lib/secp256k1');
 const network = Network.get('regtest');
 const assert = require('bsert');
 const common = require('./util/common');
+const { italics } = require('bns/lib/roothints');
 
 const node = new FullNode({
   network: 'regtest',
@@ -1849,6 +1850,11 @@ describe('Wallet HTTP', function() {
     // 1 name is expected to fail
     assert.equal(errorMessages.length, 1);
 
+    await sleep(100);
+
+    let mempool = await nclient.getMempool();
+    assert(mempool.length, 1);
+
     await mineBlocks(1, cbAddress);
 
     const batchFinishResponsePart2 = await wclient.createBatchFinish('primary', {
@@ -1859,8 +1865,82 @@ describe('Wallet HTTP', function() {
     processedFinishes = batchFinishResponsePart2.processedFinishes;
     errorMessages = batchFinishResponsePart2.errorMessages;
 
+    await sleep(100);
+
+    mempool = await nclient.getMempool();
+    assert(mempool.length, 1);
+
     assert.equal(processedFinishes.length, 3 * NAME_BID_COUNT);
     assert.equal(errorMessages.length, 0);
+  });
+
+  it('should respond from cache when same names are used for batchFinish', async function() {
+    const NAME_BID_COUNT = 100;
+
+    await mineBlocks(5, cbAddress);
+
+    const {name, bids} = await createNameWithBids(NAME_BID_COUNT);
+
+    await wclient.createBatchOpen('primary', {
+      names: [name],
+      passphrase: '',
+      broadcast: true,
+      sign: true
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    await wclient.createBatchBid('primary', {
+      passphrase: '',
+      bids: bids
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    await wclient.createBatchReveal('primary', {
+      passphrase: '',
+      names: [name],
+      sign: true,
+      broadcast: true
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    const batchFinishResponse1 = await wclient.createBatchFinish('primary', {
+      passphrase: '',
+      names: [name]
+    });
+
+    assert.equal(batchFinishResponse1.errorMessages.length, 0);
+    assert.equal(batchFinishResponse1.processedFinishes.length, NAME_BID_COUNT);
+
+    for (const processedFinish of batchFinishResponse1.processedFinishes) {
+      assert.equal(processedFinish.from_cache, false);
+    }
+
+    await sleep(100);
+
+    let mempool = await nclient.getMempool();
+    assert(mempool.length, 1);
+
+    await mineBlocks(1, cbAddress);
+
+    const batchFinishResponse2 = await wclient.createBatchFinish('primary', {
+      passphrase: '',
+      names: [name]
+    });
+
+    assert.equal(batchFinishResponse2.errorMessages.length, 0);
+    assert.equal(batchFinishResponse2.processedFinishes.length, NAME_BID_COUNT);
+
+    await sleep(100);
+
+    mempool = await nclient.getMempool();
+    assert.equal(mempool.length, 0);
+
+    for (const processedFinish of batchFinishResponse2.processedFinishes) {
+      assert.equal(processedFinish.from_cache, true);
+    }
   });
 });
 
