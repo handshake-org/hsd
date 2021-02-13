@@ -1710,9 +1710,7 @@ describe('Wallet HTTP', function() {
     });
   });
 
-  /* eslint-disable */
   it('should redeem lost bid and register won bids', async function() {
-
     const name1 = await nclient.execute('grindname', [6]);
     const name2 = await nclient.execute('grindname', [6]);
 
@@ -1732,7 +1730,7 @@ describe('Wallet HTTP', function() {
     const wallet1Name2LosingBid = createBid(name2, 1000000, 'wallet-1-bid-2');
     const wallet2Name1LosingBid = createBid(name1, 1000000, 'wallet-2-bid-1');
     const wallet2Name2WinningBid = createBid(name2, 1000001, 'wallet-2-bid-2');
-   
+
     await wclient.createBatchBid('primary', {
       passphrase: '',
       bids: [wallet1Name1WinningBid, wallet1Name2LosingBid]
@@ -1786,14 +1784,9 @@ describe('Wallet HTTP', function() {
     const mempool = await nclient.getMempool();
     assert.ok(mempool.includes(wallet2Finish.processedFinishes[0].tx_hash));
     assert.ok(mempool.includes(wallet1Finish.processedFinishes[0].tx_hash));
-
   });
 
   it('should partially process names when total finish count exceeds 200', async function() {
-
-    // for funding remove later
-    await mineBlocks(5, cbAddress);
-
     const BATCH_FINISH_LIMIT = 200;
     const NAME_BID_COUNT = 100;
     const {name: name1, bids: name1Bids} = await createNameWithBids(NAME_BID_COUNT);
@@ -1868,10 +1861,7 @@ describe('Wallet HTTP', function() {
 
     assert.equal(processedFinishes.length, 3 * NAME_BID_COUNT);
     assert.equal(errorMessages.length, 0);
-
   });
-
-  /* eslint-enable */
 });
 
 async function sleep(time) {
