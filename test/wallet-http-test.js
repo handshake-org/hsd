@@ -1711,11 +1711,7 @@ describe('Wallet HTTP', function() {
   });
 
   /* eslint-disable */
-  it('should redeem lost bid and register won bid', async function() {
-
-    // for funding remove later
-    await mineBlocks(5, cbAddress);
-    await mineBlocks(5, cb2Address);
+  it('should redeem lost bid and register won bids', async function() {
 
     const name1 = await nclient.execute('grindname', [6]);
     const name2 = await nclient.execute('grindname', [6]);
@@ -1793,6 +1789,88 @@ describe('Wallet HTTP', function() {
 
   });
 
+  it('should partially process names when total finish count exceeds 200', async function() {
+
+    // for funding remove later
+    await mineBlocks(5, cbAddress);
+
+    const BATCH_FINISH_LIMIT = 200;
+    const NAME_BID_COUNT = 100;
+    const {name: name1, bids: name1Bids} = await createNameWithBids(NAME_BID_COUNT);
+    const {name: name2, bids: name2Bids} = await createNameWithBids(NAME_BID_COUNT);
+    const {name: name3, bids: name3Bids} = await createNameWithBids(NAME_BID_COUNT);
+
+    await wclient.createBatchOpen('primary', {
+      names: [name1, name2, name3],
+      passphrase: '',
+      broadcast: true,
+      sign: true
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    await wclient.createBatchBid('primary', {
+      passphrase: '',
+      bids: [...name1Bids, ...name2Bids]
+    });
+
+    await mineBlocks(1, cbAddress);
+
+    await wclient.createBatchBid('primary', {
+      passphrase: '',
+      bids: name3Bids
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    // we need to reveal 2 time since total amount exceeds 200 limit
+    await wclient.createBatchReveal('primary', {
+      passphrase: '',
+      names: [name1, name2],
+      sign: true,
+      broadcast: true
+    });
+
+    await mineBlocks(1, cbAddress);
+
+    await wclient.createBatchReveal('primary', {
+      passphrase: '',
+      names: [name3],
+      sign: true,
+      broadcast: true
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    let processedFinishes, errorMessages;
+
+    const batchFinishResponsePart1 = await wclient.createBatchFinish('primary', {
+      passphrase: '',
+      names: [name1, name2, name3]
+    });
+
+    processedFinishes = batchFinishResponsePart1.processedFinishes;
+    errorMessages = batchFinishResponsePart1.errorMessages;
+
+    assert.equal(processedFinishes.length, BATCH_FINISH_LIMIT);
+    // 1 name is expected to fail
+    assert.equal(errorMessages.length, 1);
+
+    await mineBlocks(1, cbAddress);
+
+    const batchFinishResponsePart2 = await wclient.createBatchFinish('primary', {
+      passphrase: '',
+      names: [name1, name2, name3]
+    });
+
+    processedFinishes = batchFinishResponsePart2.processedFinishes;
+    errorMessages = batchFinishResponsePart2.errorMessages;
+
+    assert.equal(processedFinishes.length, 3 * NAME_BID_COUNT);
+    assert.equal(errorMessages.length, 0);
+
+  });
+
   /* eslint-enable */
 });
 
@@ -1836,4 +1914,18 @@ function createBid(name, bid, idempotencyKey) {
       lockup: bid + 1000000,
       idempotencyKey: idempotencyKey
   };
+}
+
+// create name with arbitrary number of bids
+async function createNameWithBids(bidCount) {
+  const name = await nclient.execute('grindname', [6]);
+  const bids = [];
+  const BaseBid = 10000000;
+
+  for (let i=0; i<bidCount; i++) {
+    const idempotencyKey = name + i;
+    bids.push(createBid(name, BaseBid + i, idempotencyKey));
+  }
+
+  return {name, bids};
 }
