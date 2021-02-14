@@ -25,7 +25,6 @@ const secp256k1 = require('bcrypto/lib/secp256k1');
 const network = Network.get('regtest');
 const assert = require('bsert');
 const common = require('./util/common');
-const { italics } = require('bns/lib/roothints');
 
 const node = new FullNode({
   network: 'regtest',
@@ -69,7 +68,6 @@ describe('Wallet HTTP', function() {
 
     await wclient.createWallet('secondary');
     cbAddress = (await wallet.createAddress('default')).address;
-    cb2Address = (await wallet2.createAddress('default')).address;
     await wallet.createAccount(accountTwo);
   });
 
