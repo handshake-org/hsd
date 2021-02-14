@@ -1711,11 +1711,32 @@ describe('Wallet HTTP', function() {
     });
   });
 
+  it('should reject malformed/invalid finish requests', async function() {
+    await assert.rejects(wclient.createBatchFinish('primary', {
+      passphrase: '',
+      names: ['invalid_finish_data']
+    }), /map must be a object./);
+
+    await assert.rejects(wclient.createBatchFinish('primary', {
+      passphrase: '',
+      names: [{name: 'domain_name'}]
+    }), /name and data must be present in every element./);
+
+    await assert.rejects(wclient.createBatchFinish('primary', {
+      passphrase: '',
+      names: [{name: 'domain_name', data: 'invalid data'}]
+    }), /data must be a object./);
+
+    await assert.rejects(wclient.createBatchFinish('primary', {
+      passphrase: '',
+      names: [{name: 'domain_name', data: {}}]
+    }), /data must be in form: {records: \[\]}/);
+  });
+
   it('should redeem lost bid and register won bids', async function() {
     const name1 = await nclient.execute('grindname', [6]);
     const name2 = await nclient.execute('grindname', [6]);
-
-    await mineBlocks(1, cbAddress);
+    const data = { records: [] };
 
     await wclient.createBatchOpen('primary', {
       names: [name1, name2],
@@ -1766,7 +1787,7 @@ describe('Wallet HTTP', function() {
 
     const wallet2Finish = await wclient.createBatchFinish('secondary', {
       passphrase: '',
-      names: [name1, name2]
+      names: [{name: name1, data}, {name: name2, data}]
     });
 
     assert.deepStrictEqual(wallet2Finish.errorMessages, []);
@@ -1774,7 +1795,7 @@ describe('Wallet HTTP', function() {
 
     const wallet1Finish = await wclient.createBatchFinish('primary', {
       passphrase: '',
-      names: [name1, name2]
+      names: [{name: name1, data}, {name: name2, data}]
     });
 
     assert.deepStrictEqual(wallet1Finish.errorMessages, []);
@@ -1793,6 +1814,7 @@ describe('Wallet HTTP', function() {
     const {name: name1, bids: name1Bids} = await createNameWithBids(NAME_BID_COUNT);
     const {name: name2, bids: name2Bids} = await createNameWithBids(NAME_BID_COUNT);
     const {name: name3, bids: name3Bids} = await createNameWithBids(NAME_BID_COUNT);
+    const data = { records: [] };
 
     await wclient.createBatchOpen('primary', {
       names: [name1, name2, name3],
@@ -1840,7 +1862,7 @@ describe('Wallet HTTP', function() {
 
     const batchFinishResponsePart1 = await wclient.createBatchFinish('primary', {
       passphrase: '',
-      names: [name1, name2, name3]
+      names: [{name: name1, data},{name: name2, data},{name: name3, data}]
     });
 
     processedFinishes = batchFinishResponsePart1.processedFinishes;
@@ -1859,7 +1881,7 @@ describe('Wallet HTTP', function() {
 
     const batchFinishResponsePart2 = await wclient.createBatchFinish('primary', {
       passphrase: '',
-      names: [name1, name2, name3]
+      names: [{name: name1, data},{name: name2, data},{name: name3, data}]
     });
 
     processedFinishes = batchFinishResponsePart2.processedFinishes;
@@ -1876,6 +1898,7 @@ describe('Wallet HTTP', function() {
 
   it('should respond from cache when same names are used for batchFinish', async function() {
     const NAME_BID_COUNT = 100;
+    const data = {records: []};
 
     await mineBlocks(5, cbAddress);
 
@@ -1908,7 +1931,7 @@ describe('Wallet HTTP', function() {
 
     const batchFinishResponse1 = await wclient.createBatchFinish('primary', {
       passphrase: '',
-      names: [name]
+      names: [{name, data}]
     });
 
     assert.equal(batchFinishResponse1.errorMessages.length, 0);
@@ -1927,7 +1950,7 @@ describe('Wallet HTTP', function() {
 
     const batchFinishResponse2 = await wclient.createBatchFinish('primary', {
       passphrase: '',
-      names: [name]
+      names: [{name, data}]
     });
 
     assert.equal(batchFinishResponse2.errorMessages.length, 0);
