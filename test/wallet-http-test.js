@@ -48,7 +48,7 @@ const wclient = new WalletClient({
 const wallet = wclient.wallet('primary');
 const wallet2 = wclient.wallet('secondary');
 
-let name, name2, cbAddress, cb2Address;
+let name, name2, cbAddress;
 const accountTwo = 'foobar';
 
 const {
