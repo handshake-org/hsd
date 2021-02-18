@@ -1746,10 +1746,17 @@ describe('Wallet HTTP', function() {
     await mineBlocks(treeInterval + 1, cbAddress);
 
     // wallet1(primary) wins name1, wallet2(secondary) wins name2
-    const wallet1Name1WinningBid = createBid(name1, 1000001, 'wallet-1-bid-1');
-    const wallet1Name2LosingBid = createBid(name2, 1000000, 'wallet-1-bid-2');
-    const wallet2Name1LosingBid = createBid(name1, 1000000, 'wallet-2-bid-1');
-    const wallet2Name2WinningBid = createBid(name2, 1000001, 'wallet-2-bid-2');
+    const wallet1Name1WinningBidValue = 1000001;
+    const wallet1Name1WinningBid = createBid(name1, wallet1Name1WinningBidValue, 'wallet-1-bid-1');
+
+    const wallet1Name2LosingBidValue = 1000000;
+    const wallet1Name2LosingBid = createBid(name2, wallet1Name2LosingBidValue, 'wallet-1-bid-2');
+
+    const wallet2Name1LosingBidValue = 1000000;
+    const wallet2Name1LosingBid = createBid(name1, wallet2Name1LosingBidValue, 'wallet-2-bid-1');
+
+    const wallet2Name2WinningBidValue = 1000001;
+    const wallet2Name2WinningBid = createBid(name2, wallet2Name2WinningBidValue, 'wallet-2-bid-2');
 
     await wclient.createBatchBid('primary', {
       passphrase: '',
@@ -1791,10 +1798,22 @@ describe('Wallet HTTP', function() {
     assert.deepStrictEqual(wallet2Finish.errorMessages, []);
     assert.equal(wallet2Finish.processedFinishes.length, 2); // one redeem one finish
 
+    const wallet2RedeemOutput = getOutputsOfType(wallet2Finish.processedFinishes, 'REDEEM')[0];
+    const wallet2RegisterOutput = getOutputsOfType(wallet2Finish.processedFinishes, 'REGISTER')[0];
+
+    assert.equal(wallet2RedeemOutput.value, wallet2Name1LosingBidValue);
+    assert.equal(wallet2RegisterOutput.value, wallet1Name2LosingBidValue); // wickrey auction
+
     const wallet1Finish = await wclient.createBatchFinish('primary', {
       passphrase: '',
       names: [{name: name1, data}, {name: name2, data}]
     });
+
+    const wallet1RedeemOutput = getOutputsOfType(wallet1Finish.processedFinishes, 'REDEEM')[0];
+    const wallet1RegisterOutput = getOutputsOfType(wallet1Finish.processedFinishes, 'REGISTER')[0];
+
+    assert.equal(wallet1RedeemOutput.value, wallet1Name2LosingBidValue);
+    assert.equal(wallet1RegisterOutput.value, wallet2Name1LosingBidValue); // wickrey auction
 
     assert.deepStrictEqual(wallet1Finish.errorMessages, []);
     assert.equal(wallet1Finish.processedFinishes.length, 2);
@@ -2019,4 +2038,14 @@ async function createNameWithBids(bidCount) {
   }
 
   return {name, bids};
+}
+
+// filter and return outputs of type
+function getOutputsOfType(processedFinishes, type) {
+  return processedFinishes
+    .filter((element) => {
+      return element.output.covenant.action === type;
+    }).map((element) => {
+      return element.output;
+    });
 }
