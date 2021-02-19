@@ -1728,7 +1728,7 @@ describe('Wallet HTTP', function() {
     await assert.rejects(wclient.createBatchFinish('primary', {
       passphrase: '',
       finishRequests: [{name: 'domain_name', data: {}}]
-    }), /data must be in form: {records: \[\]}/);
+    }), /Invalid records/);
   });
 
   it('should redeem lost bid and register won bids', async function() {
