@@ -1708,6 +1708,280 @@ describe('Wallet HTTP', function() {
       });
     });
   });
+
+  it('should reject malformed/invalid finish requests', async function() {
+    await assert.rejects(wclient.createBatchFinish('primary', {
+      passphrase: '',
+      finishRequests: ['invalid_finish_data']
+    }), /map must be a object./);
+
+    await assert.rejects(wclient.createBatchFinish('primary', {
+      passphrase: '',
+      finishRequests: [{name: 'domain_name'}]
+    }), /name and data must be present in every element./);
+
+    await assert.rejects(wclient.createBatchFinish('primary', {
+      passphrase: '',
+      finishRequests: [{name: 'domain_name', data: 'invalid data'}]
+    }), /data must be a object./);
+
+    await assert.rejects(wclient.createBatchFinish('primary', {
+      passphrase: '',
+      finishRequests: [{name: 'domain_name', data: {}}]
+    }), /data must be in form: {records: \[\]}/);
+  });
+
+  it('should redeem lost bid and register won bids', async function() {
+    const name1 = await nclient.execute('grindname', [6]);
+    const name2 = await nclient.execute('grindname', [6]);
+    const data = { records: [] };
+
+    await wclient.createBatchOpen('primary', {
+      names: [name1, name2],
+      passphrase: '',
+      broadcast: true,
+      sign: true
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    // wallet1(primary) wins name1, wallet2(secondary) wins name2
+    const wallet1Name1WinningBidValue = 1000001;
+    const wallet1Name1WinningBid = createBid(name1, wallet1Name1WinningBidValue, 'wallet-1-bid-1');
+
+    const wallet1Name2LosingBidValue = 1000000;
+    const wallet1Name2LosingBid = createBid(name2, wallet1Name2LosingBidValue, 'wallet-1-bid-2');
+
+    const wallet2Name1LosingBidValue = 1000000;
+    const wallet2Name1LosingBid = createBid(name1, wallet2Name1LosingBidValue, 'wallet-2-bid-1');
+
+    const wallet2Name2WinningBidValue = 1000001;
+    const wallet2Name2WinningBid = createBid(name2, wallet2Name2WinningBidValue, 'wallet-2-bid-2');
+
+    await wclient.createBatchBid('primary', {
+      passphrase: '',
+      bids: [wallet1Name1WinningBid, wallet1Name2LosingBid]
+    });
+
+    await mineBlocks(1, cbAddress);
+
+    await wclient.createBatchBid('secondary', {
+      passphrase: '',
+      bids: [wallet2Name1LosingBid, wallet2Name2WinningBid]
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    await wclient.createBatchReveal('primary', {
+      passphrase: '',
+      names: [name1, name2],
+      sign: true,
+      broadcast: true
+    });
+
+    await mineBlocks(1, cbAddress);
+
+    await wclient.createBatchReveal('secondary', {
+      passphrase: '',
+      names: [name1, name2],
+      sign: true,
+      broadcast: true
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    const wallet2Finish = await wclient.createBatchFinish('secondary', {
+      passphrase: '',
+      finishRequests: [{name: name1, data}, {name: name2, data}]
+    });
+
+    assert.deepStrictEqual(wallet2Finish.errorMessages, []);
+    assert.equal(wallet2Finish.processedFinishes.length, 2); // one redeem one finish
+
+    const wallet2RedeemOutput = getOutputsOfType(wallet2Finish.processedFinishes, 'REDEEM')[0];
+    const wallet2RegisterOutput = getOutputsOfType(wallet2Finish.processedFinishes, 'REGISTER')[0];
+
+    assert.equal(wallet2RedeemOutput.value, wallet2Name1LosingBidValue);
+    assert.equal(wallet2RegisterOutput.value, wallet1Name2LosingBidValue); // wickrey auction
+
+    const wallet1Finish = await wclient.createBatchFinish('primary', {
+      passphrase: '',
+      finishRequests: [{name: name1, data}, {name: name2, data}]
+    });
+
+    const wallet1RedeemOutput = getOutputsOfType(wallet1Finish.processedFinishes, 'REDEEM')[0];
+    const wallet1RegisterOutput = getOutputsOfType(wallet1Finish.processedFinishes, 'REGISTER')[0];
+
+    assert.equal(wallet1RedeemOutput.value, wallet1Name2LosingBidValue);
+    assert.equal(wallet1RegisterOutput.value, wallet2Name1LosingBidValue); // wickrey auction
+
+    assert.deepStrictEqual(wallet1Finish.errorMessages, []);
+    assert.equal(wallet1Finish.processedFinishes.length, 2);
+
+    await sleep(100);
+
+    const mempool = await nclient.getMempool();
+    assert.ok(mempool.includes(wallet2Finish.processedFinishes[0].tx_hash));
+    assert.ok(mempool.includes(wallet1Finish.processedFinishes[0].tx_hash));
+  });
+
+  it('should partially process names when total finish count exceeds 200', async function() {
+    const BATCH_FINISH_LIMIT = 200;
+    const NAME_BID_COUNT = 100;
+    const {name: name1, bids: name1Bids} = await createNameWithBids(NAME_BID_COUNT);
+    const {name: name2, bids: name2Bids} = await createNameWithBids(NAME_BID_COUNT);
+    const {name: name3, bids: name3Bids} = await createNameWithBids(NAME_BID_COUNT);
+    const data = { records: [] };
+
+    await wclient.createBatchOpen('primary', {
+      names: [name1, name2, name3],
+      passphrase: '',
+      broadcast: true,
+      sign: true
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    await wclient.createBatchBid('primary', {
+      passphrase: '',
+      bids: [...name1Bids, ...name2Bids]
+    });
+
+    await mineBlocks(1, cbAddress);
+
+    await wclient.createBatchBid('primary', {
+      passphrase: '',
+      bids: name3Bids
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    // we need to reveal 2 time since total amount exceeds 200 limit
+    await wclient.createBatchReveal('primary', {
+      passphrase: '',
+      names: [name1, name2],
+      sign: true,
+      broadcast: true
+    });
+
+    await mineBlocks(1, cbAddress);
+
+    await wclient.createBatchReveal('primary', {
+      passphrase: '',
+      names: [name3],
+      sign: true,
+      broadcast: true
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    let processedFinishes, errorMessages;
+
+    const batchFinishResponsePart1 = await wclient.createBatchFinish('primary', {
+      passphrase: '',
+      finishRequests: [{name: name1, data},{name: name2, data},{name: name3, data}]
+    });
+
+    processedFinishes = batchFinishResponsePart1.processedFinishes;
+    errorMessages = batchFinishResponsePart1.errorMessages;
+
+    assert.equal(processedFinishes.length, BATCH_FINISH_LIMIT);
+    // 1 name is expected to fail
+    assert.equal(errorMessages.length, 1);
+
+    await sleep(100);
+
+    let mempool = await nclient.getMempool();
+    assert(mempool.length, 1);
+
+    await mineBlocks(1, cbAddress);
+
+    const batchFinishResponsePart2 = await wclient.createBatchFinish('primary', {
+      passphrase: '',
+      finishRequests: [{name: name1, data},{name: name2, data},{name: name3, data}]
+    });
+
+    processedFinishes = batchFinishResponsePart2.processedFinishes;
+    errorMessages = batchFinishResponsePart2.errorMessages;
+
+    await sleep(100);
+
+    mempool = await nclient.getMempool();
+    assert(mempool.length, 1);
+
+    assert.equal(processedFinishes.length, 3 * NAME_BID_COUNT);
+    assert.equal(errorMessages.length, 0);
+  });
+
+  it('should respond from cache when same names are used for batchFinish', async function() {
+    const NAME_BID_COUNT = 100;
+    const data = {records: []};
+
+    await mineBlocks(5, cbAddress);
+
+    const {name, bids} = await createNameWithBids(NAME_BID_COUNT);
+
+    await wclient.createBatchOpen('primary', {
+      names: [name],
+      passphrase: '',
+      broadcast: true,
+      sign: true
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    await wclient.createBatchBid('primary', {
+      passphrase: '',
+      bids: bids
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    await wclient.createBatchReveal('primary', {
+      passphrase: '',
+      names: [name],
+      sign: true,
+      broadcast: true
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    const batchFinishResponse1 = await wclient.createBatchFinish('primary', {
+      passphrase: '',
+      finishRequests: [{name, data}]
+    });
+
+    assert.equal(batchFinishResponse1.errorMessages.length, 0);
+    assert.equal(batchFinishResponse1.processedFinishes.length, NAME_BID_COUNT);
+
+    for (const processedFinish of batchFinishResponse1.processedFinishes) {
+      assert.equal(processedFinish.from_cache, false);
+    }
+
+    await sleep(100);
+
+    let mempool = await nclient.getMempool();
+    assert(mempool.length, 1);
+
+    await mineBlocks(1, cbAddress);
+
+    const batchFinishResponse2 = await wclient.createBatchFinish('primary', {
+      passphrase: '',
+      finishRequests: [{name, data}]
+    });
+
+    assert.equal(batchFinishResponse2.errorMessages.length, 0);
+    assert.equal(batchFinishResponse2.processedFinishes.length, NAME_BID_COUNT);
+
+    await sleep(100);
+
+    mempool = await nclient.getMempool();
+    assert.equal(mempool.length, 0);
+
+    for (const processedFinish of batchFinishResponse2.processedFinishes) {
+      assert.equal(processedFinish.from_cache, true);
+    }
+  });
 });
 
 async function sleep(time) {
@@ -1740,4 +2014,38 @@ function openOutput(name, address) {
   output.covenant.push(rawName);
 
   return output;
+}
+
+// create bid
+function createBid(name, bid, idempotencyKey) {
+  return {
+      name: name,
+      bid: bid,
+      lockup: bid + 1000000,
+      idempotencyKey: idempotencyKey
+  };
+}
+
+// create name with arbitrary number of bids
+async function createNameWithBids(bidCount) {
+  const name = await nclient.execute('grindname', [6]);
+  const bids = [];
+  const BaseBid = 10000000;
+
+  for (let i=0; i<bidCount; i++) {
+    const idempotencyKey = name + i;
+    bids.push(createBid(name, BaseBid + i, idempotencyKey));
+  }
+
+  return {name, bids};
+}
+
+// filter and return outputs of type
+function getOutputsOfType(processedFinishes, type) {
+  return processedFinishes
+    .filter((element) => {
+      return element.output.covenant.action === type;
+    }).map((element) => {
+      return element.output;
+    });
 }
