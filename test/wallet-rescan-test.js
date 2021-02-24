@@ -18,10 +18,11 @@ const network = Network.get('regtest');
 const {
   treeInterval,
   biddingPeriod,
-  revealPeriod
+  revealPeriod,
+  transferLockup
 } = network.names;
 
-describe('Wallet Rescan with TRANSFER', function() {
+describe('Wallet rescan with namestate transitions', function() {
   describe('Only sends OPEN', function() {
     // Bob runs a full node with wallet plugin
     const node = new FullNode({
@@ -54,6 +55,9 @@ describe('Wallet Rescan with TRANSFER', function() {
 
     const NAME = rules.grindName(4, 4, network);
 
+    // Hash of the FINALIZE transaction
+    let aliceFinalizeHash;
+
     async function mineBlocks(n, addr) {
       addr = addr ? addr : new Address().toString('regtest');
       const blocks = [];
@@ -65,6 +69,7 @@ describe('Wallet Rescan with TRANSFER', function() {
 
       return blocks;
     }
+
     before(async () => {
       await node.open();
       bob = await wdb.create();
@@ -150,7 +155,7 @@ describe('Wallet Rescan with TRANSFER', function() {
       assert(ns);
       assert.strictEqual(ns.transfer, node.chain.height);
 
-      // Bob's wallet has indexed the TRANSFER
+      // Bob's wallet has not indexed the TRANSFER
       const bobTransfer = await bob.getTX(aliceTransfer.hash());
       assert.strictEqual(bobTransfer, null);
     });
@@ -164,6 +169,83 @@ describe('Wallet Rescan with TRANSFER', function() {
       const ns = await bob.getNameStateByName(NAME);
       assert(ns);
       assert.strictEqual(ns.transfer, node.chain.height);
+    });
+
+    it('should process FINALIZE', async () => {
+      await mineBlocks(transferLockup);
+
+      // Alice finalizes the name
+      const aliceFinalize = await alice.createFinalize(NAME);
+      await node.mempool.addTX(aliceFinalize.toTX());
+      const finalizeBlocks = await mineBlocks(1);
+      assert.strictEqual(finalizeBlocks[0].txs.length, 2);
+
+      aliceFinalizeHash = aliceFinalize.hash();
+
+      // Bob detects the FINALIZE even though it doesn't involve him at all
+      const ns = await bob.getNameStateByName(NAME);
+      assert(ns);
+      assert.bufferEqual(ns.owner.hash, aliceFinalizeHash);
+
+      // Bob's wallet has not indexed the FINALIZE
+      const bobFinalize = await bob.getTX(aliceFinalize.hash());
+      assert.strictEqual(bobFinalize, null);
+    });
+
+    it('should fully rescan', async () => {
+      // Complete chain rescan
+      await wdb.rescan(0);
+      await forValue(wdb, 'height', node.chain.height);
+
+      // No change
+      const ns = await bob.getNameStateByName(NAME);
+      assert(ns);
+      assert.bufferEqual(ns.owner.hash, aliceFinalizeHash);
+    });
+
+    it('should process TRANSFER (again)', async () => {
+      // Alice transfers the name to her own address
+      const aliceTransfer = await alice.createTransfer(NAME, aliceAddr);
+      await node.mempool.addTX(aliceTransfer.toTX());
+      const transferBlocks = await mineBlocks(1);
+      assert.strictEqual(transferBlocks[0].txs.length, 2);
+
+      // Bob detects the TRANSFER even though it doesn't involve him at all
+      const ns = await bob.getNameStateByName(NAME);
+      assert(ns);
+      assert.strictEqual(ns.transfer, node.chain.height);
+
+      // Bob's wallet has not indexed the TRANSFER
+      const bobTransfer = await bob.getTX(aliceTransfer.hash());
+      assert.strictEqual(bobTransfer, null);
+    });
+
+    it('should process REVOKE', async () => {
+      // Alice revokes the name
+      const aliceRevoke = await alice.createRevoke(NAME);
+      await node.mempool.addTX(aliceRevoke.toTX());
+      const revokeBlocks = await mineBlocks(1);
+      assert.strictEqual(revokeBlocks[0].txs.length, 2);
+
+      // Bob detects the REVOKE even though it doesn't involve him at all
+      const ns = await bob.getNameStateByName(NAME);
+      assert(ns);
+      assert.strictEqual(ns.revoked, node.chain.height);
+
+      // Bob's wallet has not indexed the REVOKE
+      const bobTransfer = await bob.getTX(aliceRevoke.hash());
+      assert.strictEqual(bobTransfer, null);
+    });
+
+    it('should fully rescan', async () => {
+      // Complete chain rescan
+      await wdb.rescan(0);
+      await forValue(wdb, 'height', node.chain.height);
+
+      // No change
+      const ns = await bob.getNameStateByName(NAME);
+      assert(ns);
+      assert.strictEqual(ns.revoked, node.chain.height);
     });
   });
 
@@ -201,6 +283,8 @@ describe('Wallet Rescan with TRANSFER', function() {
 
     // Block that confirmed the bids
     let bidBlockHash;
+    // Hash of the FINALIZE transaction
+    let aliceFinalizeHash;
 
     async function mineBlocks(n, addr) {
       addr = addr ? addr : new Address().toString('regtest');
@@ -330,6 +414,103 @@ describe('Wallet Rescan with TRANSFER', function() {
       const ns = await bob.getNameStateByName(NAME);
       assert(ns);
       assert.strictEqual(ns.transfer, node.chain.height);
+    });
+
+    it('should process FINALIZE', async () => {
+      await mineBlocks(transferLockup);
+
+      // Alice finalizes the name
+      const aliceFinalize = await alice.createFinalize(NAME);
+      await node.mempool.addTX(aliceFinalize.toTX());
+      const finalizeBlocks = await mineBlocks(1);
+      assert.strictEqual(finalizeBlocks[0].txs.length, 2);
+
+      aliceFinalizeHash = aliceFinalize.hash();
+
+      // Bob detects the FINALIZE even though it doesn't involve him at all
+      const ns = await bob.getNameStateByName(NAME);
+      assert(ns);
+      assert.bufferEqual(ns.owner.hash, aliceFinalizeHash);
+
+      // Bob's wallet has not indexed the FINALIZE
+      const bobFinalize = await bob.getTX(aliceFinalize.hash());
+      assert.strictEqual(bobFinalize, null);
+    });
+
+    it('should fully rescan', async () => {
+      await wdb.rescan(0);
+      await forValue(wdb, 'height', node.chain.height);
+
+      // No change
+      const ns = await bob.getNameStateByName(NAME);
+      assert(ns);
+      assert.bufferEqual(ns.owner.hash, aliceFinalizeHash);
+    });
+
+    it('should rescan since, but not including, the BIDs', async () => {
+      const bidBlock = await node.chain.getEntry(bidBlockHash);
+      await wdb.rescan(bidBlock.height);
+      await forValue(wdb, 'height', node.chain.height);
+
+      // No change
+      const ns = await bob.getNameStateByName(NAME);
+      assert(ns);
+      assert.bufferEqual(ns.owner.hash, aliceFinalizeHash);
+    });
+
+    it('should process TRANSFER (again)', async () => {
+      // Alice transfers the name to her own address
+      const aliceTransfer = await alice.createTransfer(NAME, aliceAddr);
+      await node.mempool.addTX(aliceTransfer.toTX());
+      const transferBlocks = await mineBlocks(1);
+      assert.strictEqual(transferBlocks[0].txs.length, 2);
+
+      // Bob detects the TRANSFER even though it doesn't involve him at all
+      const ns = await bob.getNameStateByName(NAME);
+      assert(ns);
+      assert.strictEqual(ns.transfer, node.chain.height);
+
+      // Bob's wallet has not indexed the TRANSFER
+      const bobTransfer = await bob.getTX(aliceTransfer.hash());
+      assert.strictEqual(bobTransfer, null);
+    });
+
+    it('should process REVOKE', async () => {
+      // Alice revokes the name
+      const aliceRevoke = await alice.createRevoke(NAME);
+      await node.mempool.addTX(aliceRevoke.toTX());
+      const revokeBlocks = await mineBlocks(1);
+      assert.strictEqual(revokeBlocks[0].txs.length, 2);
+
+      // Bob detects the REVOKE even though it doesn't involve him at all
+      const ns = await bob.getNameStateByName(NAME);
+      assert(ns);
+      assert.strictEqual(ns.revoked, node.chain.height);
+
+      // Bob's wallet has not indexed the REVOKE
+      const bobTransfer = await bob.getTX(aliceRevoke.hash());
+      assert.strictEqual(bobTransfer, null);
+    });
+
+    it('should fully rescan', async () => {
+      await wdb.rescan(0);
+      await forValue(wdb, 'height', node.chain.height);
+
+      // No change
+      const ns = await bob.getNameStateByName(NAME);
+      assert(ns);
+      assert.strictEqual(ns.revoked, node.chain.height);
+    });
+
+    it('should rescan since, but not including, the BIDs', async () => {
+      const bidBlock = await node.chain.getEntry(bidBlockHash);
+      await wdb.rescan(bidBlock.height);
+      await forValue(wdb, 'height', node.chain.height);
+
+      // No change
+      const ns = await bob.getNameStateByName(NAME);
+      assert(ns);
+      assert.strictEqual(ns.revoked, node.chain.height);
     });
   });
 });
