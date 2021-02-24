@@ -1,6 +1,30 @@
 # HSD Release Notes & Changelog
 
-## unreleased
+## v2.3.0
+
+### Node changes
+
+- `FullNode` now parses option `--min-weight=<number>` (`min-weight: <number>` in
+hsd.conf or `minWeight: <number>` in JavaScript object instantiation).
+When assembling a block template, if there are not enough fee-paying transactions available,
+the miner will add transactions up to the minimum weight that would normally be
+ignored for being "free" (paying a fee below policy limit). The default value is
+raised from `0` to `5000` (a 1-in, 2-out BID transaction has a weight of about `889`).
+
+- Transactions that have sat unconfirmed in the mempool for 3 days will be evicted.
+This is the default `MEMPOOL_EXPIRY_TIME` value set in `policy.js` but can be
+configured (in seconds) with the `FullNode` option `--mempool-expiry-time`.
+
+### Wallet API changes
+
+- Adds new wallet HTTP endpoint `/deepclean` that requires a parameter
+`I_HAVE_BACKED_UP_MY_WALLET=true`. This action wipes out balance and transaction
+history in the wallet DB but retains key hashes and name maps. It should be used
+only if the wallet state has been corrupted by issues like the
+[reserved name registration bug](https://github.com/handshake-org/hsd/issues/454)
+or the
+[locked coins balance after FINALIZE bug](https://github.com/handshake-org/hsd/pull/464).
+After the corrupt data has been cleared, **a walletDB rescan is required**.
 
 ### Node API changes
 
@@ -15,7 +39,7 @@ or the
 ### Wallet changes
 
 - Fixes a bug that ignored the effect of sending or receiving a FINALIZE on a
-wallet's `lockedConfirmed` and `lockedUnconfirmed` balance. 
+wallet's `lockedConfirmed` and `lockedUnconfirmed` balance.
 
 ## v2.2.0
 
