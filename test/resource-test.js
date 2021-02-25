@@ -106,12 +106,35 @@ describe('Resource', function() {
     assert.strictEqual(synthAAAA.data.address, '::2');
   });
 
-  it('should not return TXT from root zone', () => {
+  it('should not return TXT from root zone if NS is present', () => {
     const res = Resource.fromJSON(json);
     const msg = res.toDNS('hns.', types.TXT);
 
     assert(msg.aa);
     assert(msg.answer.length === 0);
+  });
+
+  it('should return TXT from root zone if NS is not present', () => {
+    const res = Resource.fromJSON({
+      records: [
+        {
+          type: 'TXT',
+          txt: ['hello world']
+        }
+      ]
+    });
+    const msg = res.toDNS('hns.', types.TXT);
+
+    assert(msg.aa);
+    assert(msg.answer.length === 2);
+
+    const [txt, sig] = msg.answer;
+    assert.strictEqual(txt.type, types.TXT);
+    assert.strictEqual(txt.name, 'hns.');
+    assert.strictEqual(txt.data.txt.length, 1);
+    assert.strictEqual(txt.data.txt[0], 'hello world');
+    assert.strictEqual(sig.type, types.RRSIG);
+    assert.strictEqual(sig.name, 'hns.');
   });
 
   it('should synthesize an answer', () => {
