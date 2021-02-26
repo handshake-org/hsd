@@ -1,6 +1,8 @@
 'use strict';
 
 const assert = require('bsert');
+const fs = require('fs');
+const Path = require ('path');
 const {wire} = require('bns');
 const {Resource} = require('../lib/dns/resource');
 const {types} = wire;
@@ -56,6 +58,23 @@ describe('Resource', function() {
 
     assert.deepStrictEqual(res1.toJSON(), json);
     assert.deepStrictEqual(res1.toJSON(), res2.toJSON());
+  });
+
+  it('should dump zone', async () => {
+    const expected = await fs.readFileSync(
+      Path.join(__dirname, 'data', 'hns.zone'),
+      'ascii'
+    );
+
+    const res = Resource.fromJSON(json);
+    const zone = res.toZone('hns.');
+    let file = '';
+    for (const record of zone) {
+      if (record.type !== types.RRSIG)
+        file += record.toString() + '\n';
+    }
+
+    assert.deepStrictEqual(file, expected);
   });
 
   it('should synthesize a referral', () => {
