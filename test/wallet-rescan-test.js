@@ -70,6 +70,23 @@ describe('Wallet rescan with namestate transitions', function() {
       return blocks;
     }
 
+    async function sendTXs() {
+      const aliceTX = await alice.send({
+        outputs: [{
+          address: aliceAddr,
+          value: 20000
+        }]
+      });
+      alice.addTX(aliceTX.toTX());
+      await node.mempool.addTX(aliceTX.toTX());
+      await bob.send({
+        outputs: [{
+          address: bobAddr,
+          value: 20000
+        }]
+      });
+    }
+
     before(async () => {
       await node.open();
       bob = await wdb.create();
@@ -94,31 +111,38 @@ describe('Wallet rescan with namestate transitions', function() {
       // Poor Bob, all he does is send an OPEN but his wallet will
       // watch all the other activity including TRANSFERS for this name
       await bob.sendOpen(NAME, true);
+      // Scatter unrelated TXs throughout the test.
+      // This will ensure that txdb.removeBlock() removes TXs
+      // in the reverse order from when they were added
+      await sendTXs();
       const openBlocks = await mineBlocks(1);
       // Coinbase plus open
-      assert.strictEqual(openBlocks[0].txs.length, 2);
+      assert.strictEqual(openBlocks[0].txs.length, 4);
 
       // Advance to bidding phase
       await mineBlocks(treeInterval);
       await forValue(alice, 'height', node.chain.height);
 
       // Alice sends only bid
+      await sendTXs();
       const aliceBid = await alice.createBid(NAME, 20000, 20000);
       await node.mempool.addTX(aliceBid.toTX());
       const bidBlocks = await mineBlocks(1);
-      assert.strictEqual(bidBlocks[0].txs.length, 2);
+      assert.strictEqual(bidBlocks[0].txs.length, 4);
 
       // Advance to reveal phase
       await mineBlocks(biddingPeriod);
+      await sendTXs();
       const aliceReveal = await alice.createReveal(NAME);
       await node.mempool.addTX(aliceReveal.toTX());
       const revealBlocks = await mineBlocks(1);
-      assert.strictEqual(revealBlocks[0].txs.length, 2);
+      assert.strictEqual(revealBlocks[0].txs.length, 4);
 
       // Close auction
       await mineBlocks(revealPeriod);
 
       // Alice registers
+      await sendTXs();
       const aliceRegister = await alice.createRegister(
         NAME,
         Resource.fromJSON({records:[]})
@@ -126,7 +150,7 @@ describe('Wallet rescan with namestate transitions', function() {
       await node.mempool.addTX(aliceRegister.toTX());
 
       const registerBlocks = await mineBlocks(1);
-      assert.strictEqual(registerBlocks[0].txs.length, 2);
+      assert.strictEqual(registerBlocks[0].txs.length, 4);
     });
 
     it('should get namestate', async () => {
@@ -145,10 +169,11 @@ describe('Wallet rescan with namestate transitions', function() {
 
     it('should process TRANSFER', async () => {
       // Alice transfers the name to her own address
+      await sendTXs();
       const aliceTransfer = await alice.createTransfer(NAME, aliceAddr);
       await node.mempool.addTX(aliceTransfer.toTX());
       const transferBlocks = await mineBlocks(1);
-      assert.strictEqual(transferBlocks[0].txs.length, 2);
+      assert.strictEqual(transferBlocks[0].txs.length, 4);
 
       // Bob detects the TRANSFER even though it doesn't involve him at all
       const ns = await bob.getNameStateByName(NAME);
@@ -175,10 +200,11 @@ describe('Wallet rescan with namestate transitions', function() {
       await mineBlocks(transferLockup);
 
       // Alice finalizes the name
+      await sendTXs();
       const aliceFinalize = await alice.createFinalize(NAME);
       await node.mempool.addTX(aliceFinalize.toTX());
       const finalizeBlocks = await mineBlocks(1);
-      assert.strictEqual(finalizeBlocks[0].txs.length, 2);
+      assert.strictEqual(finalizeBlocks[0].txs.length, 4);
 
       aliceFinalizeHash = aliceFinalize.hash();
 
@@ -205,10 +231,11 @@ describe('Wallet rescan with namestate transitions', function() {
 
     it('should process TRANSFER (again)', async () => {
       // Alice transfers the name to her own address
+      await sendTXs();
       const aliceTransfer = await alice.createTransfer(NAME, aliceAddr);
       await node.mempool.addTX(aliceTransfer.toTX());
       const transferBlocks = await mineBlocks(1);
-      assert.strictEqual(transferBlocks[0].txs.length, 2);
+      assert.strictEqual(transferBlocks[0].txs.length, 4);
 
       // Bob detects the TRANSFER even though it doesn't involve him at all
       const ns = await bob.getNameStateByName(NAME);
@@ -222,10 +249,11 @@ describe('Wallet rescan with namestate transitions', function() {
 
     it('should process REVOKE', async () => {
       // Alice revokes the name
+      await sendTXs();
       const aliceRevoke = await alice.createRevoke(NAME);
       await node.mempool.addTX(aliceRevoke.toTX());
       const revokeBlocks = await mineBlocks(1);
-      assert.strictEqual(revokeBlocks[0].txs.length, 2);
+      assert.strictEqual(revokeBlocks[0].txs.length, 4);
 
       // Bob detects the REVOKE even though it doesn't involve him at all
       const ns = await bob.getNameStateByName(NAME);
@@ -298,6 +326,23 @@ describe('Wallet rescan with namestate transitions', function() {
       return blocks;
     }
 
+    async function sendTXs() {
+      const aliceTX = await alice.send({
+        outputs: [{
+          address: aliceAddr,
+          value: 20000
+        }]
+      });
+      alice.addTX(aliceTX.toTX());
+      await node.mempool.addTX(aliceTX.toTX());
+      await bob.send({
+        outputs: [{
+          address: bobAddr,
+          value: 20000
+        }]
+      });
+    }
+
     before(async () => {
       await node.open();
       bob = await wdb.create();
@@ -320,11 +365,12 @@ describe('Wallet rescan with namestate transitions', function() {
 
     it('should run auction', async () => {
       // Alice opens
+      await sendTXs();
       const aliceOpen = await alice.createOpen(NAME);
       await node.mempool.addTX(aliceOpen.toTX());
       const openBlocks = await mineBlocks(1);
       // Coinbase plus open
-      assert.strictEqual(openBlocks[0].txs.length, 2);
+      assert.strictEqual(openBlocks[0].txs.length, 4);
 
       // Advance to bidding phase
       await mineBlocks(treeInterval);
@@ -335,25 +381,28 @@ describe('Wallet rescan with namestate transitions', function() {
       await bob.sendBid(NAME, 10000, 10000);
 
       // Alice sends winning bid
+      await sendTXs();
       const aliceBid = await alice.createBid(NAME, 20000, 20000);
       await node.mempool.addTX(aliceBid.toTX());
       const bidBlocks = await mineBlocks(1);
-      assert.strictEqual(bidBlocks[0].txs.length, 3);
+      assert.strictEqual(bidBlocks[0].txs.length, 5);
 
       bidBlockHash = bidBlocks[0].hash();
 
       // Advance to reveal phase
       await mineBlocks(biddingPeriod);
       await bob.sendReveal(NAME);
+      await sendTXs();
       const aliceReveal = await alice.createReveal(NAME);
       await node.mempool.addTX(aliceReveal.toTX());
       const revealBlocks = await mineBlocks(1);
-      assert.strictEqual(revealBlocks[0].txs.length, 3);
+      assert.strictEqual(revealBlocks[0].txs.length, 5);
 
       // Close auction
       await mineBlocks(revealPeriod);
 
       // Alice registers
+      await sendTXs();
       const aliceRegister = await alice.createRegister(
         NAME,
         Resource.fromJSON({records:[]})
@@ -361,7 +410,7 @@ describe('Wallet rescan with namestate transitions', function() {
       await node.mempool.addTX(aliceRegister.toTX());
 
       const registerBlocks = await mineBlocks(1);
-      assert.strictEqual(registerBlocks[0].txs.length, 2);
+      assert.strictEqual(registerBlocks[0].txs.length, 4);
     });
 
     it('should get namestate', async () => {
@@ -380,10 +429,11 @@ describe('Wallet rescan with namestate transitions', function() {
 
     it('should process TRANSFER', async () => {
       // Alice transfers the name to her own address
+      await sendTXs();
       const aliceTransfer = await alice.createTransfer(NAME, aliceAddr);
       await node.mempool.addTX(aliceTransfer.toTX());
       const transferBlocks = await mineBlocks(1);
-      assert.strictEqual(transferBlocks[0].txs.length, 2);
+      assert.strictEqual(transferBlocks[0].txs.length, 4);
 
       // Bob detects the TRANSFER even though it doesn't involve him at all
       const ns = await bob.getNameStateByName(NAME);
@@ -420,10 +470,11 @@ describe('Wallet rescan with namestate transitions', function() {
       await mineBlocks(transferLockup);
 
       // Alice finalizes the name
+      await sendTXs();
       const aliceFinalize = await alice.createFinalize(NAME);
       await node.mempool.addTX(aliceFinalize.toTX());
       const finalizeBlocks = await mineBlocks(1);
-      assert.strictEqual(finalizeBlocks[0].txs.length, 2);
+      assert.strictEqual(finalizeBlocks[0].txs.length, 4);
 
       aliceFinalizeHash = aliceFinalize.hash();
 
@@ -460,10 +511,11 @@ describe('Wallet rescan with namestate transitions', function() {
 
     it('should process TRANSFER (again)', async () => {
       // Alice transfers the name to her own address
+      await sendTXs();
       const aliceTransfer = await alice.createTransfer(NAME, aliceAddr);
       await node.mempool.addTX(aliceTransfer.toTX());
       const transferBlocks = await mineBlocks(1);
-      assert.strictEqual(transferBlocks[0].txs.length, 2);
+      assert.strictEqual(transferBlocks[0].txs.length, 4);
 
       // Bob detects the TRANSFER even though it doesn't involve him at all
       const ns = await bob.getNameStateByName(NAME);
@@ -477,10 +529,11 @@ describe('Wallet rescan with namestate transitions', function() {
 
     it('should process REVOKE', async () => {
       // Alice revokes the name
+      await sendTXs();
       const aliceRevoke = await alice.createRevoke(NAME);
       await node.mempool.addTX(aliceRevoke.toTX());
       const revokeBlocks = await mineBlocks(1);
-      assert.strictEqual(revokeBlocks[0].txs.length, 2);
+      assert.strictEqual(revokeBlocks[0].txs.length, 4);
 
       // Bob detects the REVOKE even though it doesn't involve him at all
       const ns = await bob.getNameStateByName(NAME);
