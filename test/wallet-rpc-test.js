@@ -197,6 +197,10 @@ describe('Wallet RPC Methods', function() {
       const info = await wclient.getAccount(watchOnlyWalletId, 'default');
       await wclient.execute('selectwallet', [watchOnlyWalletId]);
 
+      // lookahead parameter in account.js is defined as 1000 ( 0011 1110 1000 )
+      // in namebase, thus maps to 232 when represented ( 1110 1000 )
+      // as single byte, to align with this test we are adding 32 more addresses
+
       // Assert that the lookahead is configured as expected
       // subtract one from addresses.length, it is 0 indexed
       assert.equal(addresses.length - 1, info.lookahead);
@@ -209,9 +213,10 @@ describe('Wallet RPC Methods', function() {
         assert.equal(response.ismine, true);
       }
 
-      // m/44'/5355'/0'/201
+      // m/44'/5355'/0'/1001
       // This address is outside of the lookahead range
-      const failed = 'rs1qs2a5lthdy8uxh7d7faeqzuwlandyn0kg2lylqp';
+      // TODO this address is 1001th address
+      const failed = 'rs1qsrfg0khmn0t83e8ktpmepzrefmaqtv2gd4ncnv';
 
       const response = await wclient.execute('getaddressinfo', [failed]);
       assert.equal(response.ismine, false);
