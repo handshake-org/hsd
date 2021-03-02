@@ -106,21 +106,58 @@ describe('Resource', function() {
     assert.strictEqual(synthAAAA.data.address, '::2');
   });
 
-  it('should synthesize an answer', () => {
+  it('should not return TXT from root zone if NS is present', () => {
     const res = Resource.fromJSON(json);
+    const msg = res.toDNS('hns.', types.TXT);
+
+    assert(msg.aa);
+    assert(msg.answer.length === 0);
+  });
+
+  it('should return TXT from root zone if NS is not present', () => {
+    const res = Resource.fromJSON({
+      records: [
+        {
+          type: 'TXT',
+          txt: ['hello world']
+        }
+      ]
+    });
     const msg = res.toDNS('hns.', types.TXT);
 
     assert(msg.aa);
     assert(msg.answer.length === 2);
 
     const [txt, sig] = msg.answer;
-
     assert.strictEqual(txt.type, types.TXT);
     assert.strictEqual(txt.name, 'hns.');
+    assert.strictEqual(txt.data.txt.length, 1);
+    assert.strictEqual(txt.data.txt[0], 'hello world');
+    assert.strictEqual(sig.type, types.RRSIG);
+    assert.strictEqual(sig.name, 'hns.');
+  });
+
+  it('should synthesize an answer', () => {
+    const res = Resource.fromJSON(json);
+    const msg = res.toDNS('hns.', types.DS);
+
+    assert(msg.aa);
+    assert(msg.answer.length === 2);
+
+    const [ds, sig] = msg.answer;
+
+    assert.strictEqual(ds.type, types.DS);
+    assert.strictEqual(ds.name, 'hns.');
     assert.strictEqual(sig.type, types.RRSIG);
     assert.strictEqual(sig.name, 'hns.');
 
-    assert.strictEqual(txt.data.txt.length, 1);
-    assert.strictEqual(txt.data.txt[0], 'hello world');
+    assert.strictEqual(ds.data.keyTag, 57355);
+    assert.bufferEqual(
+      ds.data.digest,
+      Buffer.from(
+        '95a57c3bab7849dbcddf7c72ada71a88146b141110318ca5be672057e865c3e2',
+        'hex'
+      )
+    );
   });
 });
