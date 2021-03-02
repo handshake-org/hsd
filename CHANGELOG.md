@@ -2,6 +2,11 @@
 
 ## unreleased
 
+### DNS changes
+
+- Root server DNSSEC has been fixed. It is only authoritative over DS and TXT records,
+and only returns TXT if no NS (referral) is present in the zone.
+
 ### Wallet API changes
 
 - Adds new wallet HTTP endpoint `/wallet/:id/auction` based on `POST /wallet/:id/bid`.
