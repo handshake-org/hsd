@@ -2,6 +2,11 @@
 
 ## unreleased
 
+### Wallet changes
+
+- Fixes a bug that caused rescans to fail if a name being "watched" was ever
+`TRANSFER`ed. A `deepclean` plus `rescan` may be required to fix affected wallets.
+
 ### Wallet API changes
 
 - Adds new wallet HTTP endpoint `/wallet/:id/auction` based on `POST /wallet/:id/bid`.
