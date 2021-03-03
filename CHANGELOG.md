@@ -21,7 +21,12 @@ The bid will be broadcasted either during the creation (`broadcastBid=true`) or 
 (`broadcastBid=false`).
 The reveal will have to be broadcasted at a later time, during the REVEAL phase.
 The lockup must include a blind big enough to ensure the BID will be the only input of the REVEAL
-transaction. 
+transaction.
+
+- Now parses option `--wallet-check-lookahead` (or `--check-lookahead` for standalone
+wallet node) that will check every account of every wallet in the DB and ensure
+the lookahead value is the current default and maximum of `200`. A rescan is
+recommended after this action.
 
 ### Node & Wallet API changes
 
