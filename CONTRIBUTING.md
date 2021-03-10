@@ -5,14 +5,16 @@
 This repository includes a file [.eslintrc.json](.eslintrc.json) which sets
 linting preferences for the project. The continuous integration bot will
 install [bslint](https://www.npmjs.com/package/bslint) which vendors a specific
-version of eslint. Before submitting a pull request, please make sure your code
-is clean of linting errors. If you choose to use bslint, it can be installed
-globally in your development environment:
+version of eslint and [jsdoc](https://www.npmjs.com/package/jsdoc). Before
+submitting a pull request, please make sure your code is clean of linting errors
+and has a valid documentation. If you choose to use bslint and/or jsdoc, they can
+be installed globally in your development environment:
 
 ```
-npm install bslint -g
-cd hsd            # must be in repository root
-npm run lint      # command is defined in package.json
+npm install bslint jsdoc -g
+cd hsd              # must be in repository root
+npm run lint        # command is defined in package.json
+npm run build-docs  # also defined in package.json
 ```
 
 ## Testing
@@ -41,7 +43,7 @@ Recent workflow actions are available:
 https://github.com/handshake-org/hsd/actions
 
 All code changes should be covered by new tests if applicable. We currently use
-Coveralls to examine test coverage, and a pull request that *decreases* test
+Coveralls to examine test coverage, and a pull request that _decreases_ test
 coverage will likely not be reviewed by contributors or maintainers.
 
 Current test coverage details are available:
@@ -68,6 +70,3 @@ example of this is in
 [this commit](https://github.com/handshake-org/hsd/commit/c385fc59d488f5cd592a1d23554fe1c018bf26da).
 Note how the author used a very brief commit message as the title but then added
 a detailed description in the extended message.
-
-
-

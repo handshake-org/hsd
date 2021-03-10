@@ -62,6 +62,7 @@
     "hsw-cli": "./bin/hsw-cli"
   },
   "scripts": {
+    "build-docs": "jsdoc -c jsdoc.json",
     "lint": "eslint $(cat .eslintfiles)",
     "lint-file": "eslint",
     "test": "bmocha --reporter spec test/*.js",
