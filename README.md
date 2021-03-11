@@ -121,7 +121,7 @@ $ npm install -g hs-client
 
 - Documentation Site: [https://hsd-dev.org](https://hsd-dev.org)
 - API Docs: [https://hsd-dev.org/api-docs](https://hsd-dev.org/api-docs)
-- JSDoc: [https://hsd-dev.org/docs](https://hsd-dev.org/docs)
+- JSDoc: [https://hsd-dev.org/hsd](https://hsd-dev.org/hsd)
 
 ## Contributing
 
