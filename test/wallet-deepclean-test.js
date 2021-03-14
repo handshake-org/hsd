@@ -34,19 +34,6 @@ let aliceAcct0Info, aliceNames, aliceBalance, aliceHistory;
 let bob, bobReceive, bobAcct0;
 let bobAcct0Info, bobNames, bobBalance, bobHistory;
 
-// note: these were brute forced to be available on week 0
-const immediatelyReleasedNames = [
-  'alice110',
-  'bob30',
-  'alice152',
-  'bob67',
-  'alice240',
-  'bob160',
-  'alice300',
-  'bob258',
-  'alice509',
-  'bob278'
-];
 const aliceBlinds = [];
 const bobBlinds = [];
 
@@ -58,7 +45,7 @@ async function mineBlocks(n, addr) {
   }
 }
 
-describe('Wallet deep rescan', function() {
+describe('Wallet Deep Clean', function() {
   this.timeout(20000);
 
   before(async () => {
@@ -86,12 +73,10 @@ describe('Wallet deep rescan', function() {
   });
 
   it('should open 10 auctions and REGISTER names', async () => {
-    for (let i = 0; i < immediatelyReleasedNames.length; i++) {
-      // alternately win names to alice and bob
-      const isAlice = i % 2 === 0;
-      const w = isAlice ? alice : bob;
-      const name = immediatelyReleasedNames[i];
-      const array = isAlice ? aliceBlinds : bobBlinds;
+    for (let i = 0; i < 10; i++) {
+      const w = i < 5 ? alice : bob;
+      const name = i < 5 ? `alice${i}` : `bob${i}`;
+      const array = i < 5 ? aliceBlinds : bobBlinds;
 
       await w.sendOpen(name, false, {account: 0});
       await mineBlocks(network.names.treeInterval + 2);
@@ -122,19 +107,18 @@ describe('Wallet deep rescan', function() {
   });
 
   it('should TRANSFER and FINALIZE some names', async () => {
-    // note: transfer the most recently won names to avoid expiry issues
     const bobReceiveName = await bobAcct0.receiveAddress();
-    await alice.sendTransfer(immediatelyReleasedNames[8], bobReceiveName);
+    await alice.sendTransfer('alice0', bobReceiveName);
     await mineBlocks(network.names.transferLockup + 1);
 
-    await alice.sendFinalize(immediatelyReleasedNames[8]);
+    await alice.sendFinalize('alice0');
     await mineBlocks(10);
 
     const aliceReceiveName = await aliceAcct0.receiveAddress();
-    await bob.sendTransfer(immediatelyReleasedNames[9], aliceReceiveName);
+    await bob.sendTransfer('bob9', aliceReceiveName);
     await mineBlocks(network.names.transferLockup + 1);
 
-    await bob.sendFinalize(immediatelyReleasedNames[9]);
+    await bob.sendFinalize('bob9');
     await mineBlocks(10);
   });
 
@@ -169,9 +153,8 @@ describe('Wallet deep rescan', function() {
     bobAcct0Info = await bob.getAccount(0);
   });
 
-  it('should DEEP RESCAN - wipe only', async () => {
-    // Just do the erasing part first
-    await wdb.deepRescan(false);
+  it('should DEEP CLEAN', async () => {
+    await wdb.deepClean();
   });
 
   it('should have erased wallet data', async () => {
@@ -206,8 +189,8 @@ describe('Wallet deep rescan', function() {
     compareHistories(bobHistory2, []);
   });
 
-  it('should DEEP RESCAN - with recovery', async () => {
-    await wdb.deepRescan();
+  it('should rescan wallets', async () => {
+    await wdb.rescan(0);
   });
 
   it('should have recovered wallet data', async () => {
