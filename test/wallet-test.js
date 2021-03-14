@@ -30,7 +30,7 @@ const policy = require('../lib/protocol/policy');
 const HDPrivateKey = require('../lib/hd/private');
 const Wallet = require('../lib/wallet/wallet');
 const rules = require('../lib/covenants/rules');
-const {types} = rules;
+const {types, hashName} = rules;
 const {forValue} = require('./util/common');
 
 const KEY1 = 'xprv9s21ZrQH143K3Aj6xQBymM31Zb4BVc7wxqfUhMZrzewdDVCt'
@@ -1511,11 +1511,45 @@ describe('Wallet', function() {
   });
 
   it('should remove a wallet', async () => {
-    await wdb.create({
+    const wallet = await wdb.create({
       id: 'alice100'
     });
+    const addr1 = await wallet.receiveAddress();
+    const b = wdb.db.batch();
+    const wid = await wdb.getWID('alice100');
     assert(await wdb.get('alice100'));
+
+    // Add one single, unconfirmed coin to wallet
+    const mtx = new MTX();
+    mtx.addInput(dummyInput());
+    mtx.addOutput(addr1, 10 * 1e8);
+    await wdb.addTXMap(b, mtx.hash(), wid);
+
+    // Add one name to NameMap
+    await wdb.addNameMap(b, hashName('test123'), wid);
+
+    await b.write();
+
+    // Should return tx from TX Map
+    let wids = await wdb.getWalletsByTX(mtx);
+    assert(wids.has(wid));
+
+    // Should have wid in NameMap
+    let map = await wdb.getNameMap(hashName('test123'));
+    assert(map.wids.has(wid));
+
+    // Remove wallet
     await wdb.remove('alice100');
+
+    // Should not return tx from TX Map after wallet is removed
+    wids = await wdb.getWalletsByTX(mtx);
+    assert.strictEqual(wids, null);
+
+    // Should not return wid from NameMap after wid is removed
+    map = await wdb.getNameMap(hashName('test123'));
+    assert.strictEqual(map, null);
+
+    // Should not return wallet after it is removed
     assert(!await wdb.get('alice100'));
   });
 
@@ -2909,6 +2943,346 @@ describe('Wallet', function() {
 
       await Wallet.doWithCache(testCache, null, action);
       assert.equal(2, counter);
+    });
+  });
+
+  describe('Create auction-related TX in advance', function () {
+    const network = Network.get('regtest');
+    const workers = new WorkerPool({ enabled });
+    const wdb = new WalletDB({ network, workers });
+    // This test executes a complete auction for this name
+    const name = 'satoshi-in-advance';
+    // There will be two bids. Both from our wallet, one made in advance and
+    // another created and broadcasted right away
+    const value = 1e6;
+    const lockup = 2e6;
+    const secondHighest = value - 1;
+    // All TXs will have a hard-coded fee to simplify the expected balances,
+    // along with counters for OUTGOING (un)confirmed transactions.
+    const fee = 10000;
+    let uTXCount = 0;
+    let cTXCount = 0;
+    // Initial wallet funds
+    const fund = 10e6;
+    // Store height of auction OPEN to be used in second bid.
+    // The main test wallet, and wallet that will receive the FINALIZE.
+    let wallet;
+    let unsentReveal;
+
+    // Hack required to focus test on txdb mechanics.
+    // We don't otherwise need WalletDB or Blockchain
+    wdb.getRenewalBlock = () => {
+      return network.genesis.hash;
+    };
+
+    before(async () => {
+      await wdb.open();
+      wallet = await wdb.create();
+      // rollout all names
+      wdb.height = 52 * 144 * 7;
+    });
+
+    after(async () => {
+      await wdb.close();
+    });
+
+    it('should fund wallet', async () => {
+      const addr = await wallet.receiveAddress();
+
+      // Fund wallet
+      const mtx = new MTX();
+      mtx.addOutpoint(new Outpoint(Buffer.alloc(32), 0));
+      mtx.addOutput(addr, fund);
+      const tx = mtx.toTX();
+
+      // Dummy block
+      const block = {
+        height: wdb.height + 1,
+        hash: Buffer.alloc(32),
+        time: Date.now()
+      };
+
+      // Add confirmed funding TX to wallet
+      await wallet.txdb.add(tx, block);
+
+      // Check
+      const bal = await wallet.getBalance();
+      assert.strictEqual(bal.tx, 1);
+      assert.strictEqual(bal.coin, 1);
+      assert.strictEqual(bal.confirmed, fund);
+      assert.strictEqual(bal.unconfirmed, fund);
+      assert.strictEqual(bal.ulocked, 0);
+      assert.strictEqual(bal.clocked, 0);
+    });
+
+    it('should send and confirm OPEN', async () => {
+      const open = await wallet.sendOpen(name, false, { hardFee: fee });
+      uTXCount++;
+
+      // Check
+      let bal = await wallet.getBalance();
+      assert.strictEqual(bal.tx, 2);
+      assert.strictEqual(bal.coin, 2);
+      assert.strictEqual(bal.confirmed, fund);
+      assert.strictEqual(bal.unconfirmed, fund - uTXCount * fee);
+      assert.strictEqual(bal.ulocked, 0);
+      assert.strictEqual(bal.clocked, 0);
+
+      // Confirm OPEN
+      const block = {
+        height: wdb.height + 1,
+        hash: Buffer.alloc(32),
+        time: Date.now()
+      };
+      await wallet.txdb.add(open, block);
+      cTXCount++;
+
+      // Check
+      bal = await wallet.getBalance();
+      assert.strictEqual(bal.tx, 2);
+      assert.strictEqual(bal.coin, 2);
+      assert.strictEqual(bal.confirmed, fund - cTXCount * fee);
+      assert.strictEqual(bal.unconfirmed, fund - uTXCount * fee);
+      assert.strictEqual(bal.ulocked, 0);
+      assert.strictEqual(bal.clocked, 0);
+    });
+
+    it('should send and confirm BID', async () => {
+      // Advance to bidding
+      wdb.height += network.names.treeInterval + 1;
+      const losingBid = await wallet.sendBid(name, secondHighest, lockup, {
+        hardFee: fee
+      });
+      uTXCount++;
+
+      // Check
+      let bal = await wallet.getBalance();
+      assert.strictEqual(bal.tx, 3);
+      assert.strictEqual(bal.coin, 3);
+      assert.strictEqual(bal.confirmed, fund - cTXCount * fee);
+      assert.strictEqual(bal.unconfirmed, fund - uTXCount * fee);
+      assert.strictEqual(bal.ulocked, lockup);
+      assert.strictEqual(bal.clocked, 0);
+
+      // Confirm BID
+      let block = {
+        height: wdb.height + 1,
+        hash: Buffer.alloc(32),
+        time: Date.now()
+      };
+      await wallet.txdb.add(losingBid, block);
+      cTXCount++;
+
+      const losingBlindFromMtx = losingBid.outputs
+        .find(o => o.covenant.isBid())
+        .covenant.getHash(3);
+      let allBids = await wallet.getBids();
+      assert.strictEqual(allBids.length, 1);
+      const losingBlindFromWallet = allBids.find(b =>
+        b.blind.equals(losingBlindFromMtx)
+      );
+      assert(losingBlindFromWallet);
+
+      bal = await wallet.getBalance();
+      assert.strictEqual(bal.tx, 3);
+      assert.strictEqual(bal.coin, 3);
+      assert.strictEqual(bal.confirmed, fund - cTXCount * fee);
+      assert.strictEqual(bal.unconfirmed, fund - uTXCount * fee);
+      assert.strictEqual(bal.ulocked, lockup);
+      assert.strictEqual(bal.clocked, lockup);
+
+      const auctionsTxs = await wallet.createAuctionTxs(name, value, lockup, {
+        hardFee: fee
+      });
+      const winningBidUnsent = auctionsTxs.bid;
+      unsentReveal = auctionsTxs.reveal;
+
+      const winningBid = await wallet.sendMTX(winningBidUnsent, null);
+      uTXCount++;
+
+      // Check
+      bal = await wallet.getBalance();
+      assert.strictEqual(bal.tx, 4);
+      assert.strictEqual(bal.coin, 4);
+      assert.strictEqual(bal.confirmed, fund - cTXCount * fee);
+      assert.strictEqual(bal.unconfirmed, fund - uTXCount * fee);
+      assert.strictEqual(bal.ulocked, 2 * lockup);
+      assert.strictEqual(bal.clocked, lockup);
+
+      // Confirm BID
+      block = {
+        height: wdb.height + 1,
+        hash: Buffer.alloc(32),
+        time: Date.now()
+      };
+      await wallet.txdb.add(winningBid, block);
+      cTXCount++;
+
+      const winningBlindFromMtx = winningBid.outputs
+        .find(o => o.covenant.isBid())
+        .covenant.getHash(3);
+      allBids = await wallet.getBids();
+      assert.strictEqual(allBids.length, 2);
+      const winningBlindFromWallet = allBids.find(b =>
+        b.blind.equals(winningBlindFromMtx)
+      );
+      assert(winningBlindFromWallet);
+
+      // Check
+      bal = await wallet.getBalance();
+      assert.strictEqual(bal.tx, 4);
+      assert.strictEqual(bal.coin, 4);
+      assert.strictEqual(bal.confirmed, fund - cTXCount * fee);
+      assert.strictEqual(bal.unconfirmed, fund - uTXCount * fee);
+      assert.strictEqual(bal.ulocked, 2 * lockup);
+      assert.strictEqual(bal.clocked, 2 * lockup);
+    });
+
+    it('should send and confirm REVEAL', async () => {
+      // Advance to reveal
+      wdb.height += network.names.biddingPeriod;
+      const reveal = await wallet.sendMTX(unsentReveal, null);
+      uTXCount++;
+
+      // Check
+      let bal = await wallet.getBalance();
+      assert.strictEqual(bal.tx, 5);
+      assert.strictEqual(bal.coin, 5);
+      assert.strictEqual(bal.confirmed, fund - cTXCount * fee);
+      assert.strictEqual(bal.unconfirmed, fund - uTXCount * fee);
+      assert.strictEqual(bal.ulocked, lockup + value);
+      assert.strictEqual(bal.clocked, 2 * lockup);
+
+      // Confirm REVEAL
+      const block = {
+        height: wdb.height + 1,
+        hash: Buffer.alloc(32),
+        time: Date.now()
+      };
+      await wallet.txdb.add(reveal, block);
+      cTXCount++;
+
+      const revealValueFromMtx = reveal.outputs.find(o => o.covenant.isReveal())
+        .value;
+      let allReveals = await wallet.getReveals();
+      assert.strictEqual(allReveals.length, 1);
+      const revealFromWallet = allReveals.find(
+        b => b.value === revealValueFromMtx
+      );
+      assert(revealFromWallet);
+
+      // Check
+      bal = await wallet.getBalance();
+      assert.strictEqual(bal.tx, 5);
+      assert.strictEqual(bal.coin, 5);
+      assert.strictEqual(bal.confirmed, fund - cTXCount * fee);
+      assert.strictEqual(bal.unconfirmed, fund - uTXCount * fee);
+      assert.strictEqual(bal.ulocked, lockup + value);
+      assert.strictEqual(bal.clocked, lockup + value);
+
+      const reveal2 = await wallet.sendReveal(name, { hardFee: fee });
+      uTXCount++;
+
+      // Confirm REVEAL
+      const block2 = {
+        height: wdb.height + 1,
+        hash: Buffer.alloc(32),
+        time: Date.now()
+      };
+      await wallet.txdb.add(reveal2, block2);
+      cTXCount++;
+
+      const reveal2ValueFromMtx = reveal.outputs.find(o =>
+        o.covenant.isReveal()
+      ).value;
+      allReveals = await wallet.getReveals();
+      assert.strictEqual(allReveals.length, 2);
+      const reveal2FromWallet = allReveals.find(
+        b => b.value === reveal2ValueFromMtx
+      );
+      assert(reveal2FromWallet);
+
+      // Check
+      bal = await wallet.getBalance();
+      assert.strictEqual(bal.tx, 6);
+      assert.strictEqual(bal.coin, 6);
+      assert.strictEqual(bal.confirmed, fund - cTXCount * fee);
+      assert.strictEqual(bal.unconfirmed, fund - uTXCount * fee);
+      assert.strictEqual(bal.ulocked, value + secondHighest);
+      assert.strictEqual(bal.clocked, value + secondHighest);
+    });
+
+    it('should send and confirm REDEEM', async () => {
+      // Advance to close
+      wdb.height += network.names.revealPeriod;
+      const redeem = await wallet.sendRedeem(name, { hardFee: fee });
+      uTXCount++;
+
+      // Check
+      let bal = await wallet.getBalance();
+      assert.strictEqual(bal.tx, 7);
+      // Wallet coin count doesn't change:
+      // REVEAL + fee money -> REDEEM + change
+      assert.strictEqual(bal.coin, 6);
+      assert.strictEqual(bal.confirmed, fund - cTXCount * fee);
+      assert.strictEqual(bal.unconfirmed, fund - uTXCount * fee);
+      assert.strictEqual(bal.ulocked, value);
+      assert.strictEqual(bal.clocked, value + secondHighest);
+
+      // Confirm REGISTER
+      const block = {
+        height: wdb.height + 1,
+        hash: Buffer.alloc(32),
+        time: Date.now()
+      };
+      await wallet.txdb.add(redeem, block);
+      cTXCount++;
+
+      // Check
+      bal = await wallet.getBalance();
+      assert.strictEqual(bal.tx, 7);
+      assert.strictEqual(bal.coin, 6);
+      assert.strictEqual(bal.confirmed, fund - cTXCount * fee);
+      assert.strictEqual(bal.unconfirmed, fund - uTXCount * fee);
+      assert.strictEqual(bal.ulocked, value);
+      assert.strictEqual(bal.clocked, value);
+    });
+
+    it('should send and confirm REGISTER', async () => {
+      const resource = Resource.fromJSON({ records: [] });
+      const register = await wallet.sendUpdate(name, resource, {
+        hardFee: fee
+      });
+      uTXCount++;
+
+      // Check
+      let bal = await wallet.getBalance();
+      assert.strictEqual(bal.tx, 8);
+      // Wallet coin count doesn't change:
+      // REVEAL + fee money -> REGISTER + change
+      assert.strictEqual(bal.coin, 6);
+      assert.strictEqual(bal.confirmed, fund - cTXCount * fee);
+      assert.strictEqual(bal.unconfirmed, fund - uTXCount * fee);
+      assert.strictEqual(bal.ulocked, secondHighest);
+      assert.strictEqual(bal.clocked, value);
+
+      // Confirm REGISTER
+      const block = {
+        height: wdb.height + 1,
+        hash: Buffer.alloc(32),
+        time: Date.now()
+      };
+      await wallet.txdb.add(register, block);
+      cTXCount++;
+
+      // Check
+      bal = await wallet.getBalance();
+      assert.strictEqual(bal.tx, 8);
+      assert.strictEqual(bal.coin, 6);
+      assert.strictEqual(bal.confirmed, fund - cTXCount * fee);
+      assert.strictEqual(bal.unconfirmed, fund - uTXCount * fee);
+      assert.strictEqual(bal.ulocked, secondHighest);
+      assert.strictEqual(bal.clocked, secondHighest);
     });
   });
 });

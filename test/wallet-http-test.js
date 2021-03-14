@@ -253,35 +253,38 @@ describe('Wallet HTTP', function() {
   });
 
   it('should create an open and broadcast the tx', async () => {
+    let emitted = 0;
+    const handler = () => emitted++;
+    node.mempool.on('tx', handler);
+
     const json = await wallet.createOpen({
       name: name
     });
 
-    let entered = false;
-    node.mempool.on('tx', () => entered = true);
-
     // wait for tx event on mempool
     await common.event(node.mempool, 'tx');
 
-    assert.equal(entered, true);
     const mempool = await nclient.getMempool();
 
     assert.ok(mempool.includes(json.hash));
 
     const opens = json.outputs.filter(output => output.covenant.type === types.OPEN);
     assert.equal(opens.length, 1);
+
+    assert.equal(emitted, 1);
+
+    // reset for next test
+    node.mempool.removeListener('tx', handler);
   });
 
   it('should create an open and not broadcast the transaction', async () => {
+    let entered = false;
+    const handler = () => entered = true;
+    node.mempool.on('tx', handler);
+
     const json = await wallet.createOpen({
       name: name,
       broadcast: false
-    });
-
-    let entered = false;
-    node.mempool.on('tx', () => {
-      entered = true;
-      assert.ok(false);
     });
 
     await sleep(500);
@@ -306,19 +309,20 @@ describe('Wallet HTTP', function() {
 
     const opens = mtx.outputs.filter(output => output.covenant.type === types.OPEN);
     assert.equal(opens.length, 1);
+
+    // reset for next test
+    node.mempool.removeListener('tx', handler);
   });
 
   it('should create an open and not sign the transaction', async () => {
+    let entered = false;
+    const handler = () => entered = true;
+    node.mempool.on('tx', handler);
+
     const json = await wallet.createOpen({
       name: name,
       broadcast: false,
       sign: false
-    });
-
-    let entered = false;
-    node.mempool.on('tx', () => {
-      entered = true;
-      assert.ok(false);
     });
 
     await sleep(500);
@@ -342,6 +346,9 @@ describe('Wallet HTTP', function() {
 
     // transaction not valid
     assert.equal(mtx.verify(), false);
+
+    // reset for next test
+    node.mempool.removeListener('tx', handler);
   });
 
   it('should throw error with incompatible broadcast and sign options', async () => {
@@ -838,6 +845,71 @@ describe('Wallet HTTP', function() {
     matchTxId(auction.bids, state.bids[1].hash);
     matchTxId(auction.reveals, state.reveals[0].hash);
     matchTxId(auction.reveals, state.reveals[1].hash);
+  });
+
+  it('should create a bid and a reveal (reveal in advance)', async () => {
+    const balanceBeforeTest = await wallet.getBalance();
+    const lockConfirmedBeforeTest = balanceBeforeTest.lockedConfirmed;
+    const lockUnconfirmedBeforeTest = balanceBeforeTest.lockedUnconfirmed;
+
+    await wallet.createOpen({ name: name });
+
+    await mineBlocks(treeInterval + 2, cbAddress);
+
+    const balanceBeforeBid = await wallet.getBalance();
+    assert.equal(balanceBeforeBid.lockedConfirmed - lockConfirmedBeforeTest, 0);
+    assert.equal(
+      balanceBeforeBid.lockedUnconfirmed - lockUnconfirmedBeforeTest,
+      0
+    );
+
+    const bidValue = 1000000;
+    const lockupValue = 5000000;
+
+    const auctionTxs = await wallet.client.post(
+      `/wallet/${wallet.id}/auction`,
+      {
+        name: name,
+        bid: 1000000,
+        lockup: 5000000,
+        broadcastBid: true
+      }
+    );
+
+    await mineBlocks(biddingPeriod + 1, cbAddress);
+
+    let walletAuction = await wallet.getAuctionByName(name);
+    const bidFromWallet = walletAuction.bids.find(
+      b => b.prevout.hash === auctionTxs.bid.hash
+    );
+    assert(bidFromWallet);
+
+    const { info } = await nclient.execute('getnameinfo', [name]);
+    assert.equal(info.name, name);
+    assert.equal(info.state, 'REVEAL');
+
+    const b5 = await wallet.getBalance();
+    assert.equal(b5.lockedConfirmed - lockConfirmedBeforeTest, lockupValue);
+    assert.equal(b5.lockedUnconfirmed - lockUnconfirmedBeforeTest, lockupValue);
+
+    await nclient.broadcast(auctionTxs.reveal.hex);
+    await mineBlocks(1, cbAddress);
+
+    walletAuction = await wallet.getAuctionByName(name);
+    const revealFromWallet = walletAuction.reveals.find(
+      b => b.prevout.hash === auctionTxs.reveal.hash
+    );
+    assert(revealFromWallet);
+
+    const b6 = await wallet.getBalance();
+    assert.equal(b6.lockedConfirmed - lockConfirmedBeforeTest, bidValue);
+    assert.equal(b6.lockedUnconfirmed - lockUnconfirmedBeforeTest, bidValue);
+
+    await mineBlocks(revealPeriod + 1, cbAddress);
+
+    const ns = await nclient.execute('getnameinfo', [name]);
+    const coin = await wallet.getCoin(ns.info.owner.hash, ns.info.owner.index);
+    assert.ok(coin);
   });
 
   it('should create a redeem', async () => {

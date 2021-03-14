@@ -1,5 +1,33 @@
 # HSD Release Notes & Changelog
 
+## unreleased
+
+### Wallet changes
+
+- Fixes a bug that caused rescans to fail if a name being "watched" was ever
+`TRANSFER`ed. A `deepclean` plus `rescan` may be required to fix affected wallets.
+
+### DNS changes
+
+- Root server DNSSEC has been fixed. It is only authoritative over DS and TXT records,
+and only returns TXT if no NS (referral) is present in the zone.
+
+### Wallet API changes
+
+- Adds new wallet HTTP endpoint `/wallet/:id/auction` based on `POST /wallet/:id/bid`.
+It requires an additional parameter `broadcastBid` set to either true or false.
+This action returns a bid and its corresponding reveal, the reveal being prepared in advance.
+The bid will be broadcasted either during the creation (`broadcastBid=true`) or at a later time
+(`broadcastBid=false`).
+The reveal will have to be broadcasted at a later time, during the REVEAL phase.
+The lockup must include a blind big enough to ensure the BID will be the only input of the REVEAL
+transaction. 
+
+### Node & Wallet API changes
+
+- The `stats` field included in `namestate.toJSON()` includes extra data if the name
+is in a TRANSFER state.
+
 ## v2.3.0
 
 ### Node changes
