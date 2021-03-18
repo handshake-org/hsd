@@ -1673,9 +1673,9 @@ describe('Wallet HTTP', function() {
       names: validNames
     });
 
-    const {processedReveals, errorMessages} = json;
+    const {processedReveals, errors} = json;
 
-    assert.ok(errorMessages.length === 0);
+    assert.ok(errors.length === 0);
     assert.ok(processedReveals.length === BID_COUNT * VALID_NAMES_LEN);
 
     for (const processedReveal of processedReveals) {
