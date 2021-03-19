@@ -1,0 +1,34 @@
+name: versioned-build
+
+on:
+  push:
+    tags:
+      - '*'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # Run for master only
+    steps:
+      - uses: actions/checkout@v2
+      - 
+        name: Set Release version
+        run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+      -
+        name: Set up QEMU
+        uses: docker/setup-qemu-action@v1
+      -
+        name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      -
+        name: Login to DockerHub
+        uses: docker/login-action@v1 
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Build baby Build!
+        uses: docker/build-push-action@v2.3.0
+        with:
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/hsd:${{ env.RELEASE_VERSION }},${{ secrets.DOCKERHUB_USERNAME }}/hsd:lts
+          platforms: linux/amd64,linux/arm64,linux/arm
