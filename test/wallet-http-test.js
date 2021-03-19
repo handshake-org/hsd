@@ -1533,15 +1533,16 @@ describe('Wallet HTTP', function() {
     ); // BIDS LEN + 1 NONE
   });
 
-  it('should create a batch reveal transaction with partial outputs for domains that exceeds the output limit of 200 (+1 for NONE)', async function() {
-    const MAX_BID_COUNT = 200;
-    const BID_COUNT = 250;
-    const VALID_NAMES_LEN = 1;
+  it('should not permit partially revealed domains', async function() {
+    const VALID_NAMES_LEN = 5;
     const validNames = [];
+    const BID_COUNT = 50;
+    const MAX_REVEAL_COUNT = 200;
     for (let i = 0; i < VALID_NAMES_LEN; i++) {
       validNames.push(await nclient.execute('grindname', [5]));
     }
 
+    await mineBlocks(1, cbAddress);
     await mineBlocks(1, cbAddress);
 
     await wclient.createBatchOpen('primary', {
@@ -1577,7 +1578,7 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(biddingPeriod + 1, cbAddress);
 
-    let json = await wclient.createBatchReveal('primary', {
+    const json = await wclient.createBatchReveal('primary', {
       passphrase: '',
       names: validNames
     });
@@ -1585,7 +1586,7 @@ describe('Wallet HTTP', function() {
     const {processedReveals, errors} = json;
 
     assert.ok(errors.length === 1);
-    assert.ok(errors[0].name != null);
+    assert.ok(processedReveals.length === MAX_REVEAL_COUNT);
 
     await sleep(100);
 
@@ -1593,28 +1594,6 @@ describe('Wallet HTTP', function() {
     for (const processedReveal of processedReveals) {
       assert.ok(mempool.includes(processedReveal.tx_hash));
     }
-
-    const numberOfBids = MAX_BID_COUNT;
-    assert.ok(
-      processedReveals.length === numberOfBids
-    ); // BIDS LEN + 1 NONE
-
-    // do reveal again and expect remaning to be present as output
-
-    await mineBlocks(1, cbAddress);
-
-    json = await wclient.createBatchReveal('primary', {
-      passphrase: '',
-      names: validNames
-    });
-
-    const {processedReveals: processedReveals2, errors: errors2} = json;
-
-    assert.ok(errors2.length === 0);
-
-    // Cache will provide previous outputs plus new outputs
-    const totalNumberOfBids = (VALID_NAMES_LEN * BID_COUNT);
-    assert.ok(processedReveals2.length === totalNumberOfBids);
   });
 
   it('should respond from cache to repeated identical requests', async function() {
