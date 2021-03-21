@@ -1458,7 +1458,7 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(biddingPeriod + 1, cbAddress);
 
-    const json = await wclient.createBatchReveal('primary', {
+    const json = await wclient.createBatchRevealWithCache('primary', {
       passphrase: '',
       names: [...validNames, ...invalidNames]
     });
@@ -1508,7 +1508,7 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(biddingPeriod + 1, cbAddress);
 
-    const json = await wclient.createBatchReveal('primary', {
+    const json = await wclient.createBatchRevealWithCache('primary', {
       passphrase: '',
       names: validNames,
       sign: true,
@@ -1578,7 +1578,7 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(biddingPeriod + 1, cbAddress);
 
-    const json = await wclient.createBatchReveal('primary', {
+    const json = await wclient.createBatchRevealWithCache('primary', {
       passphrase: '',
       names: validNames
     });
@@ -1640,14 +1640,14 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(biddingPeriod + 1, cbAddress);
 
-    await wclient.createBatchReveal('primary', {
+    await wclient.createBatchRevealWithCache('primary', {
       passphrase: '',
       names: validNames
     });
 
     await mineBlocks(1, cbAddress);
 
-    const json = await wclient.createBatchReveal('primary', {
+    const json = await wclient.createBatchRevealWithCache('primary', {
       passphrase: '',
       names: validNames
     });
@@ -1665,7 +1665,7 @@ describe('Wallet HTTP', function() {
   it('should reject a batch reveal transaction (multiple outputs) for invalid names', async function() {
     const invalidNames = ['长城', '大鸟'];
     try {
-      await wclient.createBatchReveal('primary', {
+      await wclient.createBatchRevealWithCache('primary', {
         passphrase: '',
         names: invalidNames
       });
