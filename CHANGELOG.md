@@ -28,6 +28,13 @@ wallet node) that will check every account of every wallet in the DB and ensure
 the lookahead value is the current default and maximum of `200`. A rescan is
 recommended after this action.
 
+- `rpc getbids` accepts a third parameter `unrevealed` _(bool)_ which filters the response by checking
+the wallet's unspent coins database for each bid. If an unspent coin is found, the output address
+of that coin is added to the JSON response. This is useful for wallet recovery scenarios
+when users need to call `rpc importnonce` to repair unknown blinds. The complete usage is now
+`rpc getbids name (own) (unrevealed)` so for example a wallet-recovering user would execute
+`rpc getbids null true true`.
+
 ### Node & Wallet API changes
 
 - The `stats` field included in `namestate.toJSON()` includes extra data if the name
