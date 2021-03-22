@@ -261,12 +261,9 @@ describe('Wallet HTTP', function() {
       name: name
     });
 
-<<<<<<< HEAD
-=======
     // wait for tx event on mempool
     await common.event(node.mempool, 'tx');
 
->>>>>>> production-namebase
     const mempool = await nclient.getMempool();
 
     assert.ok(mempool.includes(json.hash));
@@ -290,11 +287,8 @@ describe('Wallet HTTP', function() {
       broadcast: false
     });
 
-<<<<<<< HEAD
-=======
     await sleep(500);
 
->>>>>>> production-namebase
     // tx is not in the mempool
     assert.equal(entered, false);
     const mempool = await nclient.getMempool();
@@ -331,11 +325,8 @@ describe('Wallet HTTP', function() {
       sign: false
     });
 
-<<<<<<< HEAD
-=======
     await sleep(500);
 
->>>>>>> production-namebase
     // tx is not in the mempool
     assert.equal(entered, false);
     const mempool = await nclient.getMempool();
