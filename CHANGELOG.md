@@ -2,6 +2,58 @@
 
 ## unreleased
 
+### Wallet changes
+
+- Fixes a bug that caused rescans to fail if a name being "watched" was ever
+`TRANSFER`ed. A `deepclean` plus `rescan` may be required to fix affected wallets.
+
+### DNS changes
+
+- Root server DNSSEC has been fixed. It is only authoritative over DS and TXT records,
+and only returns TXT if no NS (referral) is present in the zone.
+
+### Wallet API changes
+
+- Adds new wallet HTTP endpoint `/wallet/:id/auction` based on `POST /wallet/:id/bid`.
+It requires an additional parameter `broadcastBid` set to either true or false.
+This action returns a bid and its corresponding reveal, the reveal being prepared in advance.
+The bid will be broadcasted either during the creation (`broadcastBid=true`) or at a later time
+(`broadcastBid=false`).
+The reveal will have to be broadcasted at a later time, during the REVEAL phase.
+The lockup must include a blind big enough to ensure the BID will be the only input of the REVEAL
+transaction. 
+
+### Node & Wallet API changes
+
+- The `stats` field included in `namestate.toJSON()` includes extra data if the name
+is in a TRANSFER state.
+
+## v2.3.0
+
+### Node changes
+
+- `FullNode` now parses option `--min-weight=<number>` (`min-weight: <number>` in
+hsd.conf or `minWeight: <number>` in JavaScript object instantiation).
+When assembling a block template, if there are not enough fee-paying transactions available,
+the miner will add transactions up to the minimum weight that would normally be
+ignored for being "free" (paying a fee below policy limit). The default value is
+raised from `0` to `5000` (a 1-in, 2-out BID transaction has a weight of about `889`).
+
+- Transactions that have sat unconfirmed in the mempool for 3 days will be evicted.
+This is the default `MEMPOOL_EXPIRY_TIME` value set in `policy.js` but can be
+configured (in seconds) with the `FullNode` option `--mempool-expiry-time`.
+
+### Wallet API changes
+
+- Adds new wallet HTTP endpoint `/deepclean` that requires a parameter
+`I_HAVE_BACKED_UP_MY_WALLET=true`. This action wipes out balance and transaction
+history in the wallet DB but retains key hashes and name maps. It should be used
+only if the wallet state has been corrupted by issues like the
+[reserved name registration bug](https://github.com/handshake-org/hsd/issues/454)
+or the
+[locked coins balance after FINALIZE bug](https://github.com/handshake-org/hsd/pull/464).
+After the corrupt data has been cleared, **a walletDB rescan is required**.
+
 ### Node API changes
 
 - Adds new wallet HTTP endpoint `/deeprescan` that requires a parameter
@@ -15,7 +67,7 @@ or the
 ### Wallet changes
 
 - Fixes a bug that ignored the effect of sending or receiving a FINALIZE on a
-wallet's `lockedConfirmed` and `lockedUnconfirmed` balance. 
+wallet's `lockedConfirmed` and `lockedUnconfirmed` balance.
 
 ## v2.2.0
 

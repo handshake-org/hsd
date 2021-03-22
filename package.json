@@ -22,7 +22,7 @@
   },
   "dependencies": {
     "bcfg": "~0.1.6",
-    "bcrypto": "~5.3.0",
+    "bcrypto": "~5.4.0",
     "bdb": "~1.3.0",
     "bdns": "~0.1.5",
     "bevent": "~0.1.5",
@@ -34,7 +34,7 @@
     "blru": "~0.1.6",
     "blst": "~0.1.5",
     "bmutex": "~0.1.6",
-    "bns": "~0.13.0",
+    "bns": "~0.14.0",
     "bsert": "~0.0.10",
     "bsock": "~0.1.9",
     "bsocks": "~0.2.5",
@@ -44,12 +44,12 @@
     "bupnp": "~0.2.6",
     "bval": "~0.1.6",
     "bweb": "~0.1.10",
-    "goosig": "~0.9.0",
+    "goosig": "~0.10.0",
     "hs-client": "~0.0.9",
     "n64": "~0.2.10",
     "mrmr": "~0.1.8",
     "namebase-hs-client": "github:namebasehq/hs-client#799eb9b",
-    "urkel": "~0.6.3"
+    "urkel": "~0.7.0"
   },
   "devDependencies": {
     "babel-eslint": "^10.1.0",
@@ -67,6 +67,7 @@
     "hsw-cli": "./bin/hsw-cli"
   },
   "scripts": {
+    "build-docs": "jsdoc -c jsdoc.json",
     "lint": "eslint $(cat .eslintfiles)",
     "lint-file": "eslint",
     "test": "bmocha --recursive --reporter spec test/*.js",
