@@ -59,7 +59,7 @@ const {
 } = network.names;
 
 describe('Wallet HTTP', function() {
-  this.timeout(20000);
+  this.timeout(100000);
 
   before(async () => {
     await node.open();
@@ -1457,23 +1457,22 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(biddingPeriod + 1, cbAddress);
 
-    const json = await wclient.createBatchReveal('primary', {
+    const json = await wclient.createBatchRevealWithCache('primary', {
       passphrase: '',
-      names: [...validNames, ...invalidNames],
-      sign: true,
-      broadcast: true
+      names: [...validNames, ...invalidNames]
     });
 
-    const { tx: transaction, errors } = json;
+    const { processedReveals, errors } = json;
     assert.ok(errors.length === INVALID_NAMES_LEN);
 
     await sleep(500);
 
     const mempool = await nclient.getMempool();
-    assert.ok(mempool.includes(transaction.hash));
-    assert.ok(
-      transaction['outputs'] && transaction['outputs'].length === (numberOfBids + 1)
-    ); // BIDS LEN + 1 NONE
+
+    for (const processedReveal of processedReveals) {
+      assert.ok(mempool.includes(processedReveal.tx_hash));
+    }
+    assert.ok(processedReveals.length === numberOfBids);
   });
 
   it('should create a batch reveal transaction with an output limit of 200 (+1 for NONE)', async function() {
@@ -1508,14 +1507,14 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(biddingPeriod + 1, cbAddress);
 
-    const json = await wclient.createBatchReveal('primary', {
+    const json = await wclient.createBatchRevealWithCache('primary', {
       passphrase: '',
       names: validNames,
       sign: true,
       broadcast: true
     });
 
-    const {tx: transaction, errors} = json;
+    const {processedReveals, errors} = json;
 
     assert.ok(errors.length === OUTPUT_LIMIT_EXCEEDING_NAMES_LEN);
     assert.ok(errors[0].name != null);
@@ -1523,22 +1522,26 @@ describe('Wallet HTTP', function() {
     await sleep(100);
 
     const mempool = await nclient.getMempool();
-    assert.ok(mempool.includes(transaction.hash));
+    for (const processedReveal of processedReveals) {
+      assert.ok(mempool.includes(processedReveal.tx_hash));
+    }
+
     const numberOfBids = (VALID_NAMES_LEN - OUTPUT_LIMIT_EXCEEDING_NAMES_LEN) * BID_COUNT;
     assert.ok(
-      transaction['outputs'] && transaction['outputs'].length === (numberOfBids + 1)
+      processedReveals.length === numberOfBids
     ); // BIDS LEN + 1 NONE
   });
 
-  it('should create a batch reveal transaction with partial outputs for domains that exceeds the output limit of 200 (+1 for NONE)', async function() {
-    const MAX_BID_COUNT = 200;
-    const BID_COUNT = 250;
-    const VALID_NAMES_LEN = 1;
+  it('should not permit partially revealed domains', async function() {
+    const VALID_NAMES_LEN = 5;
     const validNames = [];
+    const BID_COUNT = 50;
+    const MAX_REVEAL_COUNT = 200;
     for (let i = 0; i < VALID_NAMES_LEN; i++) {
       validNames.push(await nclient.execute('grindname', [5]));
     }
 
+    await mineBlocks(1, cbAddress);
     await mineBlocks(1, cbAddress);
 
     await wclient.createBatchOpen('primary', {
@@ -1574,60 +1577,96 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(biddingPeriod + 1, cbAddress);
 
-    let json = await wclient.createBatchReveal('primary', {
+    const json = await wclient.createBatchRevealWithCache('primary', {
       passphrase: '',
-      names: validNames,
-      sign: true,
-      broadcast: true
+      names: validNames
     });
 
-    const {tx: transaction, errors} = json;
+    const {processedReveals, errors} = json;
 
     assert.ok(errors.length === 1);
-    assert.ok(errors[0].name != null);
+    assert.ok(processedReveals.length === MAX_REVEAL_COUNT);
 
     await sleep(100);
 
-    let mempool = await nclient.getMempool();
-    assert.ok(mempool.includes(transaction.hash));
-    const numberOfBids = MAX_BID_COUNT;
-    assert.ok(
-      transaction['outputs'] && transaction['outputs'].length === (numberOfBids + 1)
-    ); // BIDS LEN + 1 NONE
+    const mempool = await nclient.getMempool();
+    for (const processedReveal of processedReveals) {
+      assert.ok(mempool.includes(processedReveal.tx_hash));
+    }
+  });
 
-    // do reveal again and expect remaning to be present as output
+  it('should respond from cache to repeated identical requests', async function() {
+    const VALID_NAMES_LEN = 2;
+    const validNames = [];
+    const BID_COUNT = 50;
+    for (let i = 0; i < VALID_NAMES_LEN; i++) {
+      validNames.push(await nclient.execute('grindname', [5]));
+    }
+
+    await mineBlocks(1, cbAddress);
+    await mineBlocks(1, cbAddress);
+
+    await wclient.createBatchOpen('primary', {
+      names: validNames,
+      passphrase: '',
+      broadcast: true,
+      sign: true
+    });
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    // using batch bids to speed up the test
+    let bids = [];
+    for (const domainName of validNames) {
+      for (let i=1; i<=BID_COUNT; i++) {
+        bids.push({
+          name: domainName,
+          bid: 999 + i,
+          lockup: 2000,
+          idempotencyKey: domainName + '_' + i
+        });
+
+        if (i % 50 === 0) {
+          await wclient.createBatchBid('primary', {
+            passphrase: '',
+            bids: bids
+          });
+          await mineBlocks(1, cbAddress);
+          bids = [];
+        }
+      }
+    }
+
+    await mineBlocks(biddingPeriod + 1, cbAddress);
+
+    await wclient.createBatchRevealWithCache('primary', {
+      passphrase: '',
+      names: validNames
+    });
 
     await mineBlocks(1, cbAddress);
 
-    json = await wclient.createBatchReveal('primary', {
+    const json = await wclient.createBatchRevealWithCache('primary', {
       passphrase: '',
-      names: validNames,
-      sign: true,
-      broadcast: true
+      names: validNames
     });
 
-    const {tx: transaction2, errors: errors2} = json;
+    const {processedReveals, errors} = json;
 
-    assert.ok(errors2.length === 0);
+    assert.ok(errors.length === 0);
+    assert.ok(processedReveals.length === BID_COUNT * VALID_NAMES_LEN);
 
-    await sleep(100);
-
-    mempool = await nclient.getMempool();
-    assert.ok(mempool.includes(transaction2.hash));
-    const numberOfBids2 = (VALID_NAMES_LEN * BID_COUNT) - MAX_BID_COUNT;
-    assert.ok(
-      transaction2['outputs'] && transaction2['outputs'].length === (numberOfBids2 + 1)
-    ); // BIDS LEN + 1 NONE
+    for (const processedReveal of processedReveals) {
+      assert.ok(processedReveal.from_cache);
+    }
   });
 
   it('should reject a batch reveal transaction (multiple outputs) for invalid names', async function() {
     const invalidNames = ['长城', '大鸟'];
     try {
-      await wclient.createBatchReveal('primary', {
+      await wclient.createBatchRevealWithCache('primary', {
         passphrase: '',
-        names: invalidNames,
-        sign: true,
-        broadcast: true
+        names: invalidNames
       });
     } catch (err) {
       assert.ok(err);
