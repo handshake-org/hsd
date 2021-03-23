@@ -229,9 +229,7 @@ describe('Auction RPCs', function() {
   it('should create BID with signing paths', async () => {
     // Create loser's BID.
     await util.wrpc('selectwallet', [loser.id]);
-    assert(
-      await util.wrpc('sendbid', [name, loserBid.bid, loserBid.lockup])
-    );
+    assert(await util.wrpc('sendbid', [name, loserBid.bid, loserBid.lockup]));
 
     // Create, assert, submit and mine winner's BID.
     await util.wrpc('selectwallet', [winner.id]);
@@ -346,6 +344,15 @@ describe('Auction RPCs', function() {
 
     // Mine past REVEAL period.
     await mineBlocks(util.network.names.revealPeriod, winner);
+  });
+
+  it('should request only unrevealed BIDs for name and find none', async () => {
+    await util.wrpc('selectwallet', [loser.id]);
+    const owned = await util.wrpc('getbids', [name, true, false]);
+    const unrevealed = await util.wrpc('getbids', [name, true, true]);
+
+    assert.strictEqual(owned.length, 1);
+    assert.strictEqual(unrevealed.length, 0);
   });
 
   it('should create REDEEM with signing paths', async () => {
