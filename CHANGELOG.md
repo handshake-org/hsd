@@ -12,6 +12,15 @@
 - Root server DNSSEC has been fixed. It is only authoritative over DS and TXT records,
 and only returns TXT if no NS (referral) is present in the zone.
 
+### Node changes
+
+- `FullNode` and `SPVNode` accept configuration parameter `--no-dns` (or `no-dns: true` in
+`hsd.conf`) which launches the node without either DNS server (the root authoritative
+server and the recursive resolver). This avoids some port collisions with other HNS resolvers
+like hnsd running locally, and generally separates and reduces security concerns around
+running unneeded servers when a node is just used for transactions and blocks.
+`--no-rs` is also accepted to disable the recursive DNS resolver (but keep the root server).
+
 ### Wallet API changes
 
 - Adds new wallet HTTP endpoint `/wallet/:id/auction` based on `POST /wallet/:id/bid`.
