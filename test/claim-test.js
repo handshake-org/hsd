@@ -70,8 +70,8 @@ describe('Reserved Name Claims', function() {
     ownership.ignore = false;
   });
 
-  it('should fund wallet', async () => {
-    await mineBlocks(20, addr);
+  it('should fund wallet and activate soft fork', async () => {
+    await mineBlocks(network.deflationHeight + 1, addr);
     check();
   });
 
