@@ -7,6 +7,7 @@
 const assert = require('bsert');
 const Network = require('../lib/protocol/network');
 const Address = require('../lib/primitives/address');
+const Claim = require('../lib/primitives/claim');
 const FullNode = require('../lib/node/fullnode');
 const consensus = require('../lib/protocol/consensus');
 const ownership = require('../lib/covenants/ownership');
@@ -172,5 +173,62 @@ describe('Reserved Name Claims', function() {
     const state = node.chain.db.state;
     // Claimed names have 0 value, nothing is burned
     assert.strictEqual(state.burned, 0);
+  });
+
+  it('should send initial CLAIM to unspendable address', async () => {
+    const griefClaim = await wallet.createClaim('nl');
+
+    const oldData = ownership.parseData(
+      griefClaim.proof,
+      griefClaim.target,
+      [griefClaim.txt],
+      network
+    );
+
+    const addr = new Address({
+      version: 31,
+      hash: Buffer.alloc(2)
+    });
+    const txt = ownership.createData(addr,
+                                     oldData.fee,
+                                     oldData.commitHash,
+                                     oldData.commitHeight,
+                                     network);
+
+    griefClaim.proof.addData([txt]);
+    const griefProof = Claim.fromProof(griefClaim.proof);
+
+    await wdb.sendClaim(griefProof);
+
+    check();
+    await mineBlocks(1);
+    // Only the fee gets generated because the CLAIM output is unspendable
+    AUDIT += oldData.fee;
+    check();
+
+    const tip = await node.chain.getBlock(node.chain.tip.hash);
+    const cbOut = tip.txs[0].outputs[0].value;
+    assert.strictEqual(cbOut, REWARD + oldData.fee);
+  });
+
+  it('should send re-CLAIM after unspendable-address attack', async () => {
+    reclaim = await wallet.sendFakeClaim('nl');
+    check();
+    await mineBlocks(1);
+    check();
+
+    // Miner didn't get a fee from the re-CLAIM
+    const tip = await node.chain.getBlock(node.chain.tip.hash);
+    const cbOut = tip.txs[0].outputs[0].value;
+    assert.strictEqual(cbOut, REWARD);
+
+    // Initial claim and re-claim have same value & fee
+    // but commit to different blocks
+    const initial = claim.getData(network);
+    const update = reclaim.getData(network);
+    assert.strictEqual(initial.value, update.value);
+    assert.strictEqual(initial.fee, update.fee);
+    assert.notStrictEqual(initial.commitHeight, update.commitHeight);
+    assert.notStrictEqual(initial.commitHash, update.commitHash);
   });
 });
