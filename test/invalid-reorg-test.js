@@ -211,9 +211,13 @@ describe('Invalid Reorg', function() {
         });
       }
 
+      let state = null;
+
       it('should handle a reorg', async () => {
         assert(chain.tip.hash.equals(tip1.hash));
         assert(!chain.tip.hash.equals(tip2.hash));
+
+        state = chain.db.state.clone();
 
         const job = await cpu.createJob(tip2);
 
@@ -236,6 +240,12 @@ describe('Invalid Reorg', function() {
         assert.strictEqual(err.reason, 'bad-cb-amount');
       });
 
+      it('should have correct chain value', () => {
+        assert.strictEqual(chain.db.state.value, state.value);
+        assert.strictEqual(chain.db.state.coin, state.coin);
+        assert.strictEqual(chain.db.state.tx, state.tx);
+      });
+
       it('should check main chain', async () => {
         assert(await chain.isMainChain(tip1));
         assert(chain.tip.hash.equals(tip1.hash));
@@ -245,6 +255,36 @@ describe('Invalid Reorg', function() {
 
         for (const hash of invalid)
           assert(chain.invalid.has(hash));
+      });
+
+      it('should replay main chain', async () => {
+        const blocks = [];
+
+        let entry = await chain.getEntry(1);
+
+        do {
+          blocks.push(await chain.getBlock(entry.hash));
+          entry = await chain.getNext(entry);
+        } while (entry);
+
+        const fresh = new Chain({
+          memory: true,
+          network,
+          workers
+        });
+
+        await fresh.open();
+
+        for (const block of blocks)
+          assert(await fresh.add(block));
+
+        assert(fresh.tip.hash.equals(chain.tip.hash));
+
+        assert.strictEqual(fresh.db.state.value, chain.db.state.value);
+        assert.strictEqual(fresh.db.state.coin, chain.db.state.coin);
+        assert.strictEqual(fresh.db.state.tx, chain.db.state.tx);
+
+        await fresh.close();
       });
 
       it('should mine a block after a reorg', async () => {
