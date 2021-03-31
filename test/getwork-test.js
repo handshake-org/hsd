@@ -24,7 +24,7 @@ const {wdb} = node.require('walletdb');
 
 let wallet = null;
 
-describe('Getwork', function() {
+describe('Get Work', function() {
   this.timeout(45000);
 
   it('should open chain and miner', async () => {
