@@ -79,7 +79,7 @@ $ npm install -g https://github.com/handshake-org/hsd.git
 
 A `git` ref can be used to install a particular version by appending
 a `#` and the name of the `git` ref to the URL. For example,
-`https://github.com/handshake-org/hsd.git#v2.3.0`. It is recommended
+`https://github.com/handshake-org/hsd.git#v2.4.0`. It is recommended
 to use the [latest tagged release](https://github.com/handshake-org/hsd/releases).
 
 If adding `hsd` as a dependency to a project, use the command:
