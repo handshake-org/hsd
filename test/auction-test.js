@@ -556,8 +556,111 @@ describe('Auction', function() {
       }
     });
 
+    it('should mine to deflation height', async () => {
+      assert(chain.height < network.deflationHeight - 2);
+
+      while (chain.height < network.deflationHeight - 2) {
+        const block = await cpu.mineBlock();
+        assert(block);
+        assert(await chain.add(block));
+      }
+    });
+
     it('should open a TLD claim for .nl', async () => {
       const claim = await wallet.fakeClaim('nl');
+
+      assert(chain.height === network.deflationHeight - 2);
+
+      const job = await cpu.createJob();
+      const last = job.attempt.fees;
+
+      job.pushClaim(claim, network);
+
+      assert(job.attempt.fees === last + job.attempt.claims[0].fee);
+
+      job.refresh();
+
+      const block = await job.mineAsync();
+
+      try {
+        ownership.ignore = true;
+        assert(await chain.add(block));
+      } finally {
+        ownership.ignore = false;
+      }
+    });
+
+    it('should fail to replace TLD claim for .nl', async () => {
+      const claim = await wallet.fakeClaim('nl', {
+        rate: 2000,
+        commitHeight: 2
+      });
+
+      assert(chain.height === network.deflationHeight - 1);
+
+      const job = await cpu.createJob();
+      job.pushClaim(claim, network);
+      job.refresh();
+
+      const block = await job.mineAsync();
+
+      let err = null;
+
+      ownership.ignore = true;
+
+      try {
+        await chain.add(block);
+      } catch (e) {
+        err = e;
+      }
+
+      ownership.ignore = false;
+
+      assert(err);
+      assert.strictEqual(err.reason, 'bad-claim-value');
+    });
+
+    it('should reject a fee-redeeming coinbase for .nl', async () => {
+      const claim = await wallet.fakeClaim('nl', {
+        commitHeight: 2
+      });
+
+      assert(chain.height === network.deflationHeight - 1);
+
+      const job = await cpu.createJob();
+      const last = job.attempt.fees;
+
+      job.pushClaim(claim, network);
+
+      assert(job.attempt.fees === last);
+
+      job.attempt.fees += job.attempt.claims[0].fee;
+      job.refresh();
+
+      const block = await job.mineAsync();
+
+      let err = null;
+
+      ownership.ignore = true;
+
+      try {
+        await chain.add(block);
+      } catch (e) {
+        err = e;
+      }
+
+      ownership.ignore = false;
+
+      assert(err);
+      assert.strictEqual(err.reason, 'bad-cb-amount');
+    });
+
+    it('should replace TLD claim for .nl', async () => {
+      const claim = await wallet.fakeClaim('nl', {
+        commitHeight: 2
+      });
+
+      assert(chain.height === network.deflationHeight - 1);
 
       const job = await cpu.createJob();
       job.pushClaim(claim, network);
@@ -575,6 +678,8 @@ describe('Auction', function() {
 
     it('should open a TLD claim for .af', async () => {
       const claim = await wallet.fakeClaim('af');
+
+      assert(chain.height === network.deflationHeight);
 
       const job = await cpu.createJob();
       job.pushClaim(claim, network);

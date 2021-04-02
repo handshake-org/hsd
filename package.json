@@ -1,7 +1,6 @@
 {
   "name": "hsd",
-  "version": "0.0.0",
-  "private": false,
+  "version": "2.4.0",
   "description": "Cryptocurrency bike-shed",
   "license": "MIT",
   "repository": "git://github.com/namebasehq/hsd.git",
@@ -46,8 +45,8 @@
     "bweb": "~0.1.10",
     "goosig": "~0.10.0",
     "hs-client": "~0.0.9",
-    "n64": "~0.2.10",
     "mrmr": "~0.1.8",
+    "n64": "~0.2.10",
     "namebase-hs-client": "github:namebasehq/hs-client#799eb9b",
     "urkel": "~0.7.0"
   },
