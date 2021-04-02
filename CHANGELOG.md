@@ -1,6 +1,6 @@
 # HSD Release Notes & Changelog
 
-## unreleased
+## v2.4.0
 
 ### Chain & Consensus changes
 
@@ -12,6 +12,11 @@
   migration will automatically run on boot and should only take 2-3 minutes.
   Pruned nodes _cannot_ run this migration. Note that pruned nodes may have an
   incorrect chain value until they re-sync.
+
+### Mining changes
+
+- `getwork` has been fixed and improved. See
+  https://github.com/handshake-org/hsd/pull/583.
 
 ### Wallet changes
 
