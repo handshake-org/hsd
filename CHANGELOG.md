@@ -2,6 +2,17 @@
 
 ## unreleased
 
+### Chain & Consensus changes
+
+- A consensus inflation bug has been fixed. Non-upgraded miners should upgrade
+  as soon as possible. See
+  https://handshake.org/notice/2020-04-02-Inflation-Bug-Disclosure.html for
+  more information.
+- A new chain value migration is necessary (related to the above fix). This
+  migration will automatically run on boot and should only take 2-3 minutes.
+  Pruned nodes _cannot_ run this migration. Note that pruned nodes may have an
+  incorrect chain value until they re-sync.
+
 ### Wallet changes
 
 - Fixes a bug that caused rescans to fail if a name being "watched" was ever

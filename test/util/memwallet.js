@@ -29,6 +29,7 @@ const ownership = require('../../lib/covenants/ownership');
 const policy = require('../../lib/protocol/policy');
 const {Resource} = require('../../lib/dns/resource');
 const Address = require('../../lib/primitives/address');
+const {OwnershipProof} = ownership;
 const {states} = NameState;
 const {types} = rules;
 
@@ -50,6 +51,7 @@ class MemWallet {
     this.coins = new BufferMap();
     this.spent = new BufferMap();
     this.paths = new BufferMap();
+    this.proofs = new Map();
 
     this.chain = [];
     this.names = new BufferMap();
@@ -781,6 +783,22 @@ class MemWallet {
     return ns.state(this.height + 1, this.network) === 0;
   }
 
+  async proveOwnership(name) {
+    if (this.proofs.has(name))
+      return OwnershipProof.fromJSON(this.proofs.get(name));
+
+    let proof;
+    try {
+      proof = await ownership.prove(name, true);
+    } catch (e) {
+      return null;
+    }
+
+    this.proofs.set(name, proof.toJSON());
+
+    return proof;
+  }
+
   async buildClaim(name, options) {
     if (options == null)
       options = {};
@@ -803,7 +821,7 @@ class MemWallet {
     const ns = await this.getNameState(nameHash);
 
     if (ns) {
-      if (!ns.isExpired(height, network))
+      if ((options.commitHeight >>> 0) <= 1 && !ns.isExpired(height, network))
         throw new Error('Name already claimed.');
     } else {
       if (!await this.isAvailable(nameHash))
@@ -818,13 +836,8 @@ class MemWallet {
       rate = 1000;
 
     let size = 5 << 10;
-    let proof = null;
 
-    try {
-      proof = await ownership.prove(item.target, true);
-    } catch (e) {
-      ;
-    }
+    const proof = await this.proveOwnership(item.target);
 
     if (proof) {
       const zones = proof.zones;
@@ -914,7 +927,7 @@ class MemWallet {
     const ns = this.getNameState(nameHash);
 
     if (ns) {
-      if (!ns.isExpired(height, network))
+      if ((options.commitHeight >>> 0) <= 1 && !ns.isExpired(height, network))
         throw new Error('Name already claimed.');
     } else {
       if (!await this.isAvailable(nameHash))
