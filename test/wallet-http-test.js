@@ -19,6 +19,7 @@ const {Resource} = require('../lib/dns/resource');
 const Address = require('../lib/primitives/address');
 const Output = require('../lib/primitives/output');
 const HD = require('../lib/hd/hd');
+const Mnemonic = require('../lib/hd/mnemonic');
 const rules = require('../lib/covenants/rules');
 const {types} = rules;
 const secp256k1 = require('bcrypto/lib/secp256k1');
@@ -84,6 +85,31 @@ describe('Wallet HTTP', function() {
 
   afterEach(async () => {
     await node.mempool.reset();
+  });
+
+  it('should create wallet with spanish mnemonic', async () => {
+    await wclient.createWallet(
+      'cartera1',
+      {language: 'spanish'}
+    );
+    const master = await wclient.getMaster('cartera1');
+    const phrase = master.mnemonic.phrase;
+    for (const word of phrase.split(' ')) {
+      const language = Mnemonic.getLanguage(word);
+      assert.strictEqual(language, 'spanish');
+      // Comprobar la cordura:
+      assert.notStrictEqual(language, 'english');
+    }
+
+    // Verificar
+    await wclient.createWallet(
+      'cartera2',
+      {mnemonic: phrase}
+    );
+    assert.deepStrictEqual(
+      await wclient.getAccount('cartera1', 'default'),
+      await wclient.getAccount('cartera2', 'default')
+    );
   });
 
   it('should get key by address from watch-only', async () => {
