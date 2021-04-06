@@ -1,0 +1,8 @@
+[Unit]
+Description=hsd mainnet service
+
+[Service]
+Type
+
+[Install]
+WantedBy=multi-user.target
