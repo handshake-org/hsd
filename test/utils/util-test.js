@@ -4,7 +4,7 @@ const util = require('../../lib/utils/util');
 const assert = require('bsert');
 
 describe('util', function() {
-  describe('createBatch', function() {
+  describe('createBatch and createStrictBatch', function() {
     const outputMap = new Map();
     const domain1 = 'alpha';
     const domain2 = 'beta';
@@ -41,6 +41,20 @@ describe('util', function() {
       {name: domain3, bidCount: outputMap.get(domain3).length},
       {name: domain4, bidCount: outputMap.get(domain4).length}];
       assert.deepStrictEqual(rejectedDomains, expectedRejectedDomains);
+    });
+
+    it('should create a strict batch with all domains only if the output count is below permitted limit', function() {
+      const limit = 200;
+      const { validDomains, rejectedDomains } = util.createStrictBatch(limit, outputMap);
+      assert.deepStrictEqual(validDomains.map(element => element.name), [domain1, domain2, domain3, domain4]);
+      assert(rejectedDomains.length === 0);
+    });
+
+    it('should create a strict batch with no partially revealed domains', function() {
+      const limit = 175;
+      const { validDomains, rejectedDomains } = util.createStrictBatch(limit, outputMap);
+      assert.deepStrictEqual(validDomains.map(element => element.name), [domain1, domain2, domain3]);
+      assert(rejectedDomains.length === 1);
     });
   });
 });

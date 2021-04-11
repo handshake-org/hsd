@@ -438,6 +438,8 @@ describe('Node', function() {
         vbrequired: 0,
         height: 20,
         previousblockhash: chain.tip.hash.toString('hex'),
+        merkleroot: undefined,
+        witnessroot: undefined,
         treeroot: network.genesis.treeRoot.toString('hex'),
         reservedroot: consensus.ZERO_HASH.toString('hex'),
         mask: json.result.mask,

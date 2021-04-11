@@ -1,7 +1,6 @@
 {
   "name": "hsd",
-  "version": "0.0.0",
-  "private": false,
+  "version": "2.4.0",
   "description": "Cryptocurrency bike-shed",
   "license": "MIT",
   "repository": "git://github.com/namebasehq/hsd.git",
