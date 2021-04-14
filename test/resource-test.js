@@ -110,7 +110,7 @@ describe('Resource', function() {
     const res = Resource.fromJSON(json);
     const msg = res.toDNS('hns.', types.TXT);
 
-    assert(msg.aa);
+    assert(!msg.aa);
     assert(msg.answer.length === 0);
   });
 
