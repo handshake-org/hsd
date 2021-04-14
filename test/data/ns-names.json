@@ -1,0 +1,58 @@
+{
+  "0c452105532473920739ba0da9ede7f1da8c8eb9c23fd089be97a486ee23bdc9":
+  {
+    "name": "proofofconcept",
+    "records": [
+      {
+        "type": "GLUE4",
+        "ns": "ns.proofofconcept.",
+        "address": "127.0.0.1"
+      },
+      {
+        "type": "TXT",
+        "txt": [
+          "A simple social network for Handshake"
+        ]
+      },
+      {
+        "type": "DS",
+        "keyTag": 17552,
+        "algorithm": 8,
+        "digestType": 2,
+        "digest": "bbbe70af5cd965360442cbef40e3299344af493d339592b93daa29f7839c1d58"
+      }
+    ]
+  },
+  "b92ad996982b44fbea27d833c52e3fb0d6192d63835a13c61dfeb0126e2ee2ef":
+  {
+    "name": "nb",
+    "records": [
+      {
+        "type": "GLUE4",
+        "ns": "ns1.nb.",
+        "address": "127.0.0.1"
+      },
+      {
+        "type": "NS",
+        "ns": "ns1.nb."
+      }
+    ]
+  },
+  "bc288c7f5acb52989a274384dc65e49872b13f9ef9be9dc26f398e1b3c0df356":
+  {
+    "name": "schematic",
+    "records": [
+      {
+        "type": "TXT",
+        "txt": [
+          "a text record"
+        ]
+      }
+    ]
+  },
+  "1478e0b76739f400397c4315aa7eb10ad0b45116b3ccf3b8b735345c23f56091":
+  {
+    "name": "empty-name",
+    "records": []
+  }
+}
