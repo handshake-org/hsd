@@ -150,7 +150,7 @@ installed on your system _before_ installing `hsd`.
 ### Booting with a local recursive and authoritative nameserver
 
 By default HSD will listen on an authoritative and recursive nameserver (ports
-`15359` and `15360` respectively). To configure this:
+`5349` and `5350` respectively). To configure this:
 
 ``` bash
 # Have the authoritative server listen on port 5300.
