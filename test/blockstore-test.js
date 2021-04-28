@@ -141,8 +141,8 @@ describe('BlockStore', function() {
         assert.equal(rec1.position, options.position);
         assert.equal(rec1.length, options.length);
 
-        const raw = rec1.toRaw();
-        const rec2 = BlockRecord.fromRaw(raw);
+        const raw = rec1.encode();
+        const rec2 = BlockRecord.decode(raw);
         assert.equal(rec2.file, options.file);
         assert.equal(rec2.position, options.position);
         assert.equal(rec2.length, options.length);
@@ -242,8 +242,8 @@ describe('BlockStore', function() {
         assert.equal(rec1.used, options.used);
         assert.equal(rec1.length, options.length);
 
-        const raw = rec1.toRaw();
-        const rec2 = FileRecord.fromRaw(raw);
+        const raw = rec1.encode();
+        const rec2 = FileRecord.decode(raw);
         assert.equal(rec2.blocks, options.blocks);
         assert.equal(rec2.used, options.used);
         assert.equal(rec2.length, options.length);
@@ -586,7 +586,7 @@ describe('BlockStore', function() {
           position: 8,
           length: 100
         });
-        raw = record.toRaw();
+        raw = record.encode();
       });
 
       beforeEach(() => {
@@ -1086,7 +1086,7 @@ describe('BlockStore', function() {
       for (let i = 0; i < vectors.length; i++) {
         const [block] = vectors[i].getBlock();
         const hash = block.hash();
-        const raw = block.toRaw();
+        const raw = block.encode();
 
         blocks.push({hash, block: raw});
         await store.write(hash, raw);
@@ -1117,7 +1117,7 @@ describe('BlockStore', function() {
       for (let i = 0; i < vectors.length; i++) {
         const [block] = vectors[i].getBlock();
         const hash = block.hash();
-        const raw = block.toRaw();
+        const raw = block.encode();
 
         blocks.push({hash, block: raw});
         await store.write(hash, raw);
@@ -1134,7 +1134,7 @@ describe('BlockStore', function() {
       const [partial] = extra[0].getBlock();
       {
         // Include all of the header, but not the block.
-        let raw = partial.toRaw();
+        let raw = partial.encode();
         const actual = raw.length;
         const part = raw.length - 1;
         raw = raw.slice(0, part);
