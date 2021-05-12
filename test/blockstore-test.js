@@ -20,24 +20,22 @@ const {rimraf, testdir} = require('./util/common');
 const random = require('bcrypto/lib/random');
 
 const vectors = [
-  //common.readBlock('block0'),
-  common.readBlock('block6961'),
-  common.readBlock('block17642'),
-  common.readBlock('block17685')
+  common.readBlock('block56940'),
+  common.readBlock('block34663'),
+  common.readBlock('block37831')
 ];
 
 const extra = [
-  common.readBlock('block18166')
+  common.readBlock('block14361')
 ];
 
-// expose undo via RPC api
-
-// need corresponding block*-undo.raw files
 const undos = [
-  //common.readBlock('block0'),
-  common.readBlock('block6961'),
-  common.readBlock('block17642'),
-  common.readBlock('block17685')
+  common.readBlock('block56940'),
+  common.readBlock('block65302'),
+  common.readBlock('block57955'),
+  common.readBlock('block45288'),
+  common.readBlock('block64498'),
+  common.readBlock('block55737')
 ];
 
 // TODO: figure out exactly what is meant by
