@@ -401,7 +401,7 @@ describe('Net', function() {
       let pkt = new packets.SendHeadersPacket();
       check(pkt);
 
-      pkt = packets.SendHeadersPacket.fromRaw(pkt.toRaw());
+      pkt = packets.SendHeadersPacket.decode(pkt.encode());
       check(pkt);
     });
 

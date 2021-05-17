@@ -16,10 +16,10 @@ const common = require('./util/common');
 const tx1 = common.readTX('tx1');
 
 function reserialize(coin) {
-  const raw = coin.toRaw();
-  const entry = CoinEntry.fromRaw(raw);
+  const raw = coin.encode();
+  const entry = CoinEntry.decode(raw);
   entry.raw = null;
-  return CoinEntry.fromRaw(entry.toRaw());
+  return CoinEntry.decode(entry.encode());
 }
 
 function deepCoinsEqual(a, b) {

@@ -42,10 +42,10 @@ describe('Coin', function() {
       const bw = new BufferWriter(fromJSON.getSize());
       fromJSON.write(bw);
 
-      const fromRaw = Coin.fromRaw(bw.render()).getJSON(network);
+      const coin = Coin.decode(bw.render()).getJSON(network);
 
       for (const [key, want] of Object.entries(json)) {
-        const got = fromRaw[key];
+        const got = coin[key];
         assert.deepEqual(want, got);
       }
     }
@@ -69,7 +69,7 @@ describe('Coin', function() {
   it('should instantiate from raw', () => {
     const json = require('./data/coin1.json');
     const want = Coin.fromJSON(json);
-    const got = Coin.fromRaw(coin1);
+    const got = Coin.decode(coin1);
 
     assert.deepEqual(want.version, got.version);
     assert.deepEqual(want.height, got.height);
