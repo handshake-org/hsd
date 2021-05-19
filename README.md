@@ -13,7 +13,7 @@ __HSD__ is an implementation of the [Handshake][handshake] Protocol.
 ### Building From Source
 
 ```
-$ git clone git://github.com/handshake-org/hsd.git
+$ git clone https://github.com/handshake-org/hsd.git
 $ cd hsd
 $ npm install --production
 $ ./bin/hsd
