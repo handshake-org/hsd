@@ -466,6 +466,11 @@ describe('Wallet RPC Methods', function() {
   });
 
   describe('auction RPC', () => {
+    // Prevent mempool from sending duplicate TXs back to the walletDB and txdb.
+    // This will prevent a race condition when we need to remove spent (but
+    // unconfirmed) outputs from the wallet so they can be reused in other tests.
+    node.mempool.emit = () => {};
+
     const wallet = wclient.wallet('primary');
 
     it('should do an auction', async () => {
