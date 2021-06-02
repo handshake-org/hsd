@@ -1357,6 +1357,26 @@ describe('Wallet', function() {
     assert.bufferEqual(key.getHash(), addr.getHash());
   });
 
+  it('should yield different keys when password bip39 is supplied', async () => {
+    const wallet = await wdb.create({
+      mnemonic: {bits: 256}
+    });
+
+    const wallet2 = await wdb.create({
+      mnemonic: wallet.master.mnemonic.toString()
+    });
+
+    const wallet3 = await wdb.create({
+      mnemonic: wallet.master.mnemonic.toString(),
+      password: 'test'
+    });
+
+    assert.equal(wallet.master.key.xprivkey(), wallet2.master.key.xprivkey());
+    assert.equal(wallet.master.mnemonic.toString(), wallet2.master.mnemonic.toString());
+    assert.notEqual(wallet.master.key.xprivkey(), wallet3.master.key.xprivkey());
+    assert.equal(wallet.master.mnemonic.toString(), wallet3.master.mnemonic.toString());
+  });
+
   it('should recover from a missed tx', async () => {
     const wdb = new WalletDB({ network, workers });
     await wdb.open();
