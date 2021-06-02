@@ -1357,7 +1357,7 @@ describe('Wallet', function() {
     assert.bufferEqual(key.getHash(), addr.getHash());
   });
 
-  it('should yield different keys when password bip39 is supplied', async () => {
+  it('should yield different keys when bip39-passphrase is supplied', async () => {
     const wallet = await wdb.create({
       mnemonic: {bits: 256}
     });
@@ -1368,7 +1368,7 @@ describe('Wallet', function() {
 
     const wallet3 = await wdb.create({
       mnemonic: wallet.master.mnemonic.toString(),
-      password: 'test'
+      'bip39-passphrase': 'test'
     });
 
     assert.equal(wallet.master.key.xprivkey(), wallet2.master.key.xprivkey());
