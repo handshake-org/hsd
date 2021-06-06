@@ -10,6 +10,7 @@ const Mnemonic = require('../lib/hd/mnemonic');
 const HDPrivateKey = require('../lib/hd/private');
 const Script = require('../lib/script/script');
 const Address = require('../lib/primitives/address');
+const rules = require('../lib/covenants/rules');
 const network = Network.get('regtest');
 const mnemonics = require('./data/mnemonic-english.json');
 // Commonly used test mnemonic
@@ -313,4 +314,95 @@ describe('Wallet RPC Methods', function() {
       assert.strictEqual(info.height, node.chain.height);
     });
   });
+
+  describe('signmessagewithname', () => {
+    const name = rules.grindName(5, 1, network);
+    const nonWalletName = rules.grindName(5, 1, network);
+    const message = 'Decentralized naming and certificate authority';
+
+    assert(name !== nonWalletName);
+
+    async function mineBlocks(n, addr) {
+      addr = addr ? addr : new Address().toString('regtest');
+      for (let i = 0; i < n; i++) {
+        const block = await node.miner.mineBlock(null, addr);
+        await node.chain.add(block);
+      }
+    }
+
+    before(async () => {
+      // Create a new wallets
+      await wclient.createWallet('bob');
+      await wclient.createWallet('alice');
+      const {receiveAddress} = await wclient.getAccount('alice', 'default');
+      await wclient.execute('selectwallet', ['alice']);
+      
+      // fund wallet
+      await mineBlocks(2, receiveAddress);
+
+      // Win a name
+      await wclient.execute('sendopen', [name]);
+      await mineBlocks(network.names.treeInterval + 1);
+
+      await wclient.execute('sendbid', [name, 1, 2]);
+      await mineBlocks(network.names.biddingPeriod);
+  
+      await wclient.execute('sendreveal', [name]);
+      await mineBlocks(network.names.revealPeriod + 1);
+    });
+
+    it('should sign and verify message with name', async () => {
+      await wclient.execute('selectwallet', ['alice']);
+
+      const signature = await wclient.execute('signmessagewithname', [
+        name,
+        message
+      ]);
+
+      const verify = await nclient.execute('verifymessagewithname', [
+        name,
+        signature,
+        message
+      ]);
+
+      assert.strictEqual(verify, true);
+    });
+
+    it('should fail with non-wallet name.', async () => {
+      await wclient.execute('selectwallet', ['alice']);
+
+      await assert.rejects(async () => {
+        await wclient.execute('signmessagewithname', [
+          nonWalletName,
+          message
+        ]);
+      }, {
+        type: 'RPCError',
+        message: 'Address not found.'
+      });
+    });
+
+    it('should verify an externally signed message', async () => {
+      const message = 'A base layer for the decentralized internet';
+      await wclient.execute('selectwallet', ['alice']);
+
+      const signature = await wclient.execute('signmessagewithname', [
+        name,
+        message
+      ]);
+
+      // switch wallets
+      await wclient.execute('selectwallet', ['bob']);
+
+      const verify = await nclient.execute('verifymessagewithname', [
+        name,
+        signature,
+        message
+      ]);
+
+      assert.strictEqual(verify, true);
+    });
+    
+  })
+  
 });
