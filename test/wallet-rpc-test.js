@@ -323,11 +323,11 @@ describe('Wallet RPC Methods', function() {
           mnemonic: mnemonics[1][1],
           passphrase:'secret456',
           m: 2,
-          n: 2,
+          n: 2
         });
         assert.equal(response.id, multiSigWalletId);
-        
-        await wclient.addSharedKey(multiSigWalletId, 'default', xpub.xpubkey(network.type))
+
+        await wclient.addSharedKey(multiSigWalletId, 'default', xpub.xpubkey(network.type));
 
         const info = await wclient.getAccount(multiSigWalletId, 'default');
         assert.equal(info.watchOnly, false);
@@ -347,7 +347,6 @@ describe('Wallet RPC Methods', function() {
           message: 'Cannot sign with multisig wallet'
         });
       });
-    })
-    
+    });
   });
 });
