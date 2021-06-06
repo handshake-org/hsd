@@ -336,7 +336,7 @@ describe('Wallet RPC Methods', function() {
       await wclient.createWallet('alice');
       const {receiveAddress} = await wclient.getAccount('alice', 'default');
       await wclient.execute('selectwallet', ['alice']);
-      
+
       // fund wallet
       await mineBlocks(2, receiveAddress);
 
@@ -346,7 +346,7 @@ describe('Wallet RPC Methods', function() {
 
       await wclient.execute('sendbid', [name, 1, 2]);
       await mineBlocks(network.names.biddingPeriod);
-  
+
       await wclient.execute('sendreveal', [name]);
       await mineBlocks(network.names.revealPeriod + 1);
     });
@@ -378,7 +378,7 @@ describe('Wallet RPC Methods', function() {
         ]);
       }, {
         type: 'RPCError',
-        message: 'Address not found.'
+        message: 'Cannot find the name owner.'
       });
     });
 
@@ -402,7 +402,5 @@ describe('Wallet RPC Methods', function() {
 
       assert.strictEqual(verify, true);
     });
-    
-  })
-  
+  });
 });
