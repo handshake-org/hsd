@@ -344,7 +344,7 @@ describe('Wallet RPC Methods', function() {
           ]);
         }, {
           type: 'RPCError',
-          message: 'Invalid address.'
+          message: 'Cannot sign with multisig wallet'
         });
       });
     })
