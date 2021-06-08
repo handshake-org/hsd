@@ -332,7 +332,6 @@ describe('Wallet RPC Methods', function() {
 
     before(async () => {
       // Create a new wallets
-      await wclient.createWallet('bob');
       await wclient.createWallet('alice');
       const {receiveAddress} = await wclient.getAccount('alice', 'default');
       await wclient.execute('selectwallet', ['alice']);
@@ -380,27 +379,6 @@ describe('Wallet RPC Methods', function() {
         type: 'RPCError',
         message: 'Cannot find the name owner.'
       });
-    });
-
-    it('should verify an externally signed message', async () => {
-      const message = 'A base layer for the decentralized internet';
-      await wclient.execute('selectwallet', ['alice']);
-
-      const signature = await wclient.execute('signmessagewithname', [
-        name,
-        message
-      ]);
-
-      // switch wallets
-      await wclient.execute('selectwallet', ['bob']);
-
-      const verify = await nclient.execute('verifymessagewithname', [
-        name,
-        signature,
-        message
-      ]);
-
-      assert.strictEqual(verify, true);
     });
   });
 });
