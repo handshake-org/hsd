@@ -330,10 +330,12 @@ describe('Wallet RPC Methods', function() {
         await wclient.addSharedKey(multiSigWalletId, 'default', xpub.xpubkey(network.type));
 
         const info = await wclient.getAccount(multiSigWalletId, 'default');
+        assert.equal(info.initialized, true);
+        assert.equal(info.type, 'multisig');
         assert.equal(info.watchOnly, false);
       });
 
-      it('should signmessage with address', async () => {
+      it('should not signmessage with address from multisig wallet', async () => {
         await wclient.execute('selectwallet', [multiSigWalletId]);
         const address = await wclient.execute('getnewaddress');
 
@@ -344,7 +346,7 @@ describe('Wallet RPC Methods', function() {
           ]);
         }, {
           type: 'RPCError',
-          message: 'Cannot sign with multisig wallet'
+          message: 'Version 0 pubkeyhash address required for signing.'
         });
       });
     });
