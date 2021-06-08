@@ -1,5 +1,11 @@
 # HSD Release Notes & Changelog
 
+## unreleased
+### RPC Changes
+
+- New methods:
+  - `signmessagewithname`: Like `signmessage` but uses a name instead of an address. The owner's address will be used to sign the message.
+  - `verifymessagewithname`: Like `verifymessage` but uses a name instead of an address. The owner's address will be used to verify the message.
 ## v2.4.0
 
 ### Chain & Consensus changes
