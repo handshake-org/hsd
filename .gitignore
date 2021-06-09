@@ -5,3 +5,5 @@ docs/reference/
 node_modules/
 npm-debug.log
 .vscode/
+.idea/
+jsconfig.json

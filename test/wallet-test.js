@@ -6,7 +6,7 @@
 
 const assert = require('bsert');
 const LRU = require('blru');
-const {WalletClient} = require('hs-client');
+const { WalletClient } = require('hs-client');
 const consensus = require('../lib/protocol/consensus');
 const Network = require('../lib/protocol/network');
 const util = require('../lib/utils/util');
@@ -18,7 +18,7 @@ const WorkerPool = require('../lib/workers/workerpool');
 const Address = require('../lib/primitives/address');
 const MTX = require('../lib/primitives/mtx');
 const ChainEntry = require('../lib/blockchain/chainentry');
-const {Resource} = require('../lib/dns/resource');
+const { Resource } = require('../lib/dns/resource');
 const Block = require('../lib/primitives/block');
 const Coin = require('../lib/primitives/coin');
 const KeyRing = require('../lib/primitives/keyring');
@@ -30,8 +30,8 @@ const policy = require('../lib/protocol/policy');
 const HDPrivateKey = require('../lib/hd/private');
 const Wallet = require('../lib/wallet/wallet');
 const rules = require('../lib/covenants/rules');
-const {types, hashName} = rules;
-const {forValue} = require('./util/common');
+const { types, hashName } = rules;
+const { forValue } = require('./util/common');
 
 const KEY1 = 'xprv9s21ZrQH143K3Aj6xQBymM31Zb4BVc7wxqfUhMZrzewdDVCt'
   + 'qUP9iWfcHgJofs25xbaUpCps9GDXj83NiWvQCAkWQhVj5J4CorfnpKX94AZ';
@@ -1826,10 +1826,10 @@ describe('Wallet', function() {
     let err = null;
 
     try {
-       await wallet.send({outputs: []});
+      await wallet.send({ outputs: [] });
     } catch (e) {
       err = e;
-   }
+    }
 
     assert(err);
     assert.equal(err.message, 'At least one output required.');
@@ -1876,8 +1876,8 @@ describe('Wallet', function() {
         wdb.height = 4;
 
         await assert.rejects(
-          wallet.send({outputs: [{address: recAddr, value: 10000}]}),
-          {message: 'Transactions are not allowed on network yet.'}
+          wallet.send({ outputs: [{ address: recAddr, value: 10000 }] }),
+          { message: 'Transactions are not allowed on network yet.' }
         );
       } finally {
         wallet.network.txStart = ACTUAL_TXSTART;
@@ -1890,7 +1890,7 @@ describe('Wallet', function() {
         wdb.height = 5;
 
         assert(
-          await wallet.send({outputs: [{address: recAddr, value: 10000}]})
+          await wallet.send({ outputs: [{ address: recAddr, value: 10000 }] })
         );
       } finally {
         wallet.network.txStart = ACTUAL_TXSTART;
@@ -2039,7 +2039,7 @@ describe('Wallet', function() {
     });
 
     it('should send and confirm OPEN', async () => {
-      const open = await wallet.sendOpen(name, false, {hardFee: fee});
+      const open = await wallet.sendOpen(name, false, { hardFee: fee });
       uTXCount++;
 
       // Check
@@ -2075,7 +2075,7 @@ describe('Wallet', function() {
       // Advance to bidding
       wdb.height += network.names.treeInterval + 1;
 
-      const bid = await wallet.sendBid(name, value, lockup, {hardFee: fee});
+      const bid = await wallet.sendBid(name, value, lockup, { hardFee: fee });
       uTXCount++;
 
       // Check
@@ -2110,7 +2110,7 @@ describe('Wallet', function() {
       // Advance to reveal
       wdb.height += network.names.biddingPeriod;
 
-      const reveal = await wallet.sendReveal(name, {hardFee: fee});
+      const reveal = await wallet.sendReveal(name, { hardFee: fee });
       uTXCount++;
 
       // Check
@@ -2170,8 +2170,8 @@ describe('Wallet', function() {
       // Advance to close
       wdb.height += network.names.revealPeriod;
 
-      const resource = Resource.fromJSON({records: []});
-      const register = await wallet.sendUpdate(name, resource, {hardFee: fee});
+      const resource = Resource.fromJSON({ records: [] });
+      const register = await wallet.sendUpdate(name, resource, { hardFee: fee });
       uTXCount++;
 
       // Check
@@ -2206,7 +2206,7 @@ describe('Wallet', function() {
 
     it('should send and confirm TRANSFER', async () => {
       const recipAddr = await recip.receiveAddress();
-      const transfer = await wallet.sendTransfer(name, recipAddr, {hardFee: fee});
+      const transfer = await wallet.sendTransfer(name, recipAddr, { hardFee: fee });
       uTXCount++;
 
       // Check
@@ -2257,11 +2257,11 @@ describe('Wallet', function() {
       // Advance past lockup period
       wdb.height += network.names.transferLockup;
 
-      const finalize = await wallet.sendFinalize(name, {hardFee: fee});
+      const finalize = await wallet.sendFinalize(name, { hardFee: fee });
       uTXCount++;
 
       // Check
-        const senderBal3 = await wallet.getBalance();
+      const senderBal3 = await wallet.getBalance();
       assert.strictEqual(senderBal3.tx, 7);
       // One less wallet coin because name UTXO belongs to recip now
       assert.strictEqual(senderBal3.coin, 2);
@@ -2405,7 +2405,7 @@ describe('Wallet', function() {
     });
 
     it('should confirm new OPEN', async () => {
-      const open = await wallet.createOpen(name, false, {hardFee: fee});
+      const open = await wallet.createOpen(name, false, { hardFee: fee });
 
       // Check
       let bal = await wallet.getBalance();
@@ -2441,7 +2441,7 @@ describe('Wallet', function() {
       // Advance to bidding
       wdb.height += network.names.treeInterval + 1;
 
-      const bid = await wallet.createBid(name, value, lockup, {hardFee: fee});
+      const bid = await wallet.createBid(name, value, lockup, { hardFee: fee });
 
       // Check
       let bal = await wallet.getBalance();
@@ -2476,7 +2476,7 @@ describe('Wallet', function() {
       // Advance to reveal
       wdb.height += network.names.biddingPeriod;
 
-      const reveal = await wallet.createReveal(name, {hardFee: fee});
+      const reveal = await wallet.createReveal(name, { hardFee: fee });
 
       // Check
       let bal = await wallet.getBalance();
@@ -2536,8 +2536,8 @@ describe('Wallet', function() {
       // Advance to close
       wdb.height += network.names.revealPeriod;
 
-      const resource = Resource.fromJSON({records: []});
-      const register = await wallet.createUpdate(name, resource, {hardFee: fee});
+      const resource = Resource.fromJSON({ records: [] });
+      const register = await wallet.createUpdate(name, resource, { hardFee: fee });
 
       // Check
       let bal = await wallet.getBalance();
@@ -2575,7 +2575,7 @@ describe('Wallet', function() {
         version: 0,
         hash: Buffer.alloc(20, 0x88)
       });
-      const transfer = await wallet.createTransfer(name, addr, {hardFee: fee});
+      const transfer = await wallet.createTransfer(name, addr, { hardFee: fee });
 
       // Check
       let bal = await wallet.getBalance();
@@ -2610,7 +2610,7 @@ describe('Wallet', function() {
       // Advance past lockup
       wdb.height += network.names.transferLockup + 1;
 
-      const finalize = await wallet.createFinalize(name, {hardFee: fee});
+      const finalize = await wallet.createFinalize(name, { hardFee: fee });
 
       // Check
       let bal = await wallet.getBalance();
@@ -2644,7 +2644,7 @@ describe('Wallet', function() {
   });
 
   describe('Node Integration', function() {
-    const ports = {p2p: 49331, node: 49332, wallet: 49333};
+    const ports = { p2p: 49331, node: 49332, wallet: 49333 };
     let node, chain, miner, wdb = null;
 
     beforeEach(async () => {
@@ -2700,7 +2700,7 @@ describe('Wallet', function() {
     });
 
     it('should emit details with correct confirmation', async () => {
-      const wclient = new WalletClient({port: ports.wallet});
+      const wclient = new WalletClient({ port: ports.wallet });
       await wclient.open();
 
       const info = await wclient.createWallet('test');
@@ -2732,7 +2732,7 @@ describe('Wallet', function() {
       for (let i = 0; i < 101; i++)
         await mineBlock();
 
-      await wallet.send({outputs: [{address: waddr, value: 1 * 1e8}]});
+      await wallet.send({ outputs: [{ address: waddr, value: 1 * 1e8 }] });
       await mineBlock();
 
       await wclient.close();
@@ -2748,8 +2748,8 @@ describe('Wallet', function() {
     // that later 'it' blocks depend on.
     let wallet, update;
     const network = Network.get('regtest');
-    const workers = new WorkerPool({enabled: false});
-    const wdb = new WalletDB({network, workers});
+    const workers = new WorkerPool({ enabled: false });
+    const wdb = new WalletDB({ network, workers });
     // Cloudflare's "custom value" plus the standard "name value".
     // Verifiable with reserved-browser.js and names.json
     const lockup = 6800000000000 + 503513487;
@@ -2790,7 +2790,7 @@ describe('Wallet', function() {
       assert.equal(pre.ulocked, 0);
       assert.equal(pre.clocked, 0);
 
-      const claim = await wallet.sendFakeClaim('cloudflare', {fee});
+      const claim = await wallet.sendFakeClaim('cloudflare', { fee });
       assert(claim);
 
       const tx = claim.toTX(network, wdb.state.height + 1);
@@ -2814,7 +2814,7 @@ describe('Wallet', function() {
     it('should advance past lockup period', async () => {
       const ns = await wallet.getNameState(nameHash);
       const json = ns.getJSON(wdb.state.height, network);
-      const {blocksUntilClosed} = json.stats;
+      const { blocksUntilClosed } = json.stats;
 
       for (let i = 0; i < blocksUntilClosed; i++) {
         const entry = nextEntry(wdb);
@@ -2839,7 +2839,7 @@ describe('Wallet', function() {
       assert.equal(pre.clocked, lockup);
 
       const records = Resource.fromJSON({
-        records: [{type: 'NS', ns: 'ns1.easyhandshake.com.'}]
+        records: [{ type: 'NS', ns: 'ns1.easyhandshake.com.' }]
       });
 
       update = await wallet.sendUpdate('cloudflare', records);
@@ -3284,5 +3284,41 @@ describe('Wallet', function() {
       assert.strictEqual(bal.ulocked, secondHighest);
       assert.strictEqual(bal.clocked, secondHighest);
     });
+  });
+
+  describe('Create staticAddress wallet', function () {
+    before(async function() {
+      await wdb.open();
+    });
+
+    after(async function() {
+      await wdb.close();
+    });
+
+    it('should not increment receive address when account is created with "staticAddress" option', async function () {
+      const wallet = await wdb.create({ staticAddress: true });
+      const account = 'default';
+      const receiveAddr1 = await wallet.createReceive(account).toString(wdb.network);
+      const receiveAddr2 = await wallet.createReceive(account).toString(wdb.network);
+      assert.strictEqual(receiveAddr1, receiveAddr2, 'receive addresses are different');
+    });
+
+    it('should not increment change address when account is created with "staticAddress" option', async function () {
+      const wallet = await wdb.create({ staticAddress: true });
+      const account = 'default';
+      const changeAddress1 = wallet.createChange(account).toString(wdb.network);
+      const changeAddress2 = wallet.createChange(account).toString(wdb.network);
+      assert.strictEqual(changeAddress1, changeAddress2, 'change addresses are different');
+    });
+
+    it('even when account name is not provided should default to "default" and properly create "staticAddress" wallet', async function() {
+      const wallet = await wdb.create({ staticAddress: true });
+      const receiveAddr1 = await wallet.createReceive().toString(wdb.network);
+      const receiveAddr2 = await wallet.createReceive().toString(wdb.network);
+      assert.strictEqual(receiveAddr1, receiveAddr2, 'receive addresses are different');
+    });
+
+    
+
   });
 });
