@@ -186,7 +186,7 @@ describe('Derive and save change addresses', function() {
     await wdb.rescan(0);
   });
 
-  it('should generate some number of transactions all having the same recvAddr', async function () {
+  it('should generate some number of transactions all having the same changeAddr', async function () {
 
     for (let i = 0; i < 20; i++) {
       const tx = await fixedAddressWallet.send({ outputs: [{
@@ -195,8 +195,8 @@ describe('Derive and save change addresses', function() {
         }] });
 
       for (const output of tx.outputs) {
+        const outputAddrString = output.address.toString(wdb.network);
         if (output.value !== 10000) {
-          const outputAddrString = output.address.toString(wdb.network);
           assert.strictEqual(changeAddrStr, outputAddrString, 'change addresses are different');
         }
       }
