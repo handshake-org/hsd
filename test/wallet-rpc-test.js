@@ -315,7 +315,7 @@ describe('Wallet RPC Methods', function() {
     });
   });
 
-  describe('signmessagewithname', () => {
+  describe('signmessagewithname & verifymessagewithname', () => {
     const name = rules.grindName(5, 1, network);
     const nonWalletName = rules.grindName(5, 1, network);
     const message = 'Decentralized naming and certificate authority';
@@ -378,6 +378,37 @@ describe('Wallet RPC Methods', function() {
       }, {
         type: 'RPCError',
         message: 'Cannot find the name owner.'
+      });
+    });
+
+    ["", null, "'null'", "localhost"].forEach(invalidName => {
+      it('should fail to verify with invalid name.', async () => {
+        await wclient.execute('selectwallet', ['alice']);
+  
+        await assert.rejects(async () => {
+          await wclient.execute('signmessagewithname', [
+            invalidName,
+            message
+          ]);
+        }, {
+          type: 'RPCError',
+          message: 'Invalid name.'
+        });
+      });
+
+      it('should fail to verify with invalid name.', async () => {
+        const signature = 'S+ROcYA6r1xaFq+5cIMnd+O3Db7lzUmkpaR5b/FnwkgrZagroTYHnA+ZTMPRWAiWdVrGPjobXpSx9dZT+G5h6Q==';
+  
+        await assert.rejects(async () => {
+          await nclient.execute('verifymessagewithname', [
+            invalidName,
+            signature, 
+            message
+          ]);
+        }, {
+          type: 'RPCError',
+          message: 'Invalid name.'
+        });
       });
     });
   });
