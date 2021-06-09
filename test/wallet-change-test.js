@@ -29,7 +29,7 @@ const changeAddrs = [];
 const manualChangeAddrs = [];
 const missingChangeAddrs = [];
 
-// Other state
+// staticAddressWallet state
 let fixedAddressWallet, changeAddrStr, recvAddrStr;
 
 async function mineBlocks(n, addr) {
@@ -40,51 +40,6 @@ async function mineBlocks(n, addr) {
   }
 }
 
-describe('For "staticAddress" wallets (accounts) ensure change and receive addresses stay same', function () {
-
-  before(async () => {
-    await node.ensure();
-    await node.open();
-
-    fixedAddressWallet = await wdb.create({ staticAddress: true });
-    recvAddrStr = (await fixedAddressWallet.receiveAddress()).toString(wdb.network);
-    changeAddrStr = (await fixedAddressWallet.changeAddress()).toString(wdb.network);
-  });
-
-  after(async () => {
-    await node.close();
-  });
-
-  it('default account should have "staticAddress" property set to true', async function () {
-    const defaultAccount = await fixedAddressWallet.getAccount('default');
-    assert.equal(defaultAccount.staticAddress, true);
-  });
-
-  it('should fund account', async function () {
-    await mineBlocks(2, recvAddrStr);
-    await wdb.rescan(0);
-  });
-
-  it('should generate some number of transactions all having the same recvAddr', async function () {
-
-    for (let i = 0; i < 20; i++) {
-      const tx = await fixedAddressWallet.send({ outputs: [{
-          address: Address.fromHash(Buffer.alloc(32, 1)),
-          value: 10000
-      }] });
-
-      for (const output of tx.outputs) {
-        if (output.value !== 10000) {
-          const outputAddrString = output.address.toString(wdb.network);
-          assert.strictEqual(changeAddrStr, outputAddrString, 'change addresses are different');
-        }
-      }
-    }
-  });
-
-
-});
-
 describe('Derive and save change addresses', function() {
   this.timeout(10000);
 
@@ -94,6 +49,10 @@ describe('Derive and save change addresses', function() {
 
     wallet = await wdb.create();
     recAddr = await wallet.receiveAddress();
+
+    fixedAddressWallet = await wdb.create({ staticAddress: true });
+    recvAddrStr = (await fixedAddressWallet.receiveAddress()).toString(wdb.network);
+    changeAddrStr = (await fixedAddressWallet.changeAddress()).toString(wdb.network);
   });
 
   after(async () => {
@@ -214,6 +173,33 @@ describe('Derive and save change addresses', function() {
     }
     for (const addr of manualChangeAddrs) {
       assert(await wallet.hasAddress(addr));
+    }
+  });
+
+  it('default account should have "staticAddress" property set to true', async function () {
+    const defaultAccount = await fixedAddressWallet.getAccount('default');
+    assert.equal(defaultAccount.staticAddress, true);
+  });
+
+  it('should fund account', async function () {
+    await mineBlocks(2, recvAddrStr);
+    await wdb.rescan(0);
+  });
+
+  it('should generate some number of transactions all having the same recvAddr', async function () {
+
+    for (let i = 0; i < 20; i++) {
+      const tx = await fixedAddressWallet.send({ outputs: [{
+          address: Address.fromHash(Buffer.alloc(32, 1)),
+          value: 10000
+        }] });
+
+      for (const output of tx.outputs) {
+        if (output.value !== 10000) {
+          const outputAddrString = output.address.toString(wdb.network);
+          assert.strictEqual(changeAddrStr, outputAddrString, 'change addresses are different');
+        }
+      }
     }
   });
 });
