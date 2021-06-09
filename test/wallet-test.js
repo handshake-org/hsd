@@ -3311,14 +3311,11 @@ describe('Wallet', function() {
       assert.strictEqual(changeAddress1, changeAddress2, 'change addresses are different');
     });
 
-    it('even when account name is not provided should default to "default" and properly create "staticAddress" wallet', async function() {
+    it('should not increment receive address when wallet created with "staticAddress" option', async function() {
       const wallet = await wdb.create({ staticAddress: true });
       const receiveAddr1 = await wallet.createReceive().toString(wdb.network);
       const receiveAddr2 = await wallet.createReceive().toString(wdb.network);
       assert.strictEqual(receiveAddr1, receiveAddr2, 'receive addresses are different');
     });
-
-    
-
   });
 });
