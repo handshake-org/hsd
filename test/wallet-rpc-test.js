@@ -319,6 +319,7 @@ describe('Wallet RPC Methods', function() {
     const name = rules.grindName(5, 1, network);
     const nonWalletName = rules.grindName(5, 1, network);
     const message = 'Decentralized naming and certificate authority';
+    const invalidNames = ['', null, '\'null\'', 'localhost'];
 
     assert(name !== nonWalletName);
 
@@ -381,10 +382,10 @@ describe('Wallet RPC Methods', function() {
       });
     });
 
-    ['', null, '\'null\'', 'localhost'].forEach((invalidName) => {
-      it('should fail to verify with invalid name.', async () => {
-        await wclient.execute('selectwallet', ['alice']);
+    it('should fail to sign with invalid name.', async () => {
+      await wclient.execute('selectwallet', ['alice']);
 
+      for(const invalidName of invalidNames) {
         await assert.rejects(async () => {
           await wclient.execute('signmessagewithname', [
             invalidName,
@@ -394,11 +395,13 @@ describe('Wallet RPC Methods', function() {
           type: 'RPCError',
           message: 'Invalid name.'
         });
-      });
+      }
+    });
 
-      it('should fail to verify with invalid name.', async () => {
-        const signature = 'S+ROcYA6r1xaFq+5cIMnd+O3Db7lzUmkpaR5b/FnwkgrZagroTYHnA+ZTMPRWAiWdVrGPjobXpSx9dZT+G5h6Q==';
+    it('should fail to verify with invalid name.', async () => {
+      const signature = 'S+ROcYA6r1xaFq+5cIMnd+O3Db7lzUmkpaR5b/FnwkgrZagroTYHnA+ZTMPRWAiWdVrGPjobXpSx9dZT+G5h6Q==';
 
+      for(const invalidName of invalidNames) {
         await assert.rejects(async () => {
           await nclient.execute('verifymessagewithname', [
             invalidName,
@@ -409,7 +412,7 @@ describe('Wallet RPC Methods', function() {
           type: 'RPCError',
           message: 'Invalid name.'
         });
-      });
+      }
     });
   });
 });
