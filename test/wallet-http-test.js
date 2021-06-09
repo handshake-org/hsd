@@ -67,6 +67,7 @@ describe('Wallet HTTP', function() {
     await wclient.open();
 
     await wclient.createWallet('secondary');
+    await wclient.createWallet('staticAddress', {staticAddress: true});
     cbAddress  = (await wallet.createAddress('default')).address;
     await wallet.createAccount(accountTwo);
   });
@@ -2117,6 +2118,12 @@ describe('Wallet HTTP', function() {
     for (const processedFinish of batchFinishResponse2.processedFinishes) {
       assert.equal(processedFinish.from_cache, true);
     }
+  });
+
+  it('staticAddress wallet default account should have staticAddress: true property', async function() {
+    const staticAddressWallet = wclient.wallet('staticAddress');
+    const defaultAccount = await staticAddressWallet.getAccount('default');
+    assert.equal(defaultAccount.staticAddress, true, 'default account is not staticAddress');
   });
 });
 
