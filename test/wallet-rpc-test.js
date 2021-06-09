@@ -312,5 +312,43 @@ describe('Wallet RPC Methods', function() {
       assert.strictEqual(info.walletid, 'primary');
       assert.strictEqual(info.height, node.chain.height);
     });
+
+    describe('multisig', () => {
+      const multiSigWalletId = 'foobar';
+
+      before(async () => {
+        // Create multisig wallet
+        const response = await wclient.createWallet(multiSigWalletId, {
+          type: 'multisig',
+          mnemonic: mnemonics[1][1],
+          passphrase:'secret456',
+          m: 2,
+          n: 2
+        });
+        assert.equal(response.id, multiSigWalletId);
+
+        await wclient.addSharedKey(multiSigWalletId, 'default', xpub.xpubkey(network.type));
+
+        const info = await wclient.getAccount(multiSigWalletId, 'default');
+        assert.equal(info.initialized, true);
+        assert.equal(info.type, 'multisig');
+        assert.equal(info.watchOnly, false);
+      });
+
+      it('should not signmessage with address from multisig wallet', async () => {
+        await wclient.execute('selectwallet', [multiSigWalletId]);
+        const address = await wclient.execute('getnewaddress');
+
+        await assert.rejects(async () => {
+          await wclient.execute('signmessage', [
+            address,
+            message
+          ]);
+        }, {
+          type: 'RPCError',
+          message: 'Version 0 pubkeyhash address required for signing.'
+        });
+      });
+    });
   });
 });
