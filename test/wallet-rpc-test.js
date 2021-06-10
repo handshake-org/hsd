@@ -11,16 +11,17 @@ const HDPrivateKey = require('../lib/hd/private');
 const Script = require('../lib/script/script');
 const Address = require('../lib/primitives/address');
 const rules = require('../lib/covenants/rules');
-const network = Network.get('regtest');
-const mnemonics = require('./data/mnemonic-english.json');
-// Commonly used test mnemonic
-const phrase = mnemonics[0][1];
-// First 200 addresses derived from watch only wallet
-const addresses = require('./data/addresses.json');
-const rules = require('../lib/covenants/rules');
+
 const {types} = rules;
 const {forValue} = require('./util/common');
 
+// Commonly used test mnemonic
+const mnemonics = require('./data/mnemonic-english.json');
+const phrase = mnemonics[0][1];
+// First 200 addresses derived from watch only wallet
+const addresses = require('./data/addresses.json');
+
+const network = Network.get('regtest');
 const {
   treeInterval,
   biddingPeriod,
@@ -471,7 +472,14 @@ describe('Wallet RPC Methods', function() {
     // unconfirmed) outputs from the wallet so they can be reused in other tests.
     node.mempool.emit = () => {};
 
-    const wallet = wclient.wallet('primary');
+    let wallet;
+    before(async () => {
+      await wclient.createWallet('auctionRPCWallet');
+      wallet = wclient.wallet('auctionRPCWallet');
+      await wclient.execute('selectwallet', ['auctionRPCWallet']);
+      const addr = await wclient.execute('getnewaddress', []);
+      await nclient.execute('generatetoaddress', [10, addr]);
+    });
 
     it('should do an auction', async () => {
       const NAME1 = rules.grindName(5, 2, network);
