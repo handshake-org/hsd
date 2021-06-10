@@ -139,7 +139,7 @@ describe('Chain Prune', function() {
         assert(block, 'could not get block before height check.');
       }
 
-      // nulls
+      // pruned blocks - nulls
       for (let i = 10; i < 20; i++) {
         const block = await chain.getBlock(hashes[i]);
         assert.strictEqual(block, null, `block ${i} was not pruned.`);
@@ -185,7 +185,7 @@ describe('Chain Prune', function() {
         assert(block, 'could not get block before height check.');
       }
 
-      // nulls
+      // pruned blocks - nulls
       for (let i = 10; i < 20; i++) {
         const block = await chain.getBlock(hashes[i]);
         assert.strictEqual(block, null, `block ${i} was not pruned.`);
