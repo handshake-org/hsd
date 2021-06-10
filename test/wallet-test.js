@@ -102,6 +102,11 @@ function dummyInput() {
   return Input.fromOutpoint(new Outpoint(hash, 0));
 }
 
+function walletKeyToAddressStr(walletKey, network) {
+  const { publicKey } = walletKey;
+  return Address.fromPubkey(publicKey).toString(network);
+}
+
 describe('Wallet', function() {
   this.timeout(5000);
 
@@ -3298,24 +3303,51 @@ describe('Wallet', function() {
     it('should not increment receive address when account is created with "staticAddress" option', async function () {
       const wallet = await wdb.create({ staticAddress: true });
       const account = 'default';
-      const receiveAddr1 = await wallet.createReceive(account).toString(wdb.network);
-      const receiveAddr2 = await wallet.createReceive(account).toString(wdb.network);
+
+      const receiveKey1 = await wallet.createReceive(account);
+      const receiveAddr1 = walletKeyToAddressStr(receiveKey1, wdb.network);
+
+      const receiveKey2 = await wallet.createReceive(account);
+      const receiveAddr2 = walletKeyToAddressStr(receiveKey2, wdb.network);
+
       assert.strictEqual(receiveAddr1, receiveAddr2, 'receive addresses are different');
     });
 
     it('should not increment change address when account is created with "staticAddress" option', async function () {
       const wallet = await wdb.create({ staticAddress: true });
       const account = 'default';
-      const changeAddress1 = wallet.createChange(account).toString(wdb.network);
-      const changeAddress2 = wallet.createChange(account).toString(wdb.network);
+      const changeKey1 = await wallet.createChange(account);
+      const changeAddress1 = walletKeyToAddressStr(changeKey1, wdb.network);
+
+      const changeKey2 = await wallet.createChange(account);
+      const changeAddress2 = walletKeyToAddressStr(changeKey2, wdb.network);
+
       assert.strictEqual(changeAddress1, changeAddress2, 'change addresses are different');
     });
 
     it('should not increment receive address when wallet created with "staticAddress" option', async function() {
       const wallet = await wdb.create({ staticAddress: true });
-      const receiveAddr1 = await wallet.createReceive().toString(wdb.network);
-      const receiveAddr2 = await wallet.createReceive().toString(wdb.network);
+      const walletKey1 = await wallet.createReceive();
+      const receiveAddr1 = walletKeyToAddressStr(walletKey1, wdb.network);
+
+      const walletKey2 = await wallet.createReceive();
+      const receiveAddr2 = walletKeyToAddressStr(walletKey2, wdb.network);
+
       assert.strictEqual(receiveAddr1, receiveAddr2, 'receive addresses are different');
+    });
+
+    it('should not generate new address when requested', async function () {
+      const wallet = await wdb.create({ staticAddress: true });
+      const defaultAccount = await wallet.getAccount('default');
+      const batch = wdb.db.batch;
+
+      for (let i = 0; i < 10; i++) {
+        const receiveKey = await defaultAccount.createKey(batch,0);
+        const receiveAddr = walletKeyToAddressStr(receiveKey, wdb.network);
+        const changeKey = await defaultAccount.createKey(batch,1);
+        const changeAddr = walletKeyToAddressStr(changeKey, wdb.network);
+        assert.strictEqual(receiveAddr, changeAddr, 'change and receive keys must be eqaul');
+      }
     });
   });
 });
