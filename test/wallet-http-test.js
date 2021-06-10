@@ -10,17 +10,17 @@
 
 'use strict';
 
-const {NodeClient, WalletClient} = require('namebase-hs-client');
+const { NodeClient, WalletClient } = require('namebase-hs-client');
 const Network = require('../lib/protocol/network');
 const FullNode = require('../lib/node/fullnode');
 const MTX = require('../lib/primitives/mtx');
-const {isSignatureEncoding, isKeyEncoding} = require('../lib/script/common');
-const {Resource} = require('../lib/dns/resource');
+const { isSignatureEncoding, isKeyEncoding } = require('../lib/script/common');
+const { Resource } = require('../lib/dns/resource');
 const Address = require('../lib/primitives/address');
 const Output = require('../lib/primitives/output');
 const HD = require('../lib/hd/hd');
 const rules = require('../lib/covenants/rules');
-const {types} = rules;
+const { types } = rules;
 const secp256k1 = require('bcrypto/lib/secp256k1');
 const network = Network.get('regtest');
 const assert = require('bsert');
@@ -67,7 +67,7 @@ describe('Wallet HTTP', function() {
     await wclient.open();
 
     await wclient.createWallet('secondary');
-    await wclient.createWallet('staticAddress', {staticAddress: true});
+    await wclient.createWallet('staticAddress', { staticAddress: true });
     cbAddress  = (await wallet.createAddress('default')).address;
     await wallet.createAccount(accountTwo);
   });
@@ -216,7 +216,7 @@ describe('Wallet HTTP', function() {
   it('should mine to the secondary/default wallet', async () => {
     const height = 5;
 
-    const {address} = await wallet2.createAddress('default');
+    const { address } = await wallet2.createAddress('default');
     await mineBlocks(height, address);
 
     const accountInfo = await wallet2.getAccount('default');
@@ -230,7 +230,7 @@ describe('Wallet HTTP', function() {
   });
 
   it('should allow covenants with create tx', async () => {
-    const {address} = await wallet.createChange('default');
+    const { address } = await wallet.createChange('default');
 
     const output = openOutput(name, address);
 
@@ -242,7 +242,7 @@ describe('Wallet HTTP', function() {
   });
 
   it('should allow covenants with send tx', async () => {
-    const {address} = await wallet.createChange('default');
+    const { address } = await wallet.createChange('default');
 
     const output = openOutput(name, address);
 
@@ -359,7 +359,7 @@ describe('Wallet HTTP', function() {
       sign: false
     }));
 
-    await assert.rejects(fn, {message: 'Must sign when broadcasting.'});
+    await assert.rejects(fn, { message: 'Must sign when broadcasting.' });
   });
 
   it('should fail to create open for account with no monies', async () => {
@@ -372,13 +372,13 @@ describe('Wallet HTTP', function() {
       account: accountTwo
     }));
 
-    await assert.rejects(fn, {message: /Not enough funds./});
+    await assert.rejects(fn, { message: /Not enough funds./ });
   });
 
   it('should mine to the account with no monies', async () => {
     const height = 5;
 
-    const {receiveAddress} = await wallet.getAccount(accountTwo);
+    const { receiveAddress } = await wallet.getAccount(accountTwo);
 
     await mineBlocks(height, receiveAddress);
 
@@ -396,7 +396,7 @@ describe('Wallet HTTP', function() {
     const info = await wallet.getAccount(accountTwo);
 
     // assert that each of the inputs belongs to the account
-    for (const {address} of json.inputs) {
+    for (const { address } of json.inputs) {
       const keyInfo = await wallet.getKey(address);
       assert.equal(keyInfo.name, info.name);
     }
@@ -503,7 +503,7 @@ describe('Wallet HTTP', function() {
       name: name
     }));
 
-    await assert.rejects(fn, {message: 'Bid is required.'});
+    await assert.rejects(fn, { message: 'Bid is required.' });
   });
 
   it('should fail to open a bid without a lockup value', async () => {
@@ -512,7 +512,7 @@ describe('Wallet HTTP', function() {
       bid: 1000
     }));
 
-    await assert.rejects(fn, {message: 'Lockup is required.'});
+    await assert.rejects(fn, { message: 'Lockup is required.' });
   });
 
   it('should send bid with 0 value and non-dust lockup', async () => {
@@ -542,7 +542,7 @@ describe('Wallet HTTP', function() {
       lockup: 0
     });
 
-    await assert.rejects(fn, {message: 'Output is dust.'});
+    await assert.rejects(fn, { message: 'Output is dust.' });
   });
 
   it('should get all bids (single player)', async () => {
@@ -644,7 +644,7 @@ describe('Wallet HTTP', function() {
 
     {
       // fetch only own bids for the name
-      const bids = await wallet.getBidsByName(name, {own: true});
+      const bids = await wallet.getBidsByName(name, { own: true });
       assert.equal(bids.length, 1);
       const [bid] = bids;
       assert.equal(bid.prevout.hash, tx1.hash);
@@ -666,7 +666,7 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(biddingPeriod + 1, cbAddress);
 
-    const {info} = await nclient.execute('getnameinfo', [name]);
+    const { info } = await nclient.execute('getnameinfo', [name]);
     assert.equal(info.name, name);
     assert.equal(info.state, 'REVEAL');
 
@@ -695,7 +695,7 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(biddingPeriod + 1, cbAddress);
 
-    const {info} = await nclient.execute('getnameinfo', [name]);
+    const { info } = await nclient.execute('getnameinfo', [name]);
     assert.equal(info.name, name);
     assert.equal(info.state, 'REVEAL');
 
@@ -802,7 +802,7 @@ describe('Wallet HTTP', function() {
     await mineBlocks(revealPeriod + 1, cbAddress);
 
     {
-      const reveals = await wallet.getRevealsByName(name, {own: true});
+      const reveals = await wallet.getRevealsByName(name, { own: true });
       assert.equal(reveals.length, 1);
       const [reveal] = reveals;
       assert.equal(reveal.own, true);
@@ -950,13 +950,13 @@ describe('Wallet HTTP', function() {
       name: name
     }));
 
-    await assert.rejects(fn, {message: `No reveals to redeem: "${name}".`});
+    await assert.rejects(fn, { message: `No reveals to redeem: "${name}".` });
 
     const json = await wallet.createRedeem({
       name: name
     });
 
-    const redeem = json.outputs.filter(({covenant}) => covenant.type === types.REDEEM);
+    const redeem = json.outputs.filter(({ covenant }) => covenant.type === types.REDEEM);
     assert.ok(redeem.length > 0);
   });
 
@@ -995,7 +995,7 @@ describe('Wallet HTTP', function() {
       });
 
       // register directly after reveal
-      const registers = json.outputs.filter(({covenant}) => covenant.type === types.REGISTER);
+      const registers = json.outputs.filter(({ covenant }) => covenant.type === types.REGISTER);
       assert.equal(registers.length, 1);
     }
 
@@ -1016,7 +1016,7 @@ describe('Wallet HTTP', function() {
       });
 
       // update after register or update
-      const updates = json.outputs.filter(({covenant}) => covenant.type === types.UPDATE);
+      const updates = json.outputs.filter(({ covenant }) => covenant.type === types.UPDATE);
       assert.equal(updates.length, 1);
     }
   });
@@ -1085,7 +1085,7 @@ describe('Wallet HTTP', function() {
       name
     });
 
-    const updates = json.outputs.filter(({covenant}) => covenant.type === types.RENEW);
+    const updates = json.outputs.filter(({ covenant }) => covenant.type === types.RENEW);
     assert.equal(updates.length, 1);
   });
 
@@ -1124,14 +1124,14 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(treeInterval + 1, cbAddress);
 
-    const {receiveAddress} = await wallet.getAccount(accountTwo);
+    const { receiveAddress } = await wallet.getAccount(accountTwo);
 
     const json = await wallet.createTransfer({
       name,
       address: receiveAddress
     });
 
-    const xfer = json.outputs.filter(({covenant}) => covenant.type === types.TRANSFER);
+    const xfer = json.outputs.filter(({ covenant }) => covenant.type === types.TRANSFER);
     assert.equal(xfer.length, 1);
   });
 
@@ -1170,7 +1170,7 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(treeInterval + 1, cbAddress);
 
-    const {receiveAddress} = await wallet.getAccount(accountTwo);
+    const { receiveAddress } = await wallet.getAccount(accountTwo);
 
     await wallet.createTransfer({
       name,
@@ -1183,7 +1183,7 @@ describe('Wallet HTTP', function() {
       name
     });
 
-    const final = json.outputs.filter(({covenant}) => covenant.type === types.FINALIZE);
+    const final = json.outputs.filter(({ covenant }) => covenant.type === types.FINALIZE);
     assert.equal(final.length, 1);
 
     await mineBlocks(1, cbAddress);
@@ -1229,7 +1229,7 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(treeInterval + 1, cbAddress);
 
-    const {receiveAddress} = await wallet.getAccount(accountTwo);
+    const { receiveAddress } = await wallet.getAccount(accountTwo);
 
     await wallet.createTransfer({
       name,
@@ -1238,9 +1238,9 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(transferLockup + 1, cbAddress);
 
-    const json = await wallet.createCancel({name});
+    const json = await wallet.createCancel({ name });
 
-    const cancel = json.outputs.filter(({covenant}) => covenant.type === types.UPDATE);
+    const cancel = json.outputs.filter(({ covenant }) => covenant.type === types.UPDATE);
     assert.equal(cancel.length, 1);
 
     await mineBlocks(1, cbAddress);
@@ -1290,9 +1290,9 @@ describe('Wallet HTTP', function() {
 
     await mineBlocks(treeInterval + 1, cbAddress);
 
-    const json = await wallet.createRevoke({name});
+    const json = await wallet.createRevoke({ name });
 
-    const final = json.outputs.filter(({covenant}) => covenant.type === types.REVOKE);
+    const final = json.outputs.filter(({ covenant }) => covenant.type === types.REVOKE);
     assert.equal(final.length, 1);
 
     await mineBlocks(1, cbAddress);
@@ -1305,7 +1305,7 @@ describe('Wallet HTTP', function() {
   it('should create a batch open transaction (multiple outputs) for valid names', async () => {
     const NAMES_LEN = 200;
     const validNames = [];
-    for (let i =0; i<NAMES_LEN; i++) {
+    for (let i = 0; i < NAMES_LEN; i++) {
       validNames.push(await nclient.execute('grindname', [5]));
     }
 
@@ -1315,7 +1315,7 @@ describe('Wallet HTTP', function() {
       passphrase: '',
       names: validNames,
       sign: true,
-      broadcast: true});
+      broadcast: true });
 
     const transaction = json['tx'];
     const errors = json['errors'];
@@ -1495,7 +1495,7 @@ describe('Wallet HTTP', function() {
     await mineBlocks(treeInterval + 1, cbAddress);
 
     // TODO Promise.All is failing ?
-    for (let i =0; i<BID_COUNT; i++) {
+    for (let i = 0; i < BID_COUNT; i++) {
       for (const domainName of validNames) {
         await wallet.createBid({
           name: domainName,
@@ -1515,7 +1515,7 @@ describe('Wallet HTTP', function() {
       broadcast: true
     });
 
-    const {processedReveals, errors} = json;
+    const { processedReveals, errors } = json;
 
     assert.ok(errors.length === OUTPUT_LIMIT_EXCEEDING_NAMES_LEN);
     assert.ok(errors[0].name != null);
@@ -1557,7 +1557,7 @@ describe('Wallet HTTP', function() {
     // using batch bids to speed up the test
     let bids = [];
     for (const domainName of validNames) {
-      for (let i=1; i<=BID_COUNT; i++) {
+      for (let i = 1; i <= BID_COUNT; i++) {
         bids.push({
           name: domainName,
           bid: 999 + i,
@@ -1583,7 +1583,7 @@ describe('Wallet HTTP', function() {
       names: validNames
     });
 
-    const {processedReveals, errors} = json;
+    const { processedReveals, errors } = json;
 
     assert.ok(errors.length === 1);
     assert.ok(processedReveals.length === MAX_REVEAL_COUNT);
@@ -1619,7 +1619,7 @@ describe('Wallet HTTP', function() {
     // using batch bids to speed up the test
     let bids = [];
     for (const domainName of validNames) {
-      for (let i=1; i<=BID_COUNT; i++) {
+      for (let i = 1; i <= BID_COUNT; i++) {
         bids.push({
           name: domainName,
           bid: 999 + i,
@@ -1652,7 +1652,7 @@ describe('Wallet HTTP', function() {
       names: validNames
     });
 
-    const {processedReveals, errors} = json;
+    const { processedReveals, errors } = json;
 
     assert.ok(errors.length === 0);
     assert.ok(processedReveals.length === BID_COUNT * VALID_NAMES_LEN);
@@ -1702,7 +1702,7 @@ describe('Wallet HTTP', function() {
     const bids = [];
     let counter = 0;
     for (const domainName of validNames) {
-      for (let i =0; i<BID_COUNT; i++) {
+      for (let i = 0; i < BID_COUNT; i++) {
         bids.push({
           name: domainName,
           bid: 999 + i,
@@ -1722,12 +1722,12 @@ describe('Wallet HTTP', function() {
       bids: bids
     });
 
-    for (let i=0; i<UNIQUE_BID_COUNT; i++) {
+    for (let i = 0; i < UNIQUE_BID_COUNT; i++) {
       bids.push(uniqueBids[i]);
     }
 
     // Duplicate request with UNIQUE_BID_COUNT unique bids at the end
-    const {processedBids, errorMessages} = await wclient.createBatchBid('primary', {
+    const { processedBids, errorMessages } = await wclient.createBatchBid('primary', {
       passphrase: '',
       bids: bids
     });
@@ -1775,7 +1775,7 @@ describe('Wallet HTTP', function() {
     const bids = [];
     let counter = 0;
     for (const domainName of validNames) {
-      for (let i =0; i<BID_COUNT; i++) {
+      for (let i = 0; i < BID_COUNT; i++) {
         bids.push({
           name: domainName,
           bid: 999 + i,
@@ -1785,7 +1785,7 @@ describe('Wallet HTTP', function() {
       }
     }
 
-    const {processedBids, errorMessages} = await wclient.createBatchBid('primary', {
+    const { processedBids, errorMessages } = await wclient.createBatchBid('primary', {
       passphrase: '',
       bids: bids
     });
@@ -1823,7 +1823,7 @@ describe('Wallet HTTP', function() {
     const bids = [];
     let counter = 0;
     for (const domainName of validNames) {
-      for (let i =0; i<BID_COUNT; i++) {
+      for (let i = 0; i < BID_COUNT; i++) {
         bids.push({
           name: domainName,
           bid: 999 + i,
@@ -1856,17 +1856,17 @@ describe('Wallet HTTP', function() {
 
     await assert.rejects(wclient.createBatchFinish('primary', {
       passphrase: '',
-      finishRequests: [{name: 'domain_name'}]
+      finishRequests: [{ name: 'domain_name' }]
     }), /name and data must be present in every element./);
 
     await assert.rejects(wclient.createBatchFinish('primary', {
       passphrase: '',
-      finishRequests: [{name: 'domain_name', data: 'invalid data'}]
+      finishRequests: [{ name: 'domain_name', data: 'invalid data' }]
     }), /data must be a object./);
 
     await assert.rejects(wclient.createBatchFinish('primary', {
       passphrase: '',
-      finishRequests: [{name: 'domain_name', data: {}}]
+      finishRequests: [{ name: 'domain_name', data: {} }]
     }), /Invalid records/);
   });
 
@@ -1927,11 +1927,11 @@ describe('Wallet HTTP', function() {
       broadcast: true
     });
 
-    await mineBlocks(2*treeInterval + 1, cbAddress);
+    await mineBlocks(2 * treeInterval + 1, cbAddress);
 
     const wallet2Finish = await wclient.createBatchFinish('secondary', {
       passphrase: '',
-      finishRequests: [{name: name1, data}, {name: name2, data}]
+      finishRequests: [{ name: name1, data }, { name: name2, data }]
     });
 
     assert.deepStrictEqual(wallet2Finish.errorMessages, []);
@@ -1945,7 +1945,7 @@ describe('Wallet HTTP', function() {
 
     const wallet1Finish = await wclient.createBatchFinish('primary', {
       passphrase: '',
-      finishRequests: [{name: name1, data}, {name: name2, data}]
+      finishRequests: [{ name: name1, data }, { name: name2, data }]
     });
 
     const wallet1RedeemOutput = getOutputsOfType(wallet1Finish.processedFinishes, 'REDEEM')[0];
@@ -1967,9 +1967,9 @@ describe('Wallet HTTP', function() {
   it('should partially process names when total finish count exceeds 200', async function() {
     const BATCH_FINISH_LIMIT = 200;
     const NAME_BID_COUNT = 100;
-    const {name: name1, bids: name1Bids} = await createNameWithBids(NAME_BID_COUNT);
-    const {name: name2, bids: name2Bids} = await createNameWithBids(NAME_BID_COUNT);
-    const {name: name3, bids: name3Bids} = await createNameWithBids(NAME_BID_COUNT);
+    const { name: name1, bids: name1Bids } = await createNameWithBids(NAME_BID_COUNT);
+    const { name: name2, bids: name2Bids } = await createNameWithBids(NAME_BID_COUNT);
+    const { name: name3, bids: name3Bids } = await createNameWithBids(NAME_BID_COUNT);
     const data = { records: [] };
 
     await wclient.createBatchOpen('primary', {
@@ -2012,13 +2012,13 @@ describe('Wallet HTTP', function() {
       broadcast: true
     });
 
-    await mineBlocks(2*treeInterval + 1, cbAddress);
+    await mineBlocks(2 * treeInterval + 1, cbAddress);
 
     let processedFinishes, errorMessages;
 
     const batchFinishResponsePart1 = await wclient.createBatchFinish('primary', {
       passphrase: '',
-      finishRequests: [{name: name1, data},{name: name2, data},{name: name3, data}]
+      finishRequests: [{ name: name1, data },{ name: name2, data },{ name: name3, data }]
     });
 
     processedFinishes = batchFinishResponsePart1.processedFinishes;
@@ -2037,7 +2037,7 @@ describe('Wallet HTTP', function() {
 
     const batchFinishResponsePart2 = await wclient.createBatchFinish('primary', {
       passphrase: '',
-      finishRequests: [{name: name1, data},{name: name2, data},{name: name3, data}]
+      finishRequests: [{ name: name1, data },{ name: name2, data },{ name: name3, data }]
     });
 
     processedFinishes = batchFinishResponsePart2.processedFinishes;
@@ -2054,9 +2054,9 @@ describe('Wallet HTTP', function() {
 
   it('should respond from cache when same names are used for batchFinish', async function() {
     const NAME_BID_COUNT = 100;
-    const data = {records: []};
+    const data = { records: [] };
 
-    const {name, bids} = await createNameWithBids(NAME_BID_COUNT);
+    const { name, bids } = await createNameWithBids(NAME_BID_COUNT);
 
     await wclient.createBatchOpen('primary', {
       names: [name],
@@ -2081,11 +2081,11 @@ describe('Wallet HTTP', function() {
       broadcast: true
     });
 
-    await mineBlocks(2*treeInterval + 1, cbAddress);
+    await mineBlocks(2 * treeInterval + 1, cbAddress);
 
     const batchFinishResponse1 = await wclient.createBatchFinish('primary', {
       passphrase: '',
-      finishRequests: [{name, data}]
+      finishRequests: [{ name, data }]
     });
 
     assert.equal(batchFinishResponse1.errorMessages.length, 0);
@@ -2104,7 +2104,7 @@ describe('Wallet HTTP', function() {
 
     const batchFinishResponse2 = await wclient.createBatchFinish('primary', {
       passphrase: '',
-      finishRequests: [{name, data}]
+      finishRequests: [{ name, data }]
     });
 
     assert.equal(batchFinishResponse2.errorMessages.length, 0);
@@ -2124,6 +2124,13 @@ describe('Wallet HTTP', function() {
     const staticAddressWallet = wclient.wallet('staticAddress');
     const defaultAccount = await staticAddressWallet.getAccount('default');
     assert.equal(defaultAccount.staticAddress, true, 'default account is not staticAddress');
+  });
+
+  it('static address wallet should generate same change and receive addresses always when requested', async function () {
+    const staticAddressWallet = wclient.wallet('staticAddress');
+    const changeAddr = (await staticAddressWallet.createChange('default')).toString(network);
+    const receiveAddr = (await staticAddressWallet.createAddress('default')).toString(network);
+    assert.equal(changeAddr, receiveAddr);
   });
 });
 
@@ -2175,12 +2182,12 @@ async function createNameWithBids(bidCount) {
   const bids = [];
   const BaseBid = 10000000;
 
-  for (let i=0; i<bidCount; i++) {
+  for (let i = 0; i < bidCount; i++) {
     const idempotencyKey = name + i;
     bids.push(createBid(name, BaseBid + i, idempotencyKey));
   }
 
-  return {name, bids};
+  return { name, bids };
 }
 
 // filter and return outputs of type
