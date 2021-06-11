@@ -11,12 +11,22 @@ const HDPrivateKey = require('../lib/hd/private');
 const Script = require('../lib/script/script');
 const Address = require('../lib/primitives/address');
 const rules = require('../lib/covenants/rules');
-const network = Network.get('regtest');
-const mnemonics = require('./data/mnemonic-english.json');
+
+const {types} = rules;
+const {forValue} = require('./util/common');
+
 // Commonly used test mnemonic
+const mnemonics = require('./data/mnemonic-english.json');
 const phrase = mnemonics[0][1];
 // First 200 addresses derived from watch only wallet
 const addresses = require('./data/addresses.json');
+
+const network = Network.get('regtest');
+const {
+  treeInterval,
+  biddingPeriod,
+  revealPeriod
+} = network.names;
 
 const ports = {
   p2p: 14331,
@@ -47,6 +57,8 @@ const wclient = new WalletClient({
   port: ports.wallet,
   apiKey: 'bar'
 });
+
+const {wdb} = node.require('walletdb');
 
 describe('Wallet RPC Methods', function() {
   this.timeout(15000);
@@ -451,6 +463,129 @@ describe('Wallet RPC Methods', function() {
           message: 'Invalid name.'
         });
       }
+    });
+  });
+
+  describe('auction RPC', () => {
+    // Prevent mempool from sending duplicate TXs back to the walletDB and txdb.
+    // This will prevent a race condition when we need to remove spent (but
+    // unconfirmed) outputs from the wallet so they can be reused in other tests.
+    node.mempool.emit = () => {};
+
+    let wallet;
+    before(async () => {
+      await wclient.createWallet('auctionRPCWallet');
+      wallet = wclient.wallet('auctionRPCWallet');
+      await wclient.execute('selectwallet', ['auctionRPCWallet']);
+      const addr = await wclient.execute('getnewaddress', []);
+      await nclient.execute('generatetoaddress', [10, addr]);
+    });
+
+    it('should do an auction', async () => {
+      const NAME1 = rules.grindName(5, 2, network);
+      const NAME2 = rules.grindName(6, 3, network);
+      const addr = await wclient.execute('getnewaddress', []);
+      await nclient.execute('generatetoaddress', [10, addr]);
+      await forValue(wdb, 'height', node.chain.height);
+
+      await wclient.execute('sendopen', [NAME1]);
+      await wclient.execute('sendopen', [NAME2]);
+      await nclient.execute('generatetoaddress', [treeInterval + 1, addr]);
+      await forValue(wdb, 'height', node.chain.height);
+
+      // NAME1 gets 3 bids, NAME2 gets 4.
+      await wclient.execute('sendbid', [NAME1, 1, 2]);
+      await wclient.execute('sendbid', [NAME1, 3, 4]);
+      await wclient.execute('sendbid', [NAME1, 5, 6]);
+
+      await wclient.execute('sendbid', [NAME2, 1, 2]);
+      await wclient.execute('sendbid', [NAME2, 3, 4]);
+      await wclient.execute('sendbid', [NAME2, 5, 6]);
+      await wclient.execute('sendbid', [NAME2, 7, 8]);
+      await nclient.execute('generatetoaddress', [biddingPeriod, addr]);
+      await forValue(wdb, 'height', node.chain.height);
+
+      // Works with and without specifying name.
+      const createRevealName = await wclient.execute('createreveal', [NAME1]);
+      const createRevealAll = await wclient.execute('createreveal', []);
+      const sendRevealName = await wclient.execute('sendreveal', [NAME1]);
+
+      // Un-send so we can try again.
+      await node.mempool.reset();
+      await wallet.abandon(sendRevealName.hash);
+      const sendRevealAll = await wclient.execute('sendreveal', []);
+
+      // If we don't specify the name, all 7 bids are revealed.
+      // If we DO specify the name, only those 3 are revealed.
+      assert.strictEqual(
+        createRevealAll.outputs.filter(
+          output => output.covenant.type === types.REVEAL
+        ).length,
+        7
+      );
+      assert.strictEqual(
+        createRevealName.outputs.filter(
+          output => output.covenant.type === types.REVEAL
+        ).length,
+        3
+      );
+      assert.strictEqual(
+        sendRevealAll.outputs.filter(
+          output => output.covenant.type === types.REVEAL
+        ).length,
+        7
+      );
+      assert.strictEqual(
+        sendRevealName.outputs.filter(
+          output => output.covenant.type === types.REVEAL
+        ).length,
+        3
+      );
+
+      await nclient.execute('generatetoaddress', [revealPeriod, addr]);
+      await forValue(wdb, 'height', node.chain.height);
+
+      // Works with and without specifying name.
+      const createRedeemName = await wclient.execute('createredeem', [NAME1]);
+      const createRedeemAll = await wclient.execute('createredeem', []);
+      const sendRedeemName = await wclient.execute('sendredeem', [NAME1]);
+
+      // Un-send so we can try again.
+      await node.mempool.reset();
+      await wallet.abandon(sendRedeemName.hash);
+      const sendRedeemAll = await wclient.execute('sendredeem', []);
+
+      // If we don't specify the name, all 5 losing reveals are redeemed.
+      // If we DO specify the name, only those 2 are redeemed.
+      assert.strictEqual(
+        createRedeemAll.outputs.filter(
+          output => output.covenant.type === types.REDEEM
+        ).length,
+        5
+      );
+      assert.strictEqual(
+        createRedeemName.outputs.filter(
+          output => output.covenant.type === types.REDEEM
+        ).length,
+        2
+      );
+      assert.strictEqual(
+        sendRedeemAll.outputs.filter(
+          output => output.covenant.type === types.REDEEM
+        ).length,
+        5
+      );
+      assert.strictEqual(
+        sendRedeemName.outputs.filter(
+          output => output.covenant.type === types.REDEEM
+        ).length,
+        2
+      );
+
+      // Confirm wallet has won both names.
+      await wclient.execute('sendupdate', [NAME1, {'records':[]}]);
+      await wclient.execute('sendupdate', [NAME2, {'records':[]}]);
+      await nclient.execute('generatetoaddress', [1, addr]);
     });
   });
 });

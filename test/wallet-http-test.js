@@ -45,6 +45,7 @@ const wclient = new WalletClient({
   apiKey: 'foo'
 });
 
+const {wdb} = node.require('walletdb');
 const wallet = wclient.wallet('primary');
 const wallet2 = wclient.wallet('secondary');
 
@@ -1298,6 +1299,104 @@ describe('Wallet HTTP', function() {
     const ns = await nclient.execute('getnameinfo', [name]);
     assert.equal(ns.info.name, name);
     assert.equal(ns.info.state, 'REVOKED');
+  });
+
+  it('should require passphrase for auction TXs', async () => {
+    const passphrase = 'BitDNS!5353';
+    await wclient.createWallet('lockedWallet', {passphrase});
+    const lockedWallet = await wclient.wallet('lockedWallet');
+
+    // Fast-forward through the default 60-second unlock timeout
+    async function lock() {
+      const wallet = await wdb.get('lockedWallet');
+      return wallet.lock();
+    }
+    await lock();
+
+    // Wallet is created and encrypted
+    const info = await lockedWallet.getInfo();
+    assert(info);
+    assert(info.master.encrypted);
+
+    // Fund
+    const addr = await lockedWallet.createAddress('default');
+    await mineBlocks(10, addr.address);
+    await common.forValue(wdb, 'height', node.chain.height);
+    const bal = await lockedWallet.getBalance();
+    assert(bal.confirmed > 0);
+
+    // Open
+    await assert.rejects(
+      lockedWallet.createOpen({name}),
+      {message: 'No passphrase.'}
+    );
+
+    await lockedWallet.createOpen({name, passphrase});
+    await lock();
+
+    await mineBlocks(treeInterval + 1, cbAddress);
+
+    // Bid
+    await assert.rejects(
+      lockedWallet.createBid({name, lockup: 1, bid: 1}),
+      {message: 'No passphrase.'}
+    );
+
+    // Send multiple bids, wallet remains unlocked for 60 seconds (all 3 bids)
+    await lockedWallet.createBid(
+      {name, lockup: 1000000, bid: 1000000, passphrase}
+    );
+    await lockedWallet.createBid({name, lockup: 2000000, bid: 2000000});
+    await lockedWallet.createBid({name, lockup: 3000000, bid: 3000000});
+    await lock();
+
+    await mineBlocks(biddingPeriod + 1, cbAddress);
+
+    // Reveal
+    await assert.rejects(
+      lockedWallet.createReveal({name}),
+      {message: 'No passphrase.'}
+    );
+    const revealAll = await lockedWallet.createReveal({name, passphrase});
+    await lock();
+
+    // All 3 bids are revealed
+    const reveals = revealAll.outputs.filter(
+      output => output.covenant.type === types.REVEAL
+    );
+    assert.equal(reveals.length, 3);
+
+    await mineBlocks(revealPeriod + 1, cbAddress);
+
+    // Redeem all by not passing specific name
+    await assert.rejects(
+      lockedWallet.createRedeem(),
+      {message: 'No passphrase.'}
+    );
+    const redeemAll = await lockedWallet.createRedeem({passphrase});
+    await lock();
+
+    // Only 2 reveals are redeemed (because the third one is the winner)
+    const redeems = redeemAll.outputs.filter(
+      output => output.covenant.type === types.REDEEM
+    );
+    assert.equal(redeems.length, 2);
+
+    // Register
+    await assert.rejects(
+      lockedWallet.createUpdate({name, data: {records: []}}),
+      {message: 'No passphrase.'}
+    );
+    const register = await lockedWallet.createUpdate(
+      {name, data: {records: []}, passphrase}
+    );
+    await lock();
+
+    // Only 1 register, only 1 winner!
+    const registers = register.outputs.filter(
+      output => output.covenant.type === types.REGISTER
+    );
+    assert.equal(registers.length, 1);
   });
 });
 
