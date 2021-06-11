@@ -38,10 +38,8 @@ const undos = [
   common.readBlock('block55737')
 ];
 
-// TODO: figure out exactly what is meant by
-// merkle extended...
+// extended merkle
 const merkles = [
-  //common.readMerkle('merkle300025-extended')
 ];
 
 const {

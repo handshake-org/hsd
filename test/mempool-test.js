@@ -1137,6 +1137,7 @@ describe('Mempool', function() {
 
     const chain = new Chain({
       memory: true,
+      blocks,
       workers,
       network: 'regtest'
     });
@@ -1150,6 +1151,7 @@ describe('Mempool', function() {
     });
 
     before(async () => {
+      await blocks.open();
       await mempool.open();
       await chain.open();
       await workers.open();
@@ -1159,6 +1161,7 @@ describe('Mempool', function() {
       await workers.close();
       await chain.close();
       await mempool.close();
+      await blocks.close();
     });
 
     // Number of coins available in
