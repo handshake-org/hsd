@@ -27,6 +27,7 @@ const Output = require('../lib/primitives/output');
 const Script = require('../lib/script/script');
 const policy = require('../lib/protocol/policy');
 const HDPrivateKey = require('../lib/hd/private');
+const Mnemonic = require('../lib/hd/mnemonic');
 const Wallet = require('../lib/wallet/wallet');
 const rules = require('../lib/covenants/rules');
 const {types, hashName} = rules;
@@ -132,6 +133,24 @@ describe('Wallet', function() {
     const wallet1 = await wdb.create();
     const wallet2 = await wdb.get(wallet1.id);
     assert(wallet1 === wallet2);
+  });
+
+  it('should create wallet with spanish mnemonic', async () => {
+    const wallet1 = await wdb.create({language: 'spanish'});
+    const phrase = wallet1.master.mnemonic.phrase;
+    for (const word of phrase.split(' ')) {
+      const language = Mnemonic.getLanguage(word);
+      assert.strictEqual(language, 'spanish');
+      // Comprobar la cordura
+      assert.notStrictEqual(language, 'english');
+    }
+
+    // Verificar
+    const wallet2 = await wdb.create({mnemonic: phrase});
+    assert.deepStrictEqual(
+      await wallet1.receiveAddress(),
+      await wallet2.receiveAddress()
+    );
   });
 
   it('should sign/verify p2pkh tx', async () => {
