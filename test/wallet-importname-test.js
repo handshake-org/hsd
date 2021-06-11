@@ -9,6 +9,7 @@ const FullNode = require('../lib/node/fullnode');
 const Address = require('../lib/primitives/address');
 const rules = require('../lib/covenants/rules');
 const {WalletClient} = require('hs-client');
+const {forValue} = require('./util/common');
 
 const network = Network.get('regtest');
 
@@ -230,6 +231,67 @@ describe('Wallet Import Name', function() {
         wclient.execute('importname', [name, 0]),
         {message: 'Name already exists.'}
       );
+    });
+  });
+
+  describe('import multiple / overlapping names', function() {
+    const name1 = rules.grindName(4, 1, network);
+    const name2 = rules.grindName(5, 1, network);
+    const name3 = rules.grindName(6, 1, network);
+    let startHeight;
+
+    it('should open and bid from Alice\'s wallet', async () => {
+      await alice.sendOpen(name1, false);
+      await alice.sendOpen(name2, false);
+      await alice.sendOpen(name3, false);
+      startHeight = node.chain.tip.height;
+
+      await mineBlocks(network.names.treeInterval + 1);
+      await forValue(wdb, 'height', node.chain.height);
+
+      await alice.sendBid(name1, 10000, 10000);
+      await alice.sendBid(name2, 20000, 20000);
+      await alice.sendBid(name3, 30000, 30000);
+      await mineBlocks(1);
+    });
+
+    it('should import names into Bob\'s wallet', async () => {
+      assert.strictEqual(await bob.getNameStateByName(name1), null);
+      assert.strictEqual(await bob.getNameStateByName(name2), null);
+      assert.strictEqual(await bob.getNameStateByName(name3), null);
+      assert.deepStrictEqual(await bob.getBidsByName(name1), []);
+      assert.deepStrictEqual(await bob.getBidsByName(name2), []);
+      assert.deepStrictEqual(await bob.getBidsByName(name3), []);
+
+      await bob.importName(name1);
+      await wdb.rescan(startHeight);
+
+      assert.ok(await bob.getNameStateByName(name1));
+      assert.strictEqual(await bob.getNameStateByName(name2), null);
+      assert.strictEqual(await bob.getNameStateByName(name3), null);
+      assert.ok(await bob.getBidsByName(name1));
+      assert.deepStrictEqual(await bob.getBidsByName(name2), []);
+      assert.deepStrictEqual(await bob.getBidsByName(name3), []);
+
+      await bob.importName(name2);
+      await wdb.rescan(startHeight);
+
+      assert.ok(await bob.getNameStateByName(name1));
+      assert.ok(await bob.getNameStateByName(name2));
+      assert.strictEqual(await bob.getNameStateByName(name3), null);
+      assert.ok(await bob.getBidsByName(name1));
+      assert.ok(await bob.getBidsByName(name2));
+      assert.deepStrictEqual(await bob.getBidsByName(name3), []);
+
+      await bob.importName(name3);
+      await wdb.rescan(startHeight);
+
+      assert.ok(await bob.getNameStateByName(name1));
+      assert.ok(await bob.getNameStateByName(name2));
+      assert.ok(await bob.getNameStateByName(name3));
+      assert.ok(await bob.getBidsByName(name1));
+      assert.ok(await bob.getBidsByName(name2));
+      assert.ok(await bob.getBidsByName(name3));
     });
   });
 });
