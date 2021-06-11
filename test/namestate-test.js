@@ -29,222 +29,229 @@ describe('Namestate', function() {
     ns.nameHash = nameHash;
     ns.set(Buffer.from(name, 'ascii'), height);
 
-    it('should be OPENING', () => {
-      while (height < treeInterval + 1) {
+    // After this height transfers and expirations return different stats
+    const auctionLifespan = treeInterval + 1 + biddingPeriod + revealPeriod;
+
+    describe('single auction flow', function() {
+      it('should be OPENING', () => {
+        while (height < treeInterval + 1) {
+          const json = ns.getJSON(height, network);
+
+          assert.strictEqual(json.state, 'OPENING');
+
+          const stats = Object.keys(json.stats);
+          assert.deepStrictEqual(
+            stats,
+            [
+              'openPeriodStart',
+              'openPeriodEnd',
+              'blocksUntilBidding',
+              'hoursUntilBidding'
+            ]
+          );
+          height++;
+        }
+      });
+
+      it('should be BIDDING', () => {
+        while (height < treeInterval + 1 + biddingPeriod) {
+          const json = ns.getJSON(height, network);
+
+          assert.strictEqual(json.state, 'BIDDING');
+
+          const stats = Object.keys(json.stats);
+          assert.deepStrictEqual(
+            stats,
+            [
+              'bidPeriodStart',
+              'bidPeriodEnd',
+              'blocksUntilReveal',
+              'hoursUntilReveal'
+            ]
+          );
+          height++;
+        }
+      });
+
+      it('should be REVEALING', () => {
+        while (height < treeInterval + 1 + biddingPeriod + revealPeriod) {
+          const json = ns.getJSON(height, network);
+
+          assert.strictEqual(json.state, 'REVEAL');
+
+          const stats = Object.keys(json.stats);
+          assert.deepStrictEqual(
+            stats,
+            [
+              'revealPeriodStart',
+              'revealPeriodEnd',
+              'blocksUntilClose',
+              'hoursUntilClose'
+            ]
+          );
+          height++;
+        }
+      });
+
+      it('should be CLOSED without owner', () => {
         const json = ns.getJSON(height, network);
 
-        assert.strictEqual(json.state, 'OPENING');
-
-        const stats = Object.keys(json.stats);
-        assert.deepStrictEqual(
-          stats,
-          [
-            'openPeriodStart',
-            'openPeriodEnd',
-            'blocksUntilBidding',
-            'hoursUntilBidding'
-          ]
-        );
-        height++;
-      }
-    });
-
-    it('should be BIDDING', () => {
-      while (height < treeInterval + 1 + biddingPeriod) {
-        const json = ns.getJSON(height, network);
-
-        assert.strictEqual(json.state, 'BIDDING');
-
-        const stats = Object.keys(json.stats);
-        assert.deepStrictEqual(
-          stats,
-          [
-            'bidPeriodStart',
-            'bidPeriodEnd',
-            'blocksUntilReveal',
-            'hoursUntilReveal'
-          ]
-        );
-        height++;
-      }
-    });
-
-    it('should be REVEALING', () => {
-      while (height < treeInterval + 1 + biddingPeriod + revealPeriod) {
-        const json = ns.getJSON(height, network);
-
-        assert.strictEqual(json.state, 'REVEAL');
-
-        const stats = Object.keys(json.stats);
-        assert.deepStrictEqual(
-          stats,
-          [
-            'revealPeriodStart',
-            'revealPeriodEnd',
-            'blocksUntilClose',
-            'hoursUntilClose'
-          ]
-        );
-        height++;
-      }
-    });
-
-    it('should be CLOSED without owner', () => {
-      const json = ns.getJSON(height, network);
-
-      assert.strictEqual(json.state, 'CLOSED');
-      assert(json.stats === null);
-    });
-
-    it('should be CLOSED until expiration with owner', () => {
-      // Fork the timeline;
-      let heightWithOwner = height;
-
-      // Someone won the name
-      ns.owner.hash = Buffer.alloc(32, 0x01);
-      ns.owner.index = 0;
-
-      while (heightWithOwner < renewalWindow) {
-        const json = ns.getJSON(heightWithOwner, network);
-
         assert.strictEqual(json.state, 'CLOSED');
-
-        const stats = Object.keys(json.stats);
-        assert.deepStrictEqual(
-          stats,
-          [
-            'renewalPeriodStart',
-            'renewalPeriodEnd',
-            'blocksUntilExpire',
-            'daysUntilExpire'
-          ]
-        );
-        heightWithOwner++;
-      }
-
-      // Expired without renewal
-      while (heightWithOwner < renewalWindow + 10) {
-        const json = ns.getJSON(heightWithOwner, network);
-
-        assert.strictEqual(json.state, 'CLOSED');
-
-        const stats = Object.keys(json.stats);
-        assert.deepStrictEqual(
-          stats,
-          [
-            'blocksSinceExpired'
-          ]
-        );
-        heightWithOwner++;
-      }
+        assert(json.stats === null);
+      });
     });
 
-    it('should be CLOSED with transfer statistics', () => {
-      // Fork the timeline;
-      let heightWithTransfer = height;
+    describe('post-auction states', function() {
+      it('should be CLOSED until expiration with owner', () => {
+        // Start right after auction is over
+        let heightWithOwner = auctionLifespan;
 
-      // Someone won the name
-      ns.owner.hash = Buffer.alloc(32, 0x01);
-      ns.owner.index = 0;
+        // Someone won the name
+        ns.owner.hash = Buffer.alloc(32, 0x01);
+        ns.owner.index = 0;
 
-      // Winner confirmed a TRANSFER
-      ns.transfer = heightWithTransfer;
+        while (heightWithOwner < renewalWindow) {
+          const json = ns.getJSON(heightWithOwner, network);
 
-      while (heightWithTransfer < renewalWindow) {
-        const json = ns.getJSON(heightWithTransfer, network);
+          assert.strictEqual(json.state, 'CLOSED');
 
-        assert.strictEqual(json.state, 'CLOSED');
+          const stats = Object.keys(json.stats);
+          assert.deepStrictEqual(
+            stats,
+            [
+              'renewalPeriodStart',
+              'renewalPeriodEnd',
+              'blocksUntilExpire',
+              'daysUntilExpire'
+            ]
+          );
+          heightWithOwner++;
+        }
 
-        const stats = Object.keys(json.stats);
-        assert.deepStrictEqual(
-          stats,
-          [
-            'renewalPeriodStart',
-            'renewalPeriodEnd',
-            'blocksUntilExpire',
-            'daysUntilExpire',
-            'transferLockupStart',
-            'transferLockupEnd',
-            'blocksUntilValidFinalize',
-            'hoursUntilValidFinalize'
-          ]
-        );
-        heightWithTransfer++;
-      }
+        // Expired without renewal
+        while (heightWithOwner < renewalWindow + 10) {
+          const json = ns.getJSON(heightWithOwner, network);
 
-      // Expired before FINALIZE (which resets everything)
-      while (heightWithTransfer < renewalWindow + 10) {
-        const json = ns.getJSON(heightWithTransfer, network);
+          assert.strictEqual(json.state, 'CLOSED');
 
-        assert.strictEqual(json.state, 'CLOSED');
+          const stats = Object.keys(json.stats);
+          assert.deepStrictEqual(
+            stats,
+            [
+              'blocksSinceExpired'
+            ]
+          );
+          heightWithOwner++;
+        }
+      });
 
-        const stats = Object.keys(json.stats);
-        assert.deepStrictEqual(
-          stats,
-          [
-            'blocksSinceExpired'
-          ]
-        );
-        heightWithTransfer++;
-      }
-    });
+      it('should be CLOSED with transfer statistics', () => {
+        // Start right after auction is over
+        let heightWithTransfer = auctionLifespan;
 
-    it('should be REVOKED', () => {
-      // Fork the timeline;
-      let heightWithRevoke = height;
+        // Someone won the name
+        ns.owner.hash = Buffer.alloc(32, 0x01);
+        ns.owner.index = 0;
 
-      // Someone won the name
-      ns.owner.hash = Buffer.alloc(32, 0x01);
-      ns.owner.index = 0;
+        // Winner confirmed a TRANSFER
+        ns.transfer = heightWithTransfer;
 
-      // Winner confirmed a TRANSFER
-      ns.transfer = heightWithRevoke;
+        while (heightWithTransfer < renewalWindow) {
+          const json = ns.getJSON(heightWithTransfer, network);
 
-      while (heightWithRevoke < height + 10) {
-        const json = ns.getJSON(heightWithRevoke, network);
+          assert.strictEqual(json.state, 'CLOSED');
 
-        assert.strictEqual(json.state, 'CLOSED');
+          const stats = Object.keys(json.stats);
+          assert.deepStrictEqual(
+            stats,
+            [
+              'renewalPeriodStart',
+              'renewalPeriodEnd',
+              'blocksUntilExpire',
+              'daysUntilExpire',
+              'transferLockupStart',
+              'transferLockupEnd',
+              'blocksUntilValidFinalize',
+              'hoursUntilValidFinalize'
+            ]
+          );
+          heightWithTransfer++;
+        }
 
-        const stats = Object.keys(json.stats);
-        assert.deepStrictEqual(
-          stats,
-          [
-            'renewalPeriodStart',
-            'renewalPeriodEnd',
-            'blocksUntilExpire',
-            'daysUntilExpire',
-            'transferLockupStart',
-            'transferLockupEnd',
-            'blocksUntilValidFinalize',
-            'hoursUntilValidFinalize'
-          ]
-        );
-        heightWithRevoke++;
-      }
+        // Expired before FINALIZE (which resets everything)
+        while (heightWithTransfer < renewalWindow + 10) {
+          const json = ns.getJSON(heightWithTransfer, network);
 
-      // Winner REVOKEd before FINALIZE
-      ns.transfer = 0;
-      ns.revoked = heightWithRevoke;
-      const revokedHeight = heightWithRevoke;
+          assert.strictEqual(json.state, 'CLOSED');
 
-      // Revoked stats remain until re-opened
-      while (heightWithRevoke < revokedHeight + renewalWindow) {
-        const json = ns.getJSON(heightWithRevoke, network);
+          const stats = Object.keys(json.stats);
+          assert.deepStrictEqual(
+            stats,
+            [
+              'blocksSinceExpired'
+            ]
+          );
+          heightWithTransfer++;
+        }
+      });
 
-        assert.strictEqual(json.state, 'REVOKED');
+      it('should be REVOKED', () => {
+        // Start right after auction is over
+        let heightWithRevoke = auctionLifespan;
 
-        const stats = Object.keys(json.stats);
-        assert.deepStrictEqual(
-          stats,
-          [
-            'revokePeriodStart',
-            'revokePeriodEnd',
-            'blocksUntilReopen',
-            'hoursUntilReopen'
-          ]
-        );
-        heightWithRevoke++;
-      }
+        // Someone won the name
+        ns.owner.hash = Buffer.alloc(32, 0x01);
+        ns.owner.index = 0;
+
+        // Winner confirmed a TRANSFER
+        ns.transfer = heightWithRevoke;
+
+        while (heightWithRevoke < height + 10) {
+          const json = ns.getJSON(heightWithRevoke, network);
+
+          assert.strictEqual(json.state, 'CLOSED');
+
+          const stats = Object.keys(json.stats);
+          assert.deepStrictEqual(
+            stats,
+            [
+              'renewalPeriodStart',
+              'renewalPeriodEnd',
+              'blocksUntilExpire',
+              'daysUntilExpire',
+              'transferLockupStart',
+              'transferLockupEnd',
+              'blocksUntilValidFinalize',
+              'hoursUntilValidFinalize'
+            ]
+          );
+          heightWithRevoke++;
+        }
+
+        // Winner REVOKEd before FINALIZE
+        ns.transfer = 0;
+        ns.revoked = heightWithRevoke;
+        const revokedHeight = heightWithRevoke;
+
+        // Revoked stats remain until re-opened
+        while (heightWithRevoke < revokedHeight + renewalWindow) {
+          const json = ns.getJSON(heightWithRevoke, network);
+
+          assert.strictEqual(json.state, 'REVOKED');
+
+          const stats = Object.keys(json.stats);
+          assert.deepStrictEqual(
+            stats,
+            [
+              'revokePeriodStart',
+              'revokePeriodEnd',
+              'blocksUntilReopen',
+              'hoursUntilReopen'
+            ]
+          );
+          heightWithRevoke++;
+        }
+      });
     });
   });
 
@@ -281,12 +288,9 @@ describe('Namestate', function() {
       }
     });
 
-    it('should be CLOSED until claim period ends', () => {
-      // Fork the timeline;
-      let heightWithOwner = height;
-
-      while (heightWithOwner < claimPeriod) {
-        const json = ns.getJSON(heightWithOwner, network);
+    it('should be CLOSED', () => {
+      while (height < claimPeriod) {
+        const json = ns.getJSON(height, network);
 
         assert.strictEqual(json.state, 'CLOSED');
 
@@ -300,12 +304,14 @@ describe('Namestate', function() {
             'daysUntilExpire'
           ]
         );
-        heightWithOwner++;
+        height++;
       }
+    });
 
+    it('should be CLOSED and expired', () => {
       // Expired without renewal
-      while (heightWithOwner < claimPeriod + 10) {
-        const json = ns.getJSON(heightWithOwner, network);
+      while (height < claimPeriod + 10) {
+        const json = ns.getJSON(height, network);
 
         assert.strictEqual(json.state, 'CLOSED');
 
@@ -316,7 +322,7 @@ describe('Namestate', function() {
             'blocksSinceExpired'
           ]
         );
-        heightWithOwner++;
+        height++;
       }
     });
   });
