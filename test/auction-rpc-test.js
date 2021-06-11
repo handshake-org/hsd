@@ -145,6 +145,15 @@ describe('Auction RPCs', function() {
   const util = new TestUtil();
   const name = rules.grindName(2, 0, Network.get('regtest'));
   let winner, loser;
+  const winnerBid = {
+    bid: 5,
+    lockup: 10
+  };
+  const loserBid ={
+    bid: 4,
+    lockup: 10
+  };
+  const COIN = 1e6;
 
   const mineBlocks = async (num, wallet, account = 'default') => {
     const address = (await wallet.createAddress(account)).address;
@@ -220,16 +229,106 @@ describe('Auction RPCs', function() {
   it('should create BID with signing paths', async () => {
     // Create loser's BID.
     await util.wrpc('selectwallet', [loser.id]);
-    assert(await util.wrpc('sendbid', [name, 4, 10]));
+    assert(await util.wrpc('sendbid', [name, loserBid.bid, loserBid.lockup]));
 
     // Create, assert, submit and mine winner's BID.
     await util.wrpc('selectwallet', [winner.id]);
     const submit = true;
-    const json = await util.wrpc('createbid', [name, 5, 10]);
+    const json = await util.wrpc(
+      'createbid',
+      [name, winnerBid.bid, winnerBid.lockup]
+    );
     await processJSON(json, submit);
 
     // Mine past BID period.
     await mineBlocks(util.network.names.biddingPeriod, winner);
+  });
+
+  it('should get all BIDs for name', async () => {
+    // Loser gets all bids
+    await util.wrpc('selectwallet', [loser.id]);
+    const all = await util.wrpc('getbids', [name]);
+    assert.strictEqual(all.length, 2);
+    let own = 0;
+    let unown = 0;
+    for (const bid of all) {
+      // "unrevealed" not set.
+      assert(!bid.address);
+
+      if (bid.own)
+        own++;
+      else
+        unown++;
+    }
+    assert.strictEqual(own, 1);
+    assert.strictEqual(unown, 1);
+  });
+
+  it('should get only owned BIDs for name', async () => {
+    await util.wrpc('selectwallet', [loser.id]);
+    const bids = await util.wrpc('getbids', [name, true]);
+    assert.strictEqual(bids.length, 1);
+    let own = 0;
+    let unown = 0;
+    for (const bid of bids) {
+      // "unrevealed" not set.
+      assert(!bid.address);
+
+      if (bid.own)
+        own++;
+      else
+        unown++;
+    }
+    assert.strictEqual(own, 1);
+    assert.strictEqual(unown, 0);
+  });
+
+  it('should get unrevealed BIDs for name', async () => {
+    await util.wrpc('selectwallet', [loser.id]);
+    const bids = await util.wrpc('getbids', [name, true, true]);
+    assert.strictEqual(bids.length, 1);
+    let own = 0;
+    let unown = 0;
+    for (const bid of bids) {
+      // Unrevealed bids come with their address
+      assert(bid.address);
+
+      if (bid.own)
+        own++;
+      else
+        unown++;
+    }
+    assert.strictEqual(own, 1);
+    assert.strictEqual(unown, 0);
+  });
+
+  it('should have enough data to import nonce', async () => {
+    await util.wrpc('selectwallet', [loser.id]);
+    // Same as last test, getting "owned" and "unrevealed" BIDs only
+    const bids = await util.wrpc('getbids', [name, true, true]);
+    assert.strictEqual(bids.length, 1);
+
+    const bid = bids[0];
+    const bidName = bid.name;
+    const bidAddress = bid.address;
+    const bidValue = bid.value;
+    const bidLockup = bid.lockup;
+    const bidBlind = bid.blind;
+
+    assert.strictEqual(name, bidName);
+    assert.strictEqual(loserBid.bid  * COIN, bidValue);
+    assert.strictEqual(loserBid.lockup * COIN, bidLockup);
+
+    // In this case, "loser" already knows their blind value,
+    // but we can still check that importnonce works by returning
+    // that same value. Note that "loser" MUST remember their original
+    // bid value. If this were a wallet recovery scenario, that value
+    // would have to be entered by the user without data from the blockchain.
+    const importedBlind = await util.wrpc(
+      'importnonce',
+      [bidName, bidAddress, loserBid.bid]
+    );
+    assert.strictEqual(importedBlind, bidBlind);
   });
 
   it('should create REVEAL with signing paths', async () => {
@@ -245,6 +344,15 @@ describe('Auction RPCs', function() {
 
     // Mine past REVEAL period.
     await mineBlocks(util.network.names.revealPeriod, winner);
+  });
+
+  it('should request only unrevealed BIDs for name and find none', async () => {
+    await util.wrpc('selectwallet', [loser.id]);
+    const owned = await util.wrpc('getbids', [name, true, false]);
+    const unrevealed = await util.wrpc('getbids', [name, true, true]);
+
+    assert.strictEqual(owned.length, 1);
+    assert.strictEqual(unrevealed.length, 0);
   });
 
   it('should create REDEEM with signing paths', async () => {
