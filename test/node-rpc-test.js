@@ -11,44 +11,58 @@
 
 const assert = require('bsert');
 const FullNode = require('../lib/node/fullnode');
+const SPVNode = require('../lib/node/spvnode');
+const Network = require('../lib/protocol/network');
 const {NodeClient} = require('hs-client');
+
+const TIMEOUT = 15000;
+const API_KEY = 'foo';
+const NETWORK = 'regtest';
 
 const ports = {
   p2p: 49331,
   node: 49332,
   wallet: 49333
 };
-const node = new FullNode({
-  network: 'regtest',
-  apiKey: 'foo',
+
+const nodeOptions = {
+  network: NETWORK,
+  apiKey: API_KEY,
   walletAuth: true,
   memory: true,
   workers: true,
   workersSize: 2,
   port: ports.p2p,
   httpPort: ports.node
-});
+};
 
-const nclient = new NodeClient({
+const clientOptions = {
   port: ports.node,
-  apiKey: 'foo',
-  timeout: 15000
-});
+  apiKey: API_KEY,
+  timeout: TIMEOUT
+};
+
+const errs = {
+  MISC_ERROR: -1 >>> 0
+};
 
 describe('RPC', function() {
   this.timeout(15000);
 
-  before(async () => {
-    await node.open();
-    await nclient.open();
-  });
-
-  after(async () => {
-    await nclient.close();
-    await node.close();
-  });
-
   describe('getblock', function () {
+    const node = new FullNode(nodeOptions);
+    const nclient = new NodeClient(clientOptions);
+
+    before(async () => {
+      await node.open();
+      await nclient.open();
+    });
+
+    after(async () => {
+      await nclient.close();
+      await node.close();
+    });
+
     it('should rpc getblock', async () => {
       const {chain} = await nclient.getInfo();
       const info = await nclient.execute('getblock', [chain.tip]);
@@ -223,6 +237,163 @@ describe('RPC', function() {
           assert.equal(e.message, reason);
         }
       }
+    });
+  });
+
+  describe('pruneblockchain', function() {
+    const network = Network.get(NETWORK);
+    const PRUNE_AFTER_HEIGHT = network.block.pruneAfterHeight;
+    const KEEP_BLOCKS = network.KEEP_BLOCKS;
+
+    const TEST_KEEP_BLOCKS = 10;
+    const TEST_PRUNED_BLOCKS = 10;
+    const TEST_PRUNE_AFTER_HEIGHT = 10;
+
+    let nclient, node;
+
+    before(() => {
+      network.block.pruneAfterHeight = TEST_PRUNE_AFTER_HEIGHT;
+      network.block.keepBlocks = TEST_KEEP_BLOCKS;
+    });
+
+    after(() => {
+      network.block.pruneAfterHeight = PRUNE_AFTER_HEIGHT;
+      network.block.keepBlocks = KEEP_BLOCKS;
+    });
+
+    afterEach(async () => {
+      if (nclient && nclient.opened)
+        await nclient.close();
+
+      if (node && node.opened)
+        await node.close();
+    });
+
+    it('should fail with wrong arguments', async () => {
+      node = new FullNode(nodeOptions);
+      nclient = new NodeClient(clientOptions);
+
+      await node.open();
+
+      await assert.rejects(async () => {
+        await nclient.execute('pruneblockchain', [1]);
+      }, {
+        code: errs.MISC_ERROR,
+        type: 'RPCError',
+        message: 'pruneblockchain'
+      });
+
+      await node.close();
+    });
+
+    it('should not work for spvnode', async () => {
+      node = new SPVNode(nodeOptions);
+      nclient = new NodeClient(clientOptions);
+
+      await node.open();
+
+      await assert.rejects(async () => {
+        await nclient.execute('pruneblockchain');
+      }, {
+        type: 'RPCError',
+        message: 'Cannot prune chain in SPV mode.',
+        code: errs.MISC_ERROR
+      });
+
+      await node.close();
+    });
+
+    it('should fail for pruned node', async () => {
+      node = new FullNode({
+        ...nodeOptions,
+        prune: true
+      });
+
+      await node.open();
+
+      await assert.rejects(async () => {
+        await nclient.execute('pruneblockchain');
+      }, {
+        type: 'RPCError',
+        code: errs.MISC_ERROR,
+        message: 'Chain is already pruned.'
+      });
+
+      await node.close();
+    });
+
+    it('should fail for short chain', async () => {
+      node = new FullNode(nodeOptions);
+
+      await node.open();
+
+      await assert.rejects(async () => {
+        await nclient.execute('pruneblockchain');
+      }, {
+        type: 'RPCError',
+        code: errs.MISC_ERROR,
+        message: 'Chain is too short for pruning.'
+      });
+
+      await node.close();
+    });
+
+    it('should prune chain', async () => {
+      // default - prune: false
+      node = new FullNode(nodeOptions);
+      nclient = new NodeClient(clientOptions);
+
+      await node.open();
+
+      const addr = 'rs1q4rvs9pp9496qawp2zyqpz3s90fjfk362q92vq8';
+      node.miner.addAddress(addr);
+
+      let genBlocks = TEST_PRUNE_AFTER_HEIGHT;
+      genBlocks += TEST_PRUNED_BLOCKS;
+      genBlocks += TEST_KEEP_BLOCKS;
+
+      // generate 30 blocks.
+      // similar to chain-rpc-test
+      const blocks = await nclient.execute('generate', [genBlocks]);
+
+      // make sure we have all the blocks.
+      for (let i = 0; i < genBlocks; i++) {
+        const block = await nclient.execute('getblock', [blocks[i]]);
+        assert(block);
+      }
+
+      // now prune..
+      await nclient.execute('pruneblockchain');
+
+      let i = 0;
+
+      // behind height check
+      let to = TEST_PRUNE_AFTER_HEIGHT;
+      for (; i < to; i++) {
+        const block = await nclient.execute('getblock', [blocks[i]]);
+        assert(block, 'could not get block before height check.');
+      }
+
+      // pruned blocks.
+      to += TEST_PRUNED_BLOCKS;
+      for (; i < to; i++) {
+        await assert.rejects(async () => {
+          await nclient.execute('getblock', [blocks[i]]);
+        }, {
+          type: 'RPCError',
+          code: errs.MISC_ERROR,
+          message: 'Block not available (pruned data)'
+        });
+      }
+
+      // keep blocks
+      to += TEST_KEEP_BLOCKS;
+      for (; i < to; i++) {
+        const block = await nclient.execute('getblock', [blocks[i]]);
+        assert(block, `block ${i} was pruned.`);
+      }
+
+      await node.close();
     });
   });
 });
