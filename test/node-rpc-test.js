@@ -245,11 +245,15 @@ describe('RPC', function() {
     const PRUNE_AFTER_HEIGHT = network.block.pruneAfterHeight;
     const KEEP_BLOCKS = network.KEEP_BLOCKS;
 
+    const TEST_KEEP_BLOCKS = 10;
+    const TEST_PRUNED_BLOCKS = 10;
+    const TEST_PRUNE_AFTER_HEIGHT = 10;
+
     let nclient, node;
 
     before(() => {
-      network.block.pruneAfterHeight = 10;
-      network.block.keepBlocks = 10;
+      network.block.pruneAfterHeight = TEST_PRUNE_AFTER_HEIGHT;
+      network.block.keepBlocks = TEST_KEEP_BLOCKS;
     });
 
     after(() => {
@@ -344,12 +348,16 @@ describe('RPC', function() {
       const addr = 'rs1q4rvs9pp9496qawp2zyqpz3s90fjfk362q92vq8';
       node.miner.addAddress(addr);
 
+      let genBlocks = TEST_PRUNE_AFTER_HEIGHT;
+      genBlocks += TEST_PRUNED_BLOCKS;
+      genBlocks += TEST_KEEP_BLOCKS;
+
       // generate 30 blocks.
       // similar to chain-rpc-test
-      const blocks = await nclient.execute('generate', [30]);
+      const blocks = await nclient.execute('generate', [genBlocks]);
 
       // make sure we have all the blocks.
-      for (let i = 0; i < 30; i++) {
+      for (let i = 0; i < genBlocks; i++) {
         const block = await nclient.execute('getblock', [blocks[i]]);
         assert(block);
       }
@@ -357,14 +365,18 @@ describe('RPC', function() {
       // now prune..
       await nclient.execute('pruneblockchain');
 
-      // behined height check
-      for (let i = 0; i < 10; i++) {
+      let i = 0;
+
+      // behind height check
+      let to = TEST_PRUNE_AFTER_HEIGHT;
+      for (; i < to; i++) {
         const block = await nclient.execute('getblock', [blocks[i]]);
         assert(block, 'could not get block before height check.');
       }
 
       // pruned blocks.
-      for (let i = 10; i < 20; i++) {
+      to += TEST_PRUNED_BLOCKS;
+      for (; i < to; i++) {
         await assert.rejects(async () => {
           await nclient.execute('getblock', [blocks[i]]);
         }, {
@@ -375,7 +387,8 @@ describe('RPC', function() {
       }
 
       // keep blocks
-      for (let i = 20; i < 30; i++) {
+      to += TEST_KEEP_BLOCKS;
+      for (; i < to; i++) {
         const block = await nclient.execute('getblock', [blocks[i]]);
         assert(block, `block ${i} was pruned.`);
       }

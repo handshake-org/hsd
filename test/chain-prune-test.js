@@ -53,9 +53,7 @@ describe('Chain Prune', function() {
     });
 
     it('should force retroactive prune', async () => {
-      const chain = new Chain({
-        ...chainOptions
-      });
+      const chain = new Chain(chainOptions);
 
       await chain.open();
       await chain.close();
@@ -81,6 +79,10 @@ describe('Chain Prune', function() {
     const PRUNE_AFTER_HEIGHT = network.block.pruneAfterHeight;
     const KEEP_BLOCKS = network.block.keepBlocks;
 
+    const TEST_PRUNE_AFTER_HEIGHT = 10;
+    const TEST_KEEP_BLOCKS = 10;
+    const TEST_PRUNED_BLOCKS = 10;
+
     const workers = new WorkerPool({
       enabled: true,
       size: 2
@@ -93,12 +95,17 @@ describe('Chain Prune', function() {
     };
 
     let chain, miner, cpu;
+    before(async () => {
+      await workers.open();
+    });
+
+    after(async () => {
+      await workers.close();
+    });
 
     beforeEach(async () => {
-      await workers.open();
-
-      network.block.pruneAfterHeight = 10;
-      network.block.keepBlocks = 10;
+      network.block.pruneAfterHeight = TEST_PRUNE_AFTER_HEIGHT;
+      network.block.keepBlocks = TEST_KEEP_BLOCKS;
 
       chain = new Chain(chainoptions);
       miner = new Miner({ chain });
@@ -115,7 +122,6 @@ describe('Chain Prune', function() {
         await chain.close();
 
       await miner.close();
-      await workers.open();
     });
 
     it('should prune blocks', async () => {
@@ -125,28 +131,37 @@ describe('Chain Prune', function() {
 
       const hashes = [];
 
-      // 10 behined height check + 10 pruned + 10 keep blocks
-      for (let i = 0; i < 30; i++) {
+      let genBlocks = TEST_PRUNE_AFTER_HEIGHT;
+      genBlocks += TEST_PRUNED_BLOCKS;
+      genBlocks += TEST_KEEP_BLOCKS;
+
+      // 10 behind height check + 10 pruned + 10 keep blocks
+      for (let i = 0; i < genBlocks; i++) {
         const block = await cpu.mineBlock();
         hashes.push(block.hash());
         assert(block);
         assert(await chain.add(block));
       }
 
-      // behined height check
-      for (let i = 0; i < 10; i++) {
+      let i = 0;
+
+      // behind height check
+      let to = TEST_PRUNE_AFTER_HEIGHT;
+      for (; i < 10; i++) {
         const block = await chain.getBlock(hashes[i]);
         assert(block, 'could not get block before height check.');
       }
 
       // pruned blocks - nulls
-      for (let i = 10; i < 20; i++) {
+      to += TEST_PRUNED_BLOCKS;
+      for (; i < to; i++) {
         const block = await chain.getBlock(hashes[i]);
         assert.strictEqual(block, null, `block ${i} was not pruned.`);
       }
 
       // keep blocks
-      for (let i = 20; i < 30; i++) {
+      to += TEST_KEEP_BLOCKS;
+      for (; i < to; i++) {
         const block = await chain.getBlock(hashes[i]);
         assert(block, `block ${i} was pruned.`);
       }
@@ -157,7 +172,11 @@ describe('Chain Prune', function() {
 
       const hashes = [];
 
-      for (let i = 0; i < 30; i++) {
+      let genBlocks = TEST_PRUNE_AFTER_HEIGHT;
+      genBlocks += TEST_PRUNED_BLOCKS;
+      genBlocks += TEST_KEEP_BLOCKS;
+
+      for (let i = 0; i < genBlocks; i++) {
         const block = await cpu.mineBlock();
         hashes.push(block.hash());
         assert(block);
@@ -165,7 +184,7 @@ describe('Chain Prune', function() {
       }
 
       // make sure all blocks are there
-      for (let i = 0; i < 30; i++) {
+      for (let i = 0; i < genBlocks; i++) {
         const block = await chain.getBlock(hashes[i]);
         assert(block);
       }
@@ -178,21 +197,25 @@ describe('Chain Prune', function() {
       // this should call prune on open.
       await chain.open();
 
+      let i = 0;
       // after prune we should end up with same state as above.
-      // behined height check
-      for (let i = 0; i < 10; i++) {
+      // behind height check
+      let to = TEST_PRUNE_AFTER_HEIGHT;
+      for (; i < to; i++) {
         const block = await chain.getBlock(hashes[i]);
         assert(block, 'could not get block before height check.');
       }
 
       // pruned blocks - nulls
-      for (let i = 10; i < 20; i++) {
+      to += TEST_PRUNED_BLOCKS;
+      for (; i < to; i++) {
         const block = await chain.getBlock(hashes[i]);
         assert.strictEqual(block, null, `block ${i} was not pruned.`);
       }
 
       // keep blocks
-      for (let i = 20; i < 30; i++) {
+      to += TEST_KEEP_BLOCKS;
+      for (; i < to; i++) {
         const block = await chain.getBlock(hashes[i]);
         assert(block, `block ${i} was pruned.`);
       }
