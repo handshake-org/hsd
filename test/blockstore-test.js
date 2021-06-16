@@ -90,7 +90,7 @@ describe('BlockStore', function() {
     describe('unimplemented base methods', function() {
       const groups = {
         base: ['open', 'close', 'ensure'],
-        block: ['write', 'read', 'prune', 'has'],
+        block: ['writeBlock', 'readBlock', 'pruneBlock', 'hasBlock'],
         undo: ['writeUndo', 'readUndo', 'pruneUndo', 'hasUndo'],
         merkle: ['writeMerkle', 'readMerkle', 'pruneMerkle', 'hasMerkle']
       };
@@ -485,7 +485,7 @@ describe('BlockStore', function() {
         try {
           const hash = random.randomBytes(128);
           const block = random.randomBytes(32);
-          await store.write(hash, block);
+          await store.writeBlock(hash, block);
         } catch (e) {
           err = e;
         }
@@ -524,7 +524,7 @@ describe('BlockStore', function() {
         try {
           const hash = random.randomBytes(128);
           const block = random.randomBytes(32);
-          await store.write(hash, block);
+          await store.writeBlock(hash, block);
         } catch (e) {
           err = e;
         }
@@ -558,7 +558,7 @@ describe('BlockStore', function() {
         try {
           const hash = random.randomBytes(128);
           const block = random.randomBytes(32);
-          await store.write(hash, block);
+          await store.writeBlock(hash, block);
         } catch (e) {
           err = e;
         }
@@ -608,7 +608,7 @@ describe('BlockStore', function() {
         try {
           const hash = random.randomBytes(128);
           const block = random.randomBytes(32);
-          await store.read(hash, block);
+          await store.readBlock(hash, block);
         } catch (e) {
           err = e;
         }
@@ -633,7 +633,7 @@ describe('BlockStore', function() {
         try {
           const hash = random.randomBytes(128);
           const block = random.randomBytes(32);
-          await store.read(hash, block);
+          await store.readBlock(hash, block);
         } catch (e) {
           err = e;
         }
@@ -673,9 +673,9 @@ describe('BlockStore', function() {
       const block1 = random.randomBytes(128);
       const hash = random.randomBytes(32);
 
-      await store.write(hash, block1);
+      await store.writeBlock(hash, block1);
 
-      const block2 = await store.read(hash);
+      const block2 = await store.readBlock(hash);
 
       assert.bufferEqual(block1, block2);
     });
@@ -706,12 +706,12 @@ describe('BlockStore', function() {
       const block1 = random.randomBytes(128);
       const hash = random.randomBytes(32);
 
-      await store.write(hash, block1);
+      await store.writeBlock(hash, block1);
 
       const offset = 79;
       const size = 15;
 
-      const block2 = await store.read(hash, offset, size);
+      const block2 = await store.readBlock(hash, offset, size);
 
       assert.bufferEqual(block1.slice(offset, offset + size), block2);
     });
@@ -720,10 +720,10 @@ describe('BlockStore', function() {
       const block1 = random.randomBytes(128);
       const hash = random.randomBytes(32);
 
-      await store.write(hash, block1);
+      await store.writeBlock(hash, block1);
 
       const offset = 79;
-      const block2 = await store.read(hash, offset);
+      const block2 = await store.readBlock(hash, offset);
 
       assert.bufferEqual(block1.slice(offset, block1.length), block2);
     });
@@ -732,14 +732,14 @@ describe('BlockStore', function() {
       const block1 = random.randomBytes(128);
       const hash = random.randomBytes(32);
 
-      await store.write(hash, block1);
+      await store.writeBlock(hash, block1);
 
       const offset = 79;
       const size = 50;
 
       let err = null;
       try {
-        await store.read(hash, offset, size);
+        await store.readBlock(hash, offset, size);
       } catch (e) {
         err = e;
       }
@@ -755,8 +755,8 @@ describe('BlockStore', function() {
         const block = random.randomBytes(128);
         const hash = random.randomBytes(32);
         blocks.push({hash, block});
-        await store.write(hash, block);
-        const block2 = await store.read(hash);
+        await store.writeBlock(hash, block);
+        const block2 = await store.readBlock(hash);
         assert.bufferEqual(block2, block);
       }
 
@@ -773,7 +773,7 @@ describe('BlockStore', function() {
 
       for (let i = 0; i < 16; i++) {
         const expect = blocks[i];
-        const block = await store.read(expect.hash);
+        const block = await store.readBlock(expect.hash);
         assert.bufferEqual(block, expect.block);
       }
     });
@@ -836,9 +836,9 @@ describe('BlockStore', function() {
       {
         const block = random.randomBytes(128);
         const hash = random.randomBytes(32);
-        await store.write(hash, block);
+        await store.writeBlock(hash, block);
 
-        const block2 = await store.read(hash);
+        const block2 = await store.readBlock(hash);
         assert.bufferEqual(block2, block);
       }
 
@@ -873,9 +873,9 @@ describe('BlockStore', function() {
       {
         const block = random.randomBytes(128);
         const hash = random.randomBytes(32);
-        await store.write(hash, block);
+        await store.writeBlock(hash, block);
 
-        const block2 = await store.read(hash);
+        const block2 = await store.readBlock(hash);
         assert.bufferEqual(block2, block);
       }
     });
@@ -893,7 +893,7 @@ describe('BlockStore', function() {
         // same file position.
         (async () => {
           try {
-            await store.write(hash, block);
+            await store.writeBlock(hash, block);
           } catch (e) {
             err = e;
           } finally {
@@ -936,12 +936,12 @@ describe('BlockStore', function() {
       const block = random.randomBytes(128);
       const hash = random.randomBytes(32);
 
-      const first = await store.write(hash, block);
+      const first = await store.writeBlock(hash, block);
       assert.equal(first, true);
-      const second = await store.write(hash, block);
+      const second = await store.writeBlock(hash, block);
       assert.equal(second, false);
 
-      const pruned = await store.prune(hash);
+      const pruned = await store.pruneBlock(hash);
       assert.equal(pruned, true);
 
       assert.equal(await fs.exists(store.filepath(types.BLOCK, 0)), false);
@@ -949,21 +949,21 @@ describe('BlockStore', function() {
 
     it('will return null if block not found', async () => {
       const hash = random.randomBytes(32);
-      const block = await store.read(hash);
+      const block = await store.readBlock(hash);
       assert.strictEqual(block, null);
     });
 
     it('will check if block exists (false)', async () => {
       const hash = random.randomBytes(32);
-      const exists = await store.has(hash);
+      const exists = await store.hasBlock(hash);
       assert.strictEqual(exists, false);
     });
 
     it('will check if block exists (true)', async () => {
       const block = random.randomBytes(128);
       const hash = random.randomBytes(32);
-      await store.write(hash, block);
-      const exists = await store.has(hash);
+      await store.writeBlock(hash, block);
+      const exists = await store.hasBlock(hash);
       assert.strictEqual(exists, true);
     });
 
@@ -987,7 +987,7 @@ describe('BlockStore', function() {
         const block = random.randomBytes(128);
         const hash = random.randomBytes(32);
         hashes.push(hash);
-        await store.write(hash, block);
+        await store.writeBlock(hash, block);
       }
 
       const first = await fs.stat(store.filepath(types.BLOCK, 0));
@@ -999,7 +999,7 @@ describe('BlockStore', function() {
       assert.equal(len, 128 * 16);
 
       for (let i = 0; i < 16; i++) {
-        const pruned = await store.prune(hashes[i]);
+        const pruned = await store.pruneBlock(hashes[i]);
         assert.strictEqual(pruned, true);
       }
 
@@ -1008,7 +1008,7 @@ describe('BlockStore', function() {
       assert.equal(await fs.exists(store.filepath(types.BLOCK, 2)), false);
 
       for (let i = 0; i < 16; i++) {
-        const exists = await store.has(hashes[i]);
+        const exists = await store.hasBlock(hashes[i]);
         assert.strictEqual(exists, false);
       }
 
@@ -1085,7 +1085,7 @@ describe('BlockStore', function() {
         const raw = block.encode();
 
         blocks.push({hash, block: raw});
-        await store.write(hash, raw);
+        await store.writeBlock(hash, raw);
       }
 
       await store.close();
@@ -1101,7 +1101,7 @@ describe('BlockStore', function() {
 
       for (let i = 0; i < vectors.length; i++) {
         const expect = blocks[i];
-        const block = await store.read(expect.hash);
+        const block = await store.readBlock(expect.hash);
         assert.equal(block.length, expect.block.length);
         assert.bufferEqual(block, expect.block);
       }
@@ -1116,7 +1116,7 @@ describe('BlockStore', function() {
         const raw = block.encode();
 
         blocks.push({hash, block: raw});
-        await store.write(hash, raw);
+        await store.writeBlock(hash, raw);
       }
 
       await store.close();
@@ -1162,12 +1162,12 @@ describe('BlockStore', function() {
 
       await store.open();
 
-      const incomplete = await store.read(partial.hash());
+      const incomplete = await store.readBlock(partial.hash());
       assert(incomplete === null);
 
       for (let i = 0; i < vectors.length; i++) {
         const expect = blocks[i];
-        const block = await store.read(expect.hash);
+        const block = await store.readBlock(expect.hash);
         assert.equal(block.length, expect.block.length);
         assert.bufferEqual(block, expect.block);
       }
@@ -1263,9 +1263,9 @@ describe('BlockStore', function() {
       const block1 = random.randomBytes(128);
       const hash = random.randomBytes(32);
 
-      await store.write(hash, block1);
+      await store.writeBlock(hash, block1);
 
-      const block2 = await store.read(hash);
+      const block2 = await store.readBlock(hash);
 
       assert.bufferEqual(block1, block2);
     });
@@ -1296,12 +1296,12 @@ describe('BlockStore', function() {
       const block1 = random.randomBytes(128);
       const hash = random.randomBytes(32);
 
-      await store.write(hash, block1);
+      await store.writeBlock(hash, block1);
 
       const offset = 79;
       const size = 15;
 
-      const block2 = await store.read(hash, offset, size);
+      const block2 = await store.readBlock(hash, offset, size);
 
       assert.bufferEqual(block1.slice(offset, offset + size), block2);
     });
@@ -1310,14 +1310,14 @@ describe('BlockStore', function() {
       const block1 = random.randomBytes(128);
       const hash = random.randomBytes(32);
 
-      await store.write(hash, block1);
+      await store.writeBlock(hash, block1);
 
       const offset = 79;
       const size = 50;
 
       let err = null;
       try {
-        await store.read(hash, offset, size);
+        await store.readBlock(hash, offset, size);
       } catch (e) {
         err = e;
       }
@@ -1328,21 +1328,21 @@ describe('BlockStore', function() {
 
     it('will check if block exists (false)', async () => {
       const hash = random.randomBytes(32);
-      const exists = await store.has(hash);
+      const exists = await store.hasBlock(hash);
       assert.strictEqual(exists, false);
     });
 
     it('will check if block exists (true)', async () => {
       const block = random.randomBytes(128);
       const hash = random.randomBytes(32);
-      await store.write(hash, block);
-      const exists = await store.has(hash);
+      await store.writeBlock(hash, block);
+      const exists = await store.hasBlock(hash);
       assert.strictEqual(exists, true);
     });
 
     it('will check if block undo coins exists (false)', async () => {
       const hash = random.randomBytes(32);
-      const exists = await store.has(hash);
+      const exists = await store.hasBlock(hash);
       assert.strictEqual(exists, false);
     });
 
@@ -1357,18 +1357,18 @@ describe('BlockStore', function() {
     it('will prune blocks (true)', async () => {
       const block = random.randomBytes(128);
       const hash = random.randomBytes(32);
-      await store.write(hash, block);
-      const pruned = await store.prune(hash);
+      await store.writeBlock(hash, block);
+      const pruned = await store.pruneBlock(hash);
       assert.strictEqual(pruned, true);
-      const block2 = await store.read(hash);
+      const block2 = await store.readBlock(hash);
       assert.strictEqual(block2, null);
     });
 
     it('will prune blocks (false)', async () => {
       const hash = random.randomBytes(32);
-      const exists = await store.has(hash);
+      const exists = await store.hasBlock(hash);
       assert.strictEqual(exists, false);
-      const pruned = await store.prune(hash);
+      const pruned = await store.pruneBlock(hash);
       assert.strictEqual(pruned, false);
     });
 
@@ -1388,6 +1388,449 @@ describe('BlockStore', function() {
       assert.strictEqual(exists, false);
       const pruned = await store.pruneUndo(hash);
       assert.strictEqual(pruned, false);
+    });
+  });
+
+  for (const type of ['File', 'Level', 'Level-memory']) {
+    describe(`${type} Batch`, function() {
+      const location = testdir('blockstore');
+      let store = null;
+
+      beforeEach(async () => {
+        await rimraf(location);
+
+        switch (type) {
+          case 'File': {
+            store = new FileBlockStore({
+              maxFileLength: 1024,
+              location
+            });
+
+            await store.ensure();
+
+            break;
+          }
+
+          case 'Level': {
+            store = new LevelBlockStore({
+              location
+            });
+
+            await store.ensure();
+            break;
+          }
+
+          case 'Level-memory': {
+            store = new LevelBlockStore({
+              memory: true,
+              location
+            });
+
+            break;
+          }
+        }
+
+        await store.open();
+      });
+
+      afterEach(async () => {
+        await store.close();
+      });
+
+      after(async () => {
+        await rimraf(location);
+      });
+
+      it('should write and read a block', async () => {
+        const hash = random.randomBytes(32);
+        const block1 = random.randomBytes(128);
+
+        const batch = store.batch();
+        batch.writeBlock(hash, block1);
+
+        {
+          const block = await store.readBlock(hash);
+          assert(!block, 'Block should not exist');
+        }
+        await batch.write();
+
+        const block2 = await store.readBlock(hash);
+        assert.bufferEqual(block1, block2);
+      });
+
+      it('should write and read block undo coins', async () => {
+        const hash = random.randomBytes(32);
+        const undo1 = random.randomBytes(128);
+
+        const batch = store.batch();
+        batch.writeUndo(hash, undo1);
+
+        {
+          const undo = await store.readUndo(hash);
+          assert(!undo, 'Block should not exist');
+        }
+        await batch.write();
+
+        const undo2 = await store.readUndo(hash);
+        assert.bufferEqual(undo1, undo2);
+      });
+
+      it('should write and read merkle block', async () => {
+        const hash = random.randomBytes(32);
+        const merkle1 = random.randomBytes(128);
+
+        const batch = store.batch();
+        batch.writeMerkle(hash, merkle1);
+
+        {
+          const merkle = await store.readMerkle(hash);
+          assert(!merkle, 'Block should not exist');
+        }
+        await batch.write();
+
+        const merkle2 = await store.readMerkle(hash);
+        assert.bufferEqual(merkle1, merkle2);
+      });
+
+      it('should write 20 blocks', async () => {
+        const blocks = [];
+
+        const batch = store.batch();
+
+        for (let i = 0; i < 20; i++) {
+          const hash = random.randomBytes(32);
+          const block = random.randomBytes(128);
+
+          blocks.push({hash, block});
+          batch.writeBlock(hash, block);
+        }
+
+        for (const {hash} of blocks) {
+          const hasBlock = await store.hasBlock(hash);
+          assert(!hasBlock);
+          const block = await store.readBlock(hash);
+          assert(!block);
+        }
+
+        await batch.write();
+
+        for (const {hash, block} of blocks) {
+          const hasBlock = await store.hasBlock(hash);
+          assert(hasBlock);
+
+          const block1 = await store.readBlock(hash);
+          assert.bufferEqual(block1, block);
+        }
+      });
+
+      it('should prune blocks', async () => {
+        const hashes = [];
+
+        const batch1 = store.batch();
+        for (let i = 0; i < 16; i++) {
+          const hash = random.randomBytes(32);
+          const block = random.randomBytes(128);
+          hashes.push(hash);
+          batch1.writeBlock(hash, block);
+        }
+
+        await batch1.write();
+
+        for (const hash of hashes) {
+          const hasBlock = await store.hasBlock(hash);
+          assert(hasBlock);
+        }
+
+        const batch2 = store.batch();
+        for (const hash of hashes)
+          batch2.pruneBlock(hash);
+
+        await batch2.write();
+
+        for (const hash of hashes) {
+          const hasBlock = await store.hasBlock(hash);
+          assert(!hasBlock);
+        }
+      });
+
+      it('should prune undo coins', async () => {
+        const hashes = [];
+
+        const batch1 = store.batch();
+        for (let i = 0; i < 16; i++) {
+          const hash = random.randomBytes(32);
+          const block = random.randomBytes(128);
+          hashes.push(hash);
+          batch1.writeUndo(hash, block);
+        }
+
+        await batch1.write();
+
+        for (const hash of hashes) {
+          const hasBlock = await store.hasUndo(hash);
+          assert(hasBlock);
+        }
+
+        const batch2 = store.batch();
+        for (const hash of hashes)
+          batch2.pruneUndo(hash);
+
+        await batch2.write();
+
+        for (const hash of hashes) {
+          const hasBlock = await store.hasUndo(hash);
+          assert(!hasBlock);
+        }
+      });
+
+      it('should prune merkle blocks', async () => {
+        const hashes = [];
+
+        const batch1 = store.batch();
+        for (let i = 0; i < 16; i++) {
+          const hash = random.randomBytes(32);
+          const block = random.randomBytes(128);
+          hashes.push(hash);
+          batch1.writeMerkle(hash, block);
+        }
+
+        await batch1.write();
+
+        for (const hash of hashes) {
+          const hasBlock = await store.hasMerkle(hash);
+          assert(hasBlock);
+        }
+
+        const batch2 = store.batch();
+        for (const hash of hashes)
+          batch2.pruneMerkle(hash);
+
+        await batch2.write();
+
+        for (const hash of hashes) {
+          const hasBlock = await store.hasMerkle(hash);
+          assert(!hasBlock);
+        }
+      });
+
+      it('should write and remove 10 blocks', async () => {
+        const hashes = [];
+
+        const batch = store.batch();
+        for (let i = 0; i < 10; i++) {
+          const hash = random.randomBytes(32);
+          const block = random.randomBytes(128);
+
+          hashes.push(hash);
+          batch.writeBlock(hash, block);
+        }
+
+        for (const hash of hashes)
+          batch.pruneBlock(hash);
+
+        const checkBlocks = async () => {
+          for (const hash of hashes) {
+            const hasBlock = await store.hasBlock(hash);
+            assert(!hasBlock);
+            const block = await store.readBlock(hash);
+            assert(!block);
+          }
+        };
+
+        await checkBlocks();
+        await batch.write();
+        await checkBlocks();
+      });
+
+      it('should not write twice', async () => {
+        const batch = store.batch();
+
+        const hash = random.randomBytes(32);
+        const block = random.randomBytes(128);
+
+        batch.writeBlock(hash, block);
+
+        await batch.write();
+
+        await assert.rejects(() => batch.write(), {
+          message: 'Already written.'
+        });
+
+        await assert.rejects(() => batch.clear(), {
+          message: 'Already written.'
+        });
+      });
+    });
+  }
+
+  describe('FileBlockStore Batch', function() {
+    const location = testdir('blockstore');
+    let store = null;
+
+    beforeEach(async () => {
+      await rimraf(location);
+
+      store = new FileBlockStore({
+        location: location,
+        maxFileLength: 1024
+      });
+
+      await store.ensure();
+      await store.open();
+    });
+
+    afterEach(async () => {
+      await store.close();
+    });
+
+    after(async () => {
+      await rimraf(location);
+    });
+
+    it('will allocate new files with blocks', async () => {
+      const blocks = [];
+
+      const batch = store.batch();
+      for (let i = 0; i < 16; i++) {
+        const hash = random.randomBytes(32);
+        const block = random.randomBytes(128);
+        blocks.push({hash, block});
+
+        batch.writeBlock(hash, block);
+      }
+
+      await batch.write();
+
+      for (const {hash, block} of blocks) {
+        const block2 = await store.readBlock(hash);
+        assert.bufferEqual(block2, block);
+      }
+
+      const first = await fs.stat(store.filepath(types.BLOCK, 0));
+      const second = await fs.stat(store.filepath(types.BLOCK, 1));
+      const third = await fs.stat(store.filepath(types.BLOCK, 2));
+      assert.equal(first.size, 952);
+      assert.equal(second.size, 952);
+      assert.equal(third.size, 272);
+
+      const magic = (8 * 16);
+      const len = first.size + second.size + third.size - magic;
+      assert.equal(len, 128 * 16);
+
+      for (let i = 0; i < 16; i++) {
+        const expect = blocks[i];
+        const block = await store.readBlock(expect.hash);
+        assert.bufferEqual(block, expect.block);
+      }
+    });
+
+    it('will allocate new files with undo coins', async () => {
+      const undos = [];
+
+      const batch = store.batch();
+      for (let i = 0; i < 16; i++) {
+        const hash = random.randomBytes(32);
+        const undo = random.randomBytes(128);
+        undos.push({hash, undo});
+
+        batch.writeUndo(hash, undo);
+      }
+
+      await batch.write();
+
+      for (const {hash, undo} of undos) {
+        const undo2 = await store.readUndo(hash);
+        assert.bufferEqual(undo2, undo);
+      }
+
+      const first = await fs.stat(store.filepath(types.UNDO, 0));
+      const second = await fs.stat(store.filepath(types.UNDO, 1));
+      const third = await fs.stat(store.filepath(types.UNDO, 2));
+
+      const magic = (40 * 16);
+      const len = first.size + second.size + third.size - magic;
+      assert.equal(len, 128 * 16);
+
+      for (let i = 0; i < 16; i++) {
+        const expect = undos[i];
+        const undo = await store.readUndo(expect.hash);
+        assert.bufferEqual(undo, expect.undo);
+      }
+    });
+
+    it('will allocate new files with merkle blocks', async () => {
+      const merkles = [];
+
+      const batch = store.batch();
+      for (let i = 0; i < 16; i++) {
+        const hash = random.randomBytes(32);
+        const merkle = random.randomBytes(128);
+        merkles.push({hash, merkle});
+
+        batch.writeMerkle(hash, merkle);
+      }
+
+      await batch.write();
+
+      for (const {hash, merkle} of merkles) {
+        const merkle2 = await store.readMerkle(hash);
+        assert.bufferEqual(merkle2, merkle);
+      }
+
+      const first = await fs.stat(store.filepath(types.MERKLE, 0));
+      const second = await fs.stat(store.filepath(types.MERKLE, 1));
+      const third = await fs.stat(store.filepath(types.MERKLE, 2));
+
+      const magic = (8 * 16);
+      const len = first.size + second.size + third.size - magic;
+      assert.equal(len, 128 * 16);
+
+      for (let i = 0; i < 16; i++) {
+        const expect = merkles[i];
+        const merkle = await store.readMerkle(expect.hash);
+        assert.bufferEqual(merkle, expect.merkle);
+      }
+    });
+
+    it('will prune blocks', async () => {
+      const hashes = [];
+      const batch1 = store.batch();
+
+      for (let i = 0; i < 16; i++) {
+        const hash = random.randomBytes(32);
+        const block = random.randomBytes(128);
+        hashes.push(hash);
+        batch1.writeBlock(hash, block);
+      }
+
+      await batch1.write();
+
+      const first = await fs.stat(store.filepath(types.BLOCK, 0));
+      const second = await fs.stat(store.filepath(types.BLOCK, 1));
+      const third = await fs.stat(store.filepath(types.BLOCK, 2));
+
+      const magic = (8 * 16);
+      const len = first.size + second.size + third.size - magic;
+      assert.equal(len, 128 * 16);
+
+      const batch2 = store.batch();
+
+      for (const hash of hashes)
+        batch2.pruneBlock(hash);
+
+      await batch2.write();
+
+      assert.equal(await fs.exists(store.filepath(types.BLOCK, 0)), false);
+      assert.equal(await fs.exists(store.filepath(types.BLOCK, 1)), false);
+      assert.equal(await fs.exists(store.filepath(types.BLOCK, 2)), false);
+
+      for (let i = 0; i < 16; i++) {
+        const exists = await store.hasBlock(hashes[i]);
+        assert.strictEqual(exists, false);
+      }
+
+      const exists = await store.db.has(layout.f.encode(types.BLOCK, 0));
+      assert.strictEqual(exists, false);
     });
   });
 });

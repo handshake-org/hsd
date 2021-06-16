@@ -57,7 +57,7 @@ describe('Chain Prune', function() {
         });
       }, {
         message: 'Can not prune in spv mode.'
-      })
+      });
     });
 
     it('should not allow retroactive unprune', async () => {
