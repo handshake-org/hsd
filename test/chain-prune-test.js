@@ -8,6 +8,7 @@ const Network = require('../lib/protocol/network');
 const WorkerPool = require('../lib/workers/workerpool');
 const Miner = require('../lib/mining/miner');
 const Chain = require('../lib/blockchain/chain');
+const BlockStore = require('../lib/blockstore/level');
 
 const network = Network.get('regtest');
 
@@ -17,6 +18,19 @@ describe('Chain Prune', function() {
       memory: true,
       network
     };
+
+    let blocks;
+
+    beforeEach(async () => {
+      blocks = new BlockStore(chainOptions);
+      chainOptions.blocks = blocks;
+
+      await blocks.open();
+    });
+
+    afterEach(async () => {
+      await blocks.close();
+    });
 
     it('should not allow retroactive prune', async () => {
       const chain = new Chain(chainOptions);
@@ -32,6 +46,18 @@ describe('Chain Prune', function() {
         message: 'Cannot retroactively prune.'
       });
       await chain.close();
+    });
+
+    it('should not allow prune with spv', async () => {
+      assert.throws(() => {
+        new Chain({
+          ...chainOptions,
+          prune: true,
+          spv: true
+        });
+      }, {
+        message: 'Can not prune in spv mode.'
+      })
     });
 
     it('should not allow retroactive unprune', async () => {
@@ -66,13 +92,13 @@ describe('Chain Prune', function() {
       size: 2
     });
 
-    const chainoptions = {
+    const chainOptions = {
       memory: true,
       network,
       workers
     };
 
-    let chain, miner, cpu;
+    let chain, miner, cpu, blocks;
     before(async () => {
       await workers.open();
     });
@@ -85,11 +111,19 @@ describe('Chain Prune', function() {
       network.block.pruneAfterHeight = TEST_PRUNE_AFTER_HEIGHT;
       network.block.keepBlocks = TEST_KEEP_BLOCKS;
 
-      chain = new Chain(chainoptions);
+      blocks = new BlockStore({
+        memory: true,
+        network
+      });
+      chain = new Chain({
+        ...chainOptions,
+        blocks
+      });
       miner = new Miner({ chain });
       cpu = miner.cpu;
 
       await miner.open();
+      await blocks.open();
     });
 
     afterEach(async () => {
@@ -99,6 +133,7 @@ describe('Chain Prune', function() {
       if (chain.opened)
         await chain.close();
 
+      await blocks.close();
       await miner.close();
     });
 
