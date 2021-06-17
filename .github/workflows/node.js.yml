@@ -23,7 +23,7 @@ jobs:
 
     - name: Install
       run: sudo apt-get install -y libunbound-dev |
-           npm install nyc coveralls bslint jsdoc
+           npm install nyc coveralls bslint @hns-dev/bsdoc
 
     - name: Lint
       run: npm run lint
