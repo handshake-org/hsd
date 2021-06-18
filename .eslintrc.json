@@ -1,18 +1,18 @@
 {
   "env": {
-    "es6": true,
+    "es2017": true,
     "node": true
   },
-  "extends": "eslint:recommended",
+  "extends": "airbnb-base",
   "globals": {
-    "Atomics": "readable",
-    "BigInt": "readable",
-    "BigInt64Array": "readable",
-    "BigUint64Array": "readable",
-    "queueMicrotask": "readable",
-    "SharedArrayBuffer": "readable",
-    "TextEncoder": "readable",
-    "TextDecoder": "readable"
+    "Atomics": "readonly",
+    "BigInt": "readonly",
+    "BigInt64Array": "readonly",
+    "BigUint64Array": "readonly",
+    "queueMicrotask": "readonly",
+    "SharedArrayBuffer": "readonly",
+    "TextEncoder": "readonly",
+    "TextDecoder": "readonly"
   },
   "overrides": [
     {
@@ -35,7 +35,7 @@
         "mocha": true
       },
       "globals": {
-        "register": "readable"
+        "register": "readonly"
       },
       "rules": {
         "max-len": "off",
@@ -43,15 +43,6 @@
       }
     }
   ],
-  "parser": "babel-eslint",
-  "parserOptions": {
-    "ecmaVersion": 10,
-    "ecmaFeatures": {
-      "globalReturn": true
-    },
-    "requireConfigFile": false,
-    "sourceType": "script"
-  },
   "root": true,
   "rules": {
     "array-bracket-spacing": ["error", "never"],
@@ -147,6 +138,17 @@
     "strict": "error",
     "unicode-bom": ["error", "never"],
     "valid-jsdoc": "error",
-    "wrap-iife": ["error", "inside"]
+    "wrap-iife": ["error", "inside"],
+    "no-plusplus":"off",
+    "object-curly-spacing": "off",
+    "curly": "off",
+    "object-shorthand": "off",
+    "no-bitwise": "off",
+    "no-underscore-dangle": "off",
+    "max-classes-per-file": "off",
+    "function-paren-newline": "off",
+    "no-continue": "off",
+    "no-proto": "off",
+    "no-await-in-loop": "off"
   }
 }
