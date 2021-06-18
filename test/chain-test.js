@@ -11,6 +11,7 @@ const Script = require('../lib/script/script');
 const Chain = require('../lib/blockchain/chain');
 const WorkerPool = require('../lib/workers/workerpool');
 const Miner = require('../lib/mining/miner');
+const {BlockEntry} = require('../lib/mining/template');
 const MTX = require('../lib/primitives/mtx');
 const MemWallet = require('./util/memwallet');
 const Network = require('../lib/protocol/network');
@@ -51,7 +52,7 @@ const miner = new Miner({
 
 const cpu = miner.cpu;
 
-const wallet = new MemWallet({
+let wallet = new MemWallet({
   network
 });
 
@@ -486,16 +487,16 @@ describe('Chain', function() {
     assert.strictEqual(await mineBlock(job), 'bad-cb-height');
   });
 
-  it('should fail to connect bad witness size', async () => {
+  it('should fail to connect bad witness root', async () => {
     const block = await cpu.mineBlock();
     const tx = block.txs[0];
     const input = tx.inputs[0];
     input.witness.set(0, Buffer.alloc(1001));
     block.refresh(true);
-    assert.strictEqual(await addBlock(block), 'bad-txnmrklroot');
+    assert.strictEqual(await addBlock(block), 'bad-witnessroot');
   });
 
-  it('should fail to connect bad witness commitment', async () => {
+  it('should fail to connect bad tx merkle root', async () => {
     const flags = common.flags.DEFAULT_FLAGS & ~common.flags.VERIFY_POW;
     const block = await cpu.mineBlock();
 
@@ -764,6 +765,311 @@ describe('Chain', function() {
 
     assert.strictEqual(await mineBlock(job),
       'mandatory-script-verify-flag-failed');
+  });
+
+  describe('Covenant limits', function() {
+    before(async () => {
+      await chain.reset(0);
+      wallet = new MemWallet({ network });
+
+      wallet.getNameStatus = async (nameHash) => {
+        assert(Buffer.isBuffer(nameHash));
+        const height = chain.height + 1;
+        const state = await chain.getNextState();
+        const hardened = state.hasHardening();
+        return chain.db.getNameStatus(nameHash, height, hardened);
+      };
+
+      // Because of the high volume of TXs sent by MemWallet in this test,
+      // we need to manually control the coins being used so we don't
+      // double-spend. MemWallet is too simple to track name covenants
+      // when they are unconfirmed, otherwise we could use wallet.addTX()
+      wallet.spendTX = (tx) => {
+        for (let i = 0; i < tx.inputs.length; i++) {
+          const input = tx.inputs[i];
+          const op = input.prevout.toKey();
+          wallet.removeCoin(op);
+        }
+      };
+    });
+
+    it('should mine 2000 blocks', async () => {
+      miner.addresses.length = 0;
+      miner.addAddress(wallet.getReceive());
+
+      for (let i = 0; i < 2000; i++) {
+        const block = await cpu.mineBlock();
+        assert(block);
+        assert(await chain.add(block));
+      }
+
+      assert.strictEqual(chain.height, 2000);
+    });
+
+    it('should fail to connect too many OPENs', async () => {
+      const job1 = await cpu.createJob();
+
+      for (let i = 0; i < consensus.MAX_BLOCK_OPENS + 1; i++) {
+        const name = `test_${i}`;
+        const open = await wallet.createOpen(name);
+        wallet.addTX(open);
+        const item = BlockEntry.fromTX(open.toTX(), open.view, job1.attempt);
+        job1.attempt.items.push(item);
+      }
+
+      job1.attempt.refresh();
+
+      assert.strictEqual(await mineBlock(job1), 'bad-blk-opens');
+
+      // "zap" memwallet
+      for (const {tx} of job1.attempt.items) {
+        wallet.removeTX(tx);
+      }
+    });
+
+    it('should connect max number of OPENs', async () => {
+      // We do this 3 times to open enough names for the following tests
+      for (let x = 0; x < 3; x++) {
+        const job1 = await cpu.createJob();
+        for (let i = 0; i < consensus.MAX_BLOCK_OPENS; i++) {
+          const name = `test_${x}_${i}`;
+          const open = await wallet.createOpen(name);
+          wallet.spendTX(open);
+          const item = BlockEntry.fromTX(open.toTX(), open.view, job1.attempt);
+          job1.attempt.items.push(item);
+        }
+        job1.attempt.refresh();
+        assert.strictEqual(await mineBlock(job1), 'OK');
+      }
+    });
+
+    it('should win 900 name auctions', async () => {
+      for (let i = 0; i < network.names.treeInterval; i++) {
+        const block = await cpu.mineBlock();
+        assert(await chain.add(block));
+      }
+
+      for (let x = 0; x < 3; x++) {
+        const job1 = await cpu.createJob();
+        for (let i = 0; i < consensus.MAX_BLOCK_OPENS; i++) {
+          const name = `test_${x}_${i}`;
+          const bid = await wallet.createBid(name, 1, 1);
+          wallet.spendTX(bid);
+          const item = BlockEntry.fromTX(bid.toTX(), bid.view, job1.attempt);
+          job1.attempt.items.push(item);
+        }
+        job1.attempt.refresh();
+        assert.strictEqual(await mineBlock(job1), 'OK');
+      }
+
+      for (let i = 0; i < network.names.biddingPeriod; i++) {
+        const block = await cpu.mineBlock();
+        assert(await chain.add(block));
+      }
+
+      for (let x = 0; x < 3; x++) {
+        const job2 = await cpu.createJob();
+        for (let i = 0; i < consensus.MAX_BLOCK_OPENS; i++) {
+          const name = `test_${x}_${i}`;
+          const reveal = await wallet.createReveal(name);
+          wallet.spendTX(reveal);
+          const item = BlockEntry.fromTX(reveal.toTX(), reveal.view, job2.attempt);
+          job2.attempt.items.push(item);
+        }
+        job2.attempt.refresh();
+        assert.strictEqual(await mineBlock(job2), 'OK');
+      }
+
+      for (let i = 0; i < network.names.revealPeriod; i++) {
+        const block = await cpu.mineBlock();
+        assert(await chain.add(block));
+      }
+    });
+
+    it('should fail to connect too many RENEWALs', async () => {
+      // As far as block limits are concerned
+      // REGISTER counts as a renewal, not an update.
+
+      const job1 = await cpu.createJob();
+
+      let x = 0;
+      let i = 0;
+      let count = 0;
+      while (count < consensus.MAX_BLOCK_RENEWALS + 1) {
+        const name = `test_${x}_${i}`;
+
+        // This is definitely a REGISTER (renewal) not an UPDATE
+        const ns = await chain.db.getNameStateByName(name);
+        assert(!ns.registered);
+
+        const register = await wallet.createUpdate(name, null);
+        wallet.addTX(register);
+        const item = BlockEntry.fromTX(register.toTX(), register.view, job1.attempt);
+        job1.attempt.items.push(item);
+
+        count++;
+        i++;
+        if (i >= consensus.MAX_BLOCK_OPENS) {
+          i = 0;
+          x++;
+        }
+      }
+
+      job1.attempt.refresh();
+
+      assert.strictEqual(await mineBlock(job1), 'bad-blk-renewals');
+
+      // "zap" memwallet
+      for (const {tx} of job1.attempt.items) {
+        wallet.removeTX(tx);
+      }
+    });
+
+    it('should connect max number of RENEWALs', async () => {
+      const job1 = await cpu.createJob();
+
+      let x = 0;
+      let i = 0;
+      let count = 0;
+      while (count < consensus.MAX_BLOCK_RENEWALS) {
+        const name = `test_${x}_${i}`;
+
+        // This is definitely a REGISTER (renewal) not an UPDATE
+        const ns = await chain.db.getNameStateByName(name);
+        assert(!ns.registered);
+
+        const register = await wallet.createUpdate(name, null);
+        wallet.spendTX(register);
+        const item = BlockEntry.fromTX(register.toTX(), register.view, job1.attempt);
+        job1.attempt.items.push(item);
+
+        count++;
+        i++;
+        if (i >= consensus.MAX_BLOCK_OPENS) {
+          i = 0;
+          x++;
+        }
+      }
+
+      job1.attempt.refresh();
+
+      assert.strictEqual(await mineBlock(job1), 'OK');
+
+      // Register 100 more so we can blow the limit on UPDATES in the next test
+      const job2 = await cpu.createJob();
+
+      while (count < consensus.MAX_BLOCK_RENEWALS + 100) {
+        const name = `test_${x}_${i}`;
+
+        // This is definitely a REGISTER (renewal) not an UPDATE
+        const ns = await chain.db.getNameStateByName(name);
+        assert(!ns.registered);
+
+        const register = await wallet.createUpdate(name, null);
+        wallet.spendTX(register);
+        const item = BlockEntry.fromTX(register.toTX(), register.view, job2.attempt);
+        job2.attempt.items.push(item);
+
+        count++;
+        i++;
+        if (i >= consensus.MAX_BLOCK_OPENS) {
+          i = 0;
+          x++;
+        }
+      }
+
+      job2.attempt.refresh();
+
+      assert.strictEqual(await mineBlock(job2), 'OK');
+    });
+
+    it('should fail to connect too many UPDATEs', async () => {
+      const job1 = await cpu.createJob();
+
+      let x = 0;
+      let i = 0;
+      let count = 0;
+      while (count < consensus.MAX_BLOCK_UPDATES + 1) {
+        const name = `test_${x}_${i}`;
+
+        // This is definitely an UPDATE, not a REGISTER
+        const ns = await chain.db.getNameStateByName(name);
+        assert(ns.registered);
+
+        const update = await wallet.createUpdate(name, null);
+        wallet.addTX(update);
+        const item = BlockEntry.fromTX(update.toTX(), update.view, job1.attempt);
+        job1.attempt.items.push(item);
+
+        count++;
+        i++;
+        if (i >= consensus.MAX_BLOCK_OPENS) {
+          i = 0;
+          x++;
+        }
+      }
+
+      job1.attempt.refresh();
+
+      assert.strictEqual(await mineBlock(job1), 'bad-blk-updates');
+
+      // "zap" memwallet
+      for (const {tx} of job1.attempt.items) {
+        wallet.removeTX(tx);
+      }
+    });
+
+    it('should connect max number of UPDATEs', async () => {
+      const job1 = await cpu.createJob();
+
+      let x = 0;
+      let i = 0;
+      let count = 0;
+      while (count < consensus.MAX_BLOCK_UPDATES) {
+        const name = `test_${x}_${i}`;
+
+        // This is definitely an UPDATE, not a REGISTER
+        const ns = await chain.db.getNameStateByName(name);
+        assert(ns.registered);
+
+        const update = await wallet.createUpdate(name, null);
+        wallet.spendTX(update);
+        const item = BlockEntry.fromTX(update.toTX(), update.view, job1.attempt);
+        job1.attempt.items.push(item);
+
+        count++;
+        i++;
+        if (i >= consensus.MAX_BLOCK_OPENS) {
+          i = 0;
+          x++;
+        }
+      }
+
+      job1.attempt.refresh();
+
+      assert.strictEqual(await mineBlock(job1), 'OK');
+    });
+
+    it('should fail to connect a block with duplicate names', async () => {
+      const job1 = await cpu.createJob();
+
+      for (let i = 0; i < 2; i++) {
+        const name = 'test_duplicate';
+        const open = await wallet.createOpen(name);
+        wallet.addTX(open);
+        const item = BlockEntry.fromTX(open.toTX(), open.view, job1.attempt);
+        job1.attempt.items.push(item);
+      }
+
+      job1.attempt.refresh();
+
+      assert.strictEqual(await mineBlock(job1), 'bad-blk-names');
+
+      // "zap" memwallet
+      for (const {tx} of job1.attempt.items) {
+        wallet.removeTX(tx);
+      }
+    });
   });
 
   describe('Checkpoints', function() {

@@ -1292,6 +1292,10 @@ class MemWallet {
   async createUpdate(name, resource, options) {
     assert(typeof name === 'string');
 
+    if (resource === null) {
+      resource = Resource.fromJSON({records:[]});
+    }
+
     if (resource instanceof Resource)
       resource = resource.encode();
 
