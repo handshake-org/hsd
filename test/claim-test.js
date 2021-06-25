@@ -178,6 +178,7 @@ describe('Reserved Name Claims', function() {
   it('should send initial CLAIM to unspendable address', async () => {
     const griefClaim = await wallet.createClaim('nl');
 
+    // Take existing claim made by wallet
     const oldData = ownership.parseData(
       griefClaim.proof,
       griefClaim.target,
@@ -185,6 +186,7 @@ describe('Reserved Name Claims', function() {
       network
     );
 
+    // Replace the output address with nulldata
     const addr = new Address({
       version: 31,
       hash: Buffer.alloc(2)
@@ -194,14 +196,27 @@ describe('Reserved Name Claims', function() {
                                      oldData.commitHash,
                                      oldData.commitHeight,
                                      network);
-
     griefClaim.proof.addData([txt]);
     const griefProof = Claim.fromProof(griefClaim.proof);
 
+    // Attempt to send the nulldata claim
     await wdb.sendClaim(griefProof);
 
+    // Wait, you mean it's not in the mempool?
+    assert.strictEqual(node.mempool.map.size, 0);
+    assert.strictEqual(node.mempool.claims.size, 0);
+    assert.strictEqual(node.mempool.airdrops.size, 0);
+
+    // Oh right, nulldata claims are non-standard because
+    // they can be part of a grief attack. We'll have to insert
+    // directly into a block...
     check();
-    await mineBlocks(1);
+    const job = await node.miner.createJob();
+    job.pushClaim(griefProof);
+    job.refresh();
+    const block = await job.mineAsync();
+    await node.chain.add(block);
+    AUDIT += REWARD;
     // Only the fee gets generated because the CLAIM output is unspendable
     AUDIT += oldData.fee;
     check();
@@ -211,24 +226,10 @@ describe('Reserved Name Claims', function() {
     assert.strictEqual(cbOut, REWARD + oldData.fee);
   });
 
-  it('should send re-CLAIM after unspendable-address attack', async () => {
-    reclaim = await wallet.sendFakeClaim('nl');
-    check();
-    await mineBlocks(1);
-    check();
-
-    // Miner didn't get a fee from the re-CLAIM
-    const tip = await node.chain.getBlock(node.chain.tip.hash);
-    const cbOut = tip.txs[0].outputs[0].value;
-    assert.strictEqual(cbOut, REWARD);
-
-    // Initial claim and re-claim have same value & fee
-    // but commit to different blocks
-    const initial = claim.getData(network);
-    const update = reclaim.getData(network);
-    assert.strictEqual(initial.value, update.value);
-    assert.strictEqual(initial.fee, update.fee);
-    assert.notStrictEqual(initial.commitHeight, update.commitHeight);
-    assert.notStrictEqual(initial.commitHash, update.commitHash);
+  it('should fail to re-CLAIM after unspendable-address attack', async () => {
+    await assert.rejects(
+      wallet.sendFakeClaim('nl'),
+      {message: 'Coin not found for name owner.'}
+    );
   });
 });
