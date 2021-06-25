@@ -40,6 +40,8 @@ const undos = [
 
 // extended merkle
 const merkles = [
+  common.readMerkle('merkle43269'),
+  common.readMerkle('merkle27032')
 ];
 
 const {
