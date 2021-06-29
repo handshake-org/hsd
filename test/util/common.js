@@ -1,9 +1,11 @@
 'use strict';
 
 const assert = require('assert');
+const {tmpdir} = require('os');
 const path = require('path');
 const fs = require('bfile');
 const bio = require('bufio');
+const {randomBytes} = require('bcrypto/lib/random');
 const Block = require('../../lib/primitives/block');
 const MerkleBlock = require('../../lib/primitives/merkleblock');
 const Headers = require('../../lib/primitives/headers');
@@ -85,6 +87,20 @@ common.writeTX = function writeTX(name, tx, view) {
   common.writeFile(`${name}-undo.raw`, undoRaw);
 };
 
+common.testdir = function(name) {
+  assert(/^[a-z\-]+$/.test(name), 'Invalid name');
+
+  const uniq = randomBytes(4).toString('hex');
+  return path.join(tmpdir(), `hsd-test-${name}-${uniq}`);
+};
+
+common.rimraf = async function(p) {
+  const allowed = /hsd\-test\-[a-z\-]+\-[a-f0-9]{8}((\\|\/)[a-z]+)?$/;
+  if (!allowed.test(p))
+    throw new Error(`Path not allowed: ${p}.`);
+
+  return await fs.rimraf(p);
+};
 common.event = async function event(obj, name) {
   return new Promise((resolve) => {
     obj.once(name, resolve);

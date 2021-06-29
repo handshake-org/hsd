@@ -6,14 +6,11 @@
 const assert = require('bsert');
 const FullNode = require('../lib/node/fullnode');
 const Address = require('../lib/primitives/address');
-const {tmpdir} = require('os');
-const {randomBytes} = require('bcrypto/lib/random');
-const Path = require('path');
+const {rimraf, testdir} = require('./util/common');
 const layouts = require('../lib/wallet/layout');
 const layout = layouts.wdb;
 
-const uniq = randomBytes(4).toString('hex');
-const path = Path.join(tmpdir(), `hsd-test-${uniq}`);
+const path = testdir('walletchange');
 
 const node = new FullNode({
   prefix: path,
@@ -48,6 +45,7 @@ describe('Derive and save change addresses', function() {
 
   after(async () => {
     await node.close();
+    await rimraf(path);
   });
 
   it('should fund account', async () => {
