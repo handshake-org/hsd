@@ -1,4 +1,3 @@
-
 ## HSD Migration
 ### Motivation
   Previously, bcoin used to have *external* migration scripts that would do
@@ -26,7 +25,45 @@
       database and does not need DB version change.
     - Upgrades: Changes that modify database layout and need to change the
       version of the database.
+
+  Different migrations may have different effects to the users.
+    - Migration may not apply to your database.
+    - Migration may apply to your database, but can't be done. (PRUNE)
+    - Migration applies to your database.
+
+  Concrete example we can use here is: Chain State migration:
+    - It applies to FULL Nodes.
+    - It applies to Pruned Nodes, but can't be run because of the lack of data.
+    - It does not apply to SPV nodes (they don't have the chain state)
+
+  For each of these situations migration will do different things:
+    - If it applies - throw error for the `migrationFlag` (BLOCK/WAIT)
+    - If it applies, but can't be fixed - SKIP migration and keep showing warning
+    - It it does not apply - do `fake migration`.
+
+  These differences need to be part of the migration test, so users have
+  detailed information about their database. That's why we introduce
+  `check` and `warning` methods to the `Migration` implementation.
   
+  Process looks like this:
+    - skipped = Set()
+    - lastMigration = 0
+    - for each skipped - show warnings for previous ones
+      - migration.warning()
+    - for each migration:
+      - migration.check -> {BLOCK for the flag, SKIP can't, FAKE_MIGRATE}
+      - if FAKE_MIGRATE
+        - lastMigration++
+      - if SKIP
+        - skipped.add(migrationID)
+        - migration.warning()
+        - lastMigration++
+      - if BLOCK && flag
+        - execute migration
+        - lastMigration++
+      - if BLOCK && !flag
+        - throw error for the flag
+
   Current POC does not include walletdb, but if the changes are good, we can
   port them to the walletdb as well. At least walletdb only has one mode of
   operation, only differences in migration types applies.
@@ -81,10 +118,10 @@
   migrations must not start without user input. I believe we can stick
   to the similar pattern to walletdb and accept migration flag that will
   allow all migrations to run, otherwise throw an error.  
-  I think having `--migration=bool` is good enough and is not necessary to
-  specify version, as it does not make sense for users not to upgrade
-  to the latest codebase if they are running one. If they want to skip
-  then they should probably downgrade -- hopefully this wont happen
+  I think having `--chainMigrate=bool`/`--walletMigrate` is good enough
+  and is not necessary to specify version, as it does not make sense for users
+  not to upgrade to the latest codebase if they are running one. If they want
+  to skip then they should probably downgrade -- hopefully this wont happen
   as it is a big security risk.
 
 ### Downsides
