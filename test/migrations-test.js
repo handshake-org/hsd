@@ -6,9 +6,11 @@
 const assert = require('bsert');
 const fs = require('bfile');
 const Logger = require('blgr');
+const MigrationState = require('../lib/migrations/state');
 const {
   AbstractMigration,
-  Migrations
+  Migrations,
+  types
 } = require('../lib/migrations/migrations');
 const {
   MockChainDB,
@@ -17,27 +19,23 @@ const {
 } = require('./util/migrations');
 const {rimraf, testdir} = require('./util/common');
 
-describe('Migrations', function () {
-  const logger = new Logger({
-    level: 'debug',
-    console: true
-  });
+class MockMigration1 {
+  async check() {
+    return types.MIGRATE;
+  }
 
+  async migrate() {
+    return true;
+  }
+}
+
+describe('Migrations', function() {
   let location, defaultOptions;
-
-  before(async () => {
-    await logger.open();
-  });
-
-  after(async () => {
-    await logger.close();
-  });
 
   beforeEach(async () => {
     location = testdir('migration');
     defaultOptions = {
       prefix: location,
-      logger: logger,
       memory: false
     };
     await fs.mkdirp(location);
@@ -81,8 +79,8 @@ describe('Migrations', function () {
     const db = new MockChainDB({
       ...defaultOptions,
       migrations: {
-        1: null,
-        2: null
+        1: MockMigration1,
+        2: MockMigration1
       }
     });
     const {migrations} = db;
@@ -131,7 +129,7 @@ describe('Migrations', function () {
 
     const db = new MockChainDB({
       ...defaultOptions,
-      migrations: { 1: null }
+      migrations: { 1: MockMigration1 }
     });
 
     await assert.rejects(async () => {
@@ -152,11 +150,17 @@ describe('Migrations', function () {
       migrateFlag: true,
       migrations: {
         1: class extends AbstractMigration {
+          async check() {
+            return types.MIGRATE;
+          }
           async migrate() {
             migrated1 = true;
           }
         },
         2: class extends AbstractMigration {
+          async check() {
+            return types.MIGRATE;
+          }
           async migrate() {
             migrated2 = true;
           }
@@ -187,6 +191,9 @@ describe('Migrations', function () {
       migrateFlag: true,
       migrations: {
         1: class extends AbstractMigration {
+          async check() {
+            return types.MIGRATE;
+          }
           async migrate() {
             if (!migrated1) {
               migrated1 = true;
@@ -195,6 +202,10 @@ describe('Migrations', function () {
           }
         },
         2: class extends AbstractMigration {
+          async check() {
+            return types.MIGRATE;
+          }
+
           async migrate() {
             if (!migrated2) {
               migrated2 = true;
@@ -248,7 +259,109 @@ describe('Migrations', function () {
     await db.close();
   });
 
-  describe('Options', function () {
+  it('should fake migrate if it does not apply', async () => {
+    await initDB();
+
+    let migrate = false;
+    const db = new MockChainDB({
+      ...defaultOptions,
+      migrations: {
+        1: class extends AbstractMigration {
+          async check() {
+            return types.FAKE_MIGRATE;
+          }
+
+          async migrate() {
+            migrate = true;
+          }
+        }
+      }
+    });
+
+    await db.open();
+
+    const state = await db.migrations.getState();
+    assert.strictEqual(state.inProgress, false);
+    assert.strictEqual(state.lastMigration, 1);
+    assert.strictEqual(migrate, false);
+
+    await db.close();
+  });
+
+  it('should skip migrations if it cant be fullfilled', async () => {
+    await initDB();
+
+    let checked = 0;
+    let showedWarning = 0;
+    let migrated = 0;
+
+    const db = new MockChainDB({
+      ...defaultOptions,
+      migrations: {
+        1: class extends AbstractMigration {
+          async check() {
+            checked++;
+            return types.SKIP;
+          }
+
+          async warning() {
+            showedWarning++;
+          }
+
+          async migrate() {
+            migrated++;
+          }
+        }
+      }
+    });
+
+    await db.open();
+
+    const state = await db.migrations.getState();
+    assert.strictEqual(state.inProgress, false);
+    assert.strictEqual(state.lastMigration, 1);
+    assert.deepStrictEqual(state.skipped, [1]);
+
+    assert.strictEqual(checked, 1);
+    assert.strictEqual(showedWarning, 1);
+    assert.strictEqual(migrated, 0);
+
+    await db.close();
+
+    await db.open();
+    const state2 = await db.migrations.getState();
+    assert.strictEqual(state2.inProgress, false);
+    assert.strictEqual(state2.lastMigration, 1);
+    assert.deepStrictEqual(state2.skipped, [1]);
+
+    assert.strictEqual(checked, 1);
+    assert.strictEqual(showedWarning, 2);
+    assert.strictEqual(migrated, 0);
+    await db.close();
+  });
+
+  it('should fail with unknown migration type', async () => {
+    await initDB();
+
+    const db = new MockChainDB({
+      ...defaultOptions,
+      migrations: {
+        1: class extends AbstractMigration {
+          async check() {
+            return -1;
+          }
+        }
+      }
+    });
+
+    await assert.rejects(async () => {
+      await db.open();
+    }, {
+      message: 'Unknown migration type.'
+    });
+  });
+
+  describe('Options', function() {
     it('should fail w/o db && ldb', () => {
       const errors = [
         { opts: null, err: 'Migration options are required.' },
@@ -267,5 +380,79 @@ describe('Migrations', function () {
       for (const {opts, err} of errors)
         assert.throws(() => new Migrations(opts), { message: err });
     });
+  });
+
+  describe('MigrationState', function() {
+    it('should clone the state', () => {
+      const state1 = new MigrationState();
+
+      state1.inProgress = 1;
+      state1.lastMigration = 3;
+      state1.skipped = [1, 2];
+
+      const state2 = state1.clone();
+
+      assert.notEqual(state2.skipped, state1.skipped);
+      assert.deepStrictEqual(state2, state1);
+    });
+  });
+
+  describe('AbstractMigration', function() {
+    let logger = null;
+
+    function context(ctx) {
+      return {warning: () => ctx};
+    }
+
+    const baseMethods = ['check', 'migrate'];
+
+    beforeEach(() => {
+      logger = Logger.global;
+      Logger.global = {context};
+    });
+
+    afterEach(() => {
+      Logger.global = logger;
+    });
+
+    it('construct with custom logger', async () => {
+      const migration = new AbstractMigration({logger: {context}});
+      assert(migration.logger);
+      assert(migration.logger.warning);
+      assert.strictEqual(migration.logger.warning(), 'migration');
+    });
+
+    it('should have method: warning', () => {
+      let logged;
+      const migration = new AbstractMigration({
+        logger: {
+          context: () => {
+            return {
+              warning: () => {
+                logged = true;
+              }
+            };
+          }
+        }
+      });
+
+      assert(migration.warning);
+      migration.warning();
+      assert.strictEqual(logged, true);
+    });
+
+    for (const method of baseMethods) {
+      it(`should have unimplemented method: ${method}`, async () => {
+        const migration = new AbstractMigration({logger: {context}});
+
+        assert(migration[method]);
+        await assert.rejects(async () => {
+          await migration[method]();
+        }, {
+          name: 'Error',
+          message: 'Abstract method.'
+        });
+      });
+    }
   });
 });

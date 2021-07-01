@@ -15,8 +15,8 @@ const {rimraf, testdir} = require('./util/common');
 
 const network = Network.get('regtest');
 
-describe('Chain Migrations', function () {
-  describe('Migration ChainState (integration)', function () {
+describe('Chain Migrations', function() {
+  describe('Migration ChainState (integration)', function() {
     const location = testdir('migrate-chain-state');
     const migrationsBAK = ChainMigrations.migrations;
 
