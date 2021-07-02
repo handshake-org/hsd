@@ -4,6 +4,7 @@
 'use strict';
 
 const assert = require('bsert');
+const BlockStore = require('../lib/blockstore/level');
 const Chain = require('../lib/blockchain/chain');
 const WorkerPool = require('../lib/workers/workerpool');
 const Miner = require('../lib/mining/miner');
@@ -21,8 +22,14 @@ describe('Invalid Reorg', function() {
     describe(mode, function() {
       this.timeout(45000);
 
+      const blocks = new BlockStore({
+        memory: true,
+        network
+      });
+
       const chain = new Chain({
         memory: true,
+        blocks,
         network,
         workers
       });
@@ -53,6 +60,7 @@ describe('Invalid Reorg', function() {
       const invalid = [];
 
       before(async () => {
+        await blocks.open();
         await chain.open();
         await miner.open();
       });
@@ -60,6 +68,7 @@ describe('Invalid Reorg', function() {
       after(async () => {
         await miner.close();
         await chain.close();
+        await blocks.close();
       });
 
       it('should add addrs to miner', async () => {
@@ -267,12 +276,19 @@ describe('Invalid Reorg', function() {
           entry = await chain.getNext(entry);
         } while (entry);
 
+        const store = new BlockStore({
+          memory: true,
+          network
+        });
+
         const fresh = new Chain({
           memory: true,
+          blocks: store,
           network,
           workers
         });
 
+        await store.open();
         await fresh.open();
 
         for (const block of blocks)
@@ -285,6 +301,7 @@ describe('Invalid Reorg', function() {
         assert.strictEqual(fresh.db.state.tx, chain.db.state.tx);
 
         await fresh.close();
+        await store.close();
       });
 
       it('should mine a block after a reorg', async () => {
