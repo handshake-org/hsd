@@ -12,11 +12,7 @@ const {
   Migrations,
   types
 } = require('../lib/migrations/migrations');
-const {
-  MockChainDB,
-  mockLayout,
-  oldMockLayout
-} = require('./util/migrations');
+const {MockChainDB} = require('./util/migrations');
 const {rimraf, testdir} = require('./util/common');
 
 class MockMigration1 {
@@ -73,40 +69,6 @@ describe('Migrations', function() {
     }, {
       message: 'Database does not exist.'
     });
-  });
-
-  it('should recover old migration states', async () => {
-    const db = new MockChainDB({
-      ...defaultOptions,
-      migrations: {
-        1: MockMigration1,
-        2: MockMigration1
-      }
-    });
-    const {migrations} = db;
-    const ldb = db.db;
-
-    {
-      // replicate old Migration states.
-      await ldb.open();
-      await ldb.verify(mockLayout.V.encode(), 'chain', db.dbVersion);
-      const batch = ldb.batch();
-      batch.put(oldMockLayout.M.encode(0), null);
-      batch.put(oldMockLayout.M.encode(1), null);
-      batch.put(oldMockLayout.M.encode(2), null);
-      await batch.write();
-      await ldb.close();
-    }
-
-    await db.open();
-
-    const state = await migrations.getState();
-    assert.strictEqual(state.inProgress, false);
-    assert.strictEqual(state.lastMigration, 2);
-
-    assert.strictEqual(migrations.getLastMigrationID(), 2);
-
-    await db.close();
   });
 
   it('should throw if there are no migrations', async () => {

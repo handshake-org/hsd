@@ -12,12 +12,12 @@ const Chain = require('../lib/blockchain/chain');
 const layout = require('../lib/blockchain/layout');
 const ChainMigrations = require('../lib/blockchain/migrations');
 const MigrationState = require('../lib/migrations/state');
-const {rimraf, testdir} = require('./util/common');
 const {
   AbstractMigration,
   types,
   oldLayout
 } = require('../lib/migrations/migrations');
+const {rimraf, testdir} = require('./util/common');
 
 const network = Network.get('regtest');
 
@@ -26,43 +26,26 @@ describe('Chain Migrations', function() {
     const location = testdir('migrate-chain-ensure');
     const migrationsBAK = ChainMigrations.migrations;
 
-    const workers = new WorkerPool({
-      enabled: true,
-      size: 2
-    });
-
     const chainOptions = {
       prefix: location,
       memory: false,
-      network,
-      workers
+      network
     };
 
-    let chain, chainDB, ldb, miner;
-    before(async () => {
-      await workers.open();
-    });
-
-    after(async () => {
-      await workers.close();
-    });
-
+    let chain, chainDB, ldb;
     beforeEach(async () => {
       await fs.mkdirp(location);
       chain = new Chain(chainOptions);
-      miner = new Miner({ chain });
       chainDB = chain.db;
       ldb = chainDB.db;
 
       ChainMigrations.migrations = migrationsBAK;
-      await miner.open();
     });
 
     afterEach(async () => {
       if (chain.opened)
         await chain.close();
 
-      await miner.close();
       await rimraf(location);
     });
 
