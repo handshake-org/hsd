@@ -51,6 +51,8 @@ chain.on('connect', async (entry, block, view) => {
 });
 
 describe('Miner', function() {
+  this.timeout(10000);
+
   before(async () => {
     await workers.open();
     await chain.open();

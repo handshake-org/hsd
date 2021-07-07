@@ -68,7 +68,7 @@ describe('Migrations', function() {
       migrateFlag: true
     });
 
-    assert.rejects(async () => {
+    await assert.rejects(async () => {
       await db.open();
     }, {
       message: 'Database does not exist.'

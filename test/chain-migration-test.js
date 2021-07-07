@@ -11,11 +11,219 @@ const Miner = require('../lib/mining/miner');
 const Chain = require('../lib/blockchain/chain');
 const layout = require('../lib/blockchain/layout');
 const ChainMigrations = require('../lib/blockchain/migrations');
+const MigrationState = require('../lib/migrations/state');
 const {rimraf, testdir} = require('./util/common');
+const {
+  AbstractMigration,
+  types,
+  oldLayout
+} = require('../lib/migrations/migrations');
 
 const network = Network.get('regtest');
 
 describe('Chain Migrations', function() {
+  describe('Migration State', function() {
+    const location = testdir('migrate-chain-ensure');
+    const migrationsBAK = ChainMigrations.migrations;
+
+    const workers = new WorkerPool({
+      enabled: true,
+      size: 2
+    });
+
+    const chainOptions = {
+      prefix: location,
+      memory: false,
+      network,
+      workers
+    };
+
+    let chain, chainDB, ldb, miner;
+    before(async () => {
+      await workers.open();
+    });
+
+    after(async () => {
+      await workers.close();
+    });
+
+    beforeEach(async () => {
+      await fs.mkdirp(location);
+      chain = new Chain(chainOptions);
+      miner = new Miner({ chain });
+      chainDB = chain.db;
+      ldb = chainDB.db;
+
+      ChainMigrations.migrations = migrationsBAK;
+      await miner.open();
+    });
+
+    afterEach(async () => {
+      if (chain.opened)
+        await chain.close();
+
+      await miner.close();
+      await rimraf(location);
+    });
+
+    it('should initialize fresh chain migration state', async () => {
+      await chain.open();
+
+      const rawState = await ldb.get(layout.M.encode());
+      const state = MigrationState.decode(rawState);
+
+      assert.strictEqual(state.lastMigration, 1);
+      assert.strictEqual(state.skipped.length, 0);
+      assert.strictEqual(state.inProgress, false);
+
+      await chain.close();
+    });
+
+    it('should migrate pre-old migration state', async () => {
+      await chain.open();
+      const b = ldb.batch();
+      b.del(layout.M.encode());
+      await b.write();
+      await chain.close();
+
+      let error;
+      try {
+        await chain.open();
+      } catch (e) {
+        error = e;
+        chain.opened = false;
+      }
+
+      assert(error, 'Chain must throw an error.');
+      assert.strictEqual(error.message, 'Database needs migration.');
+
+      await ldb.open();
+      const rawState = await ldb.get(layout.M.encode());
+      const state = MigrationState.decode(rawState);
+
+      assert.strictEqual(state.lastMigration, 0);
+      assert.strictEqual(state.skipped.length, 0);
+      assert.strictEqual(state.inProgress, false);
+      await ldb.close();
+    });
+
+    it('should migrate from first old migration state', async () => {
+      await chain.open();
+      const b = ldb.batch();
+      b.del(layout.M.encode());
+      b.put(oldLayout.M.encode(0), null);
+      await b.write();
+      await chain.close();
+
+      let error;
+      try {
+        await chain.open();
+      } catch (e) {
+        error = e;
+        chain.opened = false;
+      }
+
+      assert(error, 'Chain must throw an error.');
+      assert.strictEqual(error.message, 'Database needs migration.');
+
+      await ldb.open();
+      const rawState = await ldb.get(layout.M.encode());
+      const state = MigrationState.decode(rawState);
+
+      assert.strictEqual(state.lastMigration, 0);
+      assert.strictEqual(state.skipped.length, 0);
+      assert.strictEqual(state.inProgress, false);
+      await ldb.close();
+    });
+
+    it('should not migrate from last old migration state', async () => {
+      await chain.open();
+
+      const b = ldb.batch();
+      b.del(layout.M.encode());
+      b.put(oldLayout.M.encode(0), null);
+      b.put(oldLayout.M.encode(1), null);
+      await b.write();
+      await chain.close();
+
+      await chain.open();
+
+      const rawState = await ldb.get(layout.M.encode());
+      const state = MigrationState.decode(rawState);
+
+      assert.strictEqual(state.lastMigration, 1);
+      assert.strictEqual(state.skipped.length, 0);
+      assert.strictEqual(state.inProgress, false);
+    });
+
+    it('should migrate from last old migration state', async () => {
+      ChainMigrations.migrations = {
+        1: class extends AbstractMigration {
+          async check() {
+            return types.MIGRATE;
+          }
+        },
+        2: class extends AbstractMigration {
+          async check() {
+            return types.MIGRATE;
+          }
+        }
+      };
+
+      await chain.open();
+
+      const b = ldb.batch();
+      b.del(layout.M.encode());
+      b.put(oldLayout.M.encode(0), null);
+      b.put(oldLayout.M.encode(1), null);
+      await b.write();
+      await chain.close();
+
+      let error;
+      try {
+        await chain.open();
+      } catch (e) {
+        error = e;
+        chain.opened = false;
+      }
+
+      assert(error, 'Chain must throw an error.');
+      assert.strictEqual(error.message, 'Database needs migration.');
+
+      await ldb.open();
+      const rawState = await ldb.get(layout.M.encode());
+      const state = MigrationState.decode(rawState);
+
+      assert.strictEqual(state.lastMigration, 1);
+      assert.strictEqual(state.skipped.length, 0);
+      assert.strictEqual(state.inProgress, false);
+      await ldb.close();
+    });
+
+    it('should have skipped migration for prune', async () => {
+      chain.options.prune = true;
+
+      await chain.open();
+      const b = ldb.batch();
+      b.del(layout.M.encode());
+      b.put(oldLayout.M.encode(0), null);
+      b.put(oldLayout.M.encode(1), null);
+      await b.write();
+      await chain.close();
+
+      await chain.open();
+
+      const rawState = await ldb.get(layout.M.encode());
+      const state = MigrationState.decode(rawState);
+
+      assert.strictEqual(state.lastMigration, 1);
+      assert.strictEqual(state.skipped.length, 1);
+      assert.strictEqual(state.skipped[0], 1);
+      assert.strictEqual(state.inProgress, false);
+      await chain.close();
+    });
+  });
+
   describe('Migration ChainState (integration)', function() {
     const location = testdir('migrate-chain-state');
     const migrationsBAK = ChainMigrations.migrations;
