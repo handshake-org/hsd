@@ -15,7 +15,7 @@ const {
 const {MockChainDB} = require('./util/migrations');
 const {rimraf, testdir} = require('./util/common');
 
-class MockMigration1 {
+class MockMigration1 extends AbstractMigration {
   async check() {
     return types.MIGRATE;
   }
@@ -97,7 +97,7 @@ describe('Migrations', function() {
     await assert.rejects(async () => {
       await db.open();
     }, {
-      message: 'Database needs migration.'
+      message: `Database needs migration.\n${MockMigration1.info()}`
     });
   });
 

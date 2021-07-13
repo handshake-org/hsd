@@ -77,8 +77,9 @@ describe('Chain Migrations', function() {
         chain.opened = false;
       }
 
+      const info = ChainMigrations.migrations[1].info();
       assert(error, 'Chain must throw an error.');
-      assert.strictEqual(error.message, 'Database needs migration.');
+      assert.strictEqual(error.message, `Database needs migration.\n${info}`);
 
       await ldb.open();
       const rawState = await ldb.get(layout.M.encode());
@@ -106,8 +107,9 @@ describe('Chain Migrations', function() {
         chain.opened = false;
       }
 
+      const info = ChainMigrations.migrations[1].info();
       assert(error, 'Chain must throw an error.');
-      assert.strictEqual(error.message, 'Database needs migration.');
+      assert.strictEqual(error.message, `Database needs migration.\n${info}`);
 
       await ldb.open();
       const rawState = await ldb.get(layout.M.encode());
@@ -170,8 +172,9 @@ describe('Chain Migrations', function() {
         chain.opened = false;
       }
 
+      const info = ChainMigrations.migrations[1].info();
       assert(error, 'Chain must throw an error.');
-      assert.strictEqual(error.message, 'Database needs migration.');
+      assert.strictEqual(error.message, `Database needs migration.\n${info}`);
 
       await ldb.open();
       const rawState = await ldb.get(layout.M.encode());
@@ -284,10 +287,11 @@ describe('Chain Migrations', function() {
     });
 
     it('should throw error when new migration is available', async () => {
+      const info = ChainMigrations.migrations[1].info();
       await assert.rejects(async () => {
         await chain.open();
       }, {
-        message: 'Database needs migration.'
+        message: `Database needs migration.\n${info}`
       });
 
       chain.opened = false;

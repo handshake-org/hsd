@@ -75,8 +75,9 @@ describe('Wallet Migrations', function() {
         error = e;
       }
 
+      const info = WalletMigrations.migrations[1].info();
       assert(error, 'WalletDB must throw an error.');
-      assert.strictEqual(error.message, 'Database needs migration.');
+      assert.strictEqual(error.message, `Database needs migration.\n${info}`);
 
       await ldb.open();
       const rawState = await ldb.get(layout.M.encode());
@@ -138,8 +139,9 @@ describe('Wallet Migrations', function() {
         error = e;
       }
 
+      const info = WalletMigrations.migrations[1].info();
       assert(error, 'WalletDB must throw an error.');
-      assert.strictEqual(error.message, 'Database needs migration.');
+      assert.strictEqual(error.message, `Database needs migration.\n${info}`);
 
       await ldb.open();
       const rawState = await ldb.get(layout.M.encode());
@@ -220,10 +222,11 @@ describe('Wallet Migrations', function() {
     it('should fail without migrate flag', async () => {
       WalletMigrations.migrations = migrationsBAK;
 
+      const info = WalletMigrations.migrations[1].info();
       await assert.rejects(async () => {
         await walletDB.open();
       }, {
-        message: 'Database needs migration.'
+        message: `Database needs migration.\n${info}`
       });
     });
 
