@@ -2,6 +2,10 @@
 
 ## unreleased
 
+### Database changes
+  - Separated migrations from WalletDB and ChainDB: [lib/migrations/README.md](./lib/migrations/README.md)
+  - Updated database versions and layout.
+
 ### Wallet changes
 
 - New RPC methods:
