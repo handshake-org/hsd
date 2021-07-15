@@ -31,6 +31,8 @@ const mockLayout = {
   d: bdb.key('a')
 };
 
+const DB_FLAG_ERROR = 'mock chain needs migration';
+
 /**
  * This could be ChainDB or WalletDB.
  * This will resemble ChainDB because it's easier to illustrate
@@ -144,6 +146,7 @@ class MockChainDBMigrations extends Migrations {
     super(new MockChainDBMigrationsOptions(options));
 
     this.logger = this.options.logger.context('mock-migrations');
+    this.flagError = DB_FLAG_ERROR;
   }
 }
 
@@ -179,3 +182,17 @@ exports.MockChainDB = MockChainDB;
 exports.MockChainDBMigrations = MockChainDBMigrations;
 exports.mockLayout = mockLayout;
 exports.oldMockLayout = oldMockLayout;
+exports.DB_FLAG_ERROR = DB_FLAG_ERROR;
+
+exports.migrationError = (migrations, ids, flagError) => {
+  let error = 'Database needs migration(s):\n';
+
+  for (const id of ids) {
+    const info = migrations[id].info();
+    error += `  - ${info.name} - ${info.description}\n`;
+  }
+
+  error += flagError;
+
+  return error;
+};

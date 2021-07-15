@@ -12,16 +12,27 @@ const {
   Migrations,
   types
 } = require('../lib/migrations/migrations');
-const {MockChainDB} = require('./util/migrations');
+const {
+  DB_FLAG_ERROR,
+  MockChainDB,
+  migrationError
+} = require('./util/migrations');
 const {rimraf, testdir} = require('./util/common');
 
-class MockMigration1 extends AbstractMigration {
+class MockMigration extends AbstractMigration {
   async check() {
     return types.MIGRATE;
   }
 
   async migrate() {
     return true;
+  }
+
+  static info() {
+    return {
+      name: 'mock migration',
+      description: 'mock description'
+    };
   }
 }
 
@@ -54,7 +65,7 @@ describe('Migrations', function() {
     await db.open();
     const state = await migrations.getState();
     assert.strictEqual(state.inProgress, false);
-    assert.strictEqual(state.lastMigration, 0);
+    assert.strictEqual(state.nextMigration, 0);
     await db.close();
   });
 
@@ -89,15 +100,17 @@ describe('Migrations', function() {
   it('should fail if there are available migrations', async () => {
     await initDB();
 
+    const migrations = { 0: MockMigration };
     const db = new MockChainDB({
       ...defaultOptions,
-      migrations: { 1: MockMigration1 }
+      migrations
     });
 
+    const error = migrationError(migrations, [0], DB_FLAG_ERROR);
     await assert.rejects(async () => {
       await db.open();
     }, {
-      message: `Database needs migration.\n${MockMigration1.info()}`
+      message: error
     });
   });
 
@@ -111,7 +124,7 @@ describe('Migrations', function() {
       ...defaultOptions,
       migrateFlag: true,
       migrations: {
-        1: class extends AbstractMigration {
+        0: class extends AbstractMigration {
           async check() {
             return types.MIGRATE;
           }
@@ -119,7 +132,7 @@ describe('Migrations', function() {
             migrated1 = true;
           }
         },
-        2: class extends AbstractMigration {
+        1: class extends AbstractMigration {
           async check() {
             return types.MIGRATE;
           }
@@ -135,8 +148,8 @@ describe('Migrations', function() {
     const lastID = db.migrations.getLastMigrationID();
     const state = await db.migrations.getState();
 
-    assert.strictEqual(state.lastMigration, 2);
-    assert.strictEqual(lastID, 2);
+    assert.strictEqual(state.nextMigration, 2);
+    assert.strictEqual(lastID, 1);
     assert.strictEqual(migrated1, true);
     assert.strictEqual(migrated2, true);
     await db.close();
@@ -152,7 +165,7 @@ describe('Migrations', function() {
       ...defaultOptions,
       migrateFlag: true,
       migrations: {
-        1: class extends AbstractMigration {
+        0: class extends AbstractMigration {
           async check() {
             return types.MIGRATE;
           }
@@ -163,7 +176,7 @@ describe('Migrations', function() {
             }
           }
         },
-        2: class extends AbstractMigration {
+        1: class extends AbstractMigration {
           async check() {
             return types.MIGRATE;
           }
@@ -190,7 +203,7 @@ describe('Migrations', function() {
 
       const state = await db.migrations.getState();
       assert.strictEqual(state.inProgress, true);
-      assert.strictEqual(state.lastMigration, 0);
+      assert.strictEqual(state.nextMigration, 0);
 
       await db.db.close();
     }
@@ -207,7 +220,7 @@ describe('Migrations', function() {
 
       const state = await db.migrations.getState();
       assert.strictEqual(state.inProgress, true);
-      assert.strictEqual(state.lastMigration, 1);
+      assert.strictEqual(state.nextMigration, 1);
 
       await db.db.close();
     }
@@ -215,7 +228,7 @@ describe('Migrations', function() {
     await db.open();
     const state = await db.migrations.getState();
     assert.strictEqual(state.inProgress, false);
-    assert.strictEqual(state.lastMigration, 2);
+    assert.strictEqual(state.nextMigration, 2);
     assert.strictEqual(migrated1, true);
     assert.strictEqual(migrated2, true);
     await db.close();
@@ -227,8 +240,9 @@ describe('Migrations', function() {
     let migrate = false;
     const db = new MockChainDB({
       ...defaultOptions,
+      migrateFlag: true,
       migrations: {
-        1: class extends AbstractMigration {
+        0: class extends AbstractMigration {
           async check() {
             return types.FAKE_MIGRATE;
           }
@@ -244,7 +258,7 @@ describe('Migrations', function() {
 
     const state = await db.migrations.getState();
     assert.strictEqual(state.inProgress, false);
-    assert.strictEqual(state.lastMigration, 1);
+    assert.strictEqual(state.nextMigration, 1);
     assert.strictEqual(migrate, false);
 
     await db.close();
@@ -259,8 +273,9 @@ describe('Migrations', function() {
 
     const db = new MockChainDB({
       ...defaultOptions,
+      migrateFlag: true,
       migrations: {
-        1: class extends AbstractMigration {
+        0: class extends AbstractMigration {
           async check() {
             checked++;
             return types.SKIP;
@@ -281,8 +296,8 @@ describe('Migrations', function() {
 
     const state = await db.migrations.getState();
     assert.strictEqual(state.inProgress, false);
-    assert.strictEqual(state.lastMigration, 1);
-    assert.deepStrictEqual(state.skipped, [1]);
+    assert.strictEqual(state.nextMigration, 1);
+    assert.deepStrictEqual(state.skipped, [0]);
 
     assert.strictEqual(checked, 1);
     assert.strictEqual(showedWarning, 1);
@@ -290,11 +305,12 @@ describe('Migrations', function() {
 
     await db.close();
 
+    db.migrations.migrateFlag = false;
     await db.open();
     const state2 = await db.migrations.getState();
     assert.strictEqual(state2.inProgress, false);
-    assert.strictEqual(state2.lastMigration, 1);
-    assert.deepStrictEqual(state2.skipped, [1]);
+    assert.strictEqual(state2.nextMigration, 1);
+    assert.deepStrictEqual(state2.skipped, [0]);
 
     assert.strictEqual(checked, 1);
     assert.strictEqual(showedWarning, 2);
@@ -307,8 +323,9 @@ describe('Migrations', function() {
 
     const db = new MockChainDB({
       ...defaultOptions,
+      migrateFlag: true,
       migrations: {
-        1: class extends AbstractMigration {
+        0: class extends AbstractMigration {
           async check() {
             return -1;
           }
@@ -349,7 +366,7 @@ describe('Migrations', function() {
       const state1 = new MigrationState();
 
       state1.inProgress = 1;
-      state1.lastMigration = 3;
+      state1.nextMigration = 3;
       state1.skipped = [1, 2];
 
       const state2 = state1.clone();

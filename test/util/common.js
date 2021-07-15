@@ -3,6 +3,7 @@
 const assert = require('assert');
 const {tmpdir} = require('os');
 const path = require('path');
+const Logger = require('blgr');
 const fs = require('bfile');
 const bio = require('bufio');
 const {randomBytes} = require('bcrypto/lib/random');
@@ -127,6 +128,15 @@ common.forValue = async function(obj, key, val, timeout = 30000) {
       count += 1;
     }, ms);
   });
+};
+
+common.enableLogger = () => {
+  Logger.global.set({
+    level: 'debug',
+    console: true
+  });
+
+  Logger.global.closed = false;
 };
 
 function parseUndo(data) {

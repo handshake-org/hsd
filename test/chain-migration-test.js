@@ -17,9 +17,12 @@ const {
   types,
   oldLayout
 } = require('../lib/migrations/migrations');
+const {migrationError} = require('./util/migrations');
 const {rimraf, testdir} = require('./util/common');
 
 const network = Network.get('regtest');
+
+const CHAIN_FLAG_ERROR = 'Restart with `hsd --chain-migrate`.';
 
 describe('Chain Migrations', function() {
   describe('Migration State', function() {
@@ -62,10 +65,11 @@ describe('Chain Migrations', function() {
       await chain.close();
     });
 
-    it('should migrate pre-old migration state', async () => {
+    it('should not migrate pre-old migration state w/o flag', async () => {
       await chain.open();
       const b = ldb.batch();
       b.del(layout.M.encode());
+      writeVersion(b, 'chain', 1);
       await b.write();
       await chain.close();
 
@@ -77,80 +81,142 @@ describe('Chain Migrations', function() {
         chain.opened = false;
       }
 
-      const info = ChainMigrations.migrations[1].info();
       assert(error, 'Chain must throw an error.');
-      assert.strictEqual(error.message, `Database needs migration.\n${info}`);
+      const expected = migrationError(ChainMigrations.migrations, [0, 1],
+        CHAIN_FLAG_ERROR);
+      assert.strictEqual(error.message, expected);
 
       await ldb.open();
+      const versionData = await ldb.get(layout.V.encode());
+      const version = getVersion(versionData, 'chain');
+      assert.strictEqual(version, 1);
+
       const rawState = await ldb.get(layout.M.encode());
       const state = MigrationState.decode(rawState);
 
-      assert.strictEqual(state.lastMigration, 0);
+      assert.strictEqual(state.lastMigration, -1);
+      assert.strictEqual(state.nextMigration, 0);
       assert.strictEqual(state.skipped.length, 0);
       assert.strictEqual(state.inProgress, false);
       await ldb.close();
     });
 
-    it('should migrate from first old migration state', async () => {
+    it('should migrate from first old migration state with flag', async () => {
       await chain.open();
       const b = ldb.batch();
       b.del(layout.M.encode());
       b.put(oldLayout.M.encode(0), null);
+      writeVersion(b, 'chain', 1);
       await b.write();
       await chain.close();
 
-      let error;
-      try {
-        await chain.open();
-      } catch (e) {
-        error = e;
-        chain.opened = false;
-      }
+      chain.options.chainMigrate = true;
+      await chain.open();
+      const versionData = await ldb.get(layout.V.encode());
+      const version = getVersion(versionData, 'chain');
+      assert.strictEqual(version, 2);
 
-      const info = ChainMigrations.migrations[1].info();
-      assert(error, 'Chain must throw an error.');
-      assert.strictEqual(error.message, `Database needs migration.\n${info}`);
-
-      await ldb.open();
       const rawState = await ldb.get(layout.M.encode());
       const state = MigrationState.decode(rawState);
 
-      assert.strictEqual(state.lastMigration, 0);
+      assert.strictEqual(state.lastMigration, 1);
+      assert.strictEqual(state.nextMigration, 2);
       assert.strictEqual(state.skipped.length, 0);
       assert.strictEqual(state.inProgress, false);
-      await ldb.close();
+      await chain.close();
     });
 
-    it('should not migrate from last old migration state', async () => {
+    it('should not migrate last old migration state w/o flag', async () => {
       await chain.open();
 
       const b = ldb.batch();
       b.del(layout.M.encode());
       b.put(oldLayout.M.encode(0), null);
       b.put(oldLayout.M.encode(1), null);
+      writeVersion(b, 'chain', 1);
       await b.write();
       await chain.close();
 
-      await chain.open();
+      let error;
+      try {
+        await chain.open();
+      } catch (e) {
+        error = e;
+        chain.opened = false;
+      }
+
+      assert(error, 'Chain must throw an error.');
+      const expected = migrationError(ChainMigrations.migrations, [0],
+        CHAIN_FLAG_ERROR);
+      assert.strictEqual(error.message, expected);
+
+      await ldb.open();
+      const versionData = await ldb.get(layout.V.encode());
+      const version = getVersion(versionData, 'chain');
+      assert.strictEqual(version, 1);
 
       const rawState = await ldb.get(layout.M.encode());
       const state = MigrationState.decode(rawState);
 
+      assert.strictEqual(state.nextMigration, 0);
+      assert.strictEqual(state.lastMigration, -1);
+      assert.strictEqual(state.skipped.length, 0);
+      assert.strictEqual(state.inProgress, false);
+      await ldb.close();
+    });
+
+    it('should only migrate the migration states with flag', async () => {
+      await chain.open();
+
+      const b = ldb.batch();
+      b.del(layout.M.encode());
+      b.put(oldLayout.M.encode(0), null);
+      b.put(oldLayout.M.encode(1), null);
+      writeVersion(b, 'chain', 1);
+      await b.write();
+      await chain.close();
+
+      chain.options.chainMigrate = true;
+      await chain.open();
+      const versionData = await ldb.get(layout.V.encode());
+      const version = getVersion(versionData, 'chain');
+      assert.strictEqual(version, 2);
+
+      const rawState = await ldb.get(layout.M.encode());
+      const state = MigrationState.decode(rawState);
+
+      assert.strictEqual(state.nextMigration, 2);
       assert.strictEqual(state.lastMigration, 1);
       assert.strictEqual(state.skipped.length, 0);
       assert.strictEqual(state.inProgress, false);
+      await chain.close();
     });
 
-    it('should migrate from last old migration state', async () => {
+    it('should not run new migration w/o flag', async () => {
       ChainMigrations.migrations = {
+        0: migrationsBAK[0],
         1: class extends AbstractMigration {
           async check() {
             return types.MIGRATE;
+          }
+
+          static info() {
+            return {
+              name: 'test name1',
+              description: 'test description1'
+            };
           }
         },
         2: class extends AbstractMigration {
           async check() {
             return types.MIGRATE;
+          }
+
+          static info() {
+            return {
+              name: 'test name2',
+              description: 'test description2'
+            };
           }
         }
       };
@@ -172,18 +238,69 @@ describe('Chain Migrations', function() {
         chain.opened = false;
       }
 
-      const info = ChainMigrations.migrations[1].info();
       assert(error, 'Chain must throw an error.');
-      assert.strictEqual(error.message, `Database needs migration.\n${info}`);
+      const expected = migrationError(ChainMigrations.migrations, [0, 2],
+        CHAIN_FLAG_ERROR);
+      assert.strictEqual(error.message, expected);
 
       await ldb.open();
       const rawState = await ldb.get(layout.M.encode());
       const state = MigrationState.decode(rawState);
 
-      assert.strictEqual(state.lastMigration, 1);
+      assert.strictEqual(state.nextMigration, 0);
+      assert.strictEqual(state.lastMigration, -1);
       assert.strictEqual(state.skipped.length, 0);
       assert.strictEqual(state.inProgress, false);
       await ldb.close();
+    });
+
+    it('should run migration upgrade and new migration', async () => {
+      let migrated1 = false;
+      let migrated2 = false;
+      ChainMigrations.migrations = {
+        0: migrationsBAK[0],
+        1: class extends AbstractMigration {
+          async check() {
+            return types.MIGRATE;
+          }
+
+          async migrate() {
+            migrated1 = true;
+          }
+        },
+        2: class extends AbstractMigration {
+          async check() {
+            return types.MIGRATE;
+          }
+
+          async migrate() {
+            migrated2 = true;
+          }
+        }
+      };
+
+      await chain.open();
+      const b = ldb.batch();
+      b.del(layout.M.encode());
+      b.put(oldLayout.M.encode(0), null);
+      b.put(oldLayout.M.encode(1), null);
+      await b.write();
+      await chain.close();
+
+      chain.options.chainMigrate = true;
+      await chain.open();
+
+      assert.strictEqual(migrated1, false);
+      assert.strictEqual(migrated2, true);
+
+      const rawState = await ldb.get(layout.M.encode());
+      const state = MigrationState.decode(rawState);
+
+      assert.strictEqual(state.nextMigration, 3);
+      assert.strictEqual(state.lastMigration, 2);
+      assert.strictEqual(state.skipped.length, 0);
+      assert.strictEqual(state.inProgress, false);
+      await chain.close();
     });
 
     it('should have skipped migration for prune', async () => {
@@ -197,6 +314,7 @@ describe('Chain Migrations', function() {
       await b.write();
       await chain.close();
 
+      chain.options.chainMigrate = true;
       await chain.open();
 
       const rawState = await ldb.get(layout.M.encode());
@@ -282,16 +400,17 @@ describe('Chain Migrations', function() {
 
     it('should enable chain state migration', () => {
       ChainMigrations.migrations = {
+        0: ChainMigrations.MigrateMigrations,
         1: ChainMigrations.MigrateChainState
       };
     });
 
     it('should throw error when new migration is available', async () => {
-      const info = ChainMigrations.migrations[1].info();
+      const expected = migrationError(ChainMigrations.migrations, [0, 1], CHAIN_FLAG_ERROR);
       await assert.rejects(async () => {
         await chain.open();
       }, {
-        message: `Database needs migration.\n${info}`
+        message: expected
       });
 
       chain.opened = false;
@@ -309,3 +428,24 @@ describe('Chain Migrations', function() {
     });
   });
 });
+
+function writeVersion(b, name, version) {
+    const value = Buffer.alloc(name.length + 4);
+
+    value.write(name, 0, 'ascii');
+    value.writeUInt32LE(version, name.length);
+
+    b.put(layout.V.encode(), value);
+}
+
+function getVersion(data, name) {
+  const error = 'version mismatch';
+
+  if (data.length !== name.length + 4)
+    throw new Error(error);
+
+  if (data.toString('ascii', 0, name.length) !== name)
+    throw new Error(error);
+
+  return data.readUInt32LE(name.length);
+}

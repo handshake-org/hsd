@@ -9,17 +9,22 @@ const Network = require('../lib/protocol/network');
 const WalletDB = require('../lib/wallet/walletdb');
 const layouts = require('../lib/wallet/layout');
 const WalletMigrations = require('../lib/wallet/migrations');
+const {MigrateMigrations} = require('../lib/wallet/migrations');
 const MigrationState = require('../lib/migrations/state');
 const {
   AbstractMigration,
   types,
   oldLayout
 } = require('../lib/migrations/migrations');
+const {migrationError} = require('./util/migrations');
 const {rimraf, testdir} = require('./util/common');
 
 const NETWORK = 'regtest';
 const network = Network.get(NETWORK);
 const layout = layouts.wdb;
+
+const WDB_FLAG_ERROR = '`hsd --wallet-migrate` or `hsw --migrate`\n' +
+  '(Full node may be required for rescan)';
 
 describe('Wallet Migrations', function() {
   describe('Migration State', function() {
@@ -61,35 +66,53 @@ describe('Wallet Migrations', function() {
       await walletDB.close();
     });
 
-    it('should migrate pre-old migration state', async () => {
+    it('should not migrate pre-old migration state w/o flag', async () => {
       await walletDB.open();
       const b = ldb.batch();
       b.del(layout.M.encode());
       await b.write();
       await walletDB.close();
 
-      let error;
-      try {
-        await walletDB.open();
-      } catch (e) {
-        error = e;
-      }
+      const expectedError = migrationError(WalletMigrations.migrations, [0, 1],
+        WDB_FLAG_ERROR);
 
-      const info = WalletMigrations.migrations[1].info();
-      assert(error, 'WalletDB must throw an error.');
-      assert.strictEqual(error.message, `Database needs migration.\n${info}`);
+      await assert.rejects(async () => {
+        await walletDB.open();
+      }, {
+        message: expectedError
+      });
 
       await ldb.open();
       const rawState = await ldb.get(layout.M.encode());
       const state = MigrationState.decode(rawState);
 
-      assert.strictEqual(state.lastMigration, 0);
+      assert.strictEqual(state.nextMigration, 0);
+      assert.strictEqual(state.lastMigration, -1);
       assert.strictEqual(state.skipped.length, 0);
       assert.strictEqual(state.inProgress, false);
       await ldb.close();
     });
 
-    it('should not migrate from last old migration state', async () => {
+    it('should migrate pre-old migration state with flag', async () => {
+      await walletDB.open();
+      const b = ldb.batch();
+      b.del(layout.M.encode());
+      await b.write();
+      await walletDB.close();
+
+      walletDB.options.walletMigrate = true;
+      await walletDB.open();
+      const rawState = await ldb.get(layout.M.encode());
+      const state = MigrationState.decode(rawState);
+
+      assert.strictEqual(state.nextMigration, 2);
+      assert.strictEqual(state.lastMigration, 1);
+      assert.strictEqual(state.skipped.length, 0);
+      assert.strictEqual(state.inProgress, false);
+      await walletDB.close();
+    });
+
+    it('should not migrate from last old migration state w/o flag', async () => {
       await walletDB.open();
 
       const b = ldb.batch();
@@ -98,20 +121,51 @@ describe('Wallet Migrations', function() {
       await b.write();
       await walletDB.close();
 
-      await walletDB.open();
+      const expectedError = migrationError(WalletMigrations.migrations, [0],
+        WDB_FLAG_ERROR);
 
+      await assert.rejects(async () => {
+        await walletDB.open();
+      }, {
+        message: expectedError
+      });
+
+      await ldb.open();
       const rawState = await ldb.get(layout.M.encode());
       const state = MigrationState.decode(rawState);
 
-      assert.strictEqual(state.lastMigration, 1);
+      assert.strictEqual(state.nextMigration, 0);
+      assert.strictEqual(state.lastMigration, -1);
       assert.strictEqual(state.skipped.length, 0);
       assert.strictEqual(state.inProgress, false);
 
+      await ldb.close();
+    });
+
+    it('should not migrate from last old migration state with flag', async () => {
+      await walletDB.open();
+
+      const b = ldb.batch();
+      b.del(layout.M.encode());
+      b.put(oldLayout.M.encode(0), null);
+      await b.write();
+      await walletDB.close();
+
+      walletDB.options.walletMigrate = true;
+      await walletDB.open();
+      const rawState = await ldb.get(layout.M.encode());
+      const state = MigrationState.decode(rawState);
+
+      assert.strictEqual(state.nextMigration, 2);
+      assert.strictEqual(state.lastMigration, 1);
+      assert.strictEqual(state.skipped.length, 0);
+      assert.strictEqual(state.inProgress, false);
       await walletDB.close();
     });
 
-    it('should migrate from last old migration state', async () => {
+    it('should not upgrade and run new migration w/o flag', async () => {
       WalletMigrations.migrations = {
+        0: MigrateMigrations,
         1: class extends AbstractMigration {
           async check() {
             return types.MIGRATE;
@@ -132,25 +186,73 @@ describe('Wallet Migrations', function() {
       await b.write();
       await walletDB.close();
 
-      let error;
-      try {
-        await walletDB.open();
-      } catch (e) {
-        error = e;
-      }
+      const expectedError = migrationError(WalletMigrations.migrations, [0, 2],
+        WDB_FLAG_ERROR);
 
-      const info = WalletMigrations.migrations[1].info();
-      assert(error, 'WalletDB must throw an error.');
-      assert.strictEqual(error.message, `Database needs migration.\n${info}`);
+      await assert.rejects(async () => {
+        await walletDB.open();
+      }, {
+        message: expectedError
+      });
 
       await ldb.open();
       const rawState = await ldb.get(layout.M.encode());
       const state = MigrationState.decode(rawState);
 
-      assert.strictEqual(state.lastMigration, 1);
+      assert.strictEqual(state.nextMigration, 0);
+      assert.strictEqual(state.lastMigration, -1);
       assert.strictEqual(state.skipped.length, 0);
       assert.strictEqual(state.inProgress, false);
       await ldb.close();
+    });
+
+    it('should upgrade and run new migration with flag', async () => {
+      let migrated1 = false;
+      let migrated2 = false;
+      WalletMigrations.migrations = {
+        0: MigrateMigrations,
+        1: class extends AbstractMigration {
+          async check() {
+            return types.MIGRATE;
+          }
+
+          async migrate() {
+            migrated1 = true;
+          }
+        },
+        2: class extends AbstractMigration {
+          async check() {
+            return types.MIGRATE;
+          }
+
+          async migrate() {
+            migrated2 = true;
+          }
+        }
+      };
+
+      await walletDB.open();
+
+      const b = ldb.batch();
+      b.del(layout.M.encode());
+      b.put(oldLayout.M.encode(0), null);
+      await b.write();
+      await walletDB.close();
+
+      walletDB.options.walletMigrate = true;
+      await walletDB.open();
+
+      assert.strictEqual(migrated1, false);
+      assert.strictEqual(migrated2, true);
+
+      const rawState = await ldb.get(layout.M.encode());
+      const state = MigrationState.decode(rawState);
+
+      assert.strictEqual(state.nextMigration, 3);
+      assert.strictEqual(state.lastMigration, 2);
+      assert.strictEqual(state.skipped.length, 0);
+      assert.strictEqual(state.inProgress, false);
+      await walletDB.close();
     });
   });
 
@@ -222,11 +324,13 @@ describe('Wallet Migrations', function() {
     it('should fail without migrate flag', async () => {
       WalletMigrations.migrations = migrationsBAK;
 
-      const info = WalletMigrations.migrations[1].info();
+      const expectedError = migrationError(WalletMigrations.migrations, [0, 1],
+        WDB_FLAG_ERROR);
+
       await assert.rejects(async () => {
         await walletDB.open();
       }, {
-        message: `Database needs migration.\n${info}`
+        message: expectedError
       });
     });
 
