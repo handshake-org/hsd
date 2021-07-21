@@ -8,14 +8,14 @@ const fs = require('bfile');
 const Network = require('../lib/protocol/network');
 const WalletDB = require('../lib/wallet/walletdb');
 const layouts = require('../lib/wallet/layout');
-const WalletMigrations = require('../lib/wallet/migrations');
+const WalletMigrator = require('../lib/wallet/migrations');
 const {MigrateMigrations} = require('../lib/wallet/migrations');
 const MigrationState = require('../lib/migrations/state');
+const AbstractMigration = require('../lib/migrations/migration');
 const {
-  AbstractMigration,
   types,
   oldLayout
-} = require('../lib/migrations/migrations');
+} = require('../lib/migrations/migrator');
 const {migrationError} = require('./util/migrations');
 const {rimraf, testdir} = require('./util/common');
 
@@ -29,7 +29,7 @@ const WDB_FLAG_ERROR = '`hsd --wallet-migrate` or `hsw --migrate`\n' +
 describe('Wallet Migrations', function() {
   describe('Migration State', function() {
     const location = testdir('migrate-wallet-ensure');
-    const migrationsBAK = WalletMigrations.migrations;
+    const migrationsBAK = WalletMigrator.migrations;
 
     const walletOptions = {
       prefix: location,
@@ -44,7 +44,7 @@ describe('Wallet Migrations', function() {
       walletDB = new WalletDB(walletOptions);
       ldb = walletDB.db;
 
-      WalletMigrations.migrations = migrationsBAK;
+      WalletMigrator.migrations = migrationsBAK;
     });
 
     afterEach(async () => {
@@ -73,7 +73,7 @@ describe('Wallet Migrations', function() {
       await b.write();
       await walletDB.close();
 
-      const expectedError = migrationError(WalletMigrations.migrations, [0, 1],
+      const expectedError = migrationError(WalletMigrator.migrations, [0, 1],
         WDB_FLAG_ERROR);
 
       await assert.rejects(async () => {
@@ -121,7 +121,7 @@ describe('Wallet Migrations', function() {
       await b.write();
       await walletDB.close();
 
-      const expectedError = migrationError(WalletMigrations.migrations, [0],
+      const expectedError = migrationError(WalletMigrator.migrations, [0],
         WDB_FLAG_ERROR);
 
       await assert.rejects(async () => {
@@ -164,7 +164,7 @@ describe('Wallet Migrations', function() {
     });
 
     it('should not upgrade and run new migration w/o flag', async () => {
-      WalletMigrations.migrations = {
+      WalletMigrator.migrations = {
         0: MigrateMigrations,
         1: class extends AbstractMigration {
           async check() {
@@ -186,7 +186,7 @@ describe('Wallet Migrations', function() {
       await b.write();
       await walletDB.close();
 
-      const expectedError = migrationError(WalletMigrations.migrations, [0, 2],
+      const expectedError = migrationError(WalletMigrator.migrations, [0, 2],
         WDB_FLAG_ERROR);
 
       await assert.rejects(async () => {
@@ -209,7 +209,7 @@ describe('Wallet Migrations', function() {
     it('should upgrade and run new migration with flag', async () => {
       let migrated1 = false;
       let migrated2 = false;
-      WalletMigrations.migrations = {
+      WalletMigrator.migrations = {
         0: MigrateMigrations,
         1: class extends AbstractMigration {
           async check() {
@@ -258,7 +258,7 @@ describe('Wallet Migrations', function() {
 
   describe('Migrate change address (integration)', function() {
     const location = testdir('wallet-change');
-    const migrationsBAK = WalletMigrations.migrations;
+    const migrationsBAK = WalletMigrator.migrations;
 
     const walletOptions = {
       prefix: location,
@@ -271,12 +271,12 @@ describe('Wallet Migrations', function() {
     let walletDB, ldb;
     const missingAddrs = [];
     before(async () => {
-      WalletMigrations.migrations = {};
+      WalletMigrator.migrations = {};
       await fs.mkdirp(location);
     });
 
     after(async () => {
-      WalletMigrations.migrations = migrationsBAK;
+      WalletMigrator.migrations = migrationsBAK;
       await rimraf(location);
     });
 
@@ -322,9 +322,9 @@ describe('Wallet Migrations', function() {
     });
 
     it('should fail without migrate flag', async () => {
-      WalletMigrations.migrations = migrationsBAK;
+      WalletMigrator.migrations = migrationsBAK;
 
-      const expectedError = migrationError(WalletMigrations.migrations, [0, 1],
+      const expectedError = migrationError(WalletMigrator.migrations, [0, 1],
         WDB_FLAG_ERROR);
 
       await assert.rejects(async () => {
@@ -335,7 +335,7 @@ describe('Wallet Migrations', function() {
     });
 
     it('should migrate with migrate flag', async () => {
-      WalletMigrations.migrations = migrationsBAK;
+      WalletMigrator.migrations = migrationsBAK;
       walletDB.options.walletMigrate = true;
 
       let rescan = false;

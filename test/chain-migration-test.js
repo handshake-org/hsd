@@ -10,13 +10,13 @@ const WorkerPool = require('../lib/workers/workerpool');
 const Miner = require('../lib/mining/miner');
 const Chain = require('../lib/blockchain/chain');
 const layout = require('../lib/blockchain/layout');
-const ChainMigrations = require('../lib/blockchain/migrations');
+const ChainMigrator = require('../lib/blockchain/migrations');
 const MigrationState = require('../lib/migrations/state');
+const AbstractMigration = require('../lib/migrations/migration');
 const {
-  AbstractMigration,
   types,
   oldLayout
-} = require('../lib/migrations/migrations');
+} = require('../lib/migrations/migrator');
 const {migrationError} = require('./util/migrations');
 const {rimraf, testdir} = require('./util/common');
 
@@ -27,7 +27,7 @@ const CHAIN_FLAG_ERROR = 'Restart with `hsd --chain-migrate`.';
 describe('Chain Migrations', function() {
   describe('Migration State', function() {
     const location = testdir('migrate-chain-ensure');
-    const migrationsBAK = ChainMigrations.migrations;
+    const migrationsBAK = ChainMigrator.migrations;
 
     const chainOptions = {
       prefix: location,
@@ -42,7 +42,7 @@ describe('Chain Migrations', function() {
       chainDB = chain.db;
       ldb = chainDB.db;
 
-      ChainMigrations.migrations = migrationsBAK;
+      ChainMigrator.migrations = migrationsBAK;
     });
 
     afterEach(async () => {
@@ -82,7 +82,7 @@ describe('Chain Migrations', function() {
       }
 
       assert(error, 'Chain must throw an error.');
-      const expected = migrationError(ChainMigrations.migrations, [0, 1],
+      const expected = migrationError(ChainMigrator.migrations, [0, 1],
         CHAIN_FLAG_ERROR);
       assert.strictEqual(error.message, expected);
 
@@ -146,7 +146,7 @@ describe('Chain Migrations', function() {
       }
 
       assert(error, 'Chain must throw an error.');
-      const expected = migrationError(ChainMigrations.migrations, [0],
+      const expected = migrationError(ChainMigrator.migrations, [0],
         CHAIN_FLAG_ERROR);
       assert.strictEqual(error.message, expected);
 
@@ -193,7 +193,7 @@ describe('Chain Migrations', function() {
     });
 
     it('should not run new migration w/o flag', async () => {
-      ChainMigrations.migrations = {
+      ChainMigrator.migrations = {
         0: migrationsBAK[0],
         1: class extends AbstractMigration {
           async check() {
@@ -239,7 +239,7 @@ describe('Chain Migrations', function() {
       }
 
       assert(error, 'Chain must throw an error.');
-      const expected = migrationError(ChainMigrations.migrations, [0, 2],
+      const expected = migrationError(ChainMigrator.migrations, [0, 2],
         CHAIN_FLAG_ERROR);
       assert.strictEqual(error.message, expected);
 
@@ -257,7 +257,7 @@ describe('Chain Migrations', function() {
     it('should run migration upgrade and new migration', async () => {
       let migrated1 = false;
       let migrated2 = false;
-      ChainMigrations.migrations = {
+      ChainMigrator.migrations = {
         0: migrationsBAK[0],
         1: class extends AbstractMigration {
           async check() {
@@ -330,7 +330,7 @@ describe('Chain Migrations', function() {
 
   describe('Migration ChainState (integration)', function() {
     const location = testdir('migrate-chain-state');
-    const migrationsBAK = ChainMigrations.migrations;
+    const migrationsBAK = ChainMigrator.migrations;
 
     const workers = new WorkerPool({
       enabled: true,
@@ -346,13 +346,13 @@ describe('Chain Migrations', function() {
 
     let chain, miner, cpu;
     before(async () => {
-      ChainMigrations.migrations = {};
+      ChainMigrator.migrations = {};
       await fs.mkdirp(location);
       await workers.open();
     });
 
     after(async () => {
-      ChainMigrations.migrations = migrationsBAK;
+      ChainMigrator.migrations = migrationsBAK;
       await rimraf(location);
       await workers.close();
     });
@@ -399,14 +399,14 @@ describe('Chain Migrations', function() {
     });
 
     it('should enable chain state migration', () => {
-      ChainMigrations.migrations = {
-        0: ChainMigrations.MigrateMigrations,
-        1: ChainMigrations.MigrateChainState
+      ChainMigrator.migrations = {
+        0: ChainMigrator.MigrateMigrations,
+        1: ChainMigrator.MigrateChainState
       };
     });
 
     it('should throw error when new migration is available', async () => {
-      const expected = migrationError(ChainMigrations.migrations, [0, 1], CHAIN_FLAG_ERROR);
+      const expected = migrationError(ChainMigrator.migrations, [0, 1], CHAIN_FLAG_ERROR);
       await assert.rejects(async () => {
         await chain.open();
       }, {

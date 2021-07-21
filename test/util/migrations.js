@@ -12,8 +12,8 @@ const Network = require('../../lib/protocol/network');
 const bdb = require('bdb');
 
 const {
-  Migrations
-} = require('../../lib/migrations/migrations');
+  Migrator
+} = require('../../lib/migrations/migrator');
 
 const oldMockLayout = {
   V: bdb.key('V'),
@@ -53,7 +53,7 @@ class MockChainDB {
     this.prune = this.options.prune;
 
     // This is here for testing purposes.
-    this.migrations = new MockChainDBMigrations({
+    this.migrations = new MockChainDBMitrator({
       ...this.options,
       db: this,
       dbVersion: this.dbVersion
@@ -141,16 +141,16 @@ class MockChainDBOptions {
   }
 }
 
-class MockChainDBMigrations extends Migrations {
+class MockChainDBMitrator extends Migrator {
   constructor(options) {
-    super(new MockChainDBMigrationsOptions(options));
+    super(new MockChainDBMigratorOptions(options));
 
     this.logger = this.options.logger.context('mock-migrations');
     this.flagError = DB_FLAG_ERROR;
   }
 }
 
-class MockChainDBMigrationsOptions {
+class MockChainDBMigratorOptions {
   constructor(options) {
     this.network = options.network;
     this.logger = options.logger;
@@ -179,7 +179,7 @@ class MockChainDBMigrationsOptions {
 
 exports.migrations = {};
 exports.MockChainDB = MockChainDB;
-exports.MockChainDBMigrations = MockChainDBMigrations;
+exports.MockChainDBMigrator = MockChainDBMitrator;
 exports.mockLayout = mockLayout;
 exports.oldMockLayout = oldMockLayout;
 exports.DB_FLAG_ERROR = DB_FLAG_ERROR;

@@ -7,11 +7,11 @@ const assert = require('bsert');
 const fs = require('bfile');
 const Logger = require('blgr');
 const MigrationState = require('../lib/migrations/state');
+const AbstractMigration = require('../lib/migrations/migration');
 const {
-  AbstractMigration,
-  Migrations,
+  Migrator,
   types
-} = require('../lib/migrations/migrations');
+} = require('../lib/migrations/migrator');
 const {
   DB_FLAG_ERROR,
   MockChainDB,
@@ -357,7 +357,7 @@ describe('Migrations', function() {
       ];
 
       for (const {opts, err} of errors)
-        assert.throws(() => new Migrations(opts), { message: err });
+        assert.throws(() => new Migrator(opts), { message: err });
     });
   });
 
