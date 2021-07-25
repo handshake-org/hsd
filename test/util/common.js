@@ -89,14 +89,14 @@ common.writeTX = function writeTX(name, tx, view) {
 };
 
 common.testdir = function(name) {
-  assert(/^[a-z\-]+$/.test(name), 'Invalid name');
+  assert(/^[a-z0-9\-]+$/.test(name), 'Invalid name');
 
   const uniq = randomBytes(4).toString('hex');
   return path.join(tmpdir(), `hsd-test-${name}-${uniq}`);
 };
 
 common.rimraf = async function(p) {
-  const allowed = /hsd\-test\-[a-z\-]+\-[a-f0-9]{8}((\\|\/)[a-z]+)?$/;
+  const allowed = /hsd\-test\-[a-z0-9\-]+\-[a-f0-9]{8}((\\|\/)[a-z]+)?$/;
   if (!allowed.test(p))
     throw new Error(`Path not allowed: ${p}.`);
 

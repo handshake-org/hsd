@@ -42,15 +42,23 @@ We don't want to run migrations without notifying users about them first. The
 main reason is the time it may take and the downtime it may cause. Also, it
 needs to be conscious decision, because in some cases it's better to back up
 existing database. (wallet)
+But we also provide option for the projects depending on the hsd to decide for
+their users on each release. Wallet and Chain accept
+`hsd --chain-migrate=N`/`--wallet-migrate=N` flags
+(or `hsw --migrate=N` for separate wallet)
+which is number of the latest migration to run specific to that db.
 
-  - If there's a migration available for the db, running the node will fail.
-  - If there's no migration but you pass the migration flag, it will fail.
-    - We don't want users to constantly run nodes with this flag (or maybe
-      someone used config file, so they don't forget to remove the config)
-  - If there's migration and migration flag is passed, all migrations will run.
+ - Flag not set:
+   - no available migrations: nothing
+   - migrations have to run: fail with migration available error. (list)
+ - Flag == lastID
+   - no available migration: nothing
+   - migrations have to run: run the migrations
+ - Flag != lastID
+   - no available migration: fail with ID not matching error
+   - migrations have to run: fail with migration available error. (list)
 
-For fullnode use `hsd --chain-migrate` and for wallet
-`hsd --wallet-migrate` or `hsw --migrate`.
+You can also check `test/migrations-test.js - Migrate flag` test cases.
 
 ### Migration versions
 Migrations version start from 0 (which is `migrations` migration) and is

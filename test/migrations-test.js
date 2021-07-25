@@ -19,7 +19,7 @@ const {
 } = require('./util/migrations');
 const {rimraf, testdir} = require('./util/common');
 
-class MockMigration extends AbstractMigration {
+class MockMigration1 extends AbstractMigration {
   async check() {
     return types.MIGRATE;
   }
@@ -30,313 +30,482 @@ class MockMigration extends AbstractMigration {
 
   static info() {
     return {
-      name: 'mock migration',
-      description: 'mock description'
+      name: 'mock migration 1',
+      description: 'mock description 1'
+    };
+  }
+}
+
+class MockMigration2 extends AbstractMigration {
+  async check() {
+    return types.MIGRATE;
+  }
+
+  async migrate() {
+    return true;
+  }
+
+  static info() {
+    return {
+      name: 'mock migration 2',
+      description: 'mock description 2'
     };
   }
 }
 
 describe('Migrations', function() {
-  let location, defaultOptions;
+  describe('Migrate flag', function() {
+    let location, defaultOptions;
 
-  beforeEach(async () => {
-    location = testdir('migration');
-    defaultOptions = {
-      prefix: location,
-      memory: false
-    };
-    await fs.mkdirp(location);
-  });
-
-  afterEach(async () => {
-    await rimraf(location);
-  });
-
-  async function initDB() {
-    const db = new MockChainDB(defaultOptions);
-    await db.open();
-    await db.close();
-  }
-
-  it('should initialize fresh migration state', async () => {
-    const db = new MockChainDB(defaultOptions);
-    const {migrations} = db;
-
-    await db.open();
-    const state = await migrations.getState();
-    assert.strictEqual(state.inProgress, false);
-    assert.strictEqual(state.nextMigration, 0);
-    await db.close();
-  });
-
-  it('should fail migration on non-existent db', async () => {
-    const db = new MockChainDB({
-      ...defaultOptions,
-      migrateFlag: true
-    });
-
-    await assert.rejects(async () => {
+    async function initDB() {
+      const db = new MockChainDB(defaultOptions);
       await db.open();
-    }, {
-      message: 'Database does not exist.'
+      await db.close();
+    }
+
+    beforeEach(async () => {
+      location = testdir('migration');
+      defaultOptions = {
+        prefix: location,
+        memory: false,
+        migrations: {
+          0: MockMigration1
+        }
+      };
+      await fs.mkdirp(location);
+      await initDB();
     });
-  });
 
-  it('should throw if there are no migrations', async () => {
-    await initDB();
-
-    const db = new MockChainDB({
-      ...defaultOptions,
-      migrateFlag: true
+    afterEach(async () => {
+      await rimraf(location);
     });
 
-    await assert.rejects(async () => {
+    it('should do nothing w/o new migrations & w/o flag', async () => {
+      const db = new MockChainDB({
+        ...defaultOptions
+      });
+
       await db.open();
-    }, {
-      message: 'There are no available migrations.'
-    });
-  });
-
-  it('should fail if there are available migrations', async () => {
-    await initDB();
-
-    const migrations = { 0: MockMigration };
-    const db = new MockChainDB({
-      ...defaultOptions,
-      migrations
+      await db.close();
     });
 
-    const error = migrationError(migrations, [0], DB_FLAG_ERROR);
-    await assert.rejects(async () => {
+    it('should fail with new migration & w/o flag', async () => {
+      const migrations = {
+        0: MockMigration1,
+        1: MockMigration2
+      };
+      const db = new MockChainDB({
+        ...defaultOptions,
+        migrations
+      });
+
+      const error = migrationError(migrations, [1], DB_FLAG_ERROR);
+      await assert.rejects(async () => {
+        await db.open();
+      }, {
+        message: error
+      });
+    });
+
+    it('should do nothing w/o new migrations & with correct flag', async () => {
+      const db = new MockChainDB({
+        ...defaultOptions,
+        migrateFlag: 0
+      });
+
       await db.open();
-    }, {
-      message: error
+      await db.close();
     });
-  });
 
-  it('should migrate', async () => {
-    await initDB();
-
-    let migrated1 = false;
-    let migrated2 = false;
-
-    const db = new MockChainDB({
-      ...defaultOptions,
-      migrateFlag: true,
-      migrations: {
-        0: class extends AbstractMigration {
-          async check() {
-            return types.MIGRATE;
-          }
-          async migrate() {
-            migrated1 = true;
-          }
-        },
+    it('should do run migrations with correct flag', async () => {
+      let migrated = false;
+      const migrations = {
+        0: MockMigration1,
         1: class extends AbstractMigration {
           async check() {
             return types.MIGRATE;
           }
           async migrate() {
-            migrated2 = true;
+            migrated = true;
           }
         }
-      }
+      };
+      const db = new MockChainDB({
+        ...defaultOptions,
+        migrateFlag: 1,
+        migrations
+      });
+
+      await db.open();
+      assert.strictEqual(migrated, true);
+      await db.close();
     });
 
-    await db.open();
+    it('should fail w/o new migration & with incorrect flag', async () => {
+      const db = new MockChainDB({
+        ...defaultOptions,
+        migrateFlag: 1
+      });
 
-    const lastID = db.migrations.getLastMigrationID();
-    const state = await db.migrations.getState();
+      await assert.rejects(async () => {
+        await db.open();
+      }, {
+        message: 'Migrate flag 1 does not match last ID: 0'
+      });
+    });
 
-    assert.strictEqual(state.nextMigration, 2);
-    assert.strictEqual(lastID, 1);
-    assert.strictEqual(migrated1, true);
-    assert.strictEqual(migrated2, true);
-    await db.close();
+    it('should fail with new migrations & incorrect flag', async () => {
+      const migrations = {
+        0: MockMigration1,
+        1: MockMigration2
+      };
+
+      const db = new MockChainDB({
+        ...defaultOptions,
+        migrateFlag: 0,
+        migrations
+      });
+
+      const error = migrationError(migrations, [1], DB_FLAG_ERROR);
+      await assert.rejects(async () => {
+        await db.open();
+      }, {
+        message: error
+      });
+    });
   });
 
-  it('should show in progress migration status', async () => {
-    await initDB();
+  describe('Running migrations', function() {
+    let location, defaultOptions;
 
-    let migrated1 = false;
-    let migrated2 = false;
-
-    const db = new MockChainDB({
-      ...defaultOptions,
-      migrateFlag: true,
-      migrations: {
-        0: class extends AbstractMigration {
-          async check() {
-            return types.MIGRATE;
-          }
-          async migrate() {
-            if (!migrated1) {
-              migrated1 = true;
-              throw new Error('in progress error1');
-            }
-          }
-        },
-        1: class extends AbstractMigration {
-          async check() {
-            return types.MIGRATE;
-          }
-
-          async migrate() {
-            if (!migrated2) {
-              migrated2 = true;
-              throw new Error('in progress error2');
-            }
-          }
-        }
-      }
-    });
-
-    await assert.rejects(async () => {
+    async function initDB() {
+      const db = new MockChainDB(defaultOptions);
       await db.open();
-    }, {
-      message: 'in progress error1'
+      await db.close();
+    }
+
+    beforeEach(async () => {
+      location = testdir('migration');
+      defaultOptions = {
+        prefix: location,
+        memory: false
+      };
+      await fs.mkdirp(location);
+      await initDB();
     });
 
-    {
-      // check the state is correct.
-      await db.db.open();
+    afterEach(async () => {
+      await rimraf(location);
+    });
 
-      const state = await db.migrations.getState();
-      assert.strictEqual(state.inProgress, true);
+    it('should initialize fresh migration state', async () => {
+      await rimraf(location);
+
+      const db = new MockChainDB(defaultOptions);
+      const {migrations} = db;
+
+      await db.open();
+      const state = await migrations.getState();
+      assert.strictEqual(state.inProgress, false);
       assert.strictEqual(state.nextMigration, 0);
-
-      await db.db.close();
-    }
-
-    await assert.rejects(async () => {
-      await db.open();
-    }, {
-      message: 'in progress error2'
+      await db.close();
     });
 
-    {
-      // check the state is correct.
-      await db.db.open();
+    it('should fail migration on non-existent db', async () => {
+      await rimraf(location);
+
+      const db = new MockChainDB({
+        ...defaultOptions,
+        migrateFlag: 0
+      });
+
+      await assert.rejects(async () => {
+        await db.open();
+      }, {
+        message: 'Database does not exist.'
+      });
+    });
+
+    it('should throw if migrateFlag is incorrect', async () => {
+      const db = new MockChainDB({
+        ...defaultOptions,
+        migrateFlag: 0
+      });
+
+      await assert.rejects(async () => {
+        await db.open();
+      }, {
+        message: 'Migrate flag 0 does not match last ID: -1'
+      });
+    });
+
+    it('should fail if there are available migrations', async () => {
+      const migrations = { 0: MockMigration1 };
+      const db = new MockChainDB({
+        ...defaultOptions,
+        migrations
+      });
+
+      const error = migrationError(migrations, [0], DB_FLAG_ERROR);
+      await assert.rejects(async () => {
+        await db.open();
+      }, {
+        message: error
+      });
+    });
+
+    it('should fail if there are available migrations with id', async () => {
+      const migrations = {
+        0: class extends AbstractMigration {
+          async check() {}
+          async migrate() {}
+          static info() {
+            return {
+              name: 'mig1',
+              description: 'desc1'
+            };
+          }
+        },
+        1: class extends AbstractMigration {
+          async check() {}
+          async migrate() {}
+          static info() {
+            return {
+              name: 'mig2',
+              description: 'desc2'
+            };
+          }
+        }
+      };
+
+      const db = new MockChainDB({
+        ...defaultOptions,
+        migrateFlag: 0,
+        migrations: migrations
+      });
+
+      const error = migrationError(migrations, [0, 1], DB_FLAG_ERROR);
+      await assert.rejects(async () => {
+        await db.open();
+      }, {
+        message: error
+      });
+    });
+
+    it('should migrate', async () => {
+      let migrated1 = false;
+      let migrated2 = false;
+
+      const db = new MockChainDB({
+        ...defaultOptions,
+        migrateFlag: 1,
+        migrations: {
+          0: class extends AbstractMigration {
+            async check() {
+              return types.MIGRATE;
+            }
+            async migrate() {
+              migrated1 = true;
+            }
+          },
+          1: class extends AbstractMigration {
+            async check() {
+              return types.MIGRATE;
+            }
+            async migrate() {
+              migrated2 = true;
+            }
+          }
+        }
+      });
+
+      await db.open();
+
+      const lastID = db.migrations.getLastMigrationID();
+      const state = await db.migrations.getState();
+
+      assert.strictEqual(state.nextMigration, 2);
+      assert.strictEqual(lastID, 1);
+      assert.strictEqual(migrated1, true);
+      assert.strictEqual(migrated2, true);
+      await db.close();
+    });
+
+    it('should show in progress migration status', async () => {
+      let migrated1 = false;
+      let migrated2 = false;
+
+      const db = new MockChainDB({
+        ...defaultOptions,
+        migrateFlag: 1,
+        migrations: {
+          0: class extends AbstractMigration {
+            async check() {
+              return types.MIGRATE;
+            }
+            async migrate() {
+              if (!migrated1) {
+                migrated1 = true;
+                throw new Error('in progress error1');
+              }
+            }
+          },
+          1: class extends AbstractMigration {
+            async check() {
+              return types.MIGRATE;
+            }
+
+            async migrate() {
+              if (!migrated2) {
+                migrated2 = true;
+                throw new Error('in progress error2');
+              }
+            }
+          }
+        }
+      });
+
+      await assert.rejects(async () => {
+        await db.open();
+      }, {
+        message: 'in progress error1'
+      });
+
+      {
+        // check the state is correct.
+        await db.db.open();
+
+        const state = await db.migrations.getState();
+        assert.strictEqual(state.inProgress, true);
+        assert.strictEqual(state.nextMigration, 0);
+
+        await db.db.close();
+      }
+
+      await assert.rejects(async () => {
+        await db.open();
+      }, {
+        message: 'in progress error2'
+      });
+
+      {
+        // check the state is correct.
+        await db.db.open();
+
+        const state = await db.migrations.getState();
+        assert.strictEqual(state.inProgress, true);
+        assert.strictEqual(state.nextMigration, 1);
+
+        await db.db.close();
+      }
+
+      await db.open();
+      const state = await db.migrations.getState();
+      assert.strictEqual(state.inProgress, false);
+      assert.strictEqual(state.nextMigration, 2);
+      assert.strictEqual(migrated1, true);
+      assert.strictEqual(migrated2, true);
+      await db.close();
+    });
+
+    it('should fake migrate if it does not apply', async () => {
+      let migrate = false;
+      const db = new MockChainDB({
+        ...defaultOptions,
+        migrateFlag: 0,
+        migrations: {
+          0: class extends AbstractMigration {
+            async check() {
+              return types.FAKE_MIGRATE;
+            }
+
+            async migrate() {
+              migrate = true;
+            }
+          }
+        }
+      });
+
+      await db.open();
 
       const state = await db.migrations.getState();
-      assert.strictEqual(state.inProgress, true);
+      assert.strictEqual(state.inProgress, false);
       assert.strictEqual(state.nextMigration, 1);
+      assert.strictEqual(migrate, false);
 
-      await db.db.close();
-    }
-
-    await db.open();
-    const state = await db.migrations.getState();
-    assert.strictEqual(state.inProgress, false);
-    assert.strictEqual(state.nextMigration, 2);
-    assert.strictEqual(migrated1, true);
-    assert.strictEqual(migrated2, true);
-    await db.close();
-  });
-
-  it('should fake migrate if it does not apply', async () => {
-    await initDB();
-
-    let migrate = false;
-    const db = new MockChainDB({
-      ...defaultOptions,
-      migrateFlag: true,
-      migrations: {
-        0: class extends AbstractMigration {
-          async check() {
-            return types.FAKE_MIGRATE;
-          }
-
-          async migrate() {
-            migrate = true;
-          }
-        }
-      }
+      await db.close();
     });
 
-    await db.open();
+    it('should skip migrations if it cant be fullfilled', async () => {
+      let checked = 0;
+      let showedWarning = 0;
+      let migrated = 0;
 
-    const state = await db.migrations.getState();
-    assert.strictEqual(state.inProgress, false);
-    assert.strictEqual(state.nextMigration, 1);
-    assert.strictEqual(migrate, false);
+      const db = new MockChainDB({
+        ...defaultOptions,
+        migrateFlag: 0,
+        migrations: {
+          0: class extends AbstractMigration {
+            async check() {
+              checked++;
+              return types.SKIP;
+            }
 
-    await db.close();
-  });
+            async warning() {
+              showedWarning++;
+            }
 
-  it('should skip migrations if it cant be fullfilled', async () => {
-    await initDB();
-
-    let checked = 0;
-    let showedWarning = 0;
-    let migrated = 0;
-
-    const db = new MockChainDB({
-      ...defaultOptions,
-      migrateFlag: true,
-      migrations: {
-        0: class extends AbstractMigration {
-          async check() {
-            checked++;
-            return types.SKIP;
-          }
-
-          async warning() {
-            showedWarning++;
-          }
-
-          async migrate() {
-            migrated++;
+            async migrate() {
+              migrated++;
+            }
           }
         }
-      }
-    });
+      });
 
-    await db.open();
-
-    const state = await db.migrations.getState();
-    assert.strictEqual(state.inProgress, false);
-    assert.strictEqual(state.nextMigration, 1);
-    assert.deepStrictEqual(state.skipped, [0]);
-
-    assert.strictEqual(checked, 1);
-    assert.strictEqual(showedWarning, 1);
-    assert.strictEqual(migrated, 0);
-
-    await db.close();
-
-    db.migrations.migrateFlag = false;
-    await db.open();
-    const state2 = await db.migrations.getState();
-    assert.strictEqual(state2.inProgress, false);
-    assert.strictEqual(state2.nextMigration, 1);
-    assert.deepStrictEqual(state2.skipped, [0]);
-
-    assert.strictEqual(checked, 1);
-    assert.strictEqual(showedWarning, 2);
-    assert.strictEqual(migrated, 0);
-    await db.close();
-  });
-
-  it('should fail with unknown migration type', async () => {
-    await initDB();
-
-    const db = new MockChainDB({
-      ...defaultOptions,
-      migrateFlag: true,
-      migrations: {
-        0: class extends AbstractMigration {
-          async check() {
-            return -1;
-          }
-        }
-      }
-    });
-
-    await assert.rejects(async () => {
       await db.open();
-    }, {
-      message: 'Unknown migration type.'
+
+      const state = await db.migrations.getState();
+      assert.strictEqual(state.inProgress, false);
+      assert.strictEqual(state.nextMigration, 1);
+      assert.deepStrictEqual(state.skipped, [0]);
+
+      assert.strictEqual(checked, 1);
+      assert.strictEqual(showedWarning, 1);
+      assert.strictEqual(migrated, 0);
+
+      await db.close();
+
+      db.migrations.migrateFlag = -1;
+      await db.open();
+      const state2 = await db.migrations.getState();
+      assert.strictEqual(state2.inProgress, false);
+      assert.strictEqual(state2.nextMigration, 1);
+      assert.deepStrictEqual(state2.skipped, [0]);
+
+      assert.strictEqual(checked, 1);
+      assert.strictEqual(showedWarning, 2);
+      assert.strictEqual(migrated, 0);
+      await db.close();
+    });
+
+    it('should fail with unknown migration type', async () => {
+      const db = new MockChainDB({
+        ...defaultOptions,
+        migrateFlag: 0,
+        migrations: {
+          0: class extends AbstractMigration {
+            async check() {
+              return -1;
+            }
+          }
+        }
+      });
+
+      await assert.rejects(async () => {
+        await db.open();
+      }, {
+        message: 'Unknown migration type.'
+      });
     });
   });
 

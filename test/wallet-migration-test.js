@@ -27,14 +27,23 @@ const WDB_FLAG_ERROR = '`hsd --wallet-migrate` or `hsw --migrate`\n' +
   '(Full node may be required for rescan)';
 
 describe('Wallet Migrations', function() {
-  describe('Migration State', function() {
+  describe('General (v0...)', function() {
     const location = testdir('migrate-wallet-ensure');
     const migrationsBAK = WalletMigrator.migrations;
+    const lastMigrationID = Math.max(...Object.keys(migrationsBAK));
 
     const walletOptions = {
       prefix: location,
       memory: false,
       network: network
+    };
+
+    const getIDs = (min, max) => {
+      const ids = new Set();
+      for (let i = min; i <= max; i++)
+        ids.add(i);
+
+      return ids;
     };
 
     let walletDB, ldb;
@@ -51,6 +60,147 @@ describe('Wallet Migrations', function() {
       if (ldb.opened)
         await ldb.close();
       await rimraf(location);
+    });
+
+    after(() => {
+      WalletMigrator.migrations = migrationsBAK;
+    });
+
+    it('should initialize fresh walletdb migration state', async () => {
+      await walletDB.open();
+
+      const rawState = await ldb.get(layout.M.encode());
+      const state = MigrationState.decode(rawState);
+
+      assert.strictEqual(state.lastMigration, lastMigrationID);
+      assert.strictEqual(state.nextMigration, lastMigrationID + 1);
+      assert.strictEqual(state.skipped.length, 0);
+      assert.strictEqual(state.inProgress, false);
+
+      await walletDB.close();
+    });
+
+    it('should not migrate pre-old migration state w/o flag', async () => {
+      await walletDB.open();
+      const b = ldb.batch();
+      b.del(layout.M.encode());
+      await b.write();
+      await walletDB.close();
+
+      const ids = getIDs(0, lastMigrationID);
+      const expectedError = migrationError(WalletMigrator.migrations, [...ids],
+        WDB_FLAG_ERROR);
+
+      await assert.rejects(async () => {
+        await walletDB.open();
+      }, {
+        message: expectedError
+      });
+
+      await ldb.open();
+      const rawState = await ldb.get(layout.M.encode());
+      const state = MigrationState.decode(rawState);
+
+      assert.strictEqual(state.nextMigration, 0);
+      assert.strictEqual(state.lastMigration, -1);
+      assert.strictEqual(state.skipped.length, 0);
+      assert.strictEqual(state.inProgress, false);
+      await ldb.close();
+    });
+
+    // special case
+    it('should not migrate from last old migration state w/o flag', async () => {
+      await walletDB.open();
+
+      const b = ldb.batch();
+      b.del(layout.M.encode());
+      b.put(oldLayout.M.encode(0), null);
+      await b.write();
+      await walletDB.close();
+
+      const ids = getIDs(0 ,lastMigrationID);
+      ids.delete(1);
+      const expectedError = migrationError(WalletMigrator.migrations, [...ids],
+        WDB_FLAG_ERROR);
+
+      await assert.rejects(async () => {
+        await walletDB.open();
+      }, {
+        message: expectedError
+      });
+
+      await ldb.open();
+      const rawState = await ldb.get(layout.M.encode());
+      const state = MigrationState.decode(rawState);
+
+      assert.strictEqual(state.nextMigration, 0);
+      assert.strictEqual(state.lastMigration, -1);
+      assert.strictEqual(state.skipped.length, 0);
+      assert.strictEqual(state.inProgress, false);
+
+      await ldb.close();
+    });
+
+    it('should upgrade and run new migration with flag', async () => {
+      await walletDB.open();
+
+      const b = ldb.batch();
+      b.del(layout.M.encode());
+      b.put(oldLayout.M.encode(0), null);
+      writeVersion(b, 'wallet', 0);
+      await b.write();
+      await walletDB.close();
+
+      walletDB.options.walletMigrate = lastMigrationID;
+      await walletDB.open();
+
+      const versionData = await ldb.get(layout.V.encode());
+      const version = getVersion(versionData, 'wallet');
+      assert.strictEqual(version, walletDB.version);
+
+      const rawState = await ldb.get(layout.M.encode());
+      const state = MigrationState.decode(rawState);
+
+      assert.strictEqual(state.lastMigration, lastMigrationID);
+      assert.strictEqual(state.nextMigration, lastMigrationID + 1);
+      assert.strictEqual(state.skipped.length, 0);
+      assert.strictEqual(state.inProgress, false);
+      await walletDB.close();
+    });
+  });
+
+  describe('Migrations v0..v1', function() {
+    const location = testdir('migrate-wallet-v1-v2');
+    const migrationsBAK = WalletMigrator.migrations;
+    const testMigrations = {
+      0: WalletMigrator.migrations[0],
+      1: WalletMigrator.migrations[1]
+    };
+
+    const walletOptions = {
+      prefix: location,
+      memory: false,
+      network: network
+    };
+
+    let walletDB, ldb;
+    beforeEach(async () => {
+      await fs.mkdirp(location);
+
+      walletDB = new WalletDB(walletOptions);
+      ldb = walletDB.db;
+
+      WalletMigrator.migrations = testMigrations;
+    });
+
+    afterEach(async () => {
+      if (ldb.opened)
+        await ldb.close();
+      await rimraf(location);
+    });
+
+    after(() => {
+      WalletMigrator.migrations = migrationsBAK;
     });
 
     it('should initialize fresh walletdb migration state', async () => {
@@ -97,11 +247,17 @@ describe('Wallet Migrations', function() {
       await walletDB.open();
       const b = ldb.batch();
       b.del(layout.M.encode());
+      writeVersion(b, 'wallet', 0);
       await b.write();
       await walletDB.close();
 
-      walletDB.options.walletMigrate = true;
+      walletDB.options.walletMigrate = 1;
       await walletDB.open();
+
+      const versionData = await ldb.get(layout.V.encode());
+      const version = getVersion(versionData, 'wallet');
+      assert.strictEqual(version, 1);
+
       const rawState = await ldb.get(layout.M.encode());
       const state = MigrationState.decode(rawState);
 
@@ -151,7 +307,7 @@ describe('Wallet Migrations', function() {
       await b.write();
       await walletDB.close();
 
-      walletDB.options.walletMigrate = true;
+      walletDB.options.walletMigrate = 1;
       await walletDB.open();
       const rawState = await ldb.get(layout.M.encode());
       const state = MigrationState.decode(rawState);
@@ -236,14 +392,19 @@ describe('Wallet Migrations', function() {
       const b = ldb.batch();
       b.del(layout.M.encode());
       b.put(oldLayout.M.encode(0), null);
+      writeVersion(b, 'wallet', 0);
       await b.write();
       await walletDB.close();
 
-      walletDB.options.walletMigrate = true;
+      walletDB.options.walletMigrate = 2;
       await walletDB.open();
 
       assert.strictEqual(migrated1, false);
       assert.strictEqual(migrated2, true);
+
+      const versionData = await ldb.get(layout.V.encode());
+      const version = getVersion(versionData, 'wallet');
+      assert.strictEqual(version, 1);
 
       const rawState = await ldb.get(layout.M.encode());
       const state = MigrationState.decode(rawState);
@@ -321,10 +482,14 @@ describe('Wallet Migrations', function() {
       await walletDB.close();
     });
 
-    it('should fail without migrate flag', async () => {
-      WalletMigrator.migrations = migrationsBAK;
+    it('should enable wallet change migration', () => {
+      WalletMigrator.migrations = {
+        0: WalletMigrator.MigrateChangeAddress
+      };
+    });
 
-      const expectedError = migrationError(WalletMigrator.migrations, [0, 1],
+    it('should fail without migrate flag', async () => {
+      const expectedError = migrationError(WalletMigrator.migrations, [0],
         WDB_FLAG_ERROR);
 
       await assert.rejects(async () => {
@@ -335,8 +500,7 @@ describe('Wallet Migrations', function() {
     });
 
     it('should migrate with migrate flag', async () => {
-      WalletMigrator.migrations = migrationsBAK;
-      walletDB.options.walletMigrate = true;
+      walletDB.options.walletMigrate = 0;
 
       let rescan = false;
       walletDB.scan = () => {
@@ -357,3 +521,24 @@ describe('Wallet Migrations', function() {
     });
   });
 });
+
+function writeVersion(b, name, version) {
+    const value = Buffer.alloc(name.length + 4);
+
+    value.write(name, 0, 'ascii');
+    value.writeUInt32LE(version, name.length);
+
+    b.put(layout.V.encode(), value);
+}
+
+function getVersion(data, name) {
+  const error = 'version mismatch';
+
+  if (data.length !== name.length + 4)
+    throw new Error(error);
+
+  if (data.toString('ascii', 0, name.length) !== name)
+    throw new Error(error);
+
+  return data.readUInt32LE(name.length);
+}

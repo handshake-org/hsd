@@ -86,7 +86,7 @@ class MockChainDBOptions {
     this.spv = false;
     this.prune = false;
 
-    this.migrateFlag = false;
+    this.migrateFlag = -1;
     this.migrations = null;
 
     this.fromOptions(options);
@@ -130,7 +130,7 @@ class MockChainDBOptions {
     }
 
     if (options.migrateFlag != null) {
-      assert(typeof options.migrateFlag === 'boolean');
+      assert(typeof options.migrateFlag === 'number');
       this.migrateFlag = options.migrateFlag;
     }
 
