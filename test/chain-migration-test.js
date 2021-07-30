@@ -184,6 +184,62 @@ describe('Chain Migrations', function() {
       assert.strictEqual(state.inProgress, false);
       await chain.close();
     });
+
+    it('should not run with forceFlags when there are migrations', async () => {
+      await chain.open();
+      const rawState = await ldb.get(layout.M.encode());
+      const state = MigrationState.decode(rawState);
+      state.nextMigration -= 1;
+      await ldb.put(layout.M.encode(), state.encode());
+      await chain.close();
+
+      chain.options.forceFlags = true;
+
+      let error;
+      try {
+        await chain.open();
+      } catch (e) {
+        error = e;
+        chain.opened = false;
+      }
+
+      assert(error, 'Chain should throw an error');
+      assert.strictEqual(error.message,
+        'Migrations can not run with `forceFlags`');
+    });
+
+    it('should run with forceFlags when there are no migrations', async () => {
+      await chain.open();
+      await chain.close();
+
+      chain.options.forceFlags = true;
+      await chain.open();
+      await chain.close();
+      chain.options.forceFlags = false;
+    });
+
+    it('should check chaindb flags if there are migrations', async () => {
+      await chain.open();
+      const rawState = await ldb.get(layout.M.encode());
+      const state = MigrationState.decode(rawState);
+      state.nextMigration -= 1;
+      await ldb.put(layout.M.encode(), state.encode());
+      await chain.close();
+
+      chain.options.spv = true;
+
+      let error;
+      try {
+        await chain.open();
+      } catch (e) {
+        error = e;
+        chain.opened = false;
+      }
+
+      assert(error, 'Chain should throw an error');
+      assert.strictEqual(error.message,
+        'Cannot retroactively enable SPV.');
+    });
   });
 
   describe('Migrations v1..v2', function() {
