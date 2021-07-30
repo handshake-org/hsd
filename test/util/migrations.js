@@ -53,7 +53,7 @@ class MockChainDB {
     this.prune = this.options.prune;
 
     // This is here for testing purposes.
-    this.migrations = new MockChainDBMitrator({
+    this.migrations = new MockChainDBMigrator({
       ...this.options,
       db: this,
       dbVersion: this.dbVersion
@@ -141,7 +141,7 @@ class MockChainDBOptions {
   }
 }
 
-class MockChainDBMitrator extends Migrator {
+class MockChainDBMigrator extends Migrator {
   constructor(options) {
     super(new MockChainDBMigratorOptions(options));
 
@@ -179,7 +179,7 @@ class MockChainDBMigratorOptions {
 
 exports.migrations = {};
 exports.MockChainDB = MockChainDB;
-exports.MockChainDBMigrator = MockChainDBMitrator;
+exports.MockChainDBMigrator = MockChainDBMigrator;
 exports.mockLayout = mockLayout;
 exports.oldMockLayout = oldMockLayout;
 exports.DB_FLAG_ERROR = DB_FLAG_ERROR;

@@ -22,7 +22,9 @@ const {rimraf, testdir} = require('./util/common');
 
 const network = Network.get('regtest');
 
-const CHAIN_FLAG_ERROR = 'Restart with `hsd --chain-migrate`.';
+const chainFlagError = (id) => {
+  return `Restart with \`hsd --chain-migrate=${id}\``;
+};
 
 describe('Chain Migrations', function() {
   describe('General (v0..)', function() {
@@ -98,7 +100,7 @@ describe('Chain Migrations', function() {
       assert(error, 'Chain must throw an error.');
       const ids = getIDs(0, lastMigrationID);
       const expected = migrationError(ChainMigrator.migrations, [...ids],
-        CHAIN_FLAG_ERROR);
+        chainFlagError(lastMigrationID));
       assert.strictEqual(error.message, expected);
 
       await ldb.open();
@@ -140,7 +142,7 @@ describe('Chain Migrations', function() {
       const ids = getIDs(0, lastMigrationID);
       ids.delete(1);
       const expected = migrationError(ChainMigrator.migrations, [...ids],
-        CHAIN_FLAG_ERROR);
+        chainFlagError(lastMigrationID));
       assert.strictEqual(error.message, expected);
 
       await ldb.open();
@@ -188,8 +190,8 @@ describe('Chain Migrations', function() {
     const location = testdir('migrate-chain-v1-v2');
     const migrationsBAK = ChainMigrator.migrations;
     const testMigrations = {
-      0: ChainMigrator.migrations[0],
-      1: ChainMigrator.migrations[1]
+      0: ChainMigrator.MigrateMigrations,
+      1: ChainMigrator.MigrateChainState
     };
 
     const chainOptions = {
@@ -250,7 +252,7 @@ describe('Chain Migrations', function() {
 
       assert(error, 'Chain must throw an error.');
       const expected = migrationError(ChainMigrator.migrations, [0, 1],
-        CHAIN_FLAG_ERROR);
+        chainFlagError(1));
       assert.strictEqual(error.message, expected);
 
       await ldb.open();
@@ -314,7 +316,7 @@ describe('Chain Migrations', function() {
 
       assert(error, 'Chain must throw an error.');
       const expected = migrationError(ChainMigrator.migrations, [0],
-        CHAIN_FLAG_ERROR);
+        chainFlagError(1));
       assert.strictEqual(error.message, expected);
 
       await ldb.open();
@@ -407,7 +409,7 @@ describe('Chain Migrations', function() {
 
       assert(error, 'Chain must throw an error.');
       const expected = migrationError(ChainMigrator.migrations, [0, 2],
-        CHAIN_FLAG_ERROR);
+        chainFlagError(2));
       assert.strictEqual(error.message, expected);
 
       await ldb.open();
@@ -573,14 +575,18 @@ describe('Chain Migrations', function() {
 
     it('should throw error when new migration is available', async () => {
       const expected = migrationError(ChainMigrator.migrations, [0],
-        CHAIN_FLAG_ERROR);
-      await assert.rejects(async () => {
-        await chain.open();
-      }, {
-        message: expected
-      });
+        chainFlagError(0));
 
-      chain.opened = false;
+      let error;
+      try {
+        await chain.open();
+      } catch (e) {
+        error = e;
+        chain.opened = false;
+      }
+
+      assert(error, 'Chain must throw an error.');
+      assert.strictEqual(error.message, expected);
     });
 
     it('should migrate chain state', async () => {
