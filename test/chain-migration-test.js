@@ -54,12 +54,11 @@ describe('Chain Migrations', function() {
       ldb = chainDB.db;
 
       ChainMigrator.migrations = migrationsBAK;
+      await chain.open();
     });
 
     afterEach(async () => {
-      if (chain.opened)
-        await chain.close();
-
+      await chain.close();
       await rimraf(location);
     });
 
@@ -68,8 +67,6 @@ describe('Chain Migrations', function() {
     });
 
     it('should initialize fresh chain migration state', async () => {
-      await chain.open();
-
       const rawState = await ldb.get(layout.M.encode());
       const state = MigrationState.decode(rawState);
 
@@ -77,12 +74,9 @@ describe('Chain Migrations', function() {
       assert.strictEqual(state.nextMigration, lastMigrationID + 1);
       assert.strictEqual(state.skipped.length, 0);
       assert.strictEqual(state.inProgress, false);
-
-      await chain.close();
     });
 
     it('should not migrate pre-old migration state w/o flag', async () => {
-      await chain.open();
       const b = ldb.batch();
       b.del(layout.M.encode());
       writeVersion(b, 'chain', 1);
@@ -94,7 +88,6 @@ describe('Chain Migrations', function() {
         await chain.open();
       } catch (e) {
         error = e;
-        chain.opened = false;
       }
 
       assert(error, 'Chain must throw an error.');
@@ -103,7 +96,6 @@ describe('Chain Migrations', function() {
         chainFlagError(lastMigrationID));
       assert.strictEqual(error.message, expected);
 
-      await ldb.open();
       const versionData = await ldb.get(layout.V.encode());
       const version = getVersion(versionData, 'chain');
       assert.strictEqual(version, 1);
@@ -115,13 +107,10 @@ describe('Chain Migrations', function() {
       assert.strictEqual(state.nextMigration, 0);
       assert.strictEqual(state.skipped.length, 0);
       assert.strictEqual(state.inProgress, false);
-      await ldb.close();
     });
 
     // special case in migrations
     it('should not migrate last old migration state w/o flag', async () => {
-      await chain.open();
-
       const b = ldb.batch();
       b.del(layout.M.encode());
       b.put(oldLayout.M.encode(0), null);
@@ -135,7 +124,6 @@ describe('Chain Migrations', function() {
         await chain.open();
       } catch (e) {
         error = e;
-        chain.opened = false;
       }
 
       assert(error, 'Chain must throw an error.');
@@ -145,7 +133,6 @@ describe('Chain Migrations', function() {
         chainFlagError(lastMigrationID));
       assert.strictEqual(error.message, expected);
 
-      await ldb.open();
       const versionData = await ldb.get(layout.V.encode());
       const version = getVersion(versionData, 'chain');
       assert.strictEqual(version, 1);
@@ -157,12 +144,9 @@ describe('Chain Migrations', function() {
       assert.strictEqual(state.lastMigration, -1);
       assert.strictEqual(state.skipped.length, 0);
       assert.strictEqual(state.inProgress, false);
-      await ldb.close();
     });
 
     it('should only migrate the migration states with flag', async () => {
-      await chain.open();
-
       const b = ldb.batch();
       b.del(layout.M.encode());
       writeVersion(b, 'chain', 1);
@@ -182,44 +166,9 @@ describe('Chain Migrations', function() {
       assert.strictEqual(state.nextMigration, lastMigrationID + 1);
       assert.strictEqual(state.skipped.length, 0);
       assert.strictEqual(state.inProgress, false);
-      await chain.close();
-    });
-
-    it('should not run with forceFlags when there are migrations', async () => {
-      await chain.open();
-      const rawState = await ldb.get(layout.M.encode());
-      const state = MigrationState.decode(rawState);
-      state.nextMigration -= 1;
-      await ldb.put(layout.M.encode(), state.encode());
-      await chain.close();
-
-      chain.options.forceFlags = true;
-
-      let error;
-      try {
-        await chain.open();
-      } catch (e) {
-        error = e;
-        chain.opened = false;
-      }
-
-      assert(error, 'Chain should throw an error');
-      assert.strictEqual(error.message,
-        'Migrations can not run with `forceFlags`');
-    });
-
-    it('should run with forceFlags when there are no migrations', async () => {
-      await chain.open();
-      await chain.close();
-
-      chain.options.forceFlags = true;
-      await chain.open();
-      await chain.close();
-      chain.options.forceFlags = false;
     });
 
     it('should check chaindb flags if there are migrations', async () => {
-      await chain.open();
       const rawState = await ldb.get(layout.M.encode());
       const state = MigrationState.decode(rawState);
       state.nextMigration -= 1;
@@ -233,7 +182,6 @@ describe('Chain Migrations', function() {
         await chain.open();
       } catch (e) {
         error = e;
-        chain.opened = false;
       }
 
       assert(error, 'Chain should throw an error');
@@ -286,8 +234,6 @@ describe('Chain Migrations', function() {
       assert.strictEqual(state.lastMigration, 1);
       assert.strictEqual(state.skipped.length, 0);
       assert.strictEqual(state.inProgress, false);
-
-      await chain.close();
     });
 
     it('should not migrate pre-old migration state w/o flag', async () => {
@@ -303,7 +249,6 @@ describe('Chain Migrations', function() {
         await chain.open();
       } catch (e) {
         error = e;
-        chain.opened = false;
       }
 
       assert(error, 'Chain must throw an error.');
@@ -311,7 +256,6 @@ describe('Chain Migrations', function() {
         chainFlagError(1));
       assert.strictEqual(error.message, expected);
 
-      await ldb.open();
       const versionData = await ldb.get(layout.V.encode());
       const version = getVersion(versionData, 'chain');
       assert.strictEqual(version, 1);
@@ -323,7 +267,6 @@ describe('Chain Migrations', function() {
       assert.strictEqual(state.nextMigration, 0);
       assert.strictEqual(state.skipped.length, 0);
       assert.strictEqual(state.inProgress, false);
-      await ldb.close();
     });
 
     it('should migrate from first old migration state with flag', async () => {
@@ -348,7 +291,6 @@ describe('Chain Migrations', function() {
       assert.strictEqual(state.nextMigration, 2);
       assert.strictEqual(state.skipped.length, 0);
       assert.strictEqual(state.inProgress, false);
-      await chain.close();
     });
 
     it('should not migrate last old migration state w/o flag', async () => {
@@ -367,7 +309,6 @@ describe('Chain Migrations', function() {
         await chain.open();
       } catch (e) {
         error = e;
-        chain.opened = false;
       }
 
       assert(error, 'Chain must throw an error.');
@@ -375,7 +316,6 @@ describe('Chain Migrations', function() {
         chainFlagError(1));
       assert.strictEqual(error.message, expected);
 
-      await ldb.open();
       const versionData = await ldb.get(layout.V.encode());
       const version = getVersion(versionData, 'chain');
       assert.strictEqual(version, 1);
@@ -387,7 +327,6 @@ describe('Chain Migrations', function() {
       assert.strictEqual(state.lastMigration, -1);
       assert.strictEqual(state.skipped.length, 0);
       assert.strictEqual(state.inProgress, false);
-      await ldb.close();
     });
 
     it('should only migrate the migration states with flag', async () => {
@@ -414,7 +353,6 @@ describe('Chain Migrations', function() {
       assert.strictEqual(state.lastMigration, 1);
       assert.strictEqual(state.skipped.length, 0);
       assert.strictEqual(state.inProgress, false);
-      await chain.close();
     });
 
     it('should not run new migration w/o flag', async () => {
@@ -460,7 +398,6 @@ describe('Chain Migrations', function() {
         await chain.open();
       } catch (e) {
         error = e;
-        chain.opened = false;
       }
 
       assert(error, 'Chain must throw an error.');
@@ -468,7 +405,6 @@ describe('Chain Migrations', function() {
         chainFlagError(2));
       assert.strictEqual(error.message, expected);
 
-      await ldb.open();
       const rawState = await ldb.get(layout.M.encode());
       const state = MigrationState.decode(rawState);
 
@@ -476,7 +412,6 @@ describe('Chain Migrations', function() {
       assert.strictEqual(state.lastMigration, -1);
       assert.strictEqual(state.skipped.length, 0);
       assert.strictEqual(state.inProgress, false);
-      await ldb.close();
     });
 
     it('should run migration upgrade and new migration', async () => {
@@ -525,7 +460,6 @@ describe('Chain Migrations', function() {
       assert.strictEqual(state.lastMigration, 2);
       assert.strictEqual(state.skipped.length, 0);
       assert.strictEqual(state.inProgress, false);
-      await chain.close();
     });
 
     it('should have skipped migration for prune', async () => {
@@ -549,7 +483,6 @@ describe('Chain Migrations', function() {
       assert.strictEqual(state.skipped.length, 1);
       assert.strictEqual(state.skipped[0], 1);
       assert.strictEqual(state.inProgress, false);
-      await chain.close();
     });
   });
 
@@ -606,8 +539,6 @@ describe('Chain Migrations', function() {
         assert(block);
         assert(await chain.add(block));
       }
-
-      await chain.close();
     });
 
     it('should set incorrect chaindb state', async () => {
@@ -620,7 +551,6 @@ describe('Chain Migrations', function() {
       state.burned = 0;
 
       await chain.db.db.put(layout.R.encode(), state.encode());
-      await chain.close();
     });
 
     it('should enable chain state migration', () => {
@@ -638,7 +568,6 @@ describe('Chain Migrations', function() {
         await chain.open();
       } catch (e) {
         error = e;
-        chain.opened = false;
       }
 
       assert(error, 'Chain must throw an error.');
@@ -652,8 +581,6 @@ describe('Chain Migrations', function() {
 
       assert.bufferEqual(chain.db.state.encode(), correctState.encode(),
         'Chain State did not properly migrate.');
-
-      await chain.close();
     });
   });
 });

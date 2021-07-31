@@ -371,6 +371,8 @@ describe('Migrations', function() {
         message: 'in progress error1'
       });
 
+      await db.close();
+
       {
         // check the state is correct.
         await db.db.open();
@@ -387,6 +389,8 @@ describe('Migrations', function() {
       }, {
         message: 'in progress error2'
       });
+
+      await db.close();
 
       {
         // check the state is correct.

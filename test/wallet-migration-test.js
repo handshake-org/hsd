@@ -57,11 +57,10 @@ describe('Wallet Migrations', function() {
       ldb = walletDB.db;
 
       WalletMigrator.migrations = migrationsBAK;
+      await walletDB.open();
     });
 
     afterEach(async () => {
-      if (ldb.opened)
-        await ldb.close();
       await rimraf(location);
     });
 
@@ -70,8 +69,6 @@ describe('Wallet Migrations', function() {
     });
 
     it('should initialize fresh walletdb migration state', async () => {
-      await walletDB.open();
-
       const rawState = await ldb.get(layout.M.encode());
       const state = MigrationState.decode(rawState);
 
@@ -79,12 +76,10 @@ describe('Wallet Migrations', function() {
       assert.strictEqual(state.nextMigration, lastMigrationID + 1);
       assert.strictEqual(state.skipped.length, 0);
       assert.strictEqual(state.inProgress, false);
-
       await walletDB.close();
     });
 
     it('should not migrate pre-old migration state w/o flag', async () => {
-      await walletDB.open();
       const b = ldb.batch();
       b.del(layout.M.encode());
       await b.write();
@@ -100,7 +95,6 @@ describe('Wallet Migrations', function() {
         message: expectedError
       });
 
-      await ldb.open();
       const rawState = await ldb.get(layout.M.encode());
       const state = MigrationState.decode(rawState);
 
@@ -113,8 +107,6 @@ describe('Wallet Migrations', function() {
 
     // special case
     it('should not migrate from last old migration state w/o flag', async () => {
-      await walletDB.open();
-
       const b = ldb.batch();
       b.del(layout.M.encode());
       b.put(oldLayout.M.encode(0), null);
@@ -132,7 +124,6 @@ describe('Wallet Migrations', function() {
         message: expectedError
       });
 
-      await ldb.open();
       const rawState = await ldb.get(layout.M.encode());
       const state = MigrationState.decode(rawState);
 
@@ -145,8 +136,6 @@ describe('Wallet Migrations', function() {
     });
 
     it('should upgrade and run new migration with flag', async () => {
-      await walletDB.open();
-
       const b = ldb.batch();
       b.del(layout.M.encode());
       b.put(oldLayout.M.encode(0), null);
@@ -235,7 +224,6 @@ describe('Wallet Migrations', function() {
         message: expectedError
       });
 
-      await ldb.open();
       const rawState = await ldb.get(layout.M.encode());
       const state = MigrationState.decode(rawState);
 
@@ -289,7 +277,6 @@ describe('Wallet Migrations', function() {
         message: expectedError
       });
 
-      await ldb.open();
       const rawState = await ldb.get(layout.M.encode());
       const state = MigrationState.decode(rawState);
 
@@ -354,7 +341,6 @@ describe('Wallet Migrations', function() {
         message: expectedError
       });
 
-      await ldb.open();
       const rawState = await ldb.get(layout.M.encode());
       const state = MigrationState.decode(rawState);
 
@@ -500,6 +486,8 @@ describe('Wallet Migrations', function() {
       }, {
         message: expectedError
       });
+
+      await ldb.close();
     });
 
     it('should migrate with migrate flag', async () => {

@@ -61,10 +61,9 @@ class MockChainDB {
   }
 
   async open() {
-    await this.migrations.migrate();
-
     this.logger.debug('Opening mock chaindb.');
     await this.db.open();
+    await this.migrations.migrate();
     await this.db.verify(mockLayout.V.encode(), 'chain', this.dbVersion);
   }
 
