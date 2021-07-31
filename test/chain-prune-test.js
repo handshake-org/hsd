@@ -51,28 +51,6 @@ describe('Chain Prune', function() {
       });
       await chain.close();
     });
-
-    it('should force retroactive prune', async () => {
-      const chain = new Chain(chainOptions);
-
-      await chain.open();
-      await chain.close();
-
-      let pruned = false;
-      await assert.doesNotReject(async () => {
-        chain.options.forceFlags = true;
-        chain.options.prune = true;
-
-        chain.db.prune = () => {
-          pruned = true;
-        };
-
-        await chain.open();
-      });
-
-      await chain.close();
-      assert.strictEqual(pruned, true, 'should call prune.');
-    });
   });
 
   describe('Prune', function() {
@@ -148,60 +126,6 @@ describe('Chain Prune', function() {
       // behind height check
       let to = TEST_PRUNE_AFTER_HEIGHT;
       for (; i < 10; i++) {
-        const block = await chain.getBlock(hashes[i]);
-        assert(block, 'could not get block before height check.');
-      }
-
-      // pruned blocks - nulls
-      to += TEST_PRUNED_BLOCKS;
-      for (; i < to; i++) {
-        const block = await chain.getBlock(hashes[i]);
-        assert.strictEqual(block, null, `block ${i} was not pruned.`);
-      }
-
-      // keep blocks
-      to += TEST_KEEP_BLOCKS;
-      for (; i < to; i++) {
-        const block = await chain.getBlock(hashes[i]);
-        assert(block, `block ${i} was pruned.`);
-      }
-    });
-
-    it('should retroactively prune', async () => {
-      await chain.open();
-
-      const hashes = [];
-
-      let genBlocks = TEST_PRUNE_AFTER_HEIGHT;
-      genBlocks += TEST_PRUNED_BLOCKS;
-      genBlocks += TEST_KEEP_BLOCKS;
-
-      for (let i = 0; i < genBlocks; i++) {
-        const block = await cpu.mineBlock();
-        hashes.push(block.hash());
-        assert(block);
-        assert(await chain.add(block));
-      }
-
-      // make sure all blocks are there
-      for (let i = 0; i < genBlocks; i++) {
-        const block = await chain.getBlock(hashes[i]);
-        assert(block);
-      }
-
-      await chain.close();
-
-      chain.options.forceFlags = true;
-      chain.options.prune = true;
-
-      // this should call prune on open.
-      await chain.open();
-
-      let i = 0;
-      // after prune we should end up with same state as above.
-      // behind height check
-      let to = TEST_PRUNE_AFTER_HEIGHT;
-      for (; i < to; i++) {
         const block = await chain.getBlock(hashes[i]);
         assert(block, 'could not get block before height check.');
       }
