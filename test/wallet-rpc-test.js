@@ -588,4 +588,98 @@ describe('Wallet RPC Methods', function() {
       await nclient.execute('generatetoaddress', [1, addr]);
     });
   });
+
+  describe('Batches', function() {
+    let addr;
+
+    before(async () => {
+      await wclient.createWallet('batchWallet');
+      wclient.wallet('batchWallet');
+      await wclient.execute('selectwallet', ['batchWallet']);
+      addr = await wclient.execute('getnewaddress', []);
+      await nclient.execute('generatetoaddress', [100, addr]);
+    });
+
+    it('should send multiple OPENs', async () => {
+      const tx = await wclient.execute(
+        'sendbatch',
+        [
+          [['OPEN', 'abc123'], ['OPEN', 'def456'], ['OPEN', 'ghi789']]
+        ]
+      );
+      assert(tx.outputs.length === 4);
+      await nclient.execute('generatetoaddress', [7, addr]);
+    });
+
+    it('should send multiple BIDs', async () => {
+      const tx = await wclient.execute(
+        'sendbatch',
+        [
+          [
+            ['BID', 'abc123', 1, 1],
+            ['BID', 'def456', 2, 2],
+            ['BID', 'ghi789', 3, 3],
+            ['BID', 'ghi789', 4, 4]
+          ]
+        ]
+      );
+      assert(tx.outputs.length === 5);
+      await nclient.execute('generatetoaddress', [7, addr]);
+    });
+
+    it('should send multiple REVEALs', async () => {
+      const tx = await wclient.execute(
+        'sendbatch',
+        [
+          [
+            ['REVEAL', 'abc123'],
+            ['REVEAL', 'def456']
+          ]
+        ]
+      );
+      assert(tx.outputs.length === 3);
+      await nclient.execute('generatetoaddress', [1, addr]);
+    });
+
+    it('should send REVEAL all', async () => {
+      const tx = await wclient.execute(
+        'sendbatch',
+        [
+          [
+            ['REVEAL']
+          ]
+        ]
+      );
+      assert(tx.outputs.length === 3);
+      await nclient.execute('generatetoaddress', [10, addr]);
+    });
+
+    it('should send REDEEM all', async () => {
+      const tx = await wclient.execute(
+        'sendbatch',
+        [
+          [
+            ['REDEEM']
+          ]
+        ]
+      );
+      assert(tx.outputs.length === 2);
+      await nclient.execute('generatetoaddress', [1, addr]);
+    });
+
+    it('should send multiple REGISTERs', async () => {
+      const tx = await wclient.execute(
+        'sendbatch',
+        [
+          [
+            ['UPDATE', 'abc123', {'records': [{'type': 'TXT', 'txt':['abc']}]}],
+            ['UPDATE', 'def456', {'records': [{'type': 'TXT', 'txt':['def']}]}],
+            ['UPDATE', 'ghi789', {'records': [{'type': 'TXT', 'txt':['ghi']}]}]
+          ]
+        ]
+      );
+      assert(tx.outputs.length === 4);
+      await nclient.execute('generatetoaddress', [1, addr]);
+    });
+  });
 });
