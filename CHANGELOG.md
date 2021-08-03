@@ -2,6 +2,12 @@
 
 ## unreleased
 
+### Database changes
+  - Separated migrations from WalletDB and ChainDB: [lib/migrations/README.md](./lib/migrations/README.md)
+  - Updated database versions and layout.
+  - **When upgrading to this version of hsd you must pass `--chain-migrate=1 --wallet-migrate=1`
+  when you run it for the first time**
+
 ### Wallet changes
 
 - New RPC methods:
