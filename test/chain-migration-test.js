@@ -9,6 +9,7 @@ const Network = require('../lib/protocol/network');
 const WorkerPool = require('../lib/workers/workerpool');
 const Miner = require('../lib/mining/miner');
 const Chain = require('../lib/blockchain/chain');
+const BlockStore = require('../lib/blockstore');
 const layout = require('../lib/blockchain/layout');
 const ChainMigrator = require('../lib/blockchain/migrations');
 const MigrationState = require('../lib/migrations/state');
@@ -27,14 +28,20 @@ const chainFlagError = (id) => {
 };
 
 describe('Chain Migrations', function() {
-  describe('General (v0..)', function() {
+  describe('General', function() {
     const location = testdir('migrate-chain-general');
+    const store = BlockStore.create({
+      memory: true,
+      network
+    });
+
     const migrationsBAK = ChainMigrator.migrations;
     const lastMigrationID = Math.max(...Object.keys(migrationsBAK));
 
     const chainOptions = {
       prefix: location,
       memory: false,
+      blocks: store,
       network
     };
 
@@ -49,16 +56,20 @@ describe('Chain Migrations', function() {
     let chain, chainDB, ldb;
     beforeEach(async () => {
       await fs.mkdirp(location);
+
       chain = new Chain(chainOptions);
       chainDB = chain.db;
       ldb = chainDB.db;
 
       ChainMigrator.migrations = migrationsBAK;
+
+      await store.open();
       await chain.open();
     });
 
     afterEach(async () => {
       await chain.close();
+      await store.close();
       await rimraf(location);
     });
 
@@ -77,10 +88,18 @@ describe('Chain Migrations', function() {
     });
 
     it('should not migrate pre-old migration state w/o flag', async () => {
+      // set the oldest state
+      const genesisBlock = await chainDB.getBlock(0);
+      const genesisHash = genesisBlock.hash();
+      const genesisUndo = await chainDB.getUndoCoins(genesisHash);
+
       const b = ldb.batch();
       b.del(layout.M.encode());
+      b.put(layout.b.encode(genesisHash), genesisBlock.encode());
+      b.put(layout.u.encode(genesisHash), genesisUndo.encode());
       writeVersion(b, 'chain', 1);
       await b.write();
+
       await chain.close();
 
       let error;
@@ -147,10 +166,18 @@ describe('Chain Migrations', function() {
     });
 
     it('should only migrate the migration states with flag', async () => {
+      // set the oldest state
+      const genesisBlock = await chainDB.getBlock(0);
+      const genesisHash = genesisBlock.hash();
+      const genesisUndo = await chainDB.getUndoCoins(genesisHash);
+
       const b = ldb.batch();
       b.del(layout.M.encode());
+      b.put(layout.b.encode(genesisHash), genesisBlock.encode());
+      b.put(layout.u.encode(genesisHash), genesisUndo.encode());
       writeVersion(b, 'chain', 1);
       await b.write();
+
       await chain.close();
 
       chain.options.chainMigrate = lastMigrationID;
@@ -222,8 +249,13 @@ describe('Chain Migrations', function() {
     });
   });
 
-  describe('Migrations v1..v2', function() {
-    const location = testdir('migrate-chain-v1-v2');
+  describe('Migrations #0 & #1', function() {
+    const location = testdir('migrate-chain-0-1');
+    const store = BlockStore.create({
+      memory: true,
+      network
+    });
+
     const migrationsBAK = ChainMigrator.migrations;
     const testMigrations = {
       0: ChainMigrator.MigrateMigrations,
@@ -233,6 +265,7 @@ describe('Chain Migrations', function() {
     const chainOptions = {
       prefix: location,
       memory: false,
+      blocks: store,
       network
     };
 
@@ -243,6 +276,7 @@ describe('Chain Migrations', function() {
       chainDB = chain.db;
       ldb = chainDB.db;
 
+      await store.open();
       ChainMigrator.migrations = testMigrations;
     });
 
@@ -250,6 +284,7 @@ describe('Chain Migrations', function() {
       if (chain.opened)
         await chain.close();
 
+      await store.close();
       await rimraf(location);
     });
 
@@ -270,10 +305,19 @@ describe('Chain Migrations', function() {
 
     it('should not migrate pre-old migration state w/o flag', async () => {
       await chain.open();
+
+      // set the oldest state
+      const genesisBlock = await chainDB.getBlock(0);
+      const genesisHash = genesisBlock.hash();
+      const genesisUndo = await chainDB.getUndoCoins(genesisHash);
+
       const b = ldb.batch();
       b.del(layout.M.encode());
+      b.put(layout.b.encode(genesisHash), genesisBlock.encode());
+      b.put(layout.u.encode(genesisHash), genesisUndo.encode());
       writeVersion(b, 'chain', 1);
       await b.write();
+
       await chain.close();
 
       let error;
@@ -303,11 +347,20 @@ describe('Chain Migrations', function() {
 
     it('should migrate from first old migration state with flag', async () => {
       await chain.open();
+
+      // set the oldest state
+      const genesisBlock = await chainDB.getBlock(0);
+      const genesisHash = genesisBlock.hash();
+      const genesisUndo = await chainDB.getUndoCoins(genesisHash);
+
       const b = ldb.batch();
       b.del(layout.M.encode());
       b.put(oldLayout.M.encode(0), null);
+      b.put(layout.b.encode(genesisHash), genesisBlock.encode());
+      b.put(layout.u.encode(genesisHash), genesisUndo.encode());
       writeVersion(b, 'chain', 1);
       await b.write();
+
       await chain.close();
 
       chain.options.chainMigrate = 1;
@@ -521,6 +574,10 @@ describe('Chain Migrations', function() {
   describe('Migration ChainState (integration)', function() {
     const location = testdir('migrate-chain-state');
     const migrationsBAK = ChainMigrator.migrations;
+    const store = BlockStore.create({
+      memory: true,
+      network
+    });
 
     const workers = new WorkerPool({
       enabled: true,
@@ -530,6 +587,7 @@ describe('Chain Migrations', function() {
     const chainOptions = {
       prefix: location,
       memory: false,
+      blocks: store,
       network,
       workers
     };
@@ -553,12 +611,14 @@ describe('Chain Migrations', function() {
       cpu = miner.cpu;
 
       await miner.open();
+      await store.open();
     });
 
     afterEach(async () => {
       if (chain.opened)
         await chain.close();
 
+      await store.close();
       await miner.close();
     });
 
@@ -571,6 +631,27 @@ describe('Chain Migrations', function() {
         assert(block);
         assert(await chain.add(block));
       }
+    });
+
+    it('should move blocks to pre-blockstore state', async () => {
+      await chain.open();
+      const chainDB = chain.db;
+      const ldb = chainDB.db;
+
+      const state = await chainDB.getState();
+      const tipHeight = await chainDB.getHeight(state.tip);
+
+      const b = ldb.batch();
+      for (let i = 0; i <= tipHeight; i++) {
+        const block = await chainDB.getBlock(i);
+        const hash = block.hash();
+        const undo = await chainDB.getUndoCoins(hash);
+
+        b.put(layout.b.encode(hash), block.encode());
+        b.put(layout.u.encode(hash), undo.encode());
+      }
+
+      await b.write();
     });
 
     it('should set incorrect chaindb state', async () => {
