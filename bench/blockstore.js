@@ -1,5 +1,5 @@
 /*!
- * bench/blockstore.js - benchmark blockstore for bcoin
+ * bench/blockstore.js - benchmark blockstore for hsd
  *
  * This can be run to benchmark the performance of the blockstore
  * module for writing, reading and pruning block data. Results are
@@ -21,7 +21,8 @@
  * - `batch`    Bundle write & prune operations into batches.
  *
  * Copyright (c) 2019, Braydon Fuller (MIT License).
- * https://github.com/bcoin-org/bcoin
+ * Copyright (c) 2021, Matthew Zipkin (MIT License).
+ * https://github.com/handshake-org/hsd
  */
 
 'use strict';

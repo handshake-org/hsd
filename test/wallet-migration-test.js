@@ -30,7 +30,7 @@ const wdbFlagError = (id) => {
 };
 
 describe('Wallet Migrations', function() {
-  describe('General (v0...)', function() {
+  describe('General', function() {
     const location = testdir('migrate-wallet-ensure');
     const migrationsBAK = WalletMigrator.migrations;
     const lastMigrationID = Math.max(...Object.keys(migrationsBAK));
@@ -193,8 +193,8 @@ describe('Wallet Migrations', function() {
     });
   });
 
-  describe('Migrations v0..v1', function() {
-    const location = testdir('migrate-wallet-v1-v2');
+  describe('Migrations #0 & #1', function() {
+    const location = testdir('migrate-wallet-0-1');
     const migrationsBAK = WalletMigrator.migrations;
     const testMigrations = {
       0: WalletMigrator.MigrateMigrations,
