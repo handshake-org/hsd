@@ -80,125 +80,127 @@ describe('Wallet Auction', function() {
     await blocks.close();
   });
 
-  it('should open auction', async () => {
-    openAuctionMTX = await winner.createOpen(NAME1, false);
-    await winner.sign(openAuctionMTX);
-    const tx = openAuctionMTX.toTX();
-    await wdb.addTX(tx);
-  });
+  describe('Duplicate OPENs', function() {
+    it('should open auction', async () => {
+      openAuctionMTX = await winner.createOpen(NAME1, false);
+      await winner.sign(openAuctionMTX);
+      const tx = openAuctionMTX.toTX();
+      await wdb.addTX(tx);
+    });
 
-  it('should fail to create duplicate open', async () => {
-    let err;
-    try {
-      await winner.createOpen(NAME1, false);
-    } catch (e) {
-      err = e;
-    }
+    it('should fail to create duplicate open', async () => {
+      let err;
+      try {
+        await winner.createOpen(NAME1, false);
+      } catch (e) {
+        err = e;
+      }
 
-    assert(err);
-    assert.strictEqual(err.message, `Already sent an open for: ${NAME1}.`);
-  });
+      assert(err);
+      assert.strictEqual(err.message, `Already sent an open for: ${NAME1}.`);
+    });
 
-  it('should mine 1 block', async () => {
-    const job = await cpu.createJob();
-    job.addTX(openAuctionMTX.toTX(), openAuctionMTX.view);
-    job.refresh();
+    it('should mine 1 block', async () => {
+      const job = await cpu.createJob();
+      job.addTX(openAuctionMTX.toTX(), openAuctionMTX.view);
+      job.refresh();
 
-    const block = await job.mineAsync();
+      const block = await job.mineAsync();
 
-    assert(await chain.add(block));
-  });
-
-  it('should fail to re-open auction during OPEN phase', async () => {
-    let err;
-    try {
-      await winner.createOpen(NAME1, false);
-    } catch (e) {
-      err = e;
-    }
-
-    assert(err);
-    assert.strictEqual(err.message, 'Name is already opening.');
-  });
-
-  it('should mine enough blocks to enter BIDDING phase', async () => {
-    for (let i = 0; i < treeInterval; i++) {
-      const block = await cpu.mineBlock();
-      assert(block);
       assert(await chain.add(block));
-    }
-  });
+    });
 
-  it('should fail to send bid to null address', async () => {
-    const mtx = await winner.makeBid(NAME1, 1000, 2000, 0);
-    mtx.outputs[0].address = new Address();
-    await winner.fill(mtx);
-    await winner.finalize(mtx);
+    it('should fail to re-open auction during OPEN phase', async () => {
+      let err;
+      try {
+        await winner.createOpen(NAME1, false);
+      } catch (e) {
+        err = e;
+      }
 
-    const fn = async () => await winner.sendMTX(mtx);
+      assert(err);
+      assert.strictEqual(err.message, `Name is already opening: ${NAME1}.`);
+    });
 
-    await assert.rejects(fn, {message: 'Cannot send to null address.'});
-  });
+    it('should mine enough blocks to enter BIDDING phase', async () => {
+      for (let i = 0; i < treeInterval; i++) {
+        const block = await cpu.mineBlock();
+        assert(block);
+        assert(await chain.add(block));
+      }
+    });
 
-  it('should fail to re-open auction during BIDDING phase', async () => {
-    let err;
-    try {
-      await winner.createOpen(NAME1, false);
-    } catch (e) {
-      err = e;
-    }
+    it('should fail to send bid to null address', async () => {
+      const mtx = await winner.makeBid(NAME1, 1000, 2000, 0);
+      mtx.outputs[0].address = new Address();
+      await winner.fill(mtx);
+      await winner.finalize(mtx);
 
-    assert(err);
-    assert.strictEqual(err.message, 'Name is not available.');
-  });
+      const fn = async () => await winner.sendMTX(mtx);
 
-  it('should mine enough blocks to expire auction', async () => {
-    for (let i = 0; i < biddingPeriod + revealPeriod; i++) {
-      const block = await cpu.mineBlock();
-      assert(block);
+      await assert.rejects(fn, {message: 'Cannot send to null address.'});
+    });
+
+    it('should fail to re-open auction during BIDDING phase', async () => {
+      let err;
+      try {
+        await winner.createOpen(NAME1, false);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message, `Name is not available: ${NAME1}.`);
+    });
+
+    it('should mine enough blocks to expire auction', async () => {
+      for (let i = 0; i < biddingPeriod + revealPeriod; i++) {
+        const block = await cpu.mineBlock();
+        assert(block);
+        assert(await chain.add(block));
+      }
+    });
+
+    it('should open auction (again)', async () => {
+      openAuctionMTX2 = await winner.createOpen(NAME1, false);
+      await winner.sign(openAuctionMTX2);
+      const tx = openAuctionMTX2.toTX();
+      await wdb.addTX(tx);
+    });
+
+    it('should fail to create duplicate open (again)', async () => {
+      let err;
+      try {
+        await winner.createOpen(NAME1, false);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message, `Already sent an open for: ${NAME1}.`);
+    });
+
+    it('should confirm OPEN transaction', async () => {
+      const job = await cpu.createJob();
+      job.addTX(openAuctionMTX2.toTX(), openAuctionMTX2.view);
+      job.refresh();
+
+      const block = await job.mineAsync();
       assert(await chain.add(block));
-    }
-  });
 
-  it('should open auction (again)', async () => {
-    openAuctionMTX2 = await winner.createOpen(NAME1, false);
-    await winner.sign(openAuctionMTX2);
-    const tx = openAuctionMTX2.toTX();
-    await wdb.addTX(tx);
-  });
+      let ns = await chain.db.getNameStateByName(NAME1);
+      let state = ns.state(chain.height, network);
+      assert.strictEqual(state, states.OPENING);
 
-  it('should fail to create duplicate open (again)', async () => {
-    let err;
-    try {
-      await winner.createOpen(NAME1, false);
-    } catch (e) {
-      err = e;
-    }
+      for (let i = 0; i < treeInterval + 1; i++) {
+        const block = await cpu.mineBlock();
+        assert(block);
+        assert(await chain.add(block));
+      }
 
-    assert(err);
-    assert.strictEqual(err.message, `Already sent an open for: ${NAME1}.`);
-  });
-
-  it('should confirm OPEN transaction', async () => {
-    const job = await cpu.createJob();
-    job.addTX(openAuctionMTX2.toTX(), openAuctionMTX2.view);
-    job.refresh();
-
-    const block = await job.mineAsync();
-    assert(await chain.add(block));
-
-    let ns = await chain.db.getNameStateByName(NAME1);
-    let state = ns.state(chain.height, network);
-    assert.strictEqual(state, states.OPENING);
-
-    for (let i = 0; i < treeInterval + 1; i++) {
-      const block = await cpu.mineBlock();
-      assert(block);
-      assert(await chain.add(block));
-    }
-
-    ns = await chain.db.getNameStateByName(NAME1);
-    state = ns.state(chain.height, network);
-    assert.strictEqual(state, states.BIDDING);
+      ns = await chain.db.getNameStateByName(NAME1);
+      state = ns.state(chain.height, network);
+      assert.strictEqual(state, states.BIDDING);
+    });
   });
 });

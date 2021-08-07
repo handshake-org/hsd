@@ -164,7 +164,7 @@ describe('Multiple accounts participating in same auction', function() {
         await wallet.sendUpdate(name, bobResource, {account: 'bob'});
       }, {
         name: 'Error',
-        message: `Account does not own: "${name}".`
+        message: `Account does not own name: ${name}.`
       });
     });
 
@@ -193,7 +193,7 @@ describe('Multiple accounts participating in same auction', function() {
         await wallet.sendRedeem(name, {account: 0});
       }, {
         name: 'Error',
-        message: 'No reveals to redeem.'
+        message: `No reveals to redeem for name: ${name}.`
       });
     });
 
@@ -227,7 +227,7 @@ describe('Multiple accounts participating in same auction', function() {
         await wallet.sendRenewal(name, {account: 'bob'});
       }, {
         name: 'Error',
-        message: `Account does not own: "${name}".`
+        message: `Account does not own name: ${name}.`
       });
     });
 
@@ -267,7 +267,7 @@ describe('Multiple accounts participating in same auction', function() {
         await wallet.sendTransfer(name, toAddr, {account: 'bob'});
       }, {
         name: 'Error',
-        message: `Account does not own: "${name}".`
+        message: `Account does not own name: ${name}.`
       });
     });
 
@@ -304,7 +304,7 @@ describe('Multiple accounts participating in same auction', function() {
         await wallet.sendFinalize(name, {account: 'bob'});
       }, {
         name: 'Error',
-        message: `Account does not own: "${name}".`
+        message: `Account does not own name: ${name}.`
       });
     });
 
@@ -337,7 +337,7 @@ describe('Multiple accounts participating in same auction', function() {
         await wallet.sendCancel(name, {account: 'bob'});
       }, {
         name: 'Error',
-        message: `Account does not own: "${name}".`
+        message: `Account does not own name: ${name}.`
       });
     });
 
@@ -370,7 +370,7 @@ describe('Multiple accounts participating in same auction', function() {
         await wallet.sendRevoke(name, {account: 'bob'});
       }, {
         name: 'Error',
-        message: `Account does not own: "${name}".`
+        message: `Account does not own name: ${name}.`
       });
     });
 
