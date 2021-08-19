@@ -204,6 +204,14 @@ describe('Migrations', function() {
       const db = new MockChainDB(defaultOptions);
       const {migrations} = db;
 
+      migrations.logger = {
+        info: () => {},
+        debug: () => {},
+        warning: (msg) => {
+          throw new Error(`Unexpected warning: ${msg}`);
+        }
+      };
+
       await db.open();
       const state = await migrations.getState();
       assert.strictEqual(state.inProgress, false);
@@ -211,19 +219,32 @@ describe('Migrations', function() {
       await db.close();
     });
 
-    it('should fail migration on non-existent db', async () => {
+    it('should ignore migration flag on non-existent db', async () => {
       await rimraf(location);
 
       const db = new MockChainDB({
         ...defaultOptions,
+        migrations: { 0: MockMigration1 },
         migrateFlag: 0
       });
 
-      await assert.rejects(async () => {
-        await db.open();
-      }, {
-        message: 'Database does not exist.'
-      });
+      const {migrations} = db;
+
+      let warning = null;
+      migrations.logger = {
+        info: () => {},
+        debug: () => {},
+        warning: (msg) => {
+          warning = msg;
+        }
+      };
+
+      await db.open();
+      assert.strictEqual(warning, 'Fresh start, ignoring migration flag.');
+      const state = await migrations.getState();
+      assert.strictEqual(state.inProgress, false);
+      assert.strictEqual(state.nextMigration, 1);
+      await db.close();
     });
 
     it('should throw if migrateFlag is incorrect', async () => {
