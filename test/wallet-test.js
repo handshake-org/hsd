@@ -1377,9 +1377,7 @@ describe('Wallet', function() {
   });
 
   it('should yield different keys when bip39Passphrase is supplied', async () => {
-    const wallet = await wdb.create({
-      mnemonic: {bits: 256}
-    });
+    const wallet = await wdb.create();
 
     const wallet2 = await wdb.create({
       mnemonic: wallet.master.mnemonic.toString()
