@@ -203,6 +203,12 @@ class MemWallet {
     const op = new Outpoint(coin.hash, coin.index);
     const key = op.toKey();
 
+    if (this.coins.has(key)) {
+      // Update existing coin in case it has been confirmed.
+      this.coins.set(key, coin);
+      return;
+    }
+
     this.filter.add(op.encode());
 
     this.spent.delete(key);
@@ -286,9 +292,6 @@ class MemWallet {
     if (height == null)
       height = -1;
 
-    if (this.map.has(hash))
-      return true;
-
     const view = new CoinView();
 
     for (let i = 0; i < tx.inputs.length; i++) {
@@ -329,7 +332,7 @@ class MemWallet {
     if (height !== -1)
       this.connectNames(tx, view, height);
 
-    if (result) {
+    if (result && !this.map.has(hash)) {
       this.txs += 1;
       this.map.add(hash);
     }
@@ -1703,6 +1706,66 @@ class MemWallet {
 
   async send(options) {
     const mtx = await this.create(options);
+    this.addTX(mtx.toTX());
+    return mtx;
+  }
+
+  async sendOpen(name, options) {
+    const mtx = await this.createOpen(name, options);
+    this.addTX(mtx.toTX());
+    return mtx;
+  }
+
+  async sendBid(name, value, lockup, options) {
+    const mtx = await this.createBid(name, value, lockup, options);
+    this.addTX(mtx.toTX());
+    return mtx;
+  }
+
+  async sendReveal(name, options) {
+    const mtx = await this.createReveal(name, options);
+    this.addTX(mtx.toTX());
+    return mtx;
+  }
+
+  async sendRegister(name, resource, options) {
+    const mtx = await this.createRegister(name, resource, options);
+    this.addTX(mtx.toTX());
+    return mtx;
+  }
+
+  async sendUpdate(name, resource, options) {
+    const mtx = await this.createUpdate(name, resource, options);
+    this.addTX(mtx.toTX());
+    return mtx;
+  }
+
+  async sendRenewal(name, options) {
+    const mtx = await this.createRenewal(name, options);
+    this.addTX(mtx.toTX());
+    return mtx;
+  }
+
+  async sendTransfer(name, address, options) {
+    const mtx = await this.createTransfer(name, address, options);
+    this.addTX(mtx.toTX());
+    return mtx;
+  }
+
+  async sendCancel(name, resource, options) {
+    const mtx = await this.createCancel(name, resource, options);
+    this.addTX(mtx.toTX());
+    return mtx;
+  }
+
+  async sendFinalize(name, options) {
+    const mtx = await this.createFinalize(name, options);
+    this.addTX(mtx.toTX());
+    return mtx;
+  }
+
+  async sendRevoke(name, options) {
+    const mtx = await this.createRevoke(name, options);
     this.addTX(mtx.toTX());
     return mtx;
   }
