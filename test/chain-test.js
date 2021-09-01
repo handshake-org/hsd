@@ -838,7 +838,7 @@ describe('Chain', function() {
     });
   });
 
-  describe('Checkpoints', function() {
+  describe('Chain width', function() {
     before(async () => {
       const CHECKPOINT = chain.tip.height - 5;
       const entry = await chain.getEntry(CHECKPOINT);
@@ -875,9 +875,18 @@ describe('Chain', function() {
 
     it('will accept blocks after last checkpoint', async () => {
       const AFTER_CHECKPOINT = chain.tip.height - 4;
+
+      // Block is saved as an alternate (not in main chain)
+      let competitor = false;
+      chain.on('competitor', (block, entry) => {
+        competitor = true;
+        assert.strictEqual(entry.height, AFTER_CHECKPOINT + 1);
+      });
+
       const entry = await chain.getEntry(AFTER_CHECKPOINT);
       const block = await cpu.mineBlock(entry);
       assert(await chain.add(block));
+      assert(competitor);
     });
   });
 });
