@@ -159,6 +159,38 @@ describe('Wallet Migrations', function() {
       assert.strictEqual(state.inProgress, false);
       await walletDB.close();
     });
+
+    it('should only list last migration', async () => {
+      const LastMigration = class extends AbstractMigration {
+        async check() {
+          return types.MIGRATE;
+        }
+
+        static info() {
+          return {
+            name: 'last migration',
+            description: 'last migration'
+          };
+        }
+      };
+
+      const nextID = lastMigrationID + 1;
+
+      await walletDB.close();
+      WalletMigrator.migrations[nextID] = LastMigration;
+
+      let error;
+      try {
+        await walletDB.open();
+      } catch (e) {
+        error = e;
+      }
+
+      assert(error, 'Chain must throw an error.');
+      const expected = migrationError(WalletMigrator.migrations, [nextID],
+        wdbFlagError(nextID));
+      assert.strictEqual(error.message, expected);
+    });
   });
 
   describe('Migrations v0..v1', function() {

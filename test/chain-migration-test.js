@@ -188,6 +188,38 @@ describe('Chain Migrations', function() {
       assert.strictEqual(error.message,
         'Cannot retroactively enable SPV.');
     });
+
+    it('should only list last migration', async () => {
+      const LastMigration = class extends AbstractMigration {
+        async check() {
+          return types.MIGRATE;
+        }
+
+        static info() {
+          return {
+            name: 'last migration',
+            description: 'last migration'
+          };
+        }
+      };
+
+      const nextID = lastMigrationID + 1;
+
+      await chain.close();
+      ChainMigrator.migrations[nextID] = LastMigration;
+
+      let error;
+      try {
+        await chain.open();
+      } catch (e) {
+        error = e;
+      }
+
+      assert(error, 'Chain must throw an error.');
+      const expected = migrationError(ChainMigrator.migrations, [nextID],
+        chainFlagError(nextID));
+      assert.strictEqual(error.message, expected);
+    });
   });
 
   describe('Migrations v1..v2', function() {
