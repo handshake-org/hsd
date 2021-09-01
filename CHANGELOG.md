@@ -2,11 +2,18 @@
 
 ## unreleased
 
+**When upgrading to this version of hsd you must pass
+`--chain-migrate=2 --wallet-migrate=1` when you run it for the first time.**
+
 ### Database changes
-  - Separated migrations from WalletDB and ChainDB: [lib/migrations/README.md](./lib/migrations/README.md)
   - Updated database versions and layout.
-  - **When upgrading to this version of hsd you must pass `--chain-migrate=1 --wallet-migrate=1`
-  when you run it for the first time**
+  - Separated migrations from WalletDB and ChainDB: [lib/migrations/README.md](./lib/migrations/README.md)
+  - Blockstore update: The way that block data is stored has changed for greater
+  performance, efficiency, reliability and portability. To upgrade to the new
+  disk layout it's necessary to move block data from LevelDB
+  (e.g. `~/.hsd/chain`) to a new file based block storage
+  (e.g. `~./.hsd/blocks`). That will happen automatically with the migration
+  flags.
 
 ### Wallet API changes
 
