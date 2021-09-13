@@ -33,6 +33,12 @@ when users need to call `rpc importnonce` to repair unknown blinds. The complete
 - Wallet RPC `getnames` (and HTTP endpoint `/wallet/:id/name`) now accept a
 boolean parameter "own" (default: `false`) that filters out names the wallet does not own.
 
+### Other changes
+
+- The logging module `blgr` has been updated. Log files will now be rolled over
+at around 20 MB and timestamped. Only the last 10 log files will be kept on disk
+and older log files will be purged.
+
 ## v2.4.0
 
 ### Chain & Consensus changes
