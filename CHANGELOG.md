@@ -33,6 +33,11 @@ when users need to call `rpc importnonce` to repair unknown blinds. The complete
 - Wallet RPC `getnames` (and HTTP endpoint `/wallet/:id/name`) now accept a
 boolean parameter "own" (default: `false`) that filters out names the wallet does not own.
 
+### DNS changes
+
+- DNSSEC proofs from the root name server were fixed, particularly around non-existent
+domains. The empty zone proofs were replaced with minimally covering NSEC records.
+
 ### Other changes
 
 - The logging module `blgr` has been updated. Log files will now be rolled over

@@ -6,9 +6,14 @@ const {RootServer} = require('../lib/dns/server');
 const {Resource} = require('../lib/dns/resource');
 const NameState = require('../lib/covenants/namestate');
 const rules = require('../lib/covenants/rules');
-const nsec = require('../lib/dns/nsec.js');
 const nameData = require('./data/ns-names.json');
 const icannData = require('./data/ns-icann.json');
+const {
+  TYPE_MAP_ROOT,
+  TYPE_MAP_EMPTY,
+  TYPE_MAP_NS,
+  TYPE_MAP_TXT
+} = require('../lib/dns/common');
 
 describe('RootServer', function() {
   const ns = new RootServer({
@@ -319,6 +324,29 @@ describe('RootServer DNSSEC', function () {
     return ns.resolve(req);
   };
 
+  it('should confirm NSEC bitmap constants', () => {
+    const tests = [
+      [TYPE_MAP_ROOT,  [wire.types.NS,
+                        wire.types.SOA,
+                        wire.types.RRSIG,
+                        wire.types.NSEC,
+                        wire.types.DNSKEY]],
+      [TYPE_MAP_EMPTY, [wire.types.RRSIG,
+                        wire.types.NSEC]],
+      [TYPE_MAP_NS,    [wire.types.NS,
+                        wire.types.RRSIG,
+                        wire.types.NSEC]],
+      [TYPE_MAP_TXT,   [wire.types.TXT,
+                        wire.types.RRSIG,
+                        wire.types.NSEC]]
+    ];
+    for (const [actual, types] of tests) {
+      const record = new wire.NSECRecord();
+      record.setTypes(types);
+      assert.bufferEqual(actual, record.typeBitmap);
+    }
+  });
+
   it('should refuse invalid names', async () => {
     const qname = 'example\\000';
     const res = await resolve(qname, wire.types.NS);
@@ -366,7 +394,7 @@ describe('RootServer DNSSEC', function () {
     const closeNames = ['icecreal.', 'icecrean.',
       'icecreal0.', 'icecrea-a.', 'icecreama.'];
 
-    for(const name of closeNames) {
+    for (const name of closeNames) {
       const covering = findCoveringNSEC(authority, name);
       assert(!covering.found);
     }
@@ -394,7 +422,7 @@ describe('RootServer DNSSEC', function () {
     assert.strictEqual(set.length, 1);
     const proof = set[0];
 
-    assert.strictEqual(proof.data.typeBitmap, nsec.TYPE_MAP_ROOT);
+    assert.strictEqual(proof.data.typeBitmap, TYPE_MAP_ROOT);
     assert(cover('.', proof.name, proof.data.nextDomain));
     assert(!cover('0.', proof.name, proof.data.nextDomain));
     assert(!cover('aa.', proof.name, proof.data.nextDomain));
@@ -425,6 +453,7 @@ describe('RootServer DNSSEC', function () {
       assert.strictEqual(res.authority.length, 0);
       assert.strictEqual(res.additional.length, 0);
       assert(util.hasType(res.answer, wire.types.DS));
+      assert(util.hasType(res.answer, wire.types.RRSIG));
     }
   });
 
@@ -480,7 +509,7 @@ describe('RootServer DNSSEC', function () {
       const proof = set[0];
       // NSEC must be exact match
       assert.strictEqual(qname, proof.name);
-      assert.strictEqual(proof.data.typeBitmap, nsec.TYPE_MAP_NS);
+      assert.strictEqual(proof.data.typeBitmap, TYPE_MAP_NS);
     }
   });
 
@@ -514,7 +543,7 @@ describe('RootServer DNSSEC', function () {
 
       const set = util.extractSet(res.authority, tld, wire.types.NSEC);
       assert.strictEqual(set.length, 1);
-      assert.strictEqual(set[0].data.typeBitmap, nsec.TYPE_MAP_NS);
+      assert.strictEqual(set[0].data.typeBitmap, TYPE_MAP_NS);
     }
   });
 
@@ -529,8 +558,8 @@ describe('RootServer DNSSEC', function () {
     // types exist to prove non-existence
     // of the requested type
     const queries = [
-      {name: 'schematic.', type: wire.types.A, bitmap: nsec.TYPE_MAP_TXT},
-      {name: 'empty-name.', type: wire.types.TXT, bitmap: nsec.TYPE_MAP_EMPTY}
+      {name: 'schematic.', type: wire.types.A, bitmap: TYPE_MAP_TXT},
+      {name: 'empty-name.', type: wire.types.TXT, bitmap: TYPE_MAP_EMPTY}
     ];
 
     for (const query of queries) {
@@ -556,22 +585,22 @@ describe('RootServer DNSSEC', function () {
 // compare two labels lexicographically
 function compare(a, b) {
   // 63 octets + 2 octets for length and zero suffix.
-  const buf = Buffer.alloc(65 * 2);
+  const buf1 = Buffer.alloc(65);
+  const buf2 = Buffer.alloc(65);
 
   // convert to wire format
-  const [off1, lc1] = encoding.writeName(buf, a, 0, null, false);
-  const [off2, lc2] = encoding.writeName(buf, b, 65, null, false);
+  const [off1, lc1] = encoding.writeName(buf1, a, 0, null, false);
+  const [off2, lc2] = encoding.writeName(buf2, b, 0, null, false);
   assert(lc1 === 1 && lc1 === lc2);
 
-  const name1 = buf.slice(1, off1 - 1);
-  const name2 = buf.slice(66, off2 - 1);
+  const name1 = buf1.slice(1, off1 - 1);
+  const name2 = buf2.slice(1, off2 - 1);
   return name1.compare(name2);
 }
 
 // tests whether sname is between owner and next.
 function cover(sname, owner, next) {
-  return compare(owner, sname) <= 0 &&
-    compare(next, sname) === 1;
+  return compare(owner, sname) <= 0 && compare(next, sname) === 1;
 }
 
 // finds a covering NSEC record for sname in section
@@ -596,8 +625,7 @@ function findCoveringNSEC(section, sname) {
       result.wildcardNSEC = rr;
   }
 
-  result.found = result.nameNSEC !== null
-    && result.wildcardNSEC !== null;
+  result.found = result.nameNSEC !== null && result.wildcardNSEC !== null;
 
   return result;
 }
