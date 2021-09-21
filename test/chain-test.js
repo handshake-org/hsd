@@ -18,7 +18,6 @@ const Network = require('../lib/protocol/network');
 const Output = require('../lib/primitives/output');
 const MerkleBlock = require('../lib/primitives/merkleblock');
 const common = require('../lib/blockchain/common');
-const Opcode = require('../lib/script/opcode');
 const opcodes = Script.opcodes;
 
 const network = Network.get('regtest');
@@ -49,25 +48,6 @@ const cpu = miner.cpu;
 const wallet = new MemWallet({
   network
 });
-
-// Relative timelock by height
-const csvHeightScript = new Script([
-  Opcode.fromInt(2),
-  Opcode.fromSymbol('checksequenceverify')
-]);
-const csvHeightAddr = Address.fromScripthash(csvHeightScript.sha3());
-
-// Relative timelock by time
-const seconds = 60 * 60; // 1 hour
-let locktime = seconds;
-locktime >>>= consensus.SEQUENCE_GRANULARITY;  // 512-second units
-locktime &= consensus.SEQUENCE_MASK;           // 0x0000ffff
-locktime |= consensus.SEQUENCE_TYPE_FLAG;      // time, not height
-const csvTimeScript = new Script([
-  Opcode.fromInt(locktime),
-  Opcode.fromSymbol('checksequenceverify')
-]);
-const csvTimeAddr = Address.fromScripthash(csvTimeScript.sha3());
 
 let tip1 = null;
 let tip2 = null;
@@ -358,121 +338,8 @@ describe('Chain', function() {
     assert.strictEqual(total, 226);
   });
 
-  it('should test csv by height', async () => {
-    // Fund an output locked by CSV-by-height script
-    const fund = await wallet.send({
-      outputs: [
-        {address: csvHeightAddr, value: 10000}
-      ]
-    });
-    const job = await cpu.createJob();
-    assert(job.addTX(fund.toTX(), fund.view));
-    job.refresh();
-    const block1 = await job.mineAsync();
-    assert(await chain.add(block1));
-
-    // Create a TX that spends the relative-timelocked output.
-    const spend = new MTX();
-    spend.addTX(fund, 0);
-    spend.addOutput(wallet.getReceive(), 9000);
-    spend.inputs[0].witness.push(csvHeightScript.encode());
-
-    // Sequence has not been set (default is 0xffffffff)
-    // Result: TX is "final" and allowed in block but script evaluates to false.
-    const noSeqJob = await cpu.createJob();
-    noSeqJob.pushTX(spend.toTX(), spend.view);
-    noSeqJob.refresh();
-    assert.strictEqual(
-      await mineBlock(noSeqJob),
-      'mandatory-script-verify-flag-failed'
-    );
-
-    // Sequence is too early
-    // Result: TX is invalid in block even before script is evaluated.
-    spend.setSequence(0, 2, false);
-    const badSeqJob = await cpu.createJob();
-    badSeqJob.pushTX(spend.toTX(), spend.view);
-    badSeqJob.refresh();
-    assert.strictEqual(
-      await mineBlock(badSeqJob),
-      'bad-txns-nonfinal'
-    );
-
-    // Add one more block to chain
-    const block2 = await cpu.mineBlock();
-    assert(block2);
-    assert(await chain.add(block2));
-
-    // Now sequence is valid and script evaluates to true.
-    const goodJob = await cpu.createJob();
-    goodJob.pushTX(spend.toTX(), spend.view);
-    goodJob.refresh();
-    assert.strictEqual(
-      await mineBlock(goodJob),
-      'OK'
-    );
-  });
-
-  it('should test csv by time', async () => {
-    // Fund an output locked by CSV-by-time script
-    const fund = await wallet.send({
-      outputs: [
-        {address: csvTimeAddr, value: 10000}
-      ]
-    });
-    const job = await cpu.createJob();
-    assert(job.addTX(fund.toTX(), fund.view));
-    job.refresh();
-    const block1 = await job.mineAsync();
-    assert(await chain.add(block1));
-
-    // Create a TX that spends the relative-timelocked output.
-    const spend = new MTX();
-    spend.addTX(fund, 0);
-    spend.addOutput(await wallet.getReceive(), 9000);
-    spend.inputs[0].witness.push(csvTimeScript.encode());
-
-    // Sequence has not been set (default is 0xffffffff)
-    // Result: TX is "final" and allowed in block but script evaluates to false.
-    const noSeqJob = await cpu.createJob();
-    noSeqJob.pushTX(spend.toTX(), spend.view);
-    noSeqJob.refresh();
-    assert.strictEqual(
-      await mineBlock(noSeqJob),
-      'mandatory-script-verify-flag-failed'
-    );
-
-    // Sequence is too early
-    // Result: TX is invalid in block even before script is evaluated.
-    spend.setSequence(0, seconds, true);
-    const badSeqJob = await cpu.createJob();
-    badSeqJob.pushTX(spend.toTX(), spend.view);
-    badSeqJob.refresh();
-    assert.strictEqual(
-      await mineBlock(badSeqJob),
-      'bad-txns-nonfinal'
-    );
-
-    // Advance the clock and add 11 blocks to chain so MTP catches up.
-    network.time.offset = 2 * 60 * 60; // 2 hours
-    for (let i = 0; i < consensus.MEDIAN_TIMESPAN; i++) {
-      const block = await cpu.mineBlock();
-      assert(block);
-      assert(await chain.add(block));
-    }
-
-    // Now sequence is valid and script evaluates to true.
-    const goodJob = await cpu.createJob();
-    goodJob.pushTX(spend.toTX(), spend.view);
-    goodJob.refresh();
-    assert.strictEqual(
-      await mineBlock(goodJob),
-      'OK'
-    );
-  });
-
   it('should have correct wallet balance', async () => {
-    assert.strictEqual(wallet.balance, 460000000000);
+    assert.strictEqual(wallet.balance, 428000000000);
   });
 
   it('should fail to connect bad bits', async () => {
@@ -538,7 +405,7 @@ describe('Chain', function() {
       assert(await chain.add(block));
     }
 
-    assert.strictEqual(chain.height, 2231);
+    assert.strictEqual(chain.height, 2215);
   });
 
   it('should mine a witness tx', async () => {
