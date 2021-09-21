@@ -374,7 +374,7 @@ describe('Chain', function() {
     // Create a TX that spends the relative-timelocked output.
     const spend = new MTX();
     spend.addTX(fund, 0);
-    spend.addOutput(await wallet.getReceive(), 9000);
+    spend.addOutput(wallet.getReceive(), 9000);
     spend.inputs[0].witness.push(csvHeightScript.encode());
 
     // Sequence has not been set (default is 0xffffffff)
@@ -750,17 +750,18 @@ describe('Chain', function() {
       // These blocks don't have to be strictly 100% valid.
       const flags = common.flags.DEFAULT_FLAGS & ~common.flags.VERIFY_POW;
 
+      // Generate 80 blocks where each coinbase transaction
+      // has 10 outputs to the 100-sigop address.
       start = chain.height + 1;
       for (let i = 0; i < 80; i++) {
-        // Generate block that pays 100 outputs to the 100-sigop address
         const block = await cpu.mineBlock();
         const cb = block.txs[0];
 
         // Clear coinbase outputs
         cb.outputs.length = 0;
 
-        // Add 100 outputs to our sigops address instead
-        for (let j = 0; j < 100; j++) {
+        // Add 10 outputs to our sigops address instead
+        for (let j = 0; j < 10; j++) {
           const output = new Output();
           output.address = addr;
           output.value = value;
@@ -784,7 +785,12 @@ describe('Chain', function() {
     });
 
     it('should connect a block with maximum sigops', async () => {
-      // Mine a block with exactly 80,000 sigops
+      // Mine a block with exactly 80,000 sigops.
+      // We do this by spending each of the 10 coinbase outputs from each
+      // of those previously generated 80 blocks all in the same new block.
+      // Each redeem script for each of those outputs has 100 sigops:
+      // 100 sigops * 10 outputs * 80 blocks = 80,000 sigops total
+      // The consensus limit MAX_BLOCK_SIGOPS is 80,000
       const job = await cpu.createJob();
 
       // Reset the sigops counter
@@ -798,7 +804,7 @@ describe('Chain', function() {
 
         const block = await chain.getBlock(b);
         const cb = block.txs[0];
-        assert.strictEqual(cb.outputs.length, 100);
+        assert.strictEqual(cb.outputs.length, 10);
 
         for (let i = 0; i < 10; i++) {
           mtx.addTX(cb, i);
@@ -830,7 +836,7 @@ describe('Chain', function() {
 
         const block = await chain.getBlock(b);
         const cb = block.txs[0];
-        assert.strictEqual(cb.outputs.length, 100);
+        assert.strictEqual(cb.outputs.length, 10);
 
         for (let i = 0; i < 10; i++) {
           mtx.addTX(cb, i);
