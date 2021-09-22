@@ -1,0 +1,118 @@
+{
+  "com.": {
+    "id": 0,
+    "opcode": "QUERY",
+    "code": "NOERROR",
+    "qr": true,
+    "aa": false,
+    "tc": false,
+    "rd": false,
+    "ra": false,
+    "z": false,
+    "ad": true,
+    "cd": false,
+    "question": [
+      {
+        "name": "com.",
+        "class": "IN",
+        "type": "NS"
+      }
+    ],
+    "answer": [
+    ],
+    "authority": [
+      {
+        "name": "com.",
+        "ttl": 172800,
+        "class": "IN",
+        "type": "NS",
+        "data": {
+          "ns": "a.gtld-servers.net."
+        }
+      },
+      {
+        "name": "com.",
+        "ttl": 86400,
+        "class": "IN",
+        "type": "DS",
+        "data": {
+          "keyTag": 30909,
+          "algorithm": 8,
+          "digestType": 2,
+          "digest": "e2d3c916f6deeac73294e8268fb5885044a833fc5459588f4a9184cfc41a5766",
+          "algName": "RSASHA256",
+          "hashName": "SHA256"
+        }
+      }
+    ],
+    "additional": [
+      {
+        "name": "a.gtld-servers.net.",
+        "ttl": 172800,
+        "class": "IN",
+        "type": "A",
+        "data": {
+          "address": "192.5.6.30"
+        }
+      }
+    ]
+  },
+  "cf.": {
+    "id":0,
+    "opcode":"QUERY",
+    "code":"NOERROR",
+    "qr":true,
+    "aa":false,
+    "tc":false,
+    "rd":false,
+    "ra":false,
+    "z":false,
+    "ad":true,
+    "cd":false,
+    "question":[
+      {
+        "name":"cf.",
+        "class":"IN",
+        "type":"NS"
+      }
+    ],
+    "answer":[
+    ],
+    "authority":[
+      {
+        "name":"cf.",
+        "ttl":172800,
+        "class":"IN",
+        "type":"NS",
+        "data":{
+          "ns":"a.ns.cf."
+        }
+      },
+      {
+        "name":"cf.",
+        "ttl":86400,
+        "class":"IN",
+        "type":"NSEC",
+        "data":{
+          "nextDomain":"cfa.",
+          "typeBitmap":[
+            2,
+            46,
+            47
+          ]
+        }
+      }
+    ],
+    "additional":[
+      {
+        "name":"a.ns.cf.",
+        "ttl":172800,
+        "class":"IN",
+        "type":"A",
+        "data":{
+          "address":"185.21.168.17"
+        }
+      }
+    ]
+  }
+}
