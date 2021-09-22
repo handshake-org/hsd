@@ -18,20 +18,7 @@ const Network = require('../lib/protocol/network');
 const Output = require('../lib/primitives/output');
 const MerkleBlock = require('../lib/primitives/merkleblock');
 const common = require('../lib/blockchain/common');
-const Opcode = require('../lib/script/opcode');
 const opcodes = Script.opcodes;
-
-const ZERO_KEY = Buffer.alloc(33, 0x00);
-
-const csvScript = new Script([
-  Opcode.fromInt(1),
-  Opcode.fromSymbol('checksequenceverify')
-]);
-
-const csvScript2 = new Script([
-  Opcode.fromInt(2),
-  Opcode.fromSymbol('checksequenceverify')
-]);
 
 const network = Network.get('regtest');
 
@@ -84,28 +71,6 @@ async function addBlock(block, flags) {
 async function mineBlock(job, flags) {
   const block = await job.mineAsync();
   return addBlock(block, flags);
-}
-
-async function mineCSV(fund) {
-  const job = await cpu.createJob();
-  const spend = new MTX();
-
-  spend.addOutput({
-    address: Address.fromHash(csvScript.sha3()),
-    value: 10000
-  });
-
-  spend.addTX(fund, 0);
-  spend.setLocktime(chain.height);
-
-  wallet.sign(spend);
-
-  const [tx, view] = spend.commit();
-
-  job.addTX(tx, view);
-  job.refresh();
-
-  return job.mineAsync();
 }
 
 chain.on('connect', (entry, block) => {
@@ -373,89 +338,8 @@ describe('Chain', function() {
     assert.strictEqual(total, 226);
   });
 
-  it('should test csv', async () => {
-    const tx = (await chain.getBlock(chain.height - 100)).txs[0];
-    const csvBlock = await mineCSV(tx);
-
-    assert(await chain.add(csvBlock));
-
-    const csv = csvBlock.txs[1];
-
-    const spend = new MTX();
-
-    spend.addOutput({
-      address: Address.fromHash(csvScript2.sha3()),
-      value: 10000
-    });
-
-    spend.addTX(csv, 0);
-    spend.inputs[0].witness.set(0, csvScript.encode());
-    spend.setSequence(0, 1, false);
-
-    const job = await cpu.createJob();
-
-    assert(job.addTX(spend.toTX(), spend.view));
-    job.refresh();
-
-    const block = await job.mineAsync();
-
-    assert(await chain.add(block));
-  });
-
-  it('should fail csv with bad sequence', async () => {
-    const csv = (await chain.getBlock(chain.height - 100)).txs[0];
-    const spend = new MTX();
-
-    spend.addOutput({
-      address: Address.fromHash(csvScript.sha3()),
-      value: 1 * 1e8
-    });
-
-    spend.addTX(csv, 0);
-    spend.setSequence(0, 1, false);
-
-    const job = await cpu.createJob();
-    job.addTX(spend.toTX(), spend.view);
-    job.refresh();
-
-    assert.strictEqual(await mineBlock(job),
-      'mandatory-script-verify-flag-failed');
-  });
-
-  it('should mine a block', async () => {
-    const block = await cpu.mineBlock();
-    assert(block);
-    assert(await chain.add(block));
-  });
-
-  it('should fail csv lock checks', async () => {
-    const tx = (await chain.getBlock(chain.height - 100)).txs[0];
-    const csvBlock = await mineCSV(tx);
-
-    assert(await chain.add(csvBlock));
-
-    const csv = csvBlock.txs[1];
-
-    const spend = new MTX();
-
-    spend.addOutput({
-      address: Address.fromHash(csvScript2.sha3()),
-      value: 1 * 1e8
-    });
-
-    spend.addTX(csv, 0);
-    spend.inputs[0].witness.set(0, csvScript.encode());
-    spend.setSequence(0, 2, false);
-
-    const job = await cpu.createJob();
-    job.addTX(spend.toTX(), spend.view);
-    job.refresh();
-
-    assert.strictEqual(await mineBlock(job), 'bad-txns-nonfinal');
-  });
-
   it('should have correct wallet balance', async () => {
-    assert.strictEqual(wallet.balance, 435999980000);
+    assert.strictEqual(wallet.balance, 428000000000);
   });
 
   it('should fail to connect bad bits', async () => {
@@ -521,7 +405,7 @@ describe('Chain', function() {
       assert(await chain.add(block));
     }
 
-    assert.strictEqual(chain.height, 2219);
+    assert.strictEqual(chain.height, 2215);
   });
 
   it('should mine a witness tx', async () => {
@@ -703,79 +587,150 @@ describe('Chain', function() {
       'bad-txns-txouttotal-toolarge');
   });
 
-  it('should mine 111 multisig blocks', async () => {
-    const flags = common.flags.DEFAULT_FLAGS & ~common.flags.VERIFY_POW;
+  describe('Sigops', function() {
+    // Create a script with 100 sigops.
+    // The boolean logic at the top makes it ANYONECANSPEND.
+    // The following sigops are still counted even though they are not executed.
+    // This script is based on the Bitcoin Core test p2p_segwit.py
+    const script = new Script();
+    script.pushOp(opcodes.OP_1);
+    script.pushOp(opcodes.OP_IF);
+    script.pushOp(opcodes.OP_1);
+    script.pushOp(opcodes.OP_ELSE);
+    for (let i = 0; i < 100; i++)
+      script.pushOp(opcodes.OP_CHECKSIG);
+    script.pushOp(opcodes.OP_ENDIF);
+    script.compile();
 
-    const redeem = new Script();
-    redeem.pushInt(20);
+    // Address from script
+    const addr = Address.fromScripthash(script.sha3());
 
-    for (let i = 0; i < 20; i++)
-      redeem.pushData(ZERO_KEY);
+    // Value of each UTXO
+    const value = 1;
 
-    redeem.pushInt(20);
-    redeem.pushOp(opcodes.OP_CHECKMULTISIG);
+    // First block to spend from
+    let start;
 
-    redeem.compile();
+    it('should mine 80 blocks to 100-sigops script hash address', async () => {
+      // We are going to modify blocks after mining,
+      // just to get UTXO for the next test.
+      // These blocks don't have to be strictly 100% valid.
+      const flags = common.flags.DEFAULT_FLAGS & ~common.flags.VERIFY_POW;
 
-    const addr = Address.fromScripthash(redeem.sha3());
+      // Generate 80 blocks where each coinbase transaction
+      // has 10 outputs to the 100-sigop address.
+      start = chain.height + 1;
+      for (let i = 0; i < 80; i++) {
+        const block = await cpu.mineBlock();
+        const cb = block.txs[0];
 
-    for (let i = 0; i < 111; i++) {
-      const block = await cpu.mineBlock();
-      const cb = block.txs[0];
-      const val = cb.outputs[0].value;
+        // Clear coinbase outputs
+        cb.outputs.length = 0;
 
-      cb.outputs[0].value = 0;
+        // Add 10 outputs to our sigops address instead
+        for (let j = 0; j < 10; j++) {
+          const output = new Output();
+          output.address = addr;
+          output.value = value;
+          cb.outputs.push(output);
+        }
 
-      for (let j = 0; j < Math.min(100, val); j++) {
-        const output = new Output();
-        output.address = addr;
-        output.value = 1;
+        block.refresh(true);
+        block.merkleRoot = block.createMerkleRoot();
+        block.witnessRoot = block.createWitnessRoot();
 
-        cb.outputs.push(output);
+        assert(await chain.add(block, flags));
+      }
+    });
+
+    it('should mine 10 blocks to wallet', async () => {
+      for (let i = 0; i < 10; i++) {
+        const block = await cpu.mineBlock(null, wallet.getReceive());
+        assert(block);
+        assert(await chain.add(block));
+      }
+    });
+
+    it('should connect a block with maximum sigops', async () => {
+      // Mine a block with exactly 80,000 sigops.
+      // We do this by spending each of the 10 coinbase outputs from each
+      // of those previously generated 80 blocks all in the same new block.
+      // Each redeem script for each of those outputs has 100 sigops:
+      // 100 sigops * 10 outputs * 80 blocks = 80,000 sigops total
+      // The consensus limit MAX_BLOCK_SIGOPS is 80,000
+      const job = await cpu.createJob();
+
+      // Reset the sigops counter
+      // (Initial value is non-zero to reserve space for coinbase)
+      job.attempt.sigops = 0;
+
+      const end = start + 80;
+      for (let b = start; b < end; b++) {
+        const mtx = new MTX();
+        mtx.addOutput(wallet.getReceive(), 10);
+
+        const block = await chain.getBlock(b);
+        const cb = block.txs[0];
+        assert.strictEqual(cb.outputs.length, 10);
+
+        for (let i = 0; i < 10; i++) {
+          mtx.addTX(cb, i);
+
+          // Push redeem script
+          mtx.inputs[i].witness.push(script.encode());
+        }
+
+        job.pushTX(mtx.toTX(), mtx.view);
       }
 
-      block.refresh(true);
-      block.merkleRoot = block.createMerkleRoot();
-      block.witnessRoot = block.createWitnessRoot();
+      assert.strictEqual(job.attempt.sigops, 80000);
+      job.refresh();
+      assert.strictEqual(await mineBlock(job), 'OK');
+    });
 
-      assert(await chain.add(block, flags));
-    }
+    it('should fail to connect a block with too many sigops', async () => {
+      // Remove last block so we can re-use the 100-sigop outputs.
+      await chain.disconnect(chain.tip);
 
-    assert.strictEqual(chain.height, 2332);
+      // Mine a block with exactly 80,001 sigops.
+      const job = await cpu.createJob();
+      job.attempt.sigops = 0;
+
+      const end = start + 80;
+      for (let b = start; b < end; b++) {
+        const mtx = new MTX();
+        mtx.addOutput(wallet.getReceive(), 10);
+
+        const block = await chain.getBlock(b);
+        const cb = block.txs[0];
+        assert.strictEqual(cb.outputs.length, 10);
+
+        for (let i = 0; i < 10; i++) {
+          mtx.addTX(cb, i);
+
+          // Push redeem script
+          mtx.inputs[i].witness.push(script.encode());
+        }
+
+        job.pushTX(mtx.toTX(), mtx.view);
+      }
+
+      assert.strictEqual(job.attempt.sigops, 80000);
+
+      // Add one more sigop
+      const lastMTX = await wallet.create({
+        value: 1,
+        address: new Address()
+      });
+      job.pushTX(lastMTX.toTX(), lastMTX.view);
+      assert.strictEqual(job.attempt.sigops, 80001);
+
+      job.refresh();
+      assert.strictEqual(await mineBlock(job), 'bad-blk-sigops');
+    });
   });
 
-  it('should fail to connect too many sigops', async () => {
-    const start = chain.height - 110;
-    const end = chain.height - 100;
-    const job = await cpu.createJob();
-
-    for (let i = start; i <= end; i++) {
-      const block = await chain.getBlock(i);
-      const cb = block.txs[0];
-
-      if (cb.outputs.length === 2)
-        continue;
-
-      const mtx = new MTX();
-
-      for (let j = 2; j < cb.outputs.length; j++)
-        mtx.addTX(cb, j);
-
-      mtx.addOutput(wallet.getAddress(), 1);
-
-      job.pushTX(mtx.toTX());
-    }
-
-    job.refresh();
-
-    // TODO:
-    // assert.strictEqual(await mineBlock(job), 'bad-blk-sigops');
-
-    assert.strictEqual(await mineBlock(job),
-      'mandatory-script-verify-flag-failed');
-  });
-
-  describe('Checkpoints', function() {
+  describe('Chain width', function() {
     before(async () => {
       const CHECKPOINT = chain.tip.height - 5;
       const entry = await chain.getEntry(CHECKPOINT);
@@ -812,9 +767,18 @@ describe('Chain', function() {
 
     it('will accept blocks after last checkpoint', async () => {
       const AFTER_CHECKPOINT = chain.tip.height - 4;
+
+      // Block is saved as an alternate (not in main chain)
+      let competitor = false;
+      chain.on('competitor', (block, entry) => {
+        competitor = true;
+        assert.strictEqual(entry.height, AFTER_CHECKPOINT + 1);
+      });
+
       const entry = await chain.getEntry(AFTER_CHECKPOINT);
       const block = await cpu.mineBlock(entry);
       assert(await chain.add(block));
+      assert(competitor);
     });
   });
 });
