@@ -14,6 +14,7 @@ const ownership = require('../lib/covenants/ownership');
 const Address = require('../lib/primitives/address');
 const Network = require('../lib/protocol/network');
 const rules = require('../lib/covenants/rules');
+const {Resource} = require('../lib/dns/resource');
 const AirdropProof = require('../lib/primitives/airdropproof');
 
 const network = Network.get('regtest');
@@ -185,11 +186,54 @@ describe('Checkpoints', function() {
     await mineBlock([reveal1, reveal2, reveal3], null, null, 'reveals');
     await mineBlocks(network.names.revealPeriod, 'after reveals');
 
-    const register1 = await wallet.sendRegister(name1);
+    const register1 = await wallet.sendRegister(
+      name1,
+      Resource.fromJSON({
+        records: [
+          {
+            type: 'TXT',
+            txt: ['Not all REGISTER covenants are empty!']
+          }
+        ]
+      })
+    );
     const register2 = await wallet.sendRegister(name2);
 
     await mineBlock([register1, register2], null, null, 'registers');
     await mineBlocks(10, 'after registers');
+  });
+
+  it('should bid in multiple blocks', async () => {
+    const name = rules.grindName(5, chainGenerator.height - 5, network);
+
+    const open = await wallet.sendOpen(name);
+
+    await mineBlock([open], null, null, 'open multi-block auction');
+    await mineBlocks(network.names.treeInterval, 'after open multi');
+
+    let bid;
+    bid = await wallet.sendBid(name, 100, 200);
+    await mineBlock([bid], null, null, 'bid 1 multi');
+    bid = await wallet.sendBid(name, 200, 300);
+    await mineBlock([bid], null, null, 'bid 2 multi');
+    bid = await wallet.sendBid(name, 400, 500);
+    await mineBlock([bid], null, null, 'bid 3 multi');
+    bid = await wallet.sendBid(name, 600, 700);
+    await mineBlock([bid], null, null, 'bid 4 multi');
+    bid = await wallet.sendBid(name, 800, 900);
+    await mineBlock([bid], null, null, 'bid 5 multi');
+
+    await mineBlocks(network.names.biddingPeriod - 6, 'after bids multi');
+
+    const reveal = await wallet.sendReveal(name);
+
+    await mineBlock([reveal], null, null, 'reveal multi');
+    await mineBlocks(network.names.revealPeriod, 'after reveals multi');
+
+    const register = await wallet.sendRegister(name);
+
+    await mineBlock([register], null, null, 'registers multi');
+    await mineBlocks(10, 'after registers multi');
   });
 
   it('should confirm airdrop and faucet proofs', async () => {
