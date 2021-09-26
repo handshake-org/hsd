@@ -83,6 +83,7 @@ async function mineBlock(mtxs, claims, airdrops, label) {
   await chainGenerator.add(block);
 
   labels.push(label);
+  return block;
 }
 
 async function mineBlocks(n, label) {
@@ -361,6 +362,82 @@ describe('Checkpoints', function() {
       assert.deepStrictEqual(chain.tip.getJSON(), chainGenerator.tip.getJSON());
       assert.bufferEqual(chain.db.field.field, chainGenerator.db.field.field);
       assert.deepStrictEqual(chain.db.field, chainGenerator.db.field);
+    });
+
+    describe('Bypass NameState checks for BIDs under checkpoints', function() {
+      let name;
+      let invalidBlockEntry;
+
+      before(async () => {
+        name = rules.grindName(5, chainGenerator.height - 5, network);
+      });
+
+      after(async () => {
+        network.checkpointMap = {};
+        network.lastCheckpoint = 0;
+      });
+
+      it('should OPEN new auction', async () => {
+        const open = await wallet.sendOpen(name);
+        const block = await mineBlock([open], null, null, 'open new auction');
+
+        // Test chain still in sync
+        await chain.add(block);
+        assert.deepStrictEqual(
+          chain.db.state.getJSON(), chainGenerator.db.state.getJSON()
+        );
+        assert.deepStrictEqual(chain.tip.getJSON(), chainGenerator.tip.getJSON());
+        assert.bufferEqual(chain.db.field.field, chainGenerator.db.field.field);
+        assert.deepStrictEqual(chain.db.field, chainGenerator.db.field);
+      });
+
+      it('should mine an invalid BID in last checkpoint block', async () => {
+        // Name has not actually reached the bidding phase yet.
+        // We will force the wallet to create an invalid BID.
+        const restore = wallet.height;
+        wallet.height += network.names.treeInterval + 2;
+        const bid = await wallet.sendBid(name, 100, 200);
+        wallet.height = restore;
+
+        // This block is invalid!
+        const job = await cpu.createJob();
+        job.pushTX(bid.toTX());
+        job.refresh();
+        const invalidBlock = await job.mineAsync();
+
+        // Make this block the LAST CHECKPOINT
+        const height = chainGenerator.height + 1;
+        network.checkpointMap[height] = invalidBlock.hash();
+        network.lastCheckpoint = height;
+
+        // This will not throw even though the block is invalid
+        invalidBlockEntry = await chain.add(invalidBlock);
+
+        // Confirm that was the last checkpoint block
+        assert.strictEqual(invalidBlockEntry.height, network.lastCheckpoint);
+        assert.strictEqual(chain.height, network.lastCheckpoint);
+      });
+
+      it('should detect an invalid BID after last checkpoint block', async () => {
+        // Name has not actually reached the bidding phase yet.
+        // We will force the wallet into creating an invalid BID.
+        const restore = wallet.height;
+        wallet.height += network.names.treeInterval + 2;
+        const bid = await wallet.createBid(name, 300, 400);
+        wallet.height = restore;
+
+        // This block is invalid!
+        const job = await cpu.createJob(invalidBlockEntry);
+        job.pushTX(bid.toTX());
+        job.refresh();
+        const invalidBlock = await job.mineAsync();
+
+        // Now that we are 1 block past checkpoints we will throw
+        await assert.rejects(
+          chain.add(invalidBlock),
+          {reason: 'bad-bid-state'}
+        );
+      });
     });
   });
 });
