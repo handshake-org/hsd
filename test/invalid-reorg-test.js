@@ -18,6 +18,10 @@ const workers = new WorkerPool({
 });
 
 describe('Invalid Reorg', function() {
+  after(async () => {
+    await workers.close();
+  });
+
   for (const mode of ['Front', 'Middle', 'Back', 'Final']) {
     describe(mode, function() {
       this.timeout(45000);

@@ -94,6 +94,7 @@ describe('Chain', function() {
     await miner.close();
     await chain.close();
     await blocks.close();
+    await workers.close();
   });
 
   it('should add addrs to miner', async () => {

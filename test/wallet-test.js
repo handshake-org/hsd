@@ -1854,6 +1854,7 @@ describe('Wallet', function() {
   it('should cleanup', async () => {
     network.coinbaseMaturity = 2;
     await wdb.close();
+    await workers.close();
   });
 
   describe('Disable TXs', function() {
@@ -1867,6 +1868,7 @@ describe('Wallet', function() {
 
     after(async () => {
       await wdb.close();
+      await workers.close();
     });
 
     it('should only send a tx after network txStart', async () => {
@@ -2023,6 +2025,7 @@ describe('Wallet', function() {
 
     after(async () => {
       await wdb.close();
+      await workers.close();
     });
 
     it('should fund wallet', async () => {
@@ -2389,6 +2392,7 @@ describe('Wallet', function() {
 
     after(async () => {
       await wdb.close();
+      await workers.close();
     });
 
     it('should fund wallet', async () => {
@@ -2789,6 +2793,7 @@ describe('Wallet', function() {
 
     after(async () => {
       await wdb.close();
+      await workers.close();
     });
 
     it('should not have any cloudflare state', async () => {
@@ -2979,6 +2984,7 @@ describe('Wallet', function() {
 
     after(async () => {
       await wdb.close();
+      await workers.close();
     });
 
     it('should fund wallet', async () => {
