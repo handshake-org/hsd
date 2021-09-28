@@ -1,6 +1,8 @@
 'use strict';
 
 const assert = require('bsert');
+const IP = require('binet');
+const base32 = require('bcrypto/lib/encoding/base32');
 const {wire, util, encoding} = require('bns');
 const {RootServer} = require('../lib/dns/server');
 const {Resource} = require('../lib/dns/resource');
@@ -26,6 +28,37 @@ describe('RootServer', function() {
 
   after(async () => {
     await ns.close();
+  });
+
+  it('should resolve . NS as SYNTH4', async () => {
+    // Default
+    assert.strictEqual(ns.publicHost, '127.0.0.1');
+
+    // Sanity check
+    assert.strictEqual(
+      base32.encodeHex(IP.toBuffer('127.0.0.1').slice(12)),
+      'fs00008'
+    );
+
+    const name = '.';
+    const type = wire.types.NS;
+    const req = {
+      question: [{name, type}]
+    };
+
+    const res = await ns.resolve(req);
+
+    assert(res.answer.length);
+    const an = res.answer[0];
+    assert.strictEqual(an.name, name);
+    assert.strictEqual(an.type, type);
+    assert.strictEqual(an.data.ns, '_fs00008._synth.');
+
+    assert(res.additional.length);
+    const ad = res.additional[0];
+    assert.strictEqual(ad.name, '_fs00008._synth.');
+    assert.strictEqual(ad.type, wire.types.A);
+    assert.strictEqual(ad.data.address, '127.0.0.1');
   });
 
   it('should resolve a SYNTH4', async () => {
