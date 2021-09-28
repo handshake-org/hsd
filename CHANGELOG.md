@@ -38,6 +38,10 @@ boolean parameter "own" (default: `false`) that filters out names the wallet doe
 - DNSSEC proofs from the root name server were fixed, particularly around non-existent
 domains. The empty zone proofs were replaced with minimally covering NSEC records.
 
+- `FullNode` and `SPVNode` parse new option `--no-sig0` which disables SIG0 signing
+in the root nameserver and recursive resolver. The current SIG0 algorithm uses Blake2b
+and is identified as `PRIVATEDNS` which is incompatible with most legacy DNS software.
+
 ### Other changes
 
 - The logging module `blgr` has been updated. Log files will now be rolled over
