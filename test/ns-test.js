@@ -3,7 +3,7 @@
 const assert = require('bsert');
 const IP = require('binet');
 const base32 = require('bcrypto/lib/encoding/base32');
-const {wire, util, encoding} = require('bns');
+const {wire, util, encoding, StubResolver} = require('bns');
 const {RootServer} = require('../lib/dns/server');
 const {Resource} = require('../lib/dns/resource');
 const NameState = require('../lib/covenants/namestate');
@@ -608,6 +608,51 @@ describe('RootServer DNSSEC', function () {
       const proof = set[0];
       assert.strictEqual(proof.data.typeBitmap, query.bitmap);
     }
+  });
+});
+
+describe('RootServer SIG0', function() {
+  let ns;
+
+  afterEach(async () => {
+    await ns.close();
+  });
+
+  it('should answer with SIG0', async () => {
+    ns = new RootServer({
+      port: 25349
+    });
+
+    const stub = new StubResolver();
+    stub.setServers(['127.0.0.1:25349']);
+
+    // Use a synth name for this so no Urkel Tree or ICANN DNS is required
+    const name = '_fs0000g._synth.';
+
+    await ns.open();
+    const res = await stub.lookup(name);
+
+    assert(res.sig0);
+    const json = res.getJSON();
+    assert.strictEqual(json.sig0.algName, 'PRIVATEDNS');
+  });
+
+  it('should not answer with SIG0', async () => {
+    ns = new RootServer({
+      port: 25349,
+      noSig0: true
+    });
+
+    const stub = new StubResolver();
+    stub.setServers(['127.0.0.1:25349']);
+
+    // Use a synth name for this so no Urkel Tree or ICANN DNS is required
+    const name = '_fs0000g._synth.';
+
+    await ns.open();
+    const res = await stub.lookup(name);
+
+    assert(!res.sig0);
   });
 });
 
