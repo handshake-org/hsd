@@ -1155,7 +1155,7 @@ class MemWallet {
       output.covenant.pushU32(ns.height);
       output.covenant.pushHash(nonce);
 
-      mtx.addOutpoint(prevout);
+      mtx.addCoin(coin);
       mtx.outputs.push(output);
     }
 
@@ -1207,7 +1207,7 @@ class MemWallet {
       if (coin.height < ns.height)
         continue;
 
-      mtx.addOutpoint(prevout);
+      mtx.addCoin(coin);
 
       const output = new Output();
       output.address = coin.address;
@@ -1286,7 +1286,7 @@ class MemWallet {
     output.covenant.pushHash(this.getRenewalBlock());
 
     const mtx = new MTX();
-    mtx.addOutpoint(ns.owner);
+    mtx.addCoin(coin);
     mtx.outputs.push(output);
 
     return this._create(mtx, options);
@@ -1348,7 +1348,7 @@ class MemWallet {
     output.covenant.push(resource);
 
     const mtx = new MTX();
-    mtx.addOutpoint(ns.owner);
+    mtx.addCoin(coin);
     mtx.outputs.push(output);
 
     return this._create(mtx, options);
@@ -1405,7 +1405,7 @@ class MemWallet {
     output.covenant.pushHash(this.getRenewalBlock());
 
     const mtx = new MTX();
-    mtx.addOutpoint(ns.owner);
+    mtx.addCoin(coin);
     mtx.outputs.push(output);
 
     return this._create(mtx, options);
@@ -1461,7 +1461,7 @@ class MemWallet {
     output.covenant.push(address.hash);
 
     const mtx = new MTX();
-    mtx.addOutpoint(ns.owner);
+    mtx.addCoin(coin);
     mtx.outputs.push(output);
 
     return this._create(mtx, options);
@@ -1516,7 +1516,7 @@ class MemWallet {
     output.covenant.push(EMPTY);
 
     const mtx = new MTX();
-    mtx.addOutpoint(ns.owner);
+    mtx.addCoin(coin);
     mtx.outputs.push(output);
 
     return this._create(mtx, options);
@@ -1582,7 +1582,7 @@ class MemWallet {
     output.covenant.pushHash(this.getRenewalBlock());
 
     const mtx = new MTX();
-    mtx.addOutpoint(ns.owner);
+    mtx.addCoin(coin);
     mtx.outputs.push(output);
 
     return this._create(mtx, options);
@@ -1635,7 +1635,7 @@ class MemWallet {
     output.covenant.pushU32(ns.height);
 
     const mtx = new MTX();
-    mtx.addOutpoint(ns.owner);
+    mtx.addCoin(coin);
     mtx.outputs.push(output);
 
     return this._create(mtx, options);
