@@ -202,6 +202,22 @@ describe('Checkpoints', function() {
 
     await mineBlock([register1, register2], null, null, 'registers');
     await mineBlocks(10, 'after registers');
+
+    // No redeem for one-bid name1
+    const redeem2 = await wallet.sendRedeem(name2);
+    const redeem3 = await wallet.sendRedeem(name3);
+    await mineBlock([redeem2, redeem3], null, null, 'redeems');
+
+    const transfer1 = await wallet.sendTransfer(name1, wallet.getReceive());
+    const transfer2 = await wallet.sendTransfer(name2, wallet.getReceive());
+    await mineBlock([transfer1, transfer2], null, null, 'transfers');
+    await mineBlocks(network.names.lockupPeriod, 'after transfers');
+
+    const finalize1 = await wallet.sendCancel(name1);
+    await mineBlock([finalize1], null, null, 'finalize');
+
+    const revoke1 = await wallet.sendRevoke(name1);
+    await mineBlock([revoke1], null, null, 'revoke');
   });
 
   it('should bid in multiple blocks', async () => {
