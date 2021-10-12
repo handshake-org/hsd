@@ -1728,6 +1728,12 @@ class MemWallet {
     return mtx;
   }
 
+  async sendRedeem(name, options) {
+    const mtx = await this.createRedeem(name, options);
+    this.addTX(mtx.toTX());
+    return mtx;
+  }
+
   async sendRegister(name, resource, options) {
     const mtx = await this.createRegister(name, resource, options);
     this.addTX(mtx.toTX());

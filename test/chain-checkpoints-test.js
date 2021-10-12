@@ -14,6 +14,7 @@ const ownership = require('../lib/covenants/ownership');
 const Address = require('../lib/primitives/address');
 const Network = require('../lib/protocol/network');
 const rules = require('../lib/covenants/rules');
+const {Resource} = require('../lib/dns/resource');
 const AirdropProof = require('../lib/primitives/airdropproof');
 
 const network = Network.get('regtest');
@@ -82,6 +83,7 @@ async function mineBlock(mtxs, claims, airdrops, label) {
   await chainGenerator.add(block);
 
   labels.push(label);
+  return block;
 }
 
 async function mineBlocks(n, label) {
@@ -185,11 +187,70 @@ describe('Checkpoints', function() {
     await mineBlock([reveal1, reveal2, reveal3], null, null, 'reveals');
     await mineBlocks(network.names.revealPeriod, 'after reveals');
 
-    const register1 = await wallet.sendRegister(name1);
+    const register1 = await wallet.sendRegister(
+      name1,
+      Resource.fromJSON({
+        records: [
+          {
+            type: 'TXT',
+            txt: ['Not all REGISTER covenants are empty!']
+          }
+        ]
+      })
+    );
     const register2 = await wallet.sendRegister(name2);
 
     await mineBlock([register1, register2], null, null, 'registers');
     await mineBlocks(10, 'after registers');
+
+    // No redeem for one-bid name1
+    const redeem2 = await wallet.sendRedeem(name2);
+    const redeem3 = await wallet.sendRedeem(name3);
+    await mineBlock([redeem2, redeem3], null, null, 'redeems');
+
+    const transfer1 = await wallet.sendTransfer(name1, wallet.getReceive());
+    const transfer2 = await wallet.sendTransfer(name2, wallet.getReceive());
+    await mineBlock([transfer1, transfer2], null, null, 'transfers');
+    await mineBlocks(network.names.lockupPeriod, 'after transfers');
+
+    const finalize1 = await wallet.sendCancel(name1);
+    await mineBlock([finalize1], null, null, 'finalize');
+
+    const revoke1 = await wallet.sendRevoke(name1);
+    await mineBlock([revoke1], null, null, 'revoke');
+  });
+
+  it('should bid in multiple blocks', async () => {
+    const name = rules.grindName(5, chainGenerator.height - 5, network);
+
+    const open = await wallet.sendOpen(name);
+
+    await mineBlock([open], null, null, 'open multi-block auction');
+    await mineBlocks(network.names.treeInterval, 'after open multi');
+
+    let bid;
+    bid = await wallet.sendBid(name, 100, 200);
+    await mineBlock([bid], null, null, 'bid 1 multi');
+    bid = await wallet.sendBid(name, 200, 300);
+    await mineBlock([bid], null, null, 'bid 2 multi');
+    bid = await wallet.sendBid(name, 400, 500);
+    await mineBlock([bid], null, null, 'bid 3 multi');
+    bid = await wallet.sendBid(name, 600, 700);
+    await mineBlock([bid], null, null, 'bid 4 multi');
+    bid = await wallet.sendBid(name, 800, 900);
+    await mineBlock([bid], null, null, 'bid 5 multi');
+
+    await mineBlocks(network.names.biddingPeriod - 6, 'after bids multi');
+
+    const reveal = await wallet.sendReveal(name);
+
+    await mineBlock([reveal], null, null, 'reveal multi');
+    await mineBlocks(network.names.revealPeriod, 'after reveals multi');
+
+    const register = await wallet.sendRegister(name);
+
+    await mineBlock([register], null, null, 'registers multi');
+    await mineBlocks(10, 'after registers multi');
   });
 
   it('should confirm airdrop and faucet proofs', async () => {
@@ -301,6 +362,82 @@ describe('Checkpoints', function() {
       assert.deepStrictEqual(chain.tip.getJSON(), chainGenerator.tip.getJSON());
       assert.bufferEqual(chain.db.field.field, chainGenerator.db.field.field);
       assert.deepStrictEqual(chain.db.field, chainGenerator.db.field);
+    });
+
+    describe('Bypass NameState checks for BIDs under checkpoints', function() {
+      let name;
+      let invalidBlockEntry;
+
+      before(async () => {
+        name = rules.grindName(5, chainGenerator.height - 5, network);
+      });
+
+      after(async () => {
+        network.checkpointMap = {};
+        network.lastCheckpoint = 0;
+      });
+
+      it('should OPEN new auction', async () => {
+        const open = await wallet.sendOpen(name);
+        const block = await mineBlock([open], null, null, 'open new auction');
+
+        // Test chain still in sync
+        await chain.add(block);
+        assert.deepStrictEqual(
+          chain.db.state.getJSON(), chainGenerator.db.state.getJSON()
+        );
+        assert.deepStrictEqual(chain.tip.getJSON(), chainGenerator.tip.getJSON());
+        assert.bufferEqual(chain.db.field.field, chainGenerator.db.field.field);
+        assert.deepStrictEqual(chain.db.field, chainGenerator.db.field);
+      });
+
+      it('should mine an invalid BID in last checkpoint block', async () => {
+        // Name has not actually reached the bidding phase yet.
+        // We will force the wallet to create an invalid BID.
+        const restore = wallet.height;
+        wallet.height += network.names.treeInterval + 2;
+        const bid = await wallet.sendBid(name, 100, 200);
+        wallet.height = restore;
+
+        // This block is invalid!
+        const job = await cpu.createJob();
+        job.pushTX(bid.toTX());
+        job.refresh();
+        const invalidBlock = await job.mineAsync();
+
+        // Make this block the LAST CHECKPOINT
+        const height = chainGenerator.height + 1;
+        network.checkpointMap[height] = invalidBlock.hash();
+        network.lastCheckpoint = height;
+
+        // This will not throw even though the block is invalid
+        invalidBlockEntry = await chain.add(invalidBlock);
+
+        // Confirm that was the last checkpoint block
+        assert.strictEqual(invalidBlockEntry.height, network.lastCheckpoint);
+        assert.strictEqual(chain.height, network.lastCheckpoint);
+      });
+
+      it('should detect an invalid BID after last checkpoint block', async () => {
+        // Name has not actually reached the bidding phase yet.
+        // We will force the wallet into creating an invalid BID.
+        const restore = wallet.height;
+        wallet.height += network.names.treeInterval + 2;
+        const bid = await wallet.createBid(name, 300, 400);
+        wallet.height = restore;
+
+        // This block is invalid!
+        const job = await cpu.createJob(invalidBlockEntry);
+        job.pushTX(bid.toTX());
+        job.refresh();
+        const invalidBlock = await job.mineAsync();
+
+        // Now that we are 1 block past checkpoints we will throw
+        await assert.rejects(
+          chain.add(invalidBlock),
+          {reason: 'bad-bid-state'}
+        );
+      });
     });
   });
 });
