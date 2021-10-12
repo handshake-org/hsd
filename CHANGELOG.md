@@ -46,7 +46,8 @@ and is identified as `PRIVATEDNS` which is incompatible with most legacy DNS sof
 
 - The logging module `blgr` has been updated. Log files will now be rolled over
 at around 20 MB and timestamped. Only the last 10 log files will be kept on disk
-and older log files will be purged.
+and older log files will be purged. These values can be configured by passing
+`--log-max-file-size` (in MB) and `--log-max-files`.
 
 ## v2.4.0
 
