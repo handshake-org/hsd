@@ -1,6 +1,6 @@
 # HSD Release Notes & Changelog
 
-## unreleased
+## v3.0.0
 
 **When upgrading to this version of hsd you must pass
 `--chain-migrate=2 --wallet-migrate=1` when you run it for the first time.**
