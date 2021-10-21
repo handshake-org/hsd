@@ -62,7 +62,8 @@ describe('Node Critical Error', function() {
         //   at async Parser.<anonymous> (hsd/lib/net/peer.js:185:9)
         await node.chain.add(block);
       } catch (e) {
-        assert.strictEqual(e.message, 'Disk full!');
+        assert.strictEqual(e.message, 'Critical Error: Disk full!');
+        assert.strictEqual(e.type, 'CriticalError');
         break;
       }
     }
