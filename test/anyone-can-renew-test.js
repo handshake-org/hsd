@@ -67,6 +67,9 @@ describe('Anyone-can-renew address', function() {
 
     aliceReceive = await alice.receiveAddress();
     bobReceive = await bob.receiveAddress();
+
+    // Skip past first 50 blocks so renewal is possible.
+    await mineBlocks(50);
   });
 
   after(async () => {
@@ -275,7 +278,7 @@ describe('Anyone-can-renew address', function() {
     mtx.output(0).covenant.type = rules.types.RENEW;
     mtx.output(0).covenant.pushHash(nameHash);
     mtx.output(0).covenant.pushU32(heightBeforeOpen + 1);
-    mtx.output(0).covenant.pushHash(node.chain.tip.hash);
+    mtx.output(0).covenant.pushHash(await wdb.getRenewalBlock());
 
     await alice.fund(mtx, {coins: [coin]});
     await alice.finalize(mtx, {coins: [coin]});
@@ -300,7 +303,7 @@ describe('Anyone-can-renew address', function() {
     mtx.output(0).covenant.type = rules.types.RENEW;
     mtx.output(0).covenant.pushHash(nameHash);
     mtx.output(0).covenant.pushU32(heightBeforeOpen + 1);
-    mtx.output(0).covenant.pushHash(node.chain.tip.hash);
+    mtx.output(0).covenant.pushHash(await wdb.getRenewalBlock());
 
     await bob.fund(mtx, {coins: [coin]});
     await bob.finalize(mtx, {coins: [coin]});
