@@ -7,7 +7,7 @@ __HSD__ is an implementation of the [Handshake][handshake] Protocol.
 
 ## Install
 
-`hsd` requires Node.js v10 or higher
+`hsd` requires Node.js v12 or higher
 
 
 ### Building From Source
