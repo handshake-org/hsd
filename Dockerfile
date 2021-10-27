@@ -1,4 +1,4 @@
-FROM node:10-alpine AS base
+FROM node:14-alpine AS base
 WORKDIR /opt/hsd
 RUN apk add --no-cache bash unbound-dev gmp-dev
 COPY package.json /opt/hsd
