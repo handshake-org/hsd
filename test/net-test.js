@@ -45,7 +45,7 @@ describe('Net', function() {
       return new Promise((resolve, reject) => {
         parser.once('packet', (packet) => {
           try {
-            assert.strictEqual(packet.type, type);
+            assert.strictEqual(packet.rawType, type);
             test(packet, ...extra);
           } catch (e) {
             reject(e);
@@ -1033,8 +1033,9 @@ describe('Net', function() {
     });
 
     it('should encode/decode unknown packets', async () => {
-      const check = (pkt) => {
-        assert.equal(pkt.type, packets.types.UNKNOWN);
+      const check = (pkt, rawType = packets.types.UNKNOWN) => {
+        assert.strictEqual(pkt.type, packets.types.UNKNOWN);
+        assert.strictEqual(pkt.rawType, rawType);
         assert.bufferEqual(pkt.data, Buffer.alloc(12, 0x01));
       };
 
@@ -1049,7 +1050,16 @@ describe('Net', function() {
 
       await wireTest(packets.types.UNKNOWN, pkt, check);
 
-      // TODO: Add real unknown packets.
+      // real UnknownPacket
+      const RAW_TYPE = 255;
+
+      pkt = new packets.UnknownPacket(RAW_TYPE, Buffer.alloc(12, 0x01));
+      check(pkt, RAW_TYPE);
+
+      pkt = packets.decode(RAW_TYPE, pkt.encode());
+      check(pkt, RAW_TYPE);
+
+      await wireTest(RAW_TYPE, pkt, check, RAW_TYPE);
     });
   });
 
