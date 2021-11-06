@@ -1,6 +1,3 @@
-/* eslint-env mocha */
-/* eslint prefer-arrow-callback: "off" */
-
 'use strict';
 
 const base58 = require('bcrypto/lib/encoding/base58');

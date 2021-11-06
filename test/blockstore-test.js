@@ -1,13 +1,3 @@
-/**
- * test/blockstore-test.js - blockstore test for hsd
- * Copyright (c) 2019, Braydon Fuller (MIT License).
- * Copyright (c) 2019, Mark Tyneway (MIT License).
- * https://github.com/handshake-org/hsd
- */
-
-/* eslint-env mocha */
-/* eslint prefer-arrow-callback: "off" */
-
 'use strict';
 
 const Logger = require('blgr');

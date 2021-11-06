@@ -1,7 +1,3 @@
-/* eslint-env mocha */
-/* eslint prefer-arrow-callback: "off" */
-/* eslint no-implicit-coercion: "off" */
-
 'use strict';
 
 const assert = require('bsert');
@@ -2463,8 +2459,8 @@ describe('Wallet', function() {
       let bal = await wallet.getBalance();
       assert.strictEqual(bal.tx, 2);
       assert.strictEqual(bal.coin, 2);
-      assert.strictEqual(bal.confirmed, 10e6 - (1 * fee));
-      assert.strictEqual(bal.unconfirmed, 10e6 - (1 * fee));
+      assert.strictEqual(bal.confirmed, 10e6 - (cTXCount * fee));
+      assert.strictEqual(bal.unconfirmed, 10e6 - (uTXCount * fee));
       assert.strictEqual(bal.ulocked, 0);
       assert.strictEqual(bal.clocked, 0);
 

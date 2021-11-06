@@ -1,7 +1,3 @@
-/* eslint-env mocha */
-/* eslint prefer-arrow-callback: "off" */
-/* eslint no-return-assign: "off" */
-
 // DO NOT TOUCH THESE TESTS
 // They trigger the tree interval reorg bug.
 

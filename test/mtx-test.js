@@ -1,16 +1,10 @@
-/* eslint-env mocha */
-/* eslint prefer-arrow-callback: "off" */
-/* eslint no-unused-vars: "off" */
-
 'use strict';
 
 const assert = require('bsert');
-const bio = require('bufio');
 const CoinView = require('../lib/coins/coinview');
 const WalletCoinView = require('../lib/wallet/walletcoinview');
 const MTX = require('../lib/primitives/mtx');
 const Path = require('../lib/wallet/path');
-const common = require('./util/common');
 
 const mtx1json = require('./data/mtx1.json');
 const mtx2json = require('./data/mtx2.json');

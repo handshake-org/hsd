@@ -1,7 +1,3 @@
-/* eslint-env mocha */
-/* eslint prefer-arrow-callback: "off" */
-/* eslint no-implicit-coercion: "off" */
-
 'use strict';
 
 const assert = require('bsert');
