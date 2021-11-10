@@ -10,7 +10,8 @@ const TX = require('../lib/primitives/tx');
 const {
   ChainState,
   BlockMeta,
-  TXRecord
+  TXRecord,
+  MapRecord
 } = Records;
 
 function getRandomChainState(marked = false) {
@@ -262,7 +263,7 @@ describe('Wallet Records', function() {
         mtime: mtime,
         index: -1,
         ...emptyTX,
-        ...emptyBlock,
+        ...emptyBlock
       });
     });
 
@@ -274,7 +275,7 @@ describe('Wallet Records', function() {
     });
 
     it('should initialize w/ tx and block', () => {
-      const {data, block, tx} = getRandomTXRecordData(true, true)
+      const {data, block, tx} = getRandomTXRecordData(true, true);
       const wtx = new TXRecord(tx, block);
 
       compareTXRecord(wtx, data);
@@ -351,6 +352,74 @@ describe('Wallet Records', function() {
         ...data,
         ...emptyBlock
       });
+    });
+  });
+
+  describe('MapRecord', function() {
+    it('should initialize with default', () => {
+      const map = new MapRecord();
+
+      assert.strictEqual(map.wids.size, 0);
+    });
+
+    it('should encode/decode empty map', () => {
+      const map = new MapRecord();
+      const encoded = map.encode();
+      const decoded = MapRecord.decode(encoded);
+
+      assert.bufferEqual(encoded, Buffer.from('00'.repeat(4), 'hex'));
+      assert.strictEqual(map.wids.size, 0);
+      assert.strictEqual(decoded.wids.size, 0);
+    });
+
+    it('should encode/decode map', () => {
+      const rand = random.randomRange(1, 100);
+      const map = new MapRecord();
+
+      for (let i = 0; i < rand; i++)
+        map.add(i);
+
+      const encoded = map.encode();
+      const decoded = MapRecord.decode(encoded);
+
+      assert.strictEqual(decoded.wids.size, map.wids.size);
+      for (let i = 0; i < rand; i++)
+        assert(decoded.wids.has(i));
+    });
+
+    it('should add and remove items from the map', () => {
+      const items = 20;
+      const map = new MapRecord();
+
+      for (let i = 0; i < items; i++) {
+        const res = map.add(i);
+        assert.strictEqual(res, true);
+        assert.strictEqual(map.wids.size, i + 1);
+      }
+
+      for (let i = 0; i < items; i++) {
+        const res = map.add(i);
+        assert.strictEqual(res, false);
+        assert.strictEqual(map.wids.size, items);
+      }
+
+      for (let i = items; i < items * 2; i++) {
+        const res = map.remove(i);
+        assert.strictEqual(res, false);
+        assert.strictEqual(map.wids.size, items);
+      }
+
+      for (let i = 0; i < items; i++) {
+        const res = map.remove(i);
+        assert.strictEqual(res, true);
+        assert.strictEqual(map.wids.size, items - i - 1);
+      }
+
+      for (let i = 0; i < items; i++) {
+        const res = map.remove(i);
+        assert.strictEqual(res, false);
+        assert.strictEqual(map.wids.size, 0);
+      }
     });
   });
 });
