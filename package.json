@@ -65,6 +65,8 @@
     "build-docs": "jsdoc -c jsdoc.json",
     "lint": "eslint $(cat .eslintfiles)",
     "lint-file": "eslint",
+    "lint-unicode": "./scripts/unicode-lint.sh",
+    "lint-ci": "npm run lint && npm run lint-unicode",
     "test": "bmocha --reporter spec test/*.js",
     "test-browser": "NODE_BACKEND=js bmocha --reporter spec test/*.js",
     "test-file": "bmocha --reporter spec",

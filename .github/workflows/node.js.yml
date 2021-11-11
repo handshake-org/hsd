@@ -26,7 +26,7 @@ jobs:
            npm install nyc coveralls bslint @hns-dev/bsdoc
 
     - name: Lint
-      run: npm run lint
+      run: npm run lint-ci
 
     - name: Build Docs
       run: npm run build-docs
