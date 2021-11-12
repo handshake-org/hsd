@@ -812,6 +812,30 @@ describe('Wallet HTTP', function() {
     }
   });
 
+  it('should zap eligible transactions', async () => {
+    // clear all pending txes
+    let pendingTxes = await wallet.getPending('default');
+    for (const pendingTx of pendingTxes) {
+      await wallet.abandon(pendingTx.hash);
+    }
+
+    const tx = await wallet.send({
+      outputs: [{ address: cbAddress, value: 1e4 }]
+    });
+
+    pendingTxes = await wallet.getPending('default');
+    assert(pendingTxes.length === 1);
+    assert(pendingTxes[0].hash === tx.hash);
+
+    await sleep(1001);
+
+    const {success} = await wallet.zap('default', 1);
+    assert(success === true);
+
+    pendingTxes = await wallet.getPending('default');
+    assert(pendingTxes.length === 0);
+  });
+
   // this test creates namestate to use duing the
   // next test, hold on to the name being used.
   const state = {
