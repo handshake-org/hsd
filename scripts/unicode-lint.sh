@@ -1,8 +1,10 @@
 #!/usr/bin/env bash
 
 filter_ignore() {
+  filtered="$1"
+
   # Filter Mnemonic keywords
-  filtered=`echo "$1" | grep -v '^\./lib/hd/words/\(french\|italian\|japanese\|spanish\|chinese-traditional\|chinese-simplified\)\.js$'`
+  filtered=`echo "$filtered" | grep -v '^\./lib/hd/words/\(french\|italian\|japanese\|spanish\|chinese-traditional\|chinese-simplified\)\.js$'`
 
   # filter cached files
   filtered=`echo "$filtered" | grep -v '^./node_modules/.cache'`
@@ -23,56 +25,35 @@ get_whitelist() {
   echo "ä"
 }
 
-check_blacklist() {
-  # Source https://blog.rust-lang.org/2021/11/01/cve-2021-42574.html
-  grep $'[\u202A-\u202E\u2066-\u2069]' "$1"
-  exit $?
-}
-
-check_whitelist() {
-  white_list=`get_whitelist`
-  check_symbols=$'[^\u0020-\u007e\r\t'$white_list']'
-
-  grep $check_symbols "$1"
-  exit $?
-}
-
 # Start
-all_files=`find . -iname '*.js' -print`
+# Check everything for blacklists.
+blacklist_matches=`grep $'[\u202A-\u202E\u2066-\u2069]' -r . --include='*.js' -l`
+status=$?
 
-# Run blacklist against every file
-IFS=$'\n'
-for file in `echo "$all_files"`; do
-  res=`check_blacklist $file`
-  status=$?
-
-  if [[ $status -eq 1 ]]; then
-    continue
-  fi
-
-  echo -e "Found blacklisted symbols in $file !!!\n"
+if [[ $status -eq 0 ]]; then
+  echo "Found blacklisted symbols"
   echo "More info at https://github.com/handshake-org/hsd/pull/658"
+  echo "Files:"
+  for file in $blacklist_matches; do
+    echo "  $file"
+  done
   exit 1
-done
-unset IFS
+fi
 
-# add this script and bin folder
-add_files=`echo -e "$0\n$all_files\n$(find ./bin -type f)"`
-filtered=`filter_ignore "$add_files"`
+# Check files only have whitelisted characters
+white_list=`get_whitelist`
+check_symbols=$'[^\u0020-\u007e\r\t'$white_list']'
+whitelist_matches=`grep "$check_symbols" -r . --include='*.js' -l`
+filtered=`filter_ignore "$whitelist_matches"`
 
-IFS=$'\n'
-for file in `echo "$filtered"`; do
-  res=`check_whitelist $file`
-  status=$?
-
-  if [[ $status -eq 1 ]]; then
-    continue
-  fi
-
-  echo -e "Found bad symbols in $file.\nPlease either fix or add to the ignore list."
+if [[ `echo "$filtered" | wc -l` -gt 1 ]]; then
+  echo "Found non-whitelisted symbols"
   echo "More info at https://github.com/handshake-org/hsd/pull/658"
+  echo "Files:"
+  for file in $filtered; do
+    echo "  $file"
+  done
   exit 1
-done
-unset IFS
+fi
 
 exit 0
