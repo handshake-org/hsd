@@ -26,36 +26,30 @@ const mnemonic = Mnemonic.fromPhrase(phrase);
 const network = Network.get('regtest');
 
 // sighash types
-const SINGLEREVERSE = common.hashType.SINGLEREVERSE;
+const {
+  SINGLEREVERSE,
+  NOINPUT,
+  ANYONECANPAY
+} = common.hashType;
 
 const ONE_HASH = Buffer.alloc(32, 0x00);
 ONE_HASH[0] = 0x01;
-const COIN_TYPE= network.keyPrefix.coinType;
+const COIN_TYPE = network.keyPrefix.coinType;
 
 describe('Signature Hashes', function () {
+  const path = [harden(44), harden(5353), harden(0), 0, 0];
+  const keyring = newKeyRing(path);
+  const addr = keyring.getAddress();
+  const script = Script.fromPubkeyhash(keyring.getHash());
+
+  // generate receive addresses
+  const receives = [
+    newAddress([harden(44), harden(COIN_TYPE), harden(1), 0, 0]),
+    newAddress([harden(44), harden(COIN_TYPE), harden(2), 0, 0]),
+    newAddress([harden(44), harden(COIN_TYPE), harden(3), 0, 0])
+  ];
+
   describe('SINGLEREVERSE', function () {
-    let path, keyring, addr, receives;
-
-    before(() => {
-      path = [harden(44), harden(5353), harden(0), 0, 0];
-      keyring = newKeyRing(path);
-      addr = keyring.getAddress();
-
-      // generate receive addresses
-      receives = [
-        newAddress([harden(44), harden(COIN_TYPE), harden(1), 0, 0]),
-        newAddress([harden(44), harden(COIN_TYPE), harden(2), 0, 0]),
-        newAddress([harden(44), harden(COIN_TYPE), harden(3), 0, 0])
-      ];
-    });
-
-    after(() => {
-      path = null;
-      keyring = null;
-      addr = null;
-      receives = null;
-    });
-
     it('should exist in common', () => {
       assert('SINGLEREVERSE' in common.hashType);
       assert(common.hashTypeByVal[SINGLEREVERSE] === 'SINGLEREVERSE');
@@ -84,7 +78,6 @@ describe('Signature Hashes', function () {
 
       mtx.addCoin(coin);
 
-      const script = Script.fromPubkeyhash(keyring.getHash());
       // sign the 0th input, commit to the output at index 1
       const sighash = mtx.signatureHash(0, script, 70000, SINGLEREVERSE);
 
@@ -176,6 +169,91 @@ describe('Signature Hashes', function () {
       });
 
       assert.equal(mtx.verify(), false);
+    });
+  });
+
+  describe('NOINPUT', function () {
+    // We can spend this coin.
+    const coin1 = new Coin({
+      address: addr,
+      hash: Buffer.alloc(32, 0x01),
+      index: 1,
+      value: 50000
+    });
+
+    // We can spend this coin,
+    // But it has a different outpoint.
+    const coin2 = new Coin({
+      address: addr,
+      hash: Buffer.alloc(32, 0x02),
+      index: 2,
+      value: 50000
+    });
+
+    it('should exist in common', () => {
+      assert('NOINPUT' in common.hashType);
+      assert(common.hashTypeByVal[NOINPUT] === 'NOINPUT');
+    });
+
+    it('should create same sighash, but doesn\'t', () => {
+      const mtx1 = new MTX();
+      mtx1.addOutput(receives[0], 40000);
+      mtx1.addCoin(coin1);
+      const sighash1 = mtx1.signatureHash(0, script, coin1.value, NOINPUT);
+
+      const mtx2 = new MTX();
+      mtx2.addOutput(receives[0], 40000);
+      mtx2.addCoin(coin2);
+      const sighash2 = mtx2.signatureHash(0, script, coin2.value, NOINPUT);
+
+      // This fails because signatureHash() STILL COMMITS to the prevout
+      // and sequence of each input EVEN THOUGH the separate commitment
+      // to "this input's data" is cleared out by SIGHASH_NOINPUT
+      assert.notBufferEqual(sighash1, sighash2);
+    });
+
+    it('should create different sighash using ANYONECANPAY', () => {
+      const mtx1 = new MTX();
+      mtx1.addOutput(receives[0], 40000);
+      mtx1.addCoin(coin1);
+      const sighash1 = mtx1.signatureHash(0, script, coin1.value, ANYONECANPAY);
+
+      const mtx2 = new MTX();
+      mtx2.addOutput(receives[0], 40000);
+      mtx2.addCoin(coin2);
+      const sighash2 = mtx2.signatureHash(0, script, coin2.value, ANYONECANPAY);
+
+      // This fails for the opposite reason as NOINPUT.
+      // This time we are wiping out the prevouts and sequences of all the inputs,
+      // but we still commit to THIS input's outpoint and sequence.
+      assert.notBufferEqual(sighash1, sighash2);
+    });
+
+    it('should create same sighash using NOINPUT | ANYONECANPAY', () => {
+      const mtx1 = new MTX();
+      mtx1.addOutput(receives[0], 40000);
+      mtx1.addCoin(coin1);
+      const sighash1 = mtx1.signatureHash(
+        0,
+        script,
+        coin1.value,
+        NOINPUT | ANYONECANPAY
+      );
+
+      const mtx2 = new MTX();
+      mtx2.addOutput(receives[0], 40000);
+      mtx2.addCoin(coin2);
+      const sighash2 = mtx2.signatureHash(
+        0,
+        script,
+        coin1.value,
+        NOINPUT | ANYONECANPAY
+      );
+
+      // Finally we can malleate the input to this transaction without
+      // invalidating the signature. All prevouts and sequences are nullified
+      // before commitment.
+      assert.bufferEqual(sighash1, sighash2);
     });
   });
 });
