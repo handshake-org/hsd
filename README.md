@@ -5,97 +5,12 @@
 
 __HSD__ is an implementation of the [Handshake][handshake] Protocol.
 
-## Install
+## Documentation
 
-`hsd` requires Node.js v12 or higher
-
-
-### Building From Source
-
-```
-$ git clone https://github.com/handshake-org/hsd.git
-$ cd hsd
-$ npm install --production
-$ ./bin/hsd
-```
-
-Note that `node-gyp` must be installed. See the
-[node-gyp](https://github.com/nodejs/node-gyp) documentation for more
-information.
-
-### Docker
-#### Building an image
-
-To build a Docker image with the name `hsd:<version>-<commit>`, run:
-
-```bash
-$ VERSION=$(cat package.json | grep version | sed 's/.*"\([0-9]*\.[0-9]*\.[0-9]*\)".*/\1/')
-$ COMMIT=$(git rev-parse --short HEAD)
-$ docker build -t hsd:$VERSION-$COMMIT .
-```
-
-#### Running a container
-
-To start a container named `hsd` on a `regtest` network with an exposed
-node API server, run:
-
-```bash
-$ docker run --name hsd -p 14037:14037 hsd:$VERSION-$COMMIT \
-    --network regtest \
-    --http-host 0.0.0.0 \
-    --api-key=foo
-```
-
-To test connectivity, curl the info endpoint:
-```bash
-$ curl http://x:foo@localhost:14037/
-```
-
->Note: by default, none of the container's ports are exposed. Depending
-on the network used for your node, you will need to expose the correct ports
-for the node's various services (node http api, wallet http api, recursive
-name server, authoritative name server, p2p protocol, encrypted p2p protocol).
-The default ports can be found [here](./lib/protocol/networks.js). The DNS
-servers must also expose a UDP port. The syntax is different from TCP and can
-be found [here](https://docs.docker.com/config/containers/container-networking/#published-ports).
-
-#### Stopping a container
-
-To stop a container named `hsd`, run:
-
-```bash
-$ docker stop hsd
-```
-
-### npm
-
-It is not recommended to install `hsd` from npm's repositories
-but it is still possible to install with `npm` using a remote
-`git` repository.
-
-```
-$ npm install -g https://github.com/handshake-org/hsd.git
-```
-
-A `git` ref can be used to install a particular version by appending
-a `#` and the name of the `git` ref to the URL. For example,
-`https://github.com/handshake-org/hsd.git#v3.0.1`. It is recommended
-to use the [latest tagged release](https://github.com/handshake-org/hsd/releases).
-
-If adding `hsd` as a dependency to a project, use the command:
-
-```
-$ npm install https://github.com/handshake-org/hsd.git
-```
-
-### macOS
-
-`hsd` is available via [Homebrew](https://brew.sh). This will
-install all required dependencies as well as `unbound`.
-
-```
-$ brew install hsd
-```
+- [Install guide](./docs/install.md)
+- Documentation Site: [https://hsd-dev.org](https://hsd-dev.org)
+- API Docs: [https://hsd-dev.org/api-docs](https://hsd-dev.org/api-docs)
+- JSDoc: [https://hsd-dev.org/hsd](https://hsd-dev.org/hsd)
 
 ## CLI
 
@@ -116,12 +31,6 @@ The shortcuts `hsd-rpc` and `hsw-rpc` are available if you install hs-client glo
 ```
 $ npm install -g hs-client
 ```
-
-## Documentation
-
-- Documentation Site: [https://hsd-dev.org](https://hsd-dev.org)
-- API Docs: [https://hsd-dev.org/api-docs](https://hsd-dev.org/api-docs)
-- JSDoc: [https://hsd-dev.org/hsd](https://hsd-dev.org/hsd)
 
 ## Contributing
 

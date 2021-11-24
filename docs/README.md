@@ -2,7 +2,7 @@ HSD
 ===
 
 ## Links
-  - [Installation](./hsd#install)
+  - [Install](./install.md)
   - [Release process](./release-process.md)
   - [Release files](./release-files.md)
   - [Release schedule](./release-schedule.md)

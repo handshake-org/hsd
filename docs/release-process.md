@@ -1,6 +1,10 @@
 # Versioning and branching strategy
 
-## Table of Contents
+<!-- markdown-toc start -->
+
+Table of Contents
+-----------------
+
   * [Release schedule and release candidates](#release-schedule-and-release-candidates)
   * [Versioning (Semver)](#versioning-semver)
   * [Support period](#support-period)
@@ -12,6 +16,8 @@
       - [Next release candidate](#next-release-candidate)
       - [Release the major version](#release-the-major-version)
     + [Release minor and patches](#release-minor-and-patches)
+
+<!-- markdown-toc end -->
 
 This document describes the release process and branching strategy
 for the handshake.
@@ -75,7 +81,7 @@ updates are backported from the `master`. Merges to the released version
 branches must happen via Pull Requests to give other maintainers and reviewers
 time to review and verify what will be released.
 
-Process below will be described as procedurs for the situations:
+Process below will be described as procedures for the situations:
   - release `next` major version candidate.
   - release `next` major version. (becomes `latest`)
   - release `latest` minor and patch versions.
@@ -85,7 +91,7 @@ Process below will be described as procedurs for the situations:
 Process for the `latest` and `previous` minor/patch releases is the same.
 At the same time only these branches should exist in the repo
 (Example we have just released `v4.0.0`):
-  - `master` - active developmeny
+  - `master` - active development.
   - `v4.x` - just become `latest` version.
   - `v4.x-proposal` - active backport and PR base.
   - `v3.x` - just become `previous` version.
@@ -112,7 +118,8 @@ At this point we don't want to add more complex things to the release candidate,
 only `patch`es until release(feature lock).
 
 Process example (e.g. `latest` was `3.1.0` and we are releasing `4.0.0-rc.1`):
-  - create branch `4.x-proposal` from the `master`
+  - create branch `4.x` from the `master`.
+  - create branch `4.x-proposal` from the `master`.
   - update `package.json` version to `5.0.99` in `master` branch.
   - update `package.json` version to `4.0.0-rc.1` in `4.x-proposal` branch.
   - optional: In case we want to omit some changes from the `master`,
