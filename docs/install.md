@@ -42,7 +42,8 @@ Note that `node-gyp` must be installed. See the
 information.
 
 ### Verifying
-  Note this does not verify dependencies, they are downloaded from the `npm`.
+  **Note this does not verify dependencies**,
+they are downloaded from the `npm`.
   ```
   cd hsd
   git verify-tag v3.0.1
