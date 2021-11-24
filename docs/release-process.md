@@ -1,23 +1,25 @@
 # Versioning and branching strategy
 
-<!-- markdown-toc start -->
-
 Table of Contents
 -----------------
 
-  * [Release schedule and release candidates](#release-schedule-and-release-candidates)
-  * [Versioning (Semver)](#versioning-semver)
-  * [Support period](#support-period)
-  * [Changelog and release notes](#changelog-and-release-notes)
-  * [Branching strategy](#branching-strategy)
-    + [General](#general)
-    + [master branch and package.json version](#master-branch-and-packagejson-version)
-    + [Release candidate and major release](#release-candidate-and-major-release)
-      - [Next release candidate](#next-release-candidate)
-      - [Release the major version](#release-the-major-version)
-    + [Release minor and patches](#release-minor-and-patches)
+<!-- markdown-toc -i release-process.md -->
 
-<!-- markdown-toc end -->
+<!-- toc -->
+
+- [Release schedule and release candidates](#release-schedule-and-release-candidates)
+- [Versioning (Semver)](#versioning-semver)
+- [Support period](#support-period)
+- [Changelog and release notes](#changelog-and-release-notes)
+- [Branching strategy](#branching-strategy)
+  * [General](#general)
+  * [master branch and package.json version](#master-branch-and-packagejson-version)
+  * [Release candidate and major release](#release-candidate-and-major-release)
+    + [Next release candidate](#next-release-candidate)
+    + [Release the major version](#release-the-major-version)
+  * [Release minor and patches](#release-minor-and-patches)
+
+<!-- tocstop -->
 
 This document describes the release process and branching strategy
 for the handshake.

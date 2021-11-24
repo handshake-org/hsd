@@ -3,25 +3,26 @@ Install `hsd`
 
 `hsd` requires Node.js v12 or higher.
 
-<!-- markdown-toc start -->
-
 Table of contents
 -----------------
 
-- [Install `hsd`](#install-hsd)
-  * [Verifying keys](#verifying-keys)
-  * [Building From Source (git and npm)](#building-from-source-git-and-npm)
-    + [Verifying](#verifying)
-  * [npm](#npm)
-    + [Verifying](#verifying-1)
-  * [macOS](#macos)
-    + [Verifying](#verifying-2)
-  * [Docker](#docker)
-    + [Building an image](#building-an-image)
-    + [Running a container](#running-a-container)
-    + [Stopping a container](#stopping-a-container)
+<!-- markdown-toc -i install.md -->
 
-<!-- markdown-toc end -->
+<!-- toc -->
+
+- [Verifying keys](#verifying-keys)
+- [Building From Source (git and npm)](#building-from-source-git-and-npm)
+  * [Verifying](#verifying)
+- [npm](#npm)
+  * [Verifying](#verifying-1)
+- [macOS](#macos)
+  * [Verifying](#verifying-2)
+- [Docker](#docker)
+  * [Building an image](#building-an-image)
+  * [Running a container](#running-a-container)
+  * [Stopping a container](#stopping-a-container)
+
+<!-- tocstop -->
 
 ## Verifying keys
   Every verifying process described below will need project maintainer
