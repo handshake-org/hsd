@@ -1033,14 +1033,14 @@ describe('Net', function() {
     });
 
     it('should encode/decode unknown packets', async () => {
-      const check = (pkt, rawType = packets.types.UNKNOWN) => {
+      const check = (pkt, rawType) => {
         assert.strictEqual(pkt.type, packets.types.UNKNOWN);
         assert.strictEqual(pkt.rawType, rawType);
         assert.bufferEqual(pkt.data, Buffer.alloc(12, 0x01));
       };
 
       let pkt = new packets.UnknownPacket(packets.types.UNKNOWN, Buffer.alloc(12, 0x01));
-      check(pkt);
+      check(pkt, packets.types.UNKNOWN);
 
       pkt = packets.UnknownPacket.decode(pkt.encode(), packets.types.UNKNOWN);
       check(pkt, packets.types.UNKNOWN);
@@ -1048,7 +1048,7 @@ describe('Net', function() {
       pkt = packets.decode(packets.types.UNKNOWN, pkt.encode());
       check(pkt, packets.types.UNKNOWN);
 
-      await wireTest(packets.types.UNKNOWN, pkt, check);
+      await wireTest(packets.types.UNKNOWN, pkt, check, packets.types.UNKNOWN);
 
       // real UnknownPacket
       const RAW_TYPE = 255;
