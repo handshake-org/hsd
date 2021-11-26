@@ -385,7 +385,7 @@ $ hsd-rpc sendrawclaim 'base64-string'
 
 ## Support
 
-Join us on [freenode][freenode] in the [#handshake][irc] channel.
+Join us on [libera][libera] in the [#handshake][irc] channel.
 
 ## Disclaimer
 
@@ -417,8 +417,8 @@ MIT License.
 See LICENSE for more info.
 
 [handshake]: https://handshake.org/
-[freenode]: https://freenode.net/
-[irc]: irc://irc.freenode.net/handshake
+[libera]: https://libera.chat/
+[irc]: https://web.libera.chat#handshake
 [hnsd]: https://github.com/handshake-org/hnsd
 [hs-miner]: https://github.com/handshake-org/hs-miner
 [hs-client]: https://github.com/handshake-org/hs-client
