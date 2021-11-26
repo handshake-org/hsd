@@ -9,6 +9,7 @@ const fs = require('fs');
 const {BloomFilter} = require('bfilter');
 const {nonce} = require('../lib/net/common');
 const consensus = require('../lib/protocol/consensus');
+const Parser = require('../lib/net/parser');
 const Framer = require('../lib/net/framer');
 const packets = require('../lib/net/packets');
 const NetAddress = require('../lib/net/netaddress');
@@ -25,13 +26,40 @@ const genesis = require('../lib/protocol/genesis');
 const UrkelProof = require('urkel/radix').Proof;
 const blake2b = require('bcrypto/lib/blake2b');
 const AirdropProof = require('../lib/primitives/airdropproof');
+const util = require('../lib/utils/util');
+const pkg = require('../lib/pkg');
 
 const AIRDROP_PROOF_FILE = resolve(__dirname, 'data', 'airdrop-proof.base64');
 const read = file => Buffer.from(fs.readFileSync(file, 'binary'), 'base64');
 
 describe('Net', function() {
   describe('Packets', function() {
-    it('should encode/decode version packets', () => {
+    let parser, framer;
+
+    beforeEach(() => {
+      parser = new Parser();
+      framer = new Framer();
+    });
+
+    function wireTest(type, payload, test, ...extra) {
+      return new Promise((resolve, reject) => {
+        parser.once('packet', (packet) => {
+          try {
+            assert.strictEqual(packet.rawType, type);
+            test(packet, ...extra);
+          } catch (e) {
+            reject(e);
+            return;
+          }
+          resolve();
+        });
+
+        const raw = framer.packet(type, payload.encode());
+        parser.feed(raw);
+      });
+    }
+
+    it('should encode/decode version packets', async () => {
       const check = (pkt) => {
         assert.equal(pkt.type, packets.types.VERSION);
         assert.equal(pkt.version, 70012);
@@ -66,9 +94,76 @@ describe('Net', function() {
 
       pkt = packets.VersionPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.VERSION, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.VERSION, pkt, check);
     });
 
-    it('should encode/decode verack packets', () => {
+    it('should encode/decode version packets (2)', async () => {
+      const network = Network.get('main');
+      const agent = `/${pkg.name}:${pkg.version}/`;
+
+      const check1 = (pkt) => {
+        assert.strictEqual(pkt.version, 300);
+        assert.strictEqual(pkt.agent, agent);
+        assert.strictEqual(pkt.height, 0);
+        assert.strictEqual(pkt.noRelay, false);
+      };
+
+      const check2 = (pkt) => {
+        assert.strictEqual(pkt.version, 300);
+        assert.strictEqual(pkt.agent, agent);
+        assert.strictEqual(pkt.height, 10);
+        assert.strictEqual(pkt.noRelay, true);
+      };
+
+      let pkt;
+      pkt = packets.VersionPacket.fromOptions({
+        version: 300,
+        services: 1,
+        time: network.now(),
+        remote: new NetAddress(),
+        nonce: Buffer.allocUnsafe(8),
+        agent: agent,
+        height: 0,
+        noRelay: false
+      });
+
+      check1(pkt);
+
+      pkt = packets.VersionPacket.decode(pkt.encode());
+      check1(pkt);
+
+      pkt = packets.decode(packets.types.VERSION, pkt.encode());
+      check1(pkt);
+
+      await wireTest(packets.types.VERSION, pkt, check1);
+
+      pkt = packets.VersionPacket.fromOptions({
+        version: 300,
+        services: 1,
+        time: network.now(),
+        remote: new NetAddress(),
+        nonce: Buffer.allocUnsafe(8),
+        agent: agent,
+        height: 10,
+        noRelay: true
+      });
+
+      check2(pkt);
+
+      pkt = packets.VersionPacket.decode(pkt.encode());
+      check2(pkt);
+
+      pkt = packets.decode(packets.types.VERSION, pkt.encode());
+      check2(pkt);
+
+      await wireTest(packets.types.VERSION, pkt, check2);
+    });
+
+    it('should encode/decode verack packets', async () => {
       const check = (pkt) => {
         assert.equal(pkt.type, packets.types.VERACK);
       };
@@ -78,9 +173,14 @@ describe('Net', function() {
 
       pkt = packets.VerackPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.VERACK, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.VERACK, pkt, check);
     });
 
-    it('should encode/decode ping packets', () => {
+    it('should encode/decode ping packets', async () => {
       const check = (pkt) => {
         assert.equal(pkt.type, packets.types.PING);
         assert.bufferEqual(pkt.nonce, Buffer.alloc(8, 0x01));
@@ -91,9 +191,14 @@ describe('Net', function() {
 
       pkt = packets.PingPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.PING, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.PING, pkt, check);
     });
 
-    it('should encode/decode pong packets', () => {
+    it('should encode/decode pong packets', async () => {
       const check = (pkt) => {
         assert.equal(pkt.type, packets.types.PONG);
         assert.bufferEqual(pkt.nonce, Buffer.alloc(8, 0x01));
@@ -104,9 +209,14 @@ describe('Net', function() {
 
       pkt = packets.PongPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.PONG, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.PONG, pkt, check);
     });
 
-    it('should encode/decode getaddr packets', () => {
+    it('should encode/decode getaddr packets', async () => {
       const check = (pkt) => {
         assert.equal(pkt.type, packets.types.GETADDR);
       };
@@ -116,9 +226,14 @@ describe('Net', function() {
 
       pkt = packets.GetAddrPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.GETADDR, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.GETADDR, pkt, check);
     });
 
-    it('should encode/decode addr packets', () => {
+    it('should encode/decode addr packets', async () => {
       const check = (pkt) => {
         assert.equal(pkt.type, packets.types.ADDR);
 
@@ -155,9 +270,57 @@ describe('Net', function() {
 
       pkt = packets.AddrPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.ADDR, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.ADDR, pkt, check);
     });
 
-    it('should encode/decode inv packets', () => {
+    it('should encode/decode addr packets (2)', async () => {
+      const hosts = [
+        new NetAddress({
+          services: 1,
+          host: '127.0.0.1',
+          port: 8333,
+          time: util.now()
+        }),
+        new NetAddress({
+          services: 1,
+          host: '::123:456:789a',
+          port: 18333,
+          time: util.now()
+        })
+      ];
+
+      const check = (payload) => {
+        assert(Array.isArray(payload.items));
+        assert.strictEqual(payload.items.length, 2);
+
+        assert(typeof payload.items[0].time === 'number');
+        assert.strictEqual(payload.items[0].services, 1);
+        assert.strictEqual(payload.items[0].host, hosts[0].host);
+        assert.strictEqual(payload.items[0].port, hosts[0].port);
+
+        assert(typeof payload.items[1].time === 'number');
+        assert.strictEqual(payload.items[1].services, 1);
+        assert.strictEqual(payload.items[1].host, hosts[1].host);
+        assert.strictEqual(payload.items[1].port, hosts[1].port);
+      };
+
+      let pkt = new packets.AddrPacket(hosts);
+      check(pkt);
+
+      pkt = packets.AddrPacket.decode(pkt.encode());
+      check(pkt);
+
+      pkt = packets.decode(packets.types.ADDR, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.ADDR, pkt, check);
+    });
+
+    it('should encode/decode inv packets', async () => {
       const check = (pkt, many) => {
         assert.equal(pkt.type, packets.types.INV);
 
@@ -189,6 +352,11 @@ describe('Net', function() {
       pkt = packets.InvPacket.decode(pkt.encode());
       check(pkt, false);
 
+      pkt = packets.decode(packets.types.INV, pkt.encode());
+      check(pkt, false);
+
+      await wireTest(packets.types.INV, pkt, check, false);
+
       while (items.length < 254)
         items.push(new InvItem(InvItem.types.TX, Buffer.alloc(32, 0x03)));
 
@@ -197,9 +365,14 @@ describe('Net', function() {
 
       pkt = packets.InvPacket.decode(pkt.encode());
       check(pkt, true);
+
+      pkt = packets.decode(packets.types.INV, pkt.encode());
+      check(pkt, true);
+
+      await wireTest(packets.types.INV, pkt, check, true);
     });
 
-    it('should encode/decode getdata packets', () => {
+    it('should encode/decode getdata packets', async () => {
       const check = (pkt) => {
         assert.equal(pkt.type, packets.types.GETDATA);
 
@@ -222,9 +395,14 @@ describe('Net', function() {
 
       pkt = packets.GetDataPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.GETDATA, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.GETDATA, pkt, check);
     });
 
-    it('should encode/decode notfound packets', () => {
+    it('should encode/decode notfound packets', async () => {
       const check = (pkt) => {
         assert.equal(pkt.type, packets.types.NOTFOUND);
 
@@ -247,9 +425,14 @@ describe('Net', function() {
 
       pkt = packets.NotFoundPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.NOTFOUND, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.NOTFOUND, pkt, check);
     });
 
-    it('should encode/decode getblocks packets', () => {
+    it('should encode/decode getblocks packets', async () => {
       const check = (pkt, values) => {
         assert.equal(pkt.type, packets.types.GETBLOCKS);
 
@@ -277,14 +460,24 @@ describe('Net', function() {
       pkt = packets.GetBlocksPacket.decode(pkt.encode());
       check(pkt, true);
 
+      pkt = packets.decode(packets.types.GETBLOCKS, pkt.encode());
+      check(pkt, true);
+
+      await wireTest(packets.types.GETBLOCKS, pkt, check, true);
+
       pkt = new packets.GetBlocksPacket();
       check(pkt, false);
 
       pkt = packets.GetBlocksPacket.decode(pkt.encode());
       check(pkt, false);
+
+      pkt = packets.decode(packets.types.GETBLOCKS, pkt.encode());
+      check(pkt, false);
+
+      await wireTest(packets.types.GETBLOCKS, pkt, check, false);
     });
 
-    it('should encode/decode getheaders packets', () => {
+    it('should encode/decode getheaders packets', async () => {
       const check = (pkt, values) => {
         assert.equal(pkt.type, packets.types.GETHEADERS);
 
@@ -312,14 +505,24 @@ describe('Net', function() {
       pkt = packets.GetHeadersPacket.decode(pkt.encode());
       check(pkt, true);
 
+      pkt = packets.decode(packets.types.GETHEADERS, pkt.encode());
+      check(pkt, true);
+
+      await wireTest(packets.types.GETHEADERS, pkt, check, true);
+
       pkt = new packets.GetHeadersPacket();
       check(pkt, false);
 
       pkt = packets.GetHeadersPacket.decode(pkt.encode());
       check(pkt, false);
+
+      pkt = packets.decode(packets.types.GETHEADERS, pkt.encode());
+      check(pkt, false);
+
+      await wireTest(packets.types.GETHEADERS, pkt, check, false);
     });
 
-    it('should encode/decode headers packets', () => {
+    it('should encode/decode headers packets', async () => {
       const check = (pkt, values, many) => {
         assert.equal(pkt.type, packets.types.HEADERS);
 
@@ -370,6 +573,11 @@ describe('Net', function() {
       pkt = packets.HeadersPacket.decode(pkt.encode());
       check(pkt, false);
 
+      pkt = packets.decode(packets.types.HEADERS, pkt.encode());
+      check(pkt, false);
+
+      await wireTest(packets.types.HEADERS, pkt, check, false);
+
       while (items.length < 254) {
         items.push(new Headers({
           version: 0,
@@ -391,9 +599,14 @@ describe('Net', function() {
 
       pkt = packets.HeadersPacket.decode(pkt.encode());
       check(pkt, true);
+
+      pkt = packets.decode(packets.types.HEADERS, pkt.encode());
+      check(pkt, true);
+
+      await wireTest(packets.types.HEADERS, pkt, check, true);
     });
 
-    it('should encode/decode sendheaders packets', () => {
+    it('should encode/decode sendheaders packets', async () => {
       const check = (pkt) => {
         assert.equal(pkt.type, packets.types.SENDHEADERS);
       };
@@ -403,9 +616,14 @@ describe('Net', function() {
 
       pkt = packets.SendHeadersPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.SENDHEADERS, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.SENDHEADERS, pkt, check);
     });
 
-    it('should encode/decode block packets', () => {
+    it('should encode/decode block packets', async () => {
       const block = new Block(genesis.main);
       const memblock = MemBlock.decode(block.encode());
 
@@ -422,9 +640,14 @@ describe('Net', function() {
 
       pkt = packets.BlockPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.BLOCK, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.BLOCK, pkt, check);
     });
 
-    it('should encode/decode tx packets', () => {
+    it('should encode/decode tx packets', async () => {
       const tx = new TX({
         inputs: [{
           prevout: {index: 0, hash: Buffer.alloc(32, 0x00)}
@@ -442,9 +665,14 @@ describe('Net', function() {
 
       pkt = packets.TXPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.TX, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.TX, pkt, check);
     });
 
-    it('should encode/decode reject packets', () => {
+    it('should encode/decode reject packets', async () => {
       const check = (pkt) => {
         assert.equal(pkt.type, packets.types.REJECT);
         assert.equal(pkt.message, packets.types.BLOCK);
@@ -466,6 +694,11 @@ describe('Net', function() {
       pkt = packets.RejectPacket.decode(pkt.encode());
       check(pkt);
 
+      pkt = packets.decode(packets.types.REJECT, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.REJECT, pkt, check);
+
       pkt = packets.RejectPacket.fromReason(
         'invalid',
         'block',
@@ -477,9 +710,14 @@ describe('Net', function() {
 
       pkt = packets.RejectPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.REJECT, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.REJECT, pkt, check);
     });
 
-    it('should encode/decode mempool packets', () => {
+    it('should encode/decode mempool packets', async () => {
       const check = (pkt) => {
         assert.equal(pkt.type, packets.types.MEMPOOL);
       };
@@ -488,9 +726,15 @@ describe('Net', function() {
       check(pkt);
 
       pkt = packets.MempoolPacket.decode(pkt.encode());
+      check(pkt);
+
+      pkt = packets.decode(packets.types.MEMPOOL, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.MEMPOOL, pkt, check);
     });
 
-    it('should encode/decode filterload packets', () => {
+    it('should encode/decode filterload packets', async () => {
       const check = (pkt) => {
         assert.equal(pkt.type, packets.types.FILTERLOAD);
         assert.equal(pkt.filter.test(Buffer.alloc(32, 0x01)), true);
@@ -506,9 +750,14 @@ describe('Net', function() {
 
       pkt = packets.FilterLoadPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.FILTERLOAD, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.FILTERLOAD, pkt, check);
     });
 
-    it('should encode/decode filteradd packets', () => {
+    it('should encode/decode filteradd packets', async () => {
       const check = (pkt) => {
         assert.equal(pkt.type, packets.types.FILTERADD);
         assert.bufferEqual(pkt.data, Buffer.alloc(32, 0x02));
@@ -519,9 +768,14 @@ describe('Net', function() {
 
       pkt = packets.FilterAddPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.FILTERADD, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.FILTERADD, pkt, check);
     });
 
-    it('should encode/decode filterclear packets', () => {
+    it('should encode/decode filterclear packets', async () => {
       const check = (pkt) => {
         assert.equal(pkt.type, packets.types.FILTERCLEAR);
       };
@@ -531,9 +785,14 @@ describe('Net', function() {
 
       pkt = packets.FilterClearPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.FILTERCLEAR, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.FILTERCLEAR, pkt, check);
     });
 
-    it('should encode/decode merkleblock packets', () => {
+    it('should encode/decode merkleblock packets', async () => {
       const block = new Block();
       block.txs = [new TX({
         inputs: [{prevout: {hash: Buffer.alloc(32), index: 0}}],
@@ -553,9 +812,14 @@ describe('Net', function() {
 
       pkt = packets.MerkleBlockPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.MERKLEBLOCK, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.MERKLEBLOCK, pkt, check);
     });
 
-    it('should encode/decode feefilter packets', () => {
+    it('should encode/decode feefilter packets', async () => {
       const check = (pkt) => {
         assert.equal(pkt.type, packets.types.FEEFILTER);
         assert.equal(pkt.rate, 120000);
@@ -566,9 +830,14 @@ describe('Net', function() {
 
       pkt = packets.FeeFilterPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.FEEFILTER, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.FEEFILTER, pkt, check);
     });
 
-    it('should encode/decode sendcmpct packets', () => {
+    it('should encode/decode sendcmpct packets', async () => {
       const check = (pkt, mode, version) => {
         assert.equal(pkt.type, packets.types.SENDCMPCT);
         assert.equal(pkt.mode, mode);
@@ -581,14 +850,24 @@ describe('Net', function() {
       pkt = packets.SendCmpctPacket.decode(pkt.encode());
       check(pkt, 0, 1);
 
+      pkt = packets.decode(packets.types.SENDCMPCT, pkt.encode());
+      check(pkt, 0, 1);
+
+      await wireTest(packets.types.SENDCMPCT, pkt, check, 0, 1);
+
       pkt = new packets.SendCmpctPacket(1, 2);
       check(pkt, 1, 2);
 
       pkt = packets.SendCmpctPacket.decode(pkt.encode());
       check(pkt, 1, 2);
+
+      pkt = packets.decode(packets.types.SENDCMPCT, pkt.encode());
+      check(pkt, 1, 2);
+
+      await wireTest(packets.types.SENDCMPCT, pkt, check, 1, 2);
     });
 
-    it('should encode/decode cmpctblock packets', () => {
+    it('should encode/decode cmpctblock packets', async () => {
       const block = new Block();
       block.txs = [new TX({
         inputs: [{prevout: {hash: Buffer.alloc(32), index: 0}}],
@@ -607,9 +886,14 @@ describe('Net', function() {
 
       pkt = packets.CmpctBlockPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.CMPCTBLOCK, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.CMPCTBLOCK, pkt, check);
     });
 
-    it('should encode/decode getblocktxn packets', () => {
+    it('should encode/decode getblocktxn packets', async () => {
       const check = (pkt) => {
         assert.equal(pkt.type, packets.types.GETBLOCKTXN);
         assert.bufferEqual(pkt.request.hash, Buffer.alloc(32, 0x01));
@@ -626,9 +910,14 @@ describe('Net', function() {
 
       pkt = packets.GetBlockTxnPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.GETBLOCKTXN, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.GETBLOCKTXN, pkt, check);
     });
 
-    it('should encode/decode blocktxn packets', () => {
+    it('should encode/decode blocktxn packets', async () => {
       const block = new Block();
       block.txs = [new TX({
         inputs: [{prevout: {hash: Buffer.alloc(32), index: 0}}],
@@ -653,9 +942,14 @@ describe('Net', function() {
 
       pkt = packets.BlockTxnPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.BLOCKTXN, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.BLOCKTXN, pkt, check);
     });
 
-    it('should encode/decode getproof packets', () => {
+    it('should encode/decode getproof packets', async () => {
       const check = (pkt) => {
         assert.equal(pkt.type, packets.types.GETPROOF);
         assert.bufferEqual(pkt.root, Buffer.alloc(32, 0x01));
@@ -663,15 +957,18 @@ describe('Net', function() {
       };
 
       let pkt = new packets.GetProofPacket(Buffer.alloc(32, 0x01), Buffer.alloc(32, 0x02));
-
       check(pkt);
 
       pkt = packets.GetProofPacket.decode(pkt.encode());
-
       check(pkt);
+
+      pkt = packets.decode(packets.types.GETPROOF, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.GETPROOF, pkt, check);
     });
 
-    it('should encode/decode proof packets', () => {
+    it('should encode/decode proof packets', async () => {
       const root = Buffer.alloc(32, 0x00);
       const key = Buffer.alloc(32, 0x01);
       const proof = new UrkelProof();
@@ -688,9 +985,14 @@ describe('Net', function() {
 
       pkt = packets.ProofPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.PROOF, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.PROOF, pkt, check);
     });
 
-    it('should encode/decode claim packets', () => {
+    it('should encode/decode claim packets', async () => {
       const claim = new Claim();
       const check = (pkt) => {
         assert.equal(pkt.type, packets.types.CLAIM);
@@ -702,9 +1004,14 @@ describe('Net', function() {
 
       pkt = packets.ClaimPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.CLAIM, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.CLAIM, pkt, check);
     });
 
-    it('should encode/decode airdrop packets', () => {
+    it('should encode/decode airdrop packets', async () => {
       const rawProof = read(AIRDROP_PROOF_FILE);
       const proof = AirdropProof.decode(rawProof);
 
@@ -718,19 +1025,41 @@ describe('Net', function() {
 
       pkt = packets.AirdropPacket.decode(pkt.encode());
       check(pkt);
+
+      pkt = packets.decode(packets.types.AIRDROP, pkt.encode());
+      check(pkt);
+
+      await wireTest(packets.types.AIRDROP, pkt, check);
     });
 
-    it('should encode/decode unknown packets', () => {
-      const check = (pkt) => {
-        assert.equal(pkt.type, packets.types.UNKNOWN);
+    it('should encode/decode unknown packets', async () => {
+      const check = (pkt, rawType) => {
+        assert.strictEqual(pkt.type, packets.types.UNKNOWN);
+        assert.strictEqual(pkt.rawType, rawType);
         assert.bufferEqual(pkt.data, Buffer.alloc(12, 0x01));
       };
 
       let pkt = new packets.UnknownPacket(packets.types.UNKNOWN, Buffer.alloc(12, 0x01));
-      check(pkt);
+      check(pkt, packets.types.UNKNOWN);
 
       pkt = packets.UnknownPacket.decode(pkt.encode(), packets.types.UNKNOWN);
-      check(pkt);
+      check(pkt, packets.types.UNKNOWN);
+
+      pkt = packets.decode(packets.types.UNKNOWN, pkt.encode());
+      check(pkt, packets.types.UNKNOWN);
+
+      await wireTest(packets.types.UNKNOWN, pkt, check, packets.types.UNKNOWN);
+
+      // real UnknownPacket
+      const RAW_TYPE = 255;
+
+      pkt = new packets.UnknownPacket(RAW_TYPE, Buffer.alloc(12, 0x01));
+      check(pkt, RAW_TYPE);
+
+      pkt = packets.decode(RAW_TYPE, pkt.encode());
+      check(pkt, RAW_TYPE);
+
+      await wireTest(RAW_TYPE, pkt, check, RAW_TYPE);
     });
   });
 
