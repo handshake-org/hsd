@@ -9,6 +9,8 @@ const bio = require('bufio');
 const CoinView = require('../lib/coins/coinview');
 const WalletCoinView = require('../lib/wallet/walletcoinview');
 const MTX = require('../lib/primitives/mtx');
+const Address = require('../lib/primitives/address');
+const Coin = require('../lib/primitives/coin');
 const Path = require('../lib/wallet/path');
 const common = require('./util/common');
 
@@ -61,5 +63,60 @@ describe('MTX', function() {
 
     assert.ok(view instanceof CoinView);
     assert.deepStrictEqual(got, want);
+  });
+
+  it('should clone MTX including view', () => {
+    const coin1 = new Coin({
+      version: 1,
+      value: 1000001,
+      hash: Buffer.alloc(32, 0x01),
+      index: 1
+    });
+
+    const coin1alt = new Coin({
+      version: 1,
+      value: 9999999,
+      hash: Buffer.alloc(32, 0x01),
+      index: 1
+    });
+
+    const coin2 = new Coin({
+      version: 1,
+      value: 2000002,
+      hash: Buffer.alloc(32, 0x02),
+      index: 2
+    });
+
+    const addr = new Address({
+      version: 0,
+      hash: Buffer.alloc(20, 0xdb)
+    });
+
+    const value = coin1.value + coin2.value;
+
+    const mtx1 = new MTX();
+    mtx1.addCoin(coin1);
+    mtx1.addCoin(coin2);
+    mtx1.addOutput(addr, value);
+
+    // Verify clone including view
+    const mtx2 = mtx1.clone();
+    assert.deepStrictEqual(mtx1.toJSON(), mtx2.toJSON());
+    assert.strictEqual(mtx1.getInputValue(), mtx2.getInputValue());
+    assert.strictEqual(mtx1.view.map.size, 2);
+    assert.strictEqual(mtx2.view.map.size, 2);
+
+    // Sanity check: verify deep clone by modifying original data
+    mtx1.view.remove(coin1.hash);
+    assert.notDeepStrictEqual(mtx1.toJSON(), mtx2.toJSON());
+    assert.notDeepStrictEqual(mtx1.getInputValue(), mtx2.getInputValue());
+    assert.strictEqual(mtx1.view.map.size, 1);
+    assert.strictEqual(mtx2.view.map.size, 2);
+
+    mtx1.view.addCoin(coin1alt);
+    assert.notDeepStrictEqual(mtx1.toJSON(), mtx2.toJSON());
+    assert.notStrictEqual(mtx1.getInputValue(), mtx2.getInputValue());
+    assert.strictEqual(mtx1.view.map.size, 2);
+    assert.strictEqual(mtx2.view.map.size, 2);
   });
 });
