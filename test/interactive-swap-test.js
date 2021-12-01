@@ -212,7 +212,7 @@ describe('Interactive name swap', function() {
     assert(coinEntry); // ensures that coin exists and is still unspent
 
     const coin = coinEntry.toCoin(mtx.input(0).prevout);
-    mtx.view.addCoin(coin);
+    mtx.addCoin(coin);
 
     assert(coin.covenant.type === types.TRANSFER);
     const addr = new Address({
@@ -222,13 +222,7 @@ describe('Interactive name swap', function() {
     assert.deepStrictEqual(addr, bobReceive); // transfer is to Bob's address
 
     // Fund the TX.
-    // The hsd wallet is not designed to handle partially-signed TXs
-    // or coins from outside the wallet, so a little hacking is needed.
-    const changeAddress = await bob.changeAddress();
-    const rate = await wdb.estimateFee();
-    const coins = await bob.getSmartCoins();
-
-    await mtx.fund(coins, {changeAddress, rate});
+    await bob.fund(mtx);
 
     // Rearrange outputs.
     // Since we added a change output, the SINGELREVERSE is now broken:
