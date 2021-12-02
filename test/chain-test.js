@@ -743,18 +743,6 @@ describe('Chain', function() {
         const hardened = state.hasHardening();
         return chain.db.getNameStatus(nameHash, height, hardened);
       };
-
-      // Because of the high volume of TXs sent by MemWallet in this test,
-      // we need to manually control the coins being used so we don't
-      // double-spend. MemWallet is too simple to track name covenants
-      // when they are unconfirmed, otherwise we could use wallet.addTX()
-      wallet.spendTX = (tx) => {
-        for (let i = 0; i < tx.inputs.length; i++) {
-          const input = tx.inputs[i];
-          const op = input.prevout.toKey();
-          wallet.removeCoin(op);
-        }
-      };
     });
 
     it('should mine 2000 blocks', async () => {
@@ -775,8 +763,7 @@ describe('Chain', function() {
 
       for (let i = 0; i < consensus.MAX_BLOCK_OPENS + 1; i++) {
         const name = `test_${i}`;
-        const open = await wallet.createOpen(name);
-        wallet.addTX(open);
+        const open = await wallet.sendOpen(name);
         const item = BlockEntry.fromTX(open.toTX(), open.view, job1.attempt);
         job1.attempt.items.push(item);
       }
@@ -797,8 +784,7 @@ describe('Chain', function() {
         const job1 = await cpu.createJob();
         for (let i = 0; i < consensus.MAX_BLOCK_OPENS; i++) {
           const name = `test_${x}_${i}`;
-          const open = await wallet.createOpen(name);
-          wallet.spendTX(open);
+          const open = await wallet.sendOpen(name);
           const item = BlockEntry.fromTX(open.toTX(), open.view, job1.attempt);
           job1.attempt.items.push(item);
         }
@@ -817,8 +803,7 @@ describe('Chain', function() {
         const job1 = await cpu.createJob();
         for (let i = 0; i < consensus.MAX_BLOCK_OPENS; i++) {
           const name = `test_${x}_${i}`;
-          const bid = await wallet.createBid(name, 1, 1);
-          wallet.spendTX(bid);
+          const bid = await wallet.sendBid(name, 1, 1);
           const item = BlockEntry.fromTX(bid.toTX(), bid.view, job1.attempt);
           job1.attempt.items.push(item);
         }
@@ -835,8 +820,7 @@ describe('Chain', function() {
         const job2 = await cpu.createJob();
         for (let i = 0; i < consensus.MAX_BLOCK_OPENS; i++) {
           const name = `test_${x}_${i}`;
-          const reveal = await wallet.createReveal(name);
-          wallet.spendTX(reveal);
+          const reveal = await wallet.sendReveal(name);
           const item = BlockEntry.fromTX(reveal.toTX(), reveal.view, job2.attempt);
           job2.attempt.items.push(item);
         }
@@ -866,8 +850,7 @@ describe('Chain', function() {
         const ns = await chain.db.getNameStateByName(name);
         assert(!ns.registered);
 
-        const register = await wallet.createUpdate(name, null);
-        wallet.addTX(register);
+        const register = await wallet.sendUpdate(name, null);
         const item = BlockEntry.fromTX(register.toTX(), register.view, job1.attempt);
         job1.attempt.items.push(item);
 
@@ -902,8 +885,7 @@ describe('Chain', function() {
         const ns = await chain.db.getNameStateByName(name);
         assert(!ns.registered);
 
-        const register = await wallet.createUpdate(name, null);
-        wallet.spendTX(register);
+        const register = await wallet.sendUpdate(name, null);
         const item = BlockEntry.fromTX(register.toTX(), register.view, job1.attempt);
         job1.attempt.items.push(item);
 
@@ -929,8 +911,7 @@ describe('Chain', function() {
         const ns = await chain.db.getNameStateByName(name);
         assert(!ns.registered);
 
-        const register = await wallet.createUpdate(name, null);
-        wallet.spendTX(register);
+        const register = await wallet.sendUpdate(name, null);
         const item = BlockEntry.fromTX(register.toTX(), register.view, job2.attempt);
         job2.attempt.items.push(item);
 
@@ -960,8 +941,7 @@ describe('Chain', function() {
         const ns = await chain.db.getNameStateByName(name);
         assert(ns.registered);
 
-        const update = await wallet.createUpdate(name, null);
-        wallet.addTX(update);
+        const update = await wallet.sendUpdate(name, null);
         const item = BlockEntry.fromTX(update.toTX(), update.view, job1.attempt);
         job1.attempt.items.push(item);
 
@@ -996,8 +976,7 @@ describe('Chain', function() {
         const ns = await chain.db.getNameStateByName(name);
         assert(ns.registered);
 
-        const update = await wallet.createUpdate(name, null);
-        wallet.spendTX(update);
+        const update = await wallet.sendUpdate(name, null);
         const item = BlockEntry.fromTX(update.toTX(), update.view, job1.attempt);
         job1.attempt.items.push(item);
 
@@ -1019,8 +998,7 @@ describe('Chain', function() {
 
       for (let i = 0; i < 2; i++) {
         const name = 'test_duplicate';
-        const open = await wallet.createOpen(name);
-        wallet.addTX(open);
+        const open = await wallet.sendOpen(name);
         const item = BlockEntry.fromTX(open.toTX(), open.view, job1.attempt);
         job1.attempt.items.push(item);
       }
