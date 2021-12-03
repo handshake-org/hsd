@@ -150,15 +150,41 @@ describe('MTX', function() {
     const wallet2 = new MemWallet();
 
     const coins1 = [
-      dummyCoin(wallet1.getAddress(), 1_000_000),
-      dummyCoin(wallet1.getAddress(), 1_000_000),
-      dummyCoin(wallet1.getAddress(), 1_000_000)
+      dummyCoin(wallet1.getAddress(), 1000000),
+      dummyCoin(wallet1.getAddress(), 1000000),
+      dummyCoin(wallet1.getAddress(), 1000000),
+      dummyCoin(wallet1.getAddress(), 1000000),
+      dummyCoin(wallet1.getAddress(), 1000000)
     ];
+
+    const last1 = coins1[coins1.length - 1];
+    const last2 = coins1[coins1.length - 2];
+
+    /**
+     * Test matrix
+     * fund w/o inputs, just coins
+     * fund with preferred inputs - no view && coins
+     * fund with preferred inputs - view    && no coins
+     * fund with preferred inputs - view    && coins
+     * fund with preferred inputs - no view && coins - error
+     *
+     * fund with existing inputs  - no view && coins
+     * fund with existing inputs  - view    && no coins
+     * fund with existing inputs  - view    && coins
+     * fund with existing inputs  - no view && no coins - error
+     *
+     * fund with both inputs - no view && coins(1e, 1p)
+     * fund with both inputs - view(1e, 1p) && no coins
+     * fund with both inputs - view(1e, 1p) && coins(1e, 1p)
+     * fund with both inputs (1e, 1p) - no view(1e) && no coins(1e) - error.
+     * fund with both inputs (1e, 1p) - no view(1p) && no coins(1p) - error.
+     * fund with both inputs (1e, 1p) - no view && no coins - error.
+     */
 
     it('should fund mtx', async () => {
       const mtx = new MTX();
 
-      mtx.addOutput(wallet2.getAddress(), 1_500_000);
+      mtx.addOutput(wallet2.getAddress(), 1500000);
 
       await mtx.fund(coins1, {
         changeAddress: wallet1.getChange()
@@ -168,14 +194,125 @@ describe('MTX', function() {
       assert.strictEqual(mtx.outputs.length, 2);
     });
 
-    it('should fund with owned preferred inputs w/o coinview', async () => {
-      // If the input does not have a coin in the coinview
-      // but it is part of the coins list, it should be resolved
-      // from the list.
-
+    it('should fund with preferred inputs - coins', async () => {
       const mtx = new MTX();
+      const coin = last1;
 
-      const coin = coins1[0];
+      mtx.addOutput(wallet2.getAddress(), 1500000);
+
+      await mtx.fund(coins1, {
+        changeAddress: wallet1.getChange(),
+        inputs: [{
+          hash: coin.hash,
+          index: coin.index
+        }]
+      });
+
+      assert.strictEqual(mtx.inputs.length, 2);
+      assert.strictEqual(mtx.outputs.length, 2);
+
+      assert.bufferEqual(mtx.inputs[0].prevout.hash, coin.hash);
+      assert.strictEqual(mtx.inputs[0].prevout.index, coin.index);
+
+      assert(mtx.view.hasEntry({
+        hash: coin.hash,
+        index: coin.index
+      }));
+    });
+
+    it('should fund with preferred inputs - view', async () => {
+      const mtx = new MTX();
+      const coin = dummyCoin(wallet1.getAddress(), 1000000);
+
+      mtx.addOutput(wallet2.getAddress(), 1500000);
+      mtx.view.addCoin(coin);
+
+      await mtx.fund(coins1, {
+        changeAddress: wallet1.getChange(),
+        inputs: [{
+          hash: coin.hash,
+          index: coin.index
+        }]
+      });
+
+      assert.strictEqual(mtx.inputs.length, 2);
+      assert.strictEqual(mtx.outputs.length, 2);
+
+      assert.bufferEqual(mtx.inputs[0].prevout.hash, coin.hash);
+      assert.strictEqual(mtx.inputs[0].prevout.index, coin.index);
+
+      assert(mtx.view.hasEntry({
+        hash: coin.hash,
+        index: coin.index
+      }));
+    });
+
+    it('should fund with preferred inputs - coins && view', async () => {
+      const mtx = new MTX();
+      const viewCoin = dummyCoin(wallet1.getAddress(), 1000000);
+      const lastCoin = last1;
+
+      mtx.addOutput(wallet2.getAddress(), 1500000);
+      mtx.view.addCoin(viewCoin);
+
+      await mtx.fund(coins1, {
+        changeAddress: wallet1.getChange(),
+        inputs: [{
+          hash: viewCoin.hash,
+          index: viewCoin.index
+        }, {
+          hash: last1.hash,
+          index: last1.index
+        }]
+      });
+
+      assert.strictEqual(mtx.inputs.length, 2);
+      assert.strictEqual(mtx.outputs.length, 2);
+
+      assert.bufferEqual(mtx.inputs[0].prevout.hash, viewCoin.hash);
+      assert.strictEqual(mtx.inputs[0].prevout.index, viewCoin.index);
+      assert.bufferEqual(mtx.inputs[1].prevout.hash, lastCoin.hash);
+      assert.strictEqual(mtx.inputs[1].prevout.index, lastCoin.index);
+
+      assert(mtx.view.hasEntry({
+        hash: viewCoin.hash,
+        index: viewCoin.index
+      }));
+
+      assert(mtx.view.hasEntry({
+        hash: lastCoin.hash,
+        index: lastCoin.index
+      }));
+    });
+
+    it('should not fund with preferred inputs and no coin info', async () => {
+      const mtx = new MTX();
+      const coin = dummyCoin(wallet1.getAddress(), 1000000);
+
+      mtx.addOutput(wallet2.getAddress(), 1500000);
+
+      let err;
+
+      try {
+        await mtx.fund(coins1, {
+          changeAddress: wallet1.getChange(),
+          inputs: [{
+            hash: coin.hash,
+            index: coin.index
+          }]
+        });
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message, 'Could not resolve preferred inputs.');
+    });
+
+    it('should fund with existing inputs view - coins', async () => {
+      const mtx = new MTX();
+      const coin = last1;
+
       mtx.addInput({
         prevout: {
           hash: coin.hash,
@@ -183,27 +320,7 @@ describe('MTX', function() {
         }
       });
 
-      mtx.addOutput(wallet2.getAddress(), 1_500_000);
-
-      await mtx.fund(coins1, {
-        changeAddress: wallet1.getChange()
-      });
-
-      assert.strictEqual(mtx.inputs.length, 2);
-      assert.strictEqual(mtx.outputs.length, 2);
-      assert.strictEqual(mtx.view.hasEntry({
-        hash: coin.hash,
-        index: coin.index
-      }), true);
-    });
-
-    it('should fund with owner inputs with coin in coinview', async () => {
-      const mtx = new MTX();
-
-      const coin = coins1[0];
-
-      mtx.addCoin(coin);
-      mtx.addOutput(wallet2.getAddress(), 1_500_000);
+      mtx.addOutput(wallet2.getAddress(), 1500000);
 
       await mtx.fund(coins1, {
         changeAddress: wallet1.getChange()
@@ -214,21 +331,105 @@ describe('MTX', function() {
 
       assert.bufferEqual(mtx.inputs[0].prevout.hash, coin.hash);
       assert.strictEqual(mtx.inputs[0].prevout.index, coin.index);
+
+      assert(mtx.view.hasEntry({
+        hash: coin.hash,
+        index: coin.index
+      }));
     });
 
-    it('should fail fund w/o coin in CoinView', async () => {
+    it('should fund with existing inputs view - view', async () => {
       const mtx = new MTX();
+      const coin = dummyCoin(wallet1.getAddress(), 1000000);
 
       mtx.addInput({
         prevout: {
-          hash: random.randomBytes(32),
-          index: 0
+          hash: coin.hash,
+          index: coin.index
         }
       });
 
-      mtx.addOutput(wallet2.getAddress(), 1_000_000);
+      mtx.view.addCoin(coin);
+
+      mtx.addOutput(wallet2.getAddress(), 1500000);
+
+      await mtx.fund(coins1, {
+        changeAddress: wallet1.getChange()
+      });
+
+      assert.strictEqual(mtx.inputs.length, 2);
+      assert.strictEqual(mtx.outputs.length, 2);
+
+      assert.bufferEqual(mtx.inputs[0].prevout.hash, coin.hash);
+      assert.strictEqual(mtx.inputs[0].prevout.index, coin.index);
+
+      assert(mtx.view.hasEntry({
+        hash: coin.hash,
+        index: coin.index
+      }));
+    });
+
+    it('should fund with existing inputs view - coins && view', async () => {
+      const mtx = new MTX();
+      const viewCoin = dummyCoin(wallet1.getAddress(), 1000000);
+      const lastCoin = last1;
+
+      mtx.addInput({
+        prevout: {
+          hash: viewCoin.hash,
+          index: viewCoin.index
+        }
+      });
+
+      mtx.addInput({
+        prevout: {
+          hash: last1.hash,
+          index: last1.index
+        }
+      });
+
+      mtx.view.addCoin(viewCoin);
+
+      mtx.addOutput(wallet2.getAddress(), 1500000);
+
+      await mtx.fund(coins1, {
+        changeAddress: wallet1.getChange()
+      });
+
+      assert.strictEqual(mtx.inputs.length, 2);
+      assert.strictEqual(mtx.outputs.length, 2);
+
+      assert.bufferEqual(mtx.inputs[0].prevout.hash, viewCoin.hash);
+      assert.strictEqual(mtx.inputs[0].prevout.index, viewCoin.index);
+      assert.bufferEqual(mtx.inputs[1].prevout.hash, lastCoin.hash);
+      assert.strictEqual(mtx.inputs[1].prevout.index, lastCoin.index);
+
+      assert(mtx.view.hasEntry({
+        hash: viewCoin.hash,
+        index: viewCoin.index
+      }));
+
+      assert(mtx.view.hasEntry({
+        hash: lastCoin.hash,
+        index: lastCoin.index
+      }));
+    });
+
+    it('should not fund with existing inputs and no coin info', async () => {
+      const mtx = new MTX();
+      const coin = dummyCoin(wallet1.getAddress(), 1000000);
+
+      mtx.addInput({
+        prevout: {
+          hash: coin.hash,
+          index: coin.index
+        }
+      });
+
+      mtx.addOutput(wallet2.getAddress(), 1500000);
 
       let err;
+
       try {
         await mtx.fund(coins1, {
           changeAddress: wallet1.getChange()
@@ -237,27 +438,306 @@ describe('MTX', function() {
         err = e;
       }
 
-      assert(err, 'fund should fail without coin info');
-      assert(err.message, 'Could not resolve preferred inputs.');
+      assert(err);
+      assert.strictEqual(err.message, 'Could not resolve existing inputs.');
     });
 
-    it('should fund with coin in the CoinView', async () => {
+    it('should fund with preferred & existing inputs - coins', async () => {
       const mtx = new MTX();
+      const coin1 = last1;
+      const coin2 = last2;
 
-      const coin = dummyCoin(wallet2.getAddress(), 1_000_000);
+      mtx.addInput({
+        prevout: {
+          hash: coin1.hash,
+          index: coin1.index
+        }
+      });
 
-      mtx.addCoin(coin);
-      mtx.addOutput(wallet2.getAddress(), 1_500_000);
+      mtx.addOutput(wallet2.getAddress(), 1500000);
 
       await mtx.fund(coins1, {
-        changeAddress: wallet1.getChange()
+        changeAddress: wallet1.getChange(),
+        inputs: [{
+          hash: coin2.hash,
+          index: coin2.index
+        }]
       });
 
       assert.strictEqual(mtx.inputs.length, 2);
       assert.strictEqual(mtx.outputs.length, 2);
 
-      assert.bufferEqual(mtx.inputs[0].prevout.hash, coin.hash);
-      assert.strictEqual(mtx.inputs[0].prevout.index, coin.index);
+      assert.bufferEqual(mtx.inputs[0].prevout.hash, coin1.hash);
+      assert.strictEqual(mtx.inputs[0].prevout.index, coin1.index);
+      assert.bufferEqual(mtx.inputs[1].prevout.hash, coin2.hash);
+      assert.strictEqual(mtx.inputs[1].prevout.index, coin2.index);
+
+      assert(mtx.view.hasEntry({
+        hash: coin1.hash,
+        index: coin1.index
+      }));
+
+      assert(mtx.view.hasEntry({
+        hash: coin2.hash,
+        index: coin2.index
+      }));
+    });
+
+    it('should fund with preferred & existing inputs - view', async () => {
+      const mtx = new MTX();
+      const coin1 = dummyCoin(wallet1.getAddress(), 1000000);
+      const coin2 = dummyCoin(wallet1.getAddress(), 1000000);
+
+      mtx.addInput({
+        prevout: {
+          hash: coin1.hash,
+          index: coin1.index
+        }
+      });
+
+      mtx.addOutput(wallet2.getAddress(), 1500000);
+      mtx.view.addCoin(coin1);
+      mtx.view.addCoin(coin2);
+
+      await mtx.fund(coins1, {
+        changeAddress: wallet1.getChange(),
+        inputs: [{
+          hash: coin2.hash,
+          index: coin2.index
+        }]
+      });
+
+      assert.strictEqual(mtx.inputs.length, 2);
+      assert.strictEqual(mtx.outputs.length, 2);
+
+      assert.bufferEqual(mtx.inputs[0].prevout.hash, coin1.hash);
+      assert.strictEqual(mtx.inputs[0].prevout.index, coin1.index);
+      assert.bufferEqual(mtx.inputs[1].prevout.hash, coin2.hash);
+      assert.strictEqual(mtx.inputs[1].prevout.index, coin2.index);
+
+      assert(mtx.view.hasEntry({
+        hash: coin1.hash,
+        index: coin1.index
+      }));
+
+      assert(mtx.view.hasEntry({
+        hash: coin2.hash,
+        index: coin2.index
+      }));
+    });
+
+    it('should fund with preferred & existing inputs', async () => {
+      const mtx = new MTX();
+      // existing
+      const coin1 = dummyCoin(wallet1.getAddress(), 1000000);
+      const coinLast1 = last1;
+
+      // preferred
+      const coin2 = dummyCoin(wallet1.getAddress(), 1000000);
+      const coinLast2 = last2;
+
+      mtx.addInput({
+        prevout: {
+          hash: coin1.hash,
+          index: coin1.index
+        }
+      });
+      mtx.addInput({
+        prevout: {
+          hash: coinLast1.hash,
+          index: coinLast1.index
+        }
+      });
+
+      mtx.addOutput(wallet2.getAddress(), 5000000);
+      mtx.view.addCoin(coin1);
+      mtx.view.addCoin(coin2);
+
+      await mtx.fund(coins1, {
+        changeAddress: wallet1.getChange(),
+        inputs: [{
+          hash: coin2.hash,
+          index: coin2.index
+        }, {
+          hash: coinLast2.hash,
+          index: coinLast2.index
+        }]
+      });
+
+      assert.strictEqual(mtx.inputs.length, 6);
+      assert.strictEqual(mtx.outputs.length, 2);
+
+      // first comes existing
+      assert.bufferEqual(mtx.inputs[0].prevout.hash, coin1.hash);
+      assert.strictEqual(mtx.inputs[0].prevout.index, coin1.index);
+      assert.bufferEqual(mtx.inputs[1].prevout.hash, coinLast1.hash);
+      assert.strictEqual(mtx.inputs[1].prevout.index, coinLast1.index);
+
+      // then comes preferred
+      assert.bufferEqual(mtx.inputs[2].prevout.hash, coin2.hash);
+      assert.strictEqual(mtx.inputs[2].prevout.index, coin2.index);
+      assert.bufferEqual(mtx.inputs[3].prevout.hash, coinLast2.hash);
+      assert.strictEqual(mtx.inputs[3].prevout.index, coinLast2.index);
+
+      assert(mtx.view.hasEntry({
+        hash: coin1.hash,
+        index: coin1.index
+      }));
+
+      assert(mtx.view.hasEntry({
+        hash: coin2.hash,
+        index: coin2.index
+      }));
+
+      assert(mtx.view.hasEntry({
+        hash: coinLast1.hash,
+        index: coinLast1.index
+      }));
+
+      assert(mtx.view.hasEntry({
+        hash: coinLast2.hash,
+        index: coinLast2.index
+      }));
+    });
+
+    it('should not fund with missing coin info (both)', async () => {
+      const mtx = new MTX();
+      // existing
+      const coin1 = dummyCoin(wallet1.getAddress(), 1000000);
+      const coinLast1 = last1;
+
+      // preferred
+      const coin2 = dummyCoin(wallet1.getAddress(), 1000000);
+      const coinLast2 = last2;
+
+      mtx.addInput({
+        prevout: {
+          hash: coin1.hash,
+          index: coin1.index
+        }
+      });
+      mtx.addInput({
+        prevout: {
+          hash: coinLast1.hash,
+          index: coinLast1.index
+        }
+      });
+
+      mtx.addOutput(wallet2.getAddress(), 5000000);
+
+      let err;
+      try {
+        await mtx.fund(coins1, {
+          changeAddress: wallet1.getChange(),
+          inputs: [{
+            hash: coin2.hash,
+            index: coin2.index
+          }, {
+            hash: coinLast2.hash,
+            index: coinLast2.index
+          }]
+        });
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      // inputs are resolved first, so it should throw there.
+      assert.strictEqual(err.message, 'Could not resolve existing inputs.');
+    });
+
+    it('should not fund with missing coin info(only existing)', async () => {
+      const mtx = new MTX();
+      // existing
+      const coin1 = dummyCoin(wallet1.getAddress(), 1000000);
+      const coinLast1 = last1;
+
+      // preferred
+      const coin2 = dummyCoin(wallet1.getAddress(), 1000000);
+      const coinLast2 = last2;
+
+      mtx.addInput({
+        prevout: {
+          hash: coin1.hash,
+          index: coin1.index
+        }
+      });
+      mtx.addInput({
+        prevout: {
+          hash: coinLast1.hash,
+          index: coinLast1.index
+        }
+      });
+
+      mtx.addOutput(wallet2.getAddress(), 5000000);
+      mtx.view.addCoin(coin1);
+
+      let err;
+      try {
+        await mtx.fund(coins1, {
+          changeAddress: wallet1.getChange(),
+          inputs: [{
+            hash: coin2.hash,
+            index: coin2.index
+          }, {
+            hash: coinLast2.hash,
+            index: coinLast2.index
+          }]
+        });
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      // preferred is missing.
+      assert.strictEqual(err.message, 'Could not resolve preferred inputs.');
+    });
+
+    it('should not fund with missing coin info(only preferred)', async () => {
+      const mtx = new MTX();
+      // existing
+      const coin1 = dummyCoin(wallet1.getAddress(), 1000000);
+      const coinLast1 = last1;
+
+      // preferred
+      const coin2 = dummyCoin(wallet1.getAddress(), 1000000);
+      const coinLast2 = last2;
+
+      mtx.addInput({
+        prevout: {
+          hash: coin1.hash,
+          index: coin1.index
+        }
+      });
+      mtx.addInput({
+        prevout: {
+          hash: coinLast1.hash,
+          index: coinLast1.index
+        }
+      });
+
+      mtx.addOutput(wallet2.getAddress(), 5000000);
+      mtx.view.addCoin(coin2);
+
+      let err;
+      try {
+        await mtx.fund(coins1, {
+          changeAddress: wallet1.getChange(),
+          inputs: [{
+            hash: coin2.hash,
+            index: coin2.index
+          }, {
+            hash: coinLast2.hash,
+            index: coinLast2.index
+          }]
+        });
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      // preferred is missing.
+      assert.strictEqual(err.message, 'Could not resolve existing inputs.');
     });
   });
 });
