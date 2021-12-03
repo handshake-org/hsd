@@ -1,10 +1,13 @@
 'use strict';
 
 const assert = require('bsert');
+const random = require('bcrypto/lib/random');
 const CoinView = require('../lib/coins/coinview');
 const WalletCoinView = require('../lib/wallet/walletcoinview');
+const Coin = require('../lib/primitives/coin');
 const MTX = require('../lib/primitives/mtx');
 const Path = require('../lib/wallet/path');
+const MemWallet = require('./util/memwallet');
 
 const mtx1json = require('./data/mtx1.json');
 const mtx2json = require('./data/mtx2.json');
@@ -18,6 +21,13 @@ const mtx3 = MTX.fromJSON(mtx3json);
 const mtx4 = MTX.fromJSON(mtx4json);
 const mtx5 = MTX.fromJSON(mtx5json);
 const mtx6 = MTX.fromJSON(mtx6json);
+
+function dummyCoin(address, value) {
+  const hash = random.randomBytes(32);
+  const index = 0;
+
+  return new Coin({address, value, hash, index});
+}
 
 describe('MTX', function() {
   it('should serialize wallet coin view', () => {
@@ -132,6 +142,122 @@ describe('MTX', function() {
       estimate = await mtx5.estimateSize(estimateMultisig(5, 9));
       actual = mtx5.toTX().getVirtualSize();
       assert.strictEqual(estimate, actual);
+    });
+  });
+
+  describe('Fund', function() {
+    const wallet1 = new MemWallet();
+    const wallet2 = new MemWallet();
+
+    const coins1 = [
+      dummyCoin(wallet1.getAddress(), 1_000_000),
+      dummyCoin(wallet1.getAddress(), 1_000_000),
+      dummyCoin(wallet1.getAddress(), 1_000_000)
+    ];
+
+    it('should fund mtx', async () => {
+      const mtx = new MTX();
+
+      mtx.addOutput(wallet2.getAddress(), 1_500_000);
+
+      await mtx.fund(coins1, {
+        changeAddress: wallet1.getChange()
+      });
+
+      assert.strictEqual(mtx.inputs.length, 2);
+      assert.strictEqual(mtx.outputs.length, 2);
+    });
+
+    it('should fund with owned preferred inputs w/o coinview', async () => {
+      // If the input does not have a coin in the coinview
+      // but it is part of the coins list, it should be resolved
+      // from the list.
+
+      const mtx = new MTX();
+
+      const coin = coins1[0];
+      mtx.addInput({
+        prevout: {
+          hash: coin.hash,
+          index: coin.index
+        }
+      });
+
+      mtx.addOutput(wallet2.getAddress(), 1_500_000);
+
+      await mtx.fund(coins1, {
+        changeAddress: wallet1.getChange()
+      });
+
+      assert.strictEqual(mtx.inputs.length, 2);
+      assert.strictEqual(mtx.outputs.length, 2);
+      assert.strictEqual(mtx.view.hasEntry({
+        hash: coin.hash,
+        index: coin.index
+      }), true);
+    });
+
+    it('should fund with owner inputs with coin in coinview', async () => {
+      const mtx = new MTX();
+
+      const coin = coins1[0];
+
+      mtx.addCoin(coin);
+      mtx.addOutput(wallet2.getAddress(), 1_500_000);
+
+      await mtx.fund(coins1, {
+        changeAddress: wallet1.getChange()
+      });
+
+      assert.strictEqual(mtx.inputs.length, 2);
+      assert.strictEqual(mtx.outputs.length, 2);
+
+      assert.bufferEqual(mtx.inputs[0].prevout.hash, coin.hash);
+      assert.strictEqual(mtx.inputs[0].prevout.index, coin.index);
+    });
+
+    it('should fail fund w/o coin in CoinView', async () => {
+      const mtx = new MTX();
+
+      mtx.addInput({
+        prevout: {
+          hash: random.randomBytes(32),
+          index: 0
+        }
+      });
+
+      mtx.addOutput(wallet2.getAddress(), 1_000_000);
+
+      let err;
+      try {
+        await mtx.fund(coins1, {
+          changeAddress: wallet1.getChange()
+        });
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err, 'fund should fail without coin info');
+      assert(err.message, 'Could not resolve preferred inputs.');
+    });
+
+    it('should fund with coin in the CoinView', async () => {
+      const mtx = new MTX();
+
+      const coin = dummyCoin(wallet2.getAddress(), 1_000_000);
+
+      mtx.addCoin(coin);
+      mtx.addOutput(wallet2.getAddress(), 1_500_000);
+
+      await mtx.fund(coins1, {
+        changeAddress: wallet1.getChange()
+      });
+
+      assert.strictEqual(mtx.inputs.length, 2);
+      assert.strictEqual(mtx.outputs.length, 2);
+
+      assert.bufferEqual(mtx.inputs[0].prevout.hash, coin.hash);
+      assert.strictEqual(mtx.inputs[0].prevout.index, coin.index);
     });
   });
 });
