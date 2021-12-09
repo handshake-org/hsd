@@ -780,10 +780,10 @@ describe('Chain', function() {
 
     it('should connect max number of OPENs', async () => {
       // We do this 3 times to open enough names for the following tests
-      for (let x = 0; x < 3; x++) {
+      for (let blocks = 0; blocks < 3; blocks++) {
         const job1 = await cpu.createJob();
-        for (let i = 0; i < consensus.MAX_BLOCK_OPENS; i++) {
-          const name = `test_${x}_${i}`;
+        for (let txs = 0; txs < consensus.MAX_BLOCK_OPENS; txs++) {
+          const name = `test_${blocks}_${txs}`;
           const open = await wallet.sendOpen(name);
           const item = BlockEntry.fromTX(open.toTX(), open.view, job1.attempt);
           job1.attempt.items.push(item);
@@ -799,10 +799,10 @@ describe('Chain', function() {
         assert(await chain.add(block));
       }
 
-      for (let x = 0; x < 3; x++) {
+      for (let blocks = 0; blocks < 3; blocks++) {
         const job1 = await cpu.createJob();
-        for (let i = 0; i < consensus.MAX_BLOCK_OPENS; i++) {
-          const name = `test_${x}_${i}`;
+        for (let txs = 0; txs < consensus.MAX_BLOCK_OPENS; txs++) {
+          const name = `test_${blocks}_${txs}`;
           const bid = await wallet.sendBid(name, 1, 1);
           const item = BlockEntry.fromTX(bid.toTX(), bid.view, job1.attempt);
           job1.attempt.items.push(item);
@@ -816,10 +816,10 @@ describe('Chain', function() {
         assert(await chain.add(block));
       }
 
-      for (let x = 0; x < 3; x++) {
+      for (let blocks = 0; blocks < 3; blocks++) {
         const job2 = await cpu.createJob();
-        for (let i = 0; i < consensus.MAX_BLOCK_OPENS; i++) {
-          const name = `test_${x}_${i}`;
+        for (let txs = 0; txs < consensus.MAX_BLOCK_OPENS; txs++) {
+          const name = `test_${blocks}_${txs}`;
           const reveal = await wallet.sendReveal(name);
           const item = BlockEntry.fromTX(reveal.toTX(), reveal.view, job2.attempt);
           job2.attempt.items.push(item);
@@ -867,9 +867,8 @@ describe('Chain', function() {
       assert.strictEqual(await mineBlock(job1), 'bad-blk-renewals');
 
       // "zap" memwallet
-      for (const {tx} of job1.attempt.items) {
+      for (const {tx} of job1.attempt.items)
         wallet.removeTX(tx);
-      }
     });
 
     it('should connect max number of RENEWALs', async () => {
@@ -958,9 +957,8 @@ describe('Chain', function() {
       assert.strictEqual(await mineBlock(job1), 'bad-blk-updates');
 
       // "zap" memwallet
-      for (const {tx} of job1.attempt.items) {
+      for (const {tx} of job1.attempt.items)
         wallet.removeTX(tx);
-      }
     });
 
     it('should connect max number of UPDATEs', async () => {
