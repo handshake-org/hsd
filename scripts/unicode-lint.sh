@@ -44,14 +44,15 @@ includes="--include='*.c' \
 
 # Start
 # Check everything for disallowed list.
-disallowed_matches=`sh -c "grep $'[\u202A-\u202E\u2066-\u2069]' -r . -l $includes"`
+check_symbols=$'[\u202A-\u202E\u2066-\u2069]'
+disallowed_matches=`sh -c "grep \"$check_symbols\" -r . -l $includes"`
 status=$?
 
 if [[ $status -eq 0 ]]; then
   echo "Found disallowed symbols"
   echo "More info at https://github.com/handshake-org/hsd/pull/658"
   echo "Files:"
-  for file in $dissallowed_matches; do
+  for file in $disallowed_matches; do
     echo "  $file"
   done
   exit 1
