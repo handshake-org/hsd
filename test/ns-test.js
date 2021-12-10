@@ -63,8 +63,9 @@ describe('RootServer', function() {
 
   it('should resolve a SYNTH4', async () => {
     const name = '_fs0000g._synth.';
+    const type = wire.types.A;
     const req = {
-      question: [{name}]
+      question: [{name, type}]
     };
 
     const res = await ns.resolve(req);
@@ -78,8 +79,9 @@ describe('RootServer', function() {
 
   it('should resolve a SYNTH6', async () => {
     const name = '_00000000000000000000000008._synth.';
+    const type = wire.types.AAAA;
     const req = {
-      question: [{name}]
+      question: [{name, type}]
     };
 
     const res = await ns.resolve(req);
@@ -99,27 +101,22 @@ describe('RootServer', function() {
 
     // Query a record the RootResolver knows even without a database
     let name = '.';
+    let type = wire.types.NS;
     let req = {
-      question: [
-        {
-          name,
-          type: wire.types.NS
-        }
-      ]
+      question: [{name, type}]
     };
-    let res = await ns.resolve(req);
+    await ns.resolve(req);
 
     // Added to cache
     assert.strictEqual(cache.size, 1);
 
     // Query a SYNTH6 record
     name = '_00000000000000000000000008._synth.';
+    type = wire.types.AAAA;
     req = {
-      question: [
-        {name}
-      ]
+      question: [{name, type}]
     };
-    res = await ns.resolve(req);
+    let res = await ns.resolve(req);
     let answer = res.answer;
     let rec = answer[0];
 
@@ -136,8 +133,9 @@ describe('RootServer', function() {
     // This SYNTH4 request would return the result of the SYNTH6
     // record from the last request.
     name = '_fs0000g._synth.';
-     req = {
-      question: [{name}]
+    type = wire.types.A;
+    req = {
+      question: [{name, type}]
     };
 
     res = await ns.resolve(req);
