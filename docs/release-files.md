@@ -25,6 +25,8 @@ distributing the files.
 git platform. After each release we need to update INSTALL.md versions. Tags
 MUST to be signed.
 
+NOTE: `package.json` should have been updated in `v4.1.0` tag to `4.1.0`.
+
 ### Major, minor and patches
 After you are [ready](./release-process.md) to publish files
 (for example `v4.0.0`)

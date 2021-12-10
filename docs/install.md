@@ -34,6 +34,7 @@ keys. You can get keys following [Security](../SECURITY.md) document.
 git clone --depth 1 --branch v3.0.1 https://github.com/handshake-org/hsd.git
 cd hsd
 npm install --production
+# run full node in foreground with default configuration
 ./bin/hsd
 ```
 
@@ -66,7 +67,7 @@ to use the [latest tagged release](https://github.com/handshake-org/hsd/releases
 If adding `hsd` as a dependency to a project, use the command:
 
 ```
-$ npm install https://github.com/handshake-org/hsd.git
+$ npm install --save https://github.com/handshake-org/hsd.git
 ```
 
 ### Verifying
@@ -74,8 +75,8 @@ $ npm install https://github.com/handshake-org/hsd.git
 
 ## macOS
 
-`hsd` is available via [Homebrew](https://brew.sh). This will
-install all required dependencies as well as `unbound`.
+`hsd` is available via [Homebrew](https://formulae.brew.sh/formula/hsd). This
+will install all required dependencies as well as `unbound`.
 
 ```
 $ brew install hsd
@@ -101,8 +102,7 @@ To start a container named `hsd` on a `regtest` network with an exposed
 node API server, run:
 
 ```bash
-$ docker run --name hsd -p 14037:14037 hsd:$VERSION-$COMMIT \
-    --network regtest \
+$ docker run --name hsd -p 12037:12037 hsd:$VERSION-$COMMIT \
     --http-host 0.0.0.0 \
     --api-key=foo
 ```
@@ -116,7 +116,7 @@ $ curl http://x:foo@localhost:14037/
 on the network used for your node, you will need to expose the correct ports
 for the node's various services (node http api, wallet http api, recursive
 name server, authoritative name server, p2p protocol, encrypted p2p protocol).
-The default ports can be found [here](./lib/protocol/networks.js). The DNS
+The default ports can be found [here](https://hsd-dev.org/api-docs/#introduction). The DNS
 servers must also expose a UDP port. The syntax is different from TCP and can
 be found [here](https://docs.docker.com/config/containers/container-networking/#published-ports).
 

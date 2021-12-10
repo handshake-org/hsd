@@ -22,11 +22,11 @@ Table of Contents
 <!-- tocstop -->
 
 This document describes the release process and branching strategy
-for the handshake.
+for hsd.
 
 ## Release schedule and release candidates
   We release 2 major versions of the hsd per year (October and April). We
-release the `release candidate` for the next major version, month early to
+release the `release candidate` for the next major version one month early to
 allow others to join the testing of the `hsd`. `Release candidates` can be
 released several times until the final release date.
 
@@ -48,7 +48,9 @@ Some useful tips for PRs:
   - Does it need database migration ? - major upgrade.
   - Does it change RPC or HTTP API in backwards incompatible way ? - major
     upgrade.
-  - Consensus changes - major upgrade. (Even if it's a soft fork)
+  - Consensus changes - major upgrade.
+  - Soft fork is deployed to the `latest` first, if activation fails it will
+    get removed from the `next` release.
 
 ## Support period
   We release 2 major version per year and we want to support each version at
@@ -64,11 +66,12 @@ fixes, until version `6.x.x` is released. Support types:
 NOTE: We should also collect stats for the active node versions in the network.
 
 ## Changelog and release notes
-  CHANGELOG will only create backwards incompatible API change notes and
-actions users need to take to upgrade.  
- Each version should create new release-note for the version, that will
-contained detailed information of the update. This includes `Pull Requests`
-list (titles and links), CHANGELOG information related to this version.
+  CHANGELOG will only report backwards-incompatible API changes and actions
+users need to take to upgrade.  
+ Each version release should be accompanied by a new release-note file for that
+version, which will contain detailed information of the update. This includes
+`Pull Requests` list (titles and links), CHANGELOG information related to this
+version.
 
 ## Branching strategy
 ### General
