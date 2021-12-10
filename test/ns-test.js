@@ -14,7 +14,9 @@ const {
   TYPE_MAP_ROOT,
   TYPE_MAP_EMPTY,
   TYPE_MAP_NS,
-  TYPE_MAP_TXT
+  TYPE_MAP_TXT,
+  TYPE_MAP_A,
+  TYPE_MAP_AAAA
 } = require('../lib/dns/common');
 
 describe('RootServer', function() {
@@ -369,6 +371,12 @@ describe('RootServer DNSSEC', function () {
                         wire.types.NSEC]],
       [TYPE_MAP_TXT,   [wire.types.TXT,
                         wire.types.RRSIG,
+                        wire.types.NSEC]],
+      [TYPE_MAP_A,     [wire.types.A,
+                        wire.types.RRSIG,
+                        wire.types.NSEC]],
+      [TYPE_MAP_AAAA,  [wire.types.AAAA,
+                        wire.types.RRSIG,
                         wire.types.NSEC]]
     ];
     for (const [actual, types] of tests) {
@@ -591,6 +599,50 @@ describe('RootServer DNSSEC', function () {
     const queries = [
       {name: 'schematic.', type: wire.types.A, bitmap: TYPE_MAP_TXT},
       {name: 'empty-name.', type: wire.types.TXT, bitmap: TYPE_MAP_EMPTY}
+    ];
+
+    for (const query of queries) {
+      const res = await resolve(query.name, query.type);
+      assert(res.aa);
+      assert.strictEqual(res.code, wire.codes.NOERROR);
+      assert.strictEqual(res.answer.length, 0);
+      assert.strictEqual(res.additional.length, 0);
+      assert(util.hasType(res.authority, wire.types.SOA));
+
+      const set = util.extractSet(res.authority, query.name, wire.types.NSEC);
+      assert.strictEqual(set.length, 1);
+      const proof = set[0];
+      assert.strictEqual(proof.data.typeBitmap, query.bitmap);
+    }
+  });
+
+  // Synth records:
+  it('should prove _synth as an empty non-terminal', async () => {
+    const queries = [
+      {name: '_synth.', type: wire.types.NS},
+      {name: '_synth.', type: wire.types.DS},
+      {name: '_synth.', type: wire.types.TXT}
+    ];
+
+    for (const query of queries) {
+      const res = await resolve(query.name, query.type);
+      assert(res.aa);
+      assert.strictEqual(res.code, wire.codes.NOERROR);
+      assert.strictEqual(res.answer.length, 0);
+      assert(util.hasType(res.authority, wire.types.SOA));
+      assert(util.hasType(res.authority, wire.types.NSEC));
+
+      const set = util.extractSet(res.authority, query.name, wire.types.NSEC);
+      assert.strictEqual(set.length, 1);
+      assert.strictEqual(set[0].data.typeBitmap, TYPE_MAP_EMPTY);
+    }
+  });
+
+  it('should prove non-existence of a type for _synth records', async () => {
+    const queries = [
+      {name: '_040g208._synth.', type: wire.types.AAAA, bitmap: TYPE_MAP_A},
+      {name: '_040g208._synth.', type: wire.types.TXT, bitmap: TYPE_MAP_A},
+      {name: '_4o34e027000000000000000h24._synth.', type: wire.types.A, bitmap: TYPE_MAP_AAAA}
     ];
 
     for (const query of queries) {
