@@ -307,6 +307,53 @@ describe('Tree Compacting', function() {
         assert.bufferEqual(ns.data, Buffer.from([counter - 1]));
       });
 
+      it('should recover if aborted', async () => {
+        // Get current counter value.
+        let raw = await chain.db.tree.get(nameHash);
+        let ns = NameState.decode(raw);
+        const counter = ns.data[0];
+
+        // Add 20 tree intervals
+        for (let i = counter; i <= counter + 20; i++) {
+          send(await wallet.sendUpdate(name, Buffer.from([i])), mempool);
+          await mineBlocks(treeInterval, mempool);
+        }
+
+        const before = await fs.stat(treePath);
+
+        // Rewind the tree 6 intervals and compact, but do not sync to tip yet.
+        const entry = await chain.getEntry(chain.height - 6 * treeInterval);
+        await chain.db.compactTree(entry.treeRoot);
+
+        // Confirm tree state has been rewound
+        assert.notBufferEqual(chain.db.tree.rootHash(), chain.tip.treeRoot);
+
+        // Oops, we abort before calling chain.syncTree()
+        await miner.close();
+        await chain.close();
+        await blocks.close();
+
+        // Restart -- chainDB used to open tree with what it thought
+        // was the latest tree state (saved in levelDB). If the actual
+        // tree on disk was still 6 intervals behind, chain.open() would
+        // fail with `Missing node` error. The updated logic relies on the
+        // tree itself to find its own state (saved in Meta nodes) then
+        // chain.syncTree() will catch it up from there to tip.
+        await blocks.open();
+        await chain.open();
+        await miner.open();
+
+        // Tree was compacted
+        const after = await fs.stat(treePath);
+        assert(before.size > after.size);
+
+        // Tree was re-synced automatically to chain tip on restart
+        assert.bufferEqual(chain.db.tree.rootHash(), chain.tip.treeRoot);
+        raw = await chain.db.tree.get(nameHash);
+        ns = NameState.decode(raw);
+        assert.bufferEqual(ns.data, Buffer.from([counter + 20]));
+      });
+
       it(`should ${prune ? '' : 'not '}have pruned chain`, async () => {
         // Sanity check. Everything worked on a chain that is indeed pruning.
         // Start at height 2 because pruneAfterHeight == 1
