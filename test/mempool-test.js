@@ -5,6 +5,7 @@
 
 const assert = require('bsert');
 const random = require('bcrypto/lib/random');
+const Network = require('../lib/protocol/network');
 const MempoolEntry = require('../lib/mempool/mempoolentry');
 const Mempool = require('../lib/mempool/mempool');
 const WorkerPool = require('../lib/workers/workerpool');
@@ -37,18 +38,19 @@ const ownership = require('../lib/covenants/ownership');
 const ONE_HASH = Buffer.alloc(32, 0x00);
 ONE_HASH[0] = 0x01;
 
+const network = Network.get('regtest');
 const workers = new WorkerPool({
   enabled: true
 });
 
 const blocks = new BlockStore({
   memory: true,
-  network: 'regtest'
+  network
 });
 
 const chain = new Chain({
-  network: 'regtest',
   memory: true,
+  network,
   blocks,
   workers
 });
@@ -59,7 +61,7 @@ const mempool = new Mempool({
   workers
 });
 
-const wallet = new MemWallet();
+const wallet = new MemWallet({ network });
 
 let cachedTX = null;
 
@@ -234,7 +236,7 @@ describe('Mempool', function() {
   });
 
   it('should get spent coins and reflect in coinview', async () => {
-    const wallet = new MemWallet();
+    const wallet = new MemWallet({ network });
     const addr = wallet.getAddress();
 
     const dummyCoin = dummyInput(addr, random.randomBytes(32));
@@ -261,7 +263,7 @@ describe('Mempool', function() {
 
     {
       const view = await mempool.getCoinView(tx2);
-      const sview = await mempool.getCoinView(tx2);
+      const sview = await mempool.getSpentView(tx2);
       assert(view.hasEntry(coin1));
       assert(sview.hasEntry(coin1));
       assert.strictEqual(mempool.hasCoin(coin1.hash, coin1.index), true);
@@ -273,7 +275,6 @@ describe('Mempool', function() {
     {
       const view = await mempool.getCoinView(tx1);
       const sview = await mempool.getSpentView(tx1);
-
       assert(!view.hasEntry(dummyCoin));
       assert(sview.hasEntry(dummyCoin));
       assert.strictEqual(mempool.hasCoin(coin1.hash, coin1.index), false);
@@ -481,14 +482,14 @@ describe('Mempool', function() {
 
     const blocks = new BlockStore({
       memory: true,
-      network: 'regtest'
+      network
     });
 
     const chain = new Chain({
       memory: true,
       blocks,
       workers,
-      network: 'regtest'
+      network
     });
 
     const mempool = new Mempool({
@@ -497,7 +498,7 @@ describe('Mempool', function() {
       memory: true
     });
 
-    const wallet = new MemWallet();
+    const wallet = new MemWallet({ network });
 
     const COINBASE_MATURITY = mempool.network.coinbaseMaturity;
     const TREE_INTERVAL = mempool.network.names.treeInterval;
@@ -520,9 +521,7 @@ describe('Mempool', function() {
     // Number of coins available in
     // chaincoins (100k satoshi per coin).
     const N = 100;
-    const chaincoins = new MemWallet({
-      network: 'regtest'
-    });
+    const chaincoins = new MemWallet({ network });
 
     chain.on('block', (block, entry) => {
       chaincoins.addBlock(entry, block.txs);
@@ -1198,7 +1197,7 @@ describe('Mempool', function() {
       memory: true,
       blocks,
       workers,
-      network: 'regtest'
+      network
     });
 
     const mempool = new Mempool({
@@ -1226,8 +1225,8 @@ describe('Mempool', function() {
     // Number of coins available in
     // chaincoins (100k satoshi per coin).
     const N = 100;
-    const chaincoins = new MemWallet();
-    const wallet = new MemWallet();
+    const chaincoins = new MemWallet({ network });
+    const wallet = new MemWallet({ network });
 
     async function getMockBlock(chain, txs = [], cb = true) {
       if (cb) {
