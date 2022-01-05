@@ -1,12 +1,3 @@
-/**
- * test/disable-goosig-test.js - Test disabling GooSig
- * Copyright (c) 2020, The Handshake Developers (MIT License).
- * https://github.com/handshake-org/hsd
- */
-
-/* eslint-env mocha */
-/* eslint prefer-arrow-callback: "off" */
-
 'use strict';
 
 const assert = require('bsert');

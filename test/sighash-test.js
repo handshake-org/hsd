@@ -1,9 +1,3 @@
-/*!
- * sighash-test.js - test sighash types
- * Copyright (c) 2019, Mark Tyneway (MIT License).
- * https://github.com/handshake-org/hsd
- */
-
 'use strict';
 
 const assert = require('bsert');

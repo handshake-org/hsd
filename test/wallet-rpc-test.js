@@ -1,5 +1,3 @@
-/* eslint-env mocha */
-
 'use strict';
 
 const {NodeClient,WalletClient} = require('hs-client');

@@ -1,12 +1,3 @@
-/**
- * test/node-rpc-test.js - Node RPC tests for hsd
- * Copyright (c) 2020, The Handshake Developers (MIT Licence)
- * https://github.com/handshake-org/hsd
- */
-
-/* eslint-env mocha */
-/* eslint prefer-arrow-callback: "off" */
-
 'use strict';
 
 const assert = require('bsert');
