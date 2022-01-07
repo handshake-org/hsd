@@ -104,6 +104,13 @@ describe('Tree Compacting', function() {
         network.block.pruneAfterHeight = oldpruneAfterHeight;
       });
 
+      it('should throw if chain is too short to compact', async () => {
+        await assert.rejects(
+          chain.compactTree(),
+          {message: 'Chain is too short to compact tree.'}
+        );
+      });
+
       it('should fund wallet', async () => {
         miner.addresses.length = 0;
         miner.addAddress(wallet.getReceive());
