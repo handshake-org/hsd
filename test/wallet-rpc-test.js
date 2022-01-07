@@ -380,23 +380,80 @@ describe('Wallet RPC Methods', function() {
     }
 
     before(async () => {
-      // Create a new wallets
+      // Create new wallets
       await wclient.createWallet('alice');
-      const {receiveAddress} = await wclient.getAccount('alice', 'default');
+      await wclient.createWallet('bob');
+
+      const {receiveAddress: aliceAddr} = await wclient.getAccount('alice', 'default');
+      const {receiveAddress: bobAddr} = await wclient.getAccount('bob', 'default');
       await wclient.execute('selectwallet', ['alice']);
 
-      // fund wallet
-      await mineBlocks(2, receiveAddress);
+      // fund wallets
+      await mineBlocks(2, aliceAddr);
+      await mineBlocks(2, bobAddr);
 
-      // Win a name
+      // start an auction
       await wclient.execute('sendopen', [name]);
       await mineBlocks(network.names.treeInterval + 1);
 
-      await wclient.execute('sendbid', [name, 1, 2]);
+      // +--------+-------+--------+
+      // | Wallet | Value | Lockup |
+      // +--------+-------+--------+
+      // | Alice  |    10 |     10 |
+      // +--------+-------+--------+
+      // | Bob    |   100 |    100 |
+      // +--------+-------+--------+
+
+      await wclient.execute('selectwallet', ['alice']);
+      await wclient.execute('sendbid', [name, 10, 10]);
+
+      await wclient.execute('selectwallet', ['bob']);
+      await wclient.execute('sendbid', [name, 100, 100]);
       await mineBlocks(network.names.biddingPeriod);
 
+      // Alice reveal and become the temporary winner
+      await wclient.execute('selectwallet', ['alice']);
       await wclient.execute('sendreveal', [name]);
-      await mineBlocks(network.names.revealPeriod + 1);
+
+      // mine just Alice's reveal.
+      await mineBlocks(1);
+
+      // Still in reveal phase
+    });
+
+    it('should fail to sign before auction is closed', async () => {
+      await wclient.execute('selectwallet', ['alice']);
+
+      await assert.rejects(async () => {
+        await wclient.execute('signmessagewithname', [
+          name,
+          'Nobody should be able to sign this message in the current auction phase'
+        ]);
+      }, {
+        type: 'RPCError',
+        message: 'Invalid name state.'
+      });
+    });
+
+    it('should fail to verify before auction is closed', async () => {
+      await wclient.execute('selectwallet', ['alice']);
+      const message = 'We cannot verify a message before auction is closed';
+      const signature = 'U2lnbmF0dXJlIGlzIGludmFsaWQsIGFzc2VydCB0aGUgZXJyb3IgbWVzc2FnZQ==';
+
+      await assert.rejects(async () => {
+        await nclient.execute('verifymessagewithname', [
+          name,
+          signature,
+          message
+        ]);
+      }, {
+        type: 'RPCError',
+        message: 'Invalid name state.'
+      });
+    });
+
+    it('should mine blocks until the auction is finished', async () => {
+      await mineBlocks(network.names.revealPeriod);
     });
 
     it('should sign and verify message with name', async () => {
@@ -427,6 +484,20 @@ describe('Wallet RPC Methods', function() {
       }, {
         type: 'RPCError',
         message: 'Cannot find the name owner.'
+      });
+    });
+
+    it('should fail with non-owned name.', async () => {
+      await wclient.execute('selectwallet', ['bob']);
+
+      await assert.rejects(async () => {
+        await wclient.execute('signmessagewithname', [
+          name,
+          message
+        ]);
+      }, {
+        type: 'RPCError',
+        message: 'Cannot find name owner\'s coin in wallet.'
       });
     });
 
@@ -461,6 +532,51 @@ describe('Wallet RPC Methods', function() {
           message: 'Invalid name.'
         });
       }
+    });
+
+    it('should revoke the name', async () => {
+      // Bob didn't reveal, Alice won.
+      await wclient.execute('selectwallet', ['alice']);
+      await wclient.execute('sendupdate', [name, {'records':[]}]);
+      await mineBlocks(1);
+
+      // Revoke the name
+      await wclient.execute('sendrevoke', [name]);
+      await mineBlocks(1);
+
+      const ns = await nclient.execute('getnameinfo', [name]);
+      assert(ns.info.state, 'REVOKED');
+    });
+
+    it('should fail to sign after revoke', async () => {
+      await wclient.execute('selectwallet', ['alice']);
+
+      await assert.rejects(async () => {
+        await wclient.execute('signmessagewithname', [
+          name,
+          'Nobody should be able to sign this message in the current name state'
+        ]);
+      }, {
+        type: 'RPCError',
+        message: 'Invalid name state.'
+      });
+    });
+
+    it('should fail to verify after revoke', async () => {
+      await wclient.execute('selectwallet', ['alice']);
+      const message = 'We cannot verify a message after revoke';
+      const signature = 'U2lnbmF0dXJlIGlzIGludmFsaWQsIGFzc2VydCB0aGUgZXJyb3IgbWVzc2FnZQ==';
+
+      await assert.rejects(async () => {
+        await nclient.execute('verifymessagewithname', [
+          name,
+          signature,
+          message
+        ]);
+      }, {
+        type: 'RPCError',
+        message: 'Invalid name state.'
+      });
     });
   });
 
