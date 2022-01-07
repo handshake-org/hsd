@@ -8,6 +8,11 @@
   sent to peers in the version packet. Strings must not contain slashes and total
   user-agent string must be 255 characters or less.
 
+- `FullNode` parses new configuration option `--compact-tree` which will compact
+the Urkel Tree only when the node first opens. This is the preferred method
+because it will run before the node connects to the network and the processing
+time will not affect peers.
+
 ## v3.0.0
 
 **When upgrading to this version of hsd you must pass

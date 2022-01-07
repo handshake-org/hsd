@@ -11,6 +11,9 @@ const blockstore = require('../lib/blockstore');
 const MemWallet = require('./util/memwallet');
 const rules = require('../lib/covenants/rules');
 const NameState = require('../lib/covenants/namestate');
+const Address = require('../lib/primitives/address');
+const FullNode = require('../lib/node/fullnode');
+const SPVNode = require('../lib/node/spvnode');
 
 const network = Network.get('regtest');
 const {
@@ -20,6 +23,22 @@ const {
 } = network.names;
 
 describe('Tree Compacting', function() {
+    const oldKeepBlocks = network.block.keepBlocks;
+    const oldpruneAfterHeight = network.block.pruneAfterHeight;
+
+    before(async () => {
+      // Copy the 1:8 ratio from mainnet
+      network.block.keepBlocks = treeInterval * 8;
+
+      // Ensure old blocks are pruned right away
+      network.block.pruneAfterHeight = 1;
+    });
+
+    after(async () => {
+      network.block.keepBlocks = oldKeepBlocks;
+      network.block.pruneAfterHeight = oldpruneAfterHeight;
+    });
+
   for (const prune of [true, false]) {
     describe(`Chain: ${prune ? 'Pruning' : 'Archival'}`, function() {
       const prefix = path.join(
@@ -74,20 +93,10 @@ describe('Tree Compacting', function() {
           wallet.addBlock(entry, block.txs);
         }
       }
-
-      const oldKeepBlocks = network.block.keepBlocks;
-      const oldpruneAfterHeight = network.block.pruneAfterHeight;
-
       let name, nameHash;
       const treeRoots = [];
 
       before(async () => {
-        // Copy the 1:8 ratio from mainnet
-        network.block.keepBlocks = treeInterval * 8;
-
-        // Ensure old blocks are pruned right away
-        network.block.pruneAfterHeight = 1;
-
         await blocks.ensure();
         await blocks.open();
         await chain.open();
@@ -99,9 +108,6 @@ describe('Tree Compacting', function() {
         await chain.close();
         await blocks.close();
         await fs.rimraf(prefix);
-
-        network.block.keepBlocks = oldKeepBlocks;
-        network.block.pruneAfterHeight = oldpruneAfterHeight;
       });
 
       it('should throw if chain is too short to compact', async () => {
@@ -376,4 +382,131 @@ describe('Tree Compacting', function() {
       });
     });
   }
+
+  describe('SPV', function() {
+    it('should refuse to compact tree via RPC', async () => {
+      const prefix = path.join(
+        os.tmpdir(),
+        `hsd-tree-compacting-test-${Date.now()}`
+      );
+
+      const node = new SPVNode({
+        prefix,
+        network: 'regtest',
+        memory: false
+      });
+
+      await node.ensure();
+      await node.open();
+
+      await assert.rejects(
+        node.rpc.compactTree([]),
+        {message: 'Cannot compact tree in SPV mode.'}
+      );
+
+      await node.close();
+    });
+  });
+
+  describe('Full Node', function() {
+    it('should throw if chain is too short to compact on launch', async () => {
+      const prefix = path.join(
+        os.tmpdir(),
+        `hsd-tree-compacting-test-${Date.now()}`
+      );
+
+      const node = new FullNode({
+        prefix,
+        network: 'regtest',
+        memory: false,
+        compactTree: true
+      });
+
+      await node.ensure();
+
+      await assert.rejects(
+        node.open(),
+        {message: 'Chain is too short to compact tree.'}
+      );
+    });
+
+    it('should throw if chain is too short to compact via RPC', async () => {
+      const prefix = path.join(
+        os.tmpdir(),
+        `hsd-tree-compacting-test-${Date.now()}`
+      );
+
+      const node = new FullNode({
+        prefix,
+        network: 'regtest',
+        memory: false
+      });
+
+      await node.ensure();
+      await node.open();
+
+      await assert.rejects(
+        node.rpc.compactTree([]),
+        {message: 'Chain is too short to compact tree.'}
+      );
+
+      await node.close();
+    });
+
+    it('should compact tree on launch', async () => {
+      const prefix = path.join(
+        os.tmpdir(),
+        `hsd-tree-compacting-test-${Date.now()}`
+      );
+      const treePath = path.join(prefix, 'regtest', 'tree', '0000000001');
+
+      // Fresh start
+      let node = new FullNode({
+        prefix,
+        network: 'regtest',
+        memory: false
+      });
+      await node.ensure();
+      await node.open();
+      const fresh = await fs.stat(treePath);
+
+      // Grow
+      const waiter = new Promise((resolve) => {
+        node.on('connect', (entry) => {
+          if (entry.height >= 300)
+            resolve();
+        });
+      });
+      await node.rpc.generateToAddress(
+        [300, new Address().toString('regtest')]
+      );
+      await waiter;
+
+      // Tree has grown
+      const grown = await fs.stat(treePath);
+      assert(fresh.size < grown.size);
+
+      // Relaunch with compaction argument
+      await node.close();
+      node = new FullNode({
+        prefix,
+        network: 'regtest',
+        memory: false,
+        compactTree: true
+      });
+      await node.open();
+
+      // Tree is compacted
+      const compacted = await fs.stat(treePath);
+      assert(compacted.size < grown.size);
+
+      // Bonus: since there are no namestate updates in this test,
+      // all the nodes committed to the tree during "growth" are identically
+      // empty. When we compact, only the original empty node will remain.
+      assert.strictEqual(fresh.size, compacted.size);
+
+      // done
+      await node.close();
+    });
+  });
 });
