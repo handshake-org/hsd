@@ -1017,10 +1017,9 @@ class MemWallet {
 
     ns.maybeExpire(height, network);
 
-    const state = ns.state(height, network);
     const start = ns.height;
 
-    if (state !== states.OPENING)
+    if (!ns.isOpening(height, network))
       throw new Error('Name is not available.');
 
     if (start !== 0 && start !== height)
@@ -1068,13 +1067,12 @@ class MemWallet {
 
     ns.maybeExpire(height, network);
 
-    const state = ns.state(height, network);
     const start = ns.height;
 
-    if (state === states.OPENING)
+    if (ns.isOpening(height, network))
       throw new Error('Name has not reached the bidding phase yet.');
 
-    if (state !== states.BIDDING)
+    if (!ns.isBidding(height, network))
       throw new Error('Name is not available.');
 
     if (value > lockup)
@@ -1183,9 +1181,7 @@ class MemWallet {
     if (ns.isExpired(height, network))
       throw new Error('Name has expired!');
 
-    const state = ns.state(height, network);
-
-    if (state < states.CLOSED)
+    if (!ns.isRedeemable(height, network))
       throw new Error('Auction is not yet closed.');
 
     const reveals = this.getReveals(nameHash);
@@ -1265,9 +1261,7 @@ class MemWallet {
         throw new Error('Claim is not yet mature.');
     }
 
-    const state = ns.state(height, network);
-
-    if (state !== states.CLOSED)
+    if (!ns.isClosed(height, network))
       throw new Error('Auction is not yet closed.');
 
     const output = new Output();
@@ -1330,9 +1324,7 @@ class MemWallet {
     if (coin.height < ns.height)
       throw new Error(`Wallet does not own: "${name}".`);
 
-    const state = ns.state(height, network);
-
-    if (state !== states.CLOSED)
+    if (!ns.isClosed(height, network))
       throw new Error('Auction is not yet closed.');
 
     if (!coin.covenant.isRegister()
@@ -1384,9 +1376,7 @@ class MemWallet {
     if (coin.height < ns.height)
       throw new Error(`Wallet does not own: "${name}".`);
 
-    const state = ns.state(height, network);
-
-    if (state !== states.CLOSED)
+    if (!ns.isClosed(height, network))
       throw new Error('Auction is not yet closed.');
 
     if (!coin.covenant.isRegister()
@@ -1442,9 +1432,7 @@ class MemWallet {
     if (coin.height < ns.height)
       throw new Error(`Wallet does not own: "${name}".`);
 
-    const state = ns.state(height, network);
-
-    if (state !== states.CLOSED)
+    if (!ns.isClosed(height, network))
       throw new Error('Auction is not yet closed.');
 
     if (!coin.covenant.isRegister()
@@ -1502,9 +1490,7 @@ class MemWallet {
     if (coin.height < ns.height)
       throw new Error(`Wallet does not own: "${name}".`);
 
-    const state = ns.state(height, network);
-
-    if (state !== states.CLOSED)
+    if (!ns.isClosed(height, network))
       throw new Error('Auction is not yet closed.');
 
     if (!coin.covenant.isTransfer())
@@ -1552,9 +1538,7 @@ class MemWallet {
     if (coin.height < ns.height)
       throw new Error(`Wallet does not own: "${name}".`);
 
-    const state = ns.state(height, network);
-
-    if (state !== states.CLOSED)
+    if (!ns.isClosed(height, network))
       throw new Error('Auction is not yet closed.');
 
     if (!coin.covenant.isTransfer())
@@ -1618,9 +1602,7 @@ class MemWallet {
     if (ns.isExpired(height, network))
       throw new Error('Name has expired!');
 
-    const state = ns.state(height, network);
-
-    if (state !== states.CLOSED)
+    if (!ns.isClosed(height, network))
       throw new Error('Auction is not yet closed.');
 
     if (!coin.covenant.isRegister()
