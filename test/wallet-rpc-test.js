@@ -489,6 +489,20 @@ describe('Wallet RPC Methods', function() {
       });
     });
 
+    it('should fail with non-owned name.', async () => {
+      await wclient.execute('selectwallet', ['bob']);
+
+      await assert.rejects(async () => {
+        await wclient.execute('signmessagewithname', [
+          name,
+          message
+        ]);
+      }, {
+        type: 'RPCError',
+        message: 'Cannot find name owner\'s coin in wallet.'
+      });
+    });
+
     it('should fail to sign with invalid name.', async () => {
       await wclient.execute('selectwallet', ['alice']);
 
