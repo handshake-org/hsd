@@ -20,7 +20,8 @@ const {
 } = network.names;
 
 const workers = new WorkerPool({
-  enabled: false
+  enabled: false,
+  size: 2
 });
 
 const blocks = new BlockStore({

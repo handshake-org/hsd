@@ -11,7 +11,8 @@ const Network = require('../lib/protocol/network');
 const network = Network.get('regtest');
 
 const workers = new WorkerPool({
-  enabled: true
+  enabled: true,
+  size: 2
 });
 
 describe('Invalid Reorg', function() {

@@ -21,7 +21,8 @@ const opcodes = Script.opcodes;
 const network = Network.get('regtest');
 
 const workers = new WorkerPool({
-  enabled: true
+  enabled: true,
+  size: 2
 });
 
 const blocks = new BlockStore({

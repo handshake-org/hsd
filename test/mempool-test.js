@@ -37,7 +37,8 @@ ONE_HASH[0] = 0x01;
 
 const network = Network.get('regtest');
 const workers = new WorkerPool({
-  enabled: true
+  enabled: true,
+  size: 2
 });
 
 const blocks = new BlockStore({
@@ -474,7 +475,8 @@ describe('Mempool', function() {
   describe('Mempool disconnect and reorg handling', function () {
     const workers = new WorkerPool({
       // Must be disabled for `ownership.ignore`.
-      enabled: false
+      enabled: false,
+      size: 2
     });
 
     const blocks = new BlockStore({

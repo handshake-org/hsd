@@ -36,8 +36,9 @@ const KEY2 = 'xprv9s21ZrQH143K3mqiSThzPtWAabQ22Pjp3uSNnZ53A5bQ4udp'
   + 'faKekc2m4AChLYH1XDzANhrSdxHYWUeTWjYJwFwWFyHkTMnMeAcW4JyRCZa';
 
 const enabled = true;
+const size = 2;
 const network = Network.get('main');
-const workers = new WorkerPool({ enabled });
+const workers = new WorkerPool({ enabled, size });
 const wdb = new WalletDB({ network, workers });
 
 let currentWallet = null;
@@ -1854,7 +1855,7 @@ describe('Wallet', function() {
 
   describe('Disable TXs', function() {
     const network = Network.get('regtest');
-    const workers = new WorkerPool({ enabled });
+    const workers = new WorkerPool({ enabled, size });
     const wdb = new WalletDB({ network, workers });
 
     before(async () => {
@@ -1916,11 +1917,7 @@ describe('Wallet', function() {
     let wdb = null;
 
     beforeEach(async () => {
-      workers = new WorkerPool({
-        enabled: true,
-        size: 2
-      });
-
+      workers = new WorkerPool({ enabled, size });
       wdb = new WalletDB({ workers });
       await workers.open();
       await wdb.open();
@@ -1977,7 +1974,7 @@ describe('Wallet', function() {
 
   describe('TXDB locked balance', function() {
     const network = Network.get('regtest');
-    const workers = new WorkerPool({ enabled });
+    const workers = new WorkerPool({ enabled, size });
     const wdb = new WalletDB({ network, workers });
     // This test executes a complete auction for this name
     const name = 'satoshi';
@@ -2356,7 +2353,7 @@ describe('Wallet', function() {
 
   describe('TXDB locked balance after simulated rescan', function() {
     const network = Network.get('regtest');
-    const workers = new WorkerPool({ enabled });
+    const workers = new WorkerPool({ enabled, size });
     const wdb = new WalletDB({ network, workers });
     const name = 'satoshi';
     const nameHash = rules.hashName(name);
@@ -2760,7 +2757,7 @@ describe('Wallet', function() {
     // that later 'it' blocks depend on.
     let wallet, update;
     const network = Network.get('regtest');
-    const workers = new WorkerPool({enabled: false});
+    const workers = new WorkerPool({enabled: false, size});
     const wdb = new WalletDB({network, workers});
     // Cloudflare's "custom value" plus the standard "name value".
     // Verifiable with reserved-browser.js and names.json
@@ -2939,7 +2936,7 @@ describe('Wallet', function() {
 
   describe('Create auction-related TX in advance', function () {
     const network = Network.get('regtest');
-    const workers = new WorkerPool({ enabled });
+    const workers = new WorkerPool({ enabled, size });
     const wdb = new WalletDB({ network, workers });
     // This test executes a complete auction for this name
     const name = 'satoshi-in-advance';
