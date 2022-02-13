@@ -9,6 +9,7 @@ const base32 = require('bcrypto/lib/encoding/base32');
 const secp256k1 = require('bcrypto/lib/secp256k1');
 const random = require('bcrypto/lib/random');
 const common = require('./util/common');
+const util = require('../lib/utils/util');
 const Network = require('../lib/protocol/network');
 const NetAddress = require('../lib/net/netaddress');
 const HostList = require('../lib/net/hostlist');
@@ -28,6 +29,18 @@ function getHostsFromLocals(addresses, opts) {
 
   return hosts;
 }
+
+// flat
+function getFreshEntries(hosts) {
+  const naddrs = [];
+
+  for (const bucket of hosts.fresh) {
+    for (const naddr of bucket.values())
+      naddrs.push(naddr);
+  }
+
+  return naddrs;
+};
 
 describe('Net HostList', function() {
   let testdir;
@@ -505,6 +518,333 @@ describe('Net HostList', function() {
       const addr = NetAddress.fromHostname(getRandomIPv4(), regtest);
       const local = hosts.getLocal(addr);
       assert.strictEqual(local, dests[0][0]);
+    }
+  });
+
+  it('should add fresh address', () => {
+    {
+      const hosts = new HostList({
+        network: regtest,
+        publicHost: getRandomIPv4()
+      });
+
+      // fresh, w/o src, not in the buckets
+      const addr = NetAddress.fromHostname(getRandomIPv4(), regtest);
+
+      assert.strictEqual(hosts.totalFresh, 0);
+      assert.strictEqual(hosts.needsFlush, false);
+      assert.strictEqual(hosts.map.size, 0);
+      assert.strictEqual(getFreshEntries(hosts).length, 0);
+
+      hosts.add(addr);
+
+      assert.strictEqual(hosts.totalFresh, 1);
+      assert.strictEqual(hosts.needsFlush, true);
+      assert.strictEqual(hosts.map.size, 1);
+
+      const freshEntries = getFreshEntries(hosts);
+      assert.strictEqual(freshEntries.length, 1);
+
+      const entry = freshEntries[0];
+      assert.strictEqual(entry.addr, addr, 'Entry addr is not correct.');
+      assert.strictEqual(entry.src, hosts.address, 'Entry src is not correct.');
+    }
+
+    {
+      const hosts = new HostList({
+        network: regtest
+      });
+
+      const src = NetAddress.fromHostname(getRandomIPv4(), regtest);
+      const addr = NetAddress.fromHostname(getRandomIPv4(), regtest);
+
+      hosts.add(addr, src);
+      const freshEntries = getFreshEntries(hosts);
+      assert.strictEqual(freshEntries.length, 1);
+
+      const entry = freshEntries[0];
+      assert.strictEqual(entry.addr, addr, 'Entry addr is not correct.');
+      assert.strictEqual(entry.src, src, 'Entry src is not correct.');
+      assert.strictEqual(entry.refCount, 1);
+      assert.strictEqual(hosts.map.size, 1);
+    }
+  });
+
+  it('should add address (limits)', () => {
+    // Full Bucket?
+    {
+      const hosts = new HostList({
+        network: regtest
+      });
+
+      const addr = NetAddress.fromHostname(getRandomIPv4(), regtest);
+      const src = NetAddress.fromHostname(getRandomIPv4(), regtest);
+
+      let evicted = false;
+
+      // always return first bucket for this test.
+      hosts.freshBucket = function() {
+        return this.fresh[0];
+      };
+
+      hosts.evictFresh = function() {
+        evicted = true;
+      };
+
+      // Fill first bucket.
+      for (let i = 0; i < hosts.maxEntries; i++) {
+        const addr = NetAddress.fromHostname(getRandomIPv4(), regtest);
+        const added = hosts.add(addr, src);
+        assert.strictEqual(added, true);
+        assert.strictEqual(evicted, false);
+      }
+
+      const added = hosts.add(addr, src);
+      assert.strictEqual(added, true);
+      assert.strictEqual(evicted, true);
+    }
+
+    // Don't insert if entry is in a bucket.
+    {
+      const hosts = new HostList({
+        network: regtest
+      });
+
+      const addr = NetAddress.fromHostname(getRandomIPv4(), regtest);
+      const src = NetAddress.fromHostname(getRandomIPv4(), regtest);
+      const entry = new HostList.HostEntry(addr, src);
+
+      // insert entry in every bucket for this test.
+      for (const bucket of hosts.fresh)
+        bucket.set(entry.key(), entry);
+
+      const added = hosts.add(addr, src);
+      assert.strictEqual(added, false);
+    }
+  });
+
+  it('should add seen address', () => {
+    const hosts = new HostList({
+      network: regtest
+    });
+
+    // get addr clone that can be added (Online requirements)
+    const cloneAddr = (addr) => {
+      const addr2 = addr.clone();
+      // just make sure this is < 3 * 60 * 60 (Online requirements
+      // with & without penalty)
+      addr2.time = util.now() + 60 * 60;
+      return addr2;
+    };
+
+    const addr = NetAddress.fromHostname(getRandomIPv4(), regtest);
+    const src = NetAddress.fromHostname(getRandomIPv4(), regtest);
+    addr.services = 0x01;
+    const added = hosts.add(addr, src);
+    assert.strictEqual(added, true);
+    assert.strictEqual(hosts.needsFlush, true);
+    hosts.needsFlush = false;
+
+    const entries = getFreshEntries(hosts);
+    const entry = entries[0];
+    assert.strictEqual(entries.length, 1);
+    assert.strictEqual(entry.addr.services, 0x01);
+
+    // don't update - no new info (service will always get updated.)
+    {
+      const addr2 = addr.clone();
+      addr2.services = 0x02;
+      const added = hosts.add(addr2, src);
+      assert.strictEqual(added, false);
+
+      const entries = getFreshEntries(hosts);
+      const entry = entries[0];
+      assert.strictEqual(entries.length, 1);
+      assert.strictEqual(entry.addr.services, 0x03);
+      assert.strictEqual(hosts.needsFlush, false);
+    }
+
+    // update refCount.
+    {
+      const srcs = [
+        NetAddress.fromHostname(getRandomIPv4(), regtest),
+        NetAddress.fromHostname(getRandomIPv4(), regtest)
+      ];
+      const addr2 = cloneAddr(addr);
+
+      // when we have 1 ref, so probability should be 50%.
+      // then we have 2 refs, probability will be 25%.
+      // ... until we have 8 refs.
+      // Because we are reusing src, we will get same bucket
+      // so it will only get added once.
+      let added = 0;
+      for (let i = 0; i < 100; i++) {
+        const res = hosts.add(addr2, srcs[added]);
+
+        if (res)
+          added++;
+
+        if (added === 2)
+          break;
+      }
+
+      // at this point address should be in another bucket as well.
+      assert.strictEqual(added, 2);
+      assert.strictEqual(entry.refCount, 3);
+      const entries = getFreshEntries(hosts);
+      assert.strictEqual(entries.length, 3);
+      assert.strictEqual(hosts.needsFlush, true);
+      hosts.needsFlush = false;
+    }
+
+    // should fail with max ref
+    {
+      const _refCount = entry.refCount;
+      entry.refCount = HostList.MAX_REFS;
+      const addr2 = cloneAddr(addr);
+      const added = hosts.add(addr2, src);
+      assert.strictEqual(added, false);
+      entry.refCount = _refCount;
+      assert.strictEqual(hosts.needsFlush, false);
+    }
+
+    // should fail if it's used
+    {
+      entry.used = true;
+      const addr2 = cloneAddr(addr);
+      const added = hosts.add(addr2, src);
+      assert.strictEqual(added, false);
+      assert.strictEqual(hosts.needsFlush, false);
+      entry.used = false;
+    }
+  });
+
+  it('should add address (update time)', () => {
+    const getHosts = (time) => {
+      const hosts = new HostList({
+        network: regtest
+      });
+
+      const addr = NetAddress.fromHostname(getRandomIPv4(), regtest);
+      const src = NetAddress.fromHostname(getRandomIPv4(), regtest);
+
+      if (time)
+        addr.time = time;
+
+      const added = hosts.add(addr, src);
+      assert.strictEqual(added, true);
+      assert.strictEqual(hosts.needsFlush, true);
+      hosts.needsFlush = false;
+
+      const entries = getFreshEntries(hosts);
+      assert.strictEqual(entries.length, 1);
+
+      // make sure we stop after updating time.
+      entries[0].used = true;
+
+      return [hosts, entries[0], addr, src];
+    };
+
+    // Update time - Online?
+    {
+      // a week ago
+      const [hosts, entry, addr, src] = getHosts(util.now() - 7 * 24 * 60 * 60);
+      const addr2 = addr.clone();
+
+      // a day ago (interval is a day,
+      // so we update if a day and 2 hrs have passed).
+      addr2.time = util.now() - 24 * 60 * 60;
+
+      const added = hosts.add(addr2, src);
+      assert.strictEqual(added, false);
+      assert.strictEqual(entry.addr.time, addr2.time);
+      assert.strictEqual(hosts.needsFlush, true);
+    }
+
+    {
+      // a day ago
+      const [hosts, entry, addr, src] = getHosts(util.now() - 24 * 60 * 60);
+
+      const addr2 = addr.clone();
+
+      // now (interval becomes an hour, so instead we update if 3 hrs passed.
+      addr2.time = util.now();
+
+      const added = hosts.add(addr2, src);
+      assert.strictEqual(added, false);
+      assert.strictEqual(entry.addr.time, addr2.time);
+      assert.strictEqual(hosts.needsFlush, true);
+    }
+
+    // Don't update
+    {
+      // a week ago
+      const weekAgo = util.now() - 7 * 24 * 60 * 60;
+      const sixDaysAgo = util.now() - 6 * 24 * 60 * 60 + 1; // and a second
+
+      const [hosts, entry, addr, src] = getHosts(weekAgo);
+
+      const addr2 = addr.clone();
+      // 6 days ago (exactly 24 hrs after) because 2 hrs is penalty,
+      // we don't update.
+      addr2.time = sixDaysAgo;
+
+      const added = hosts.add(addr2, src);
+      assert.strictEqual(added, false);
+      assert.strictEqual(entry.addr.time, weekAgo);
+      assert.strictEqual(hosts.needsFlush, false);
+    }
+
+    // Update, because we are the ones inserting.
+    {
+      // a week ago
+      const weekAgo = util.now() - 7 * 24 * 60 * 60;
+      const sixDaysAgo = util.now() - 6 * 24 * 60 * 60 + 1; // and a second
+
+      const [hosts, entry, addr] = getHosts(weekAgo);
+
+      const addr2 = addr.clone();
+      // 6 days ago (exactly 24 hrs after) because 2 hrs is penalty,
+      // we don't update.
+      addr2.time = sixDaysAgo;
+
+      const added = hosts.add(addr2);
+      assert.strictEqual(added, false);
+      assert.strictEqual(entry.addr.time, sixDaysAgo);
+      assert.strictEqual(hosts.needsFlush, true);
+    }
+
+    // Online - but still not updating (less than 3 hrs)
+    {
+      // now vs 3 hrs ago (exactly)
+      const now = util.now();
+      const threeHoursAgo = now - 3 * 60 * 60;
+
+      const [hosts, entry, addr, src] = getHosts(threeHoursAgo);
+
+      const addr2 = addr.clone();
+      addr2.time = now;
+
+      const added = hosts.add(addr2, src);
+      assert.strictEqual(added, false);
+      assert.strictEqual(entry.addr.time, threeHoursAgo);
+      assert.strictEqual(hosts.needsFlush, false);
+    }
+
+    {
+      // now vs 3 hrs and a second ago
+      const now = util.now();
+      const threeHoursAgo = now - 1 - 3 * 60 * 60;
+
+      const [hosts, entry, addr, src] = getHosts(threeHoursAgo);
+
+      const addr2 = addr.clone();
+      addr2.time = now;
+
+      const added = hosts.add(addr2, src);
+      assert.strictEqual(added, false);
+      assert.strictEqual(entry.addr.time, now);
+      assert.strictEqual(hosts.needsFlush, true);
     }
   });
 });
