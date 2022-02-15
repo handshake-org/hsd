@@ -42,6 +42,10 @@ function getFreshEntries(hosts) {
   return naddrs;
 };
 
+function getRandomNetAddr(network = regtest) {
+  return NetAddress.fromHostname(getRandomIPv4(), network);
+}
+
 describe('Net HostList', function() {
   let testdir;
 
@@ -256,6 +260,130 @@ describe('Net HostList', function() {
     assert.strictEqual(hosts.map.size, 3);
   });
 
+  it('should add/set nodes/seeds', () => {
+    // we need 3.
+    const hosts = [
+      getRandomIPv4(),
+      getRandomIPv4(),
+      getRandomIPv4()
+    ];
+
+    const key = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+
+    const tests = [
+      // DNS Nodes
+      {
+        host: 'example.com',
+        hostname: 'example.com',
+        expected: {
+          addr: null,
+          dnsNodes: 1,
+          nodes: 0,
+          map: 0
+        }
+      },
+      // HSD Node w/o port - plaintext
+      {
+        host: hosts[0],
+        hostname: hosts[0],
+        expected: {
+          addr: { port: mainnet.port, host: hosts[0] },
+          dnsNodes: 0,
+          nodes: 1,
+          map: 1
+        }
+      },
+      // HSD Node w/o port - brontide
+      {
+        host: hosts[1],
+        hostname: `${key}@${hosts[1]}`,
+        expected: {
+          addr: { host: hosts[1], port: mainnet.brontidePort },
+          dnsNodes: 0,
+          nodes: 1,
+          map: 1
+        }
+      },
+      // HSD Node with port
+      {
+        host: hosts[2],
+        hostname: `${hosts[2]}:${mainnet.port + 1}`,
+        expected: {
+          addr: { host: hosts[2], port: mainnet.port + 1 },
+          dnsNodes: 0,
+          nodes: 1,
+          map: 1
+        }
+      }
+    ];
+
+    const allHosts = tests.map(t => t.hostname);
+    const sumExpected = tests.reduce((p, c) => {
+      p.dnsNodes += c.expected.dnsNodes;
+      p.nodes += c.expected.nodes;
+      p.map += c.expected.map;
+      return p;
+    }, {
+      dnsNodes: 0,
+      nodes: 0,
+      map: 0
+    });
+
+    for (const test of tests) {
+      const hosts = new HostList();
+      const {expected} = test;
+
+      const addr = hosts.addNode(test.hostname);
+
+      if (expected.addr == null)
+        assert.strictEqual(addr, null);
+
+      if (expected.addr != null) {
+        assert.strictEqual(addr.host, expected.addr.host);
+        assert.strictEqual(addr.port, expected.addr.port);
+      }
+
+      assert.strictEqual(hosts.dnsNodes.length, expected.dnsNodes);
+      assert.strictEqual(hosts.nodes.length, expected.nodes);
+      assert.strictEqual(hosts.map.size, expected.map);
+    }
+
+    // set all nodes
+    {
+      const hosts = new HostList();
+      hosts.setNodes(allHosts);
+      assert.strictEqual(hosts.dnsNodes.length, sumExpected.dnsNodes);
+      assert.strictEqual(hosts.nodes.length, sumExpected.nodes);
+      assert.strictEqual(hosts.map.size, sumExpected.map);
+    }
+
+    for (const test of tests) {
+      const hosts = new HostList();
+      const {expected} = test;
+
+      const addr = hosts.addSeed(test.hostname);
+
+      if (expected.addr == null)
+        assert.strictEqual(addr, null);
+
+      if (expected.addr != null) {
+        assert.strictEqual(addr.host, expected.addr.host);
+        assert.strictEqual(addr.port, expected.addr.port);
+      }
+
+      assert.strictEqual(hosts.dnsSeeds.length, expected.dnsNodes);
+      assert.strictEqual(hosts.map.size, expected.map);
+    }
+
+    {
+      const hosts = new HostList();
+
+      hosts.setSeeds(allHosts);
+      assert.strictEqual(hosts.dnsSeeds.length, sumExpected.dnsNodes);
+      assert.strictEqual(hosts.map.size, sumExpected.map);
+    }
+  });
+
   it('should add push/local addresses', () => {
     const services = 1000;
     const hosts = new HostList({ services });
@@ -363,14 +491,14 @@ describe('Net HostList', function() {
     ];
 
     const naddrsByScore = hostsByScore.map(([h, s]) => {
-      return [NetAddress.fromHostname(h, regtest), s];
+      return [getRandomNetAddr(), s];
     });
 
     // testnet/regtest
     for (let type = scores.NONE; type < scores.MAX; type++) {
       const addrs = naddrsByScore.slice(scores.NONE, type + 1);
       const hosts = getHostsFromLocals(addrs, { network: regtest });
-      const src = NetAddress.fromHostname(getRandomIPv4(), regtest);
+      const src = getRandomNetAddr();
       const best = hosts.getLocal(src);
       assert.strictEqual(best, naddrsByScore[type][0]);
     }
@@ -378,7 +506,7 @@ describe('Net HostList', function() {
     // mainnet
     {
       const hosts = getHostsFromLocals(naddrsByScore, { network: mainnet });
-      const src = NetAddress.fromHostname(getRandomIPv4(), regtest);
+      const src = getRandomNetAddr(mainnet);
       const best = hosts.getLocal(src);
       assert.strictEqual(best, naddrsByScore[scores.MANUAL][0]);
     }
@@ -387,7 +515,7 @@ describe('Net HostList', function() {
       // everything below MANUAL is skipped on main network.
       const addrs = naddrsByScore.slice(scores.NONE, scores.UPNP);
       const hosts = getHostsFromLocals(addrs, { network: mainnet });
-      const src = NetAddress.fromHostname(getRandomIPv4(), regtest);
+      const src = getRandomNetAddr(mainnet);
       const best = hosts.getLocal(src);
       assert.strictEqual(best, null);
     }
@@ -499,7 +627,7 @@ describe('Net HostList', function() {
     const hosts = getHostsFromLocals(dests, { network: regtest });
 
     {
-      const addr = NetAddress.fromHostname(getRandomIPv4(), regtest);
+      const addr = getRandomNetAddr();
       const marked = hosts.markLocal(addr);
 
       assert.strictEqual(marked, false);
@@ -507,7 +635,7 @@ describe('Net HostList', function() {
 
     {
       // we should get BIND, because BIND > IF
-      const addr = NetAddress.fromHostname(getRandomIPv4(), regtest);
+      const addr = getRandomNetAddr();
       const local = hosts.getLocal(addr);
       assert.strictEqual(local, dests[1][0]);
     }
@@ -515,7 +643,7 @@ describe('Net HostList', function() {
     {
       // with markLocal IF should get the same score (type remains).
       hosts.markLocal(dests[0][0]);
-      const addr = NetAddress.fromHostname(getRandomIPv4(), regtest);
+      const addr = getRandomNetAddr();
       const local = hosts.getLocal(addr);
       assert.strictEqual(local, dests[0][0]);
     }
@@ -523,13 +651,10 @@ describe('Net HostList', function() {
 
   it('should add fresh address', () => {
     {
-      const hosts = new HostList({
-        network: regtest,
-        publicHost: getRandomIPv4()
-      });
+      const hosts = new HostList();
 
       // fresh, w/o src, not in the buckets
-      const addr = NetAddress.fromHostname(getRandomIPv4(), regtest);
+      const addr = getRandomNetAddr();
 
       assert.strictEqual(hosts.totalFresh, 0);
       assert.strictEqual(hosts.needsFlush, false);
@@ -551,12 +676,9 @@ describe('Net HostList', function() {
     }
 
     {
-      const hosts = new HostList({
-        network: regtest
-      });
-
-      const src = NetAddress.fromHostname(getRandomIPv4(), regtest);
-      const addr = NetAddress.fromHostname(getRandomIPv4(), regtest);
+      const hosts = new HostList();
+      const addr = getRandomNetAddr();
+      const src = getRandomNetAddr();
 
       hosts.add(addr, src);
       const freshEntries = getFreshEntries(hosts);
@@ -573,12 +695,9 @@ describe('Net HostList', function() {
   it('should add address (limits)', () => {
     // Full Bucket?
     {
-      const hosts = new HostList({
-        network: regtest
-      });
-
-      const addr = NetAddress.fromHostname(getRandomIPv4(), regtest);
-      const src = NetAddress.fromHostname(getRandomIPv4(), regtest);
+      const hosts = new HostList();
+      const addr = getRandomNetAddr();
+      const src = getRandomNetAddr();
 
       let evicted = false;
 
@@ -593,7 +712,7 @@ describe('Net HostList', function() {
 
       // Fill first bucket.
       for (let i = 0; i < hosts.maxEntries; i++) {
-        const addr = NetAddress.fromHostname(getRandomIPv4(), regtest);
+        const addr = getRandomNetAddr();
         const added = hosts.add(addr, src);
         assert.strictEqual(added, true);
         assert.strictEqual(evicted, false);
@@ -606,12 +725,9 @@ describe('Net HostList', function() {
 
     // Don't insert if entry is in a bucket.
     {
-      const hosts = new HostList({
-        network: regtest
-      });
-
-      const addr = NetAddress.fromHostname(getRandomIPv4(), regtest);
-      const src = NetAddress.fromHostname(getRandomIPv4(), regtest);
+      const hosts = new HostList();
+      const addr = getRandomNetAddr();
+      const src = getRandomNetAddr();
       const entry = new HostList.HostEntry(addr, src);
 
       // insert entry in every bucket for this test.
@@ -624,9 +740,7 @@ describe('Net HostList', function() {
   });
 
   it('should add seen address', () => {
-    const hosts = new HostList({
-      network: regtest
-    });
+    const hosts = new HostList();
 
     // get addr clone that can be added (Online requirements)
     const cloneAddr = (addr) => {
@@ -637,8 +751,8 @@ describe('Net HostList', function() {
       return addr2;
     };
 
-    const addr = NetAddress.fromHostname(getRandomIPv4(), regtest);
-    const src = NetAddress.fromHostname(getRandomIPv4(), regtest);
+    const addr = getRandomNetAddr();
+    const src = getRandomNetAddr();
     addr.services = 0x01;
     const added = hosts.add(addr, src);
     assert.strictEqual(added, true);
@@ -664,37 +778,51 @@ describe('Net HostList', function() {
       assert.strictEqual(hosts.needsFlush, false);
     }
 
-    // update refCount.
+    // update refCount. (we only have 1 refCount, increase up to 8)
     {
-      const srcs = [
-        NetAddress.fromHostname(getRandomIPv4(), regtest),
-        NetAddress.fromHostname(getRandomIPv4(), regtest)
-      ];
+      const srcs = [];
+      for (let i = 0; i < 7; i++)
+        srcs.push(getRandomNetAddr());
+
+      const factors = [];
+      const _random = hosts.random;
+      const random = function (factor) {
+        factors.push(factor);
+        return 0;
+      };
+      hosts.random = random;
+
       const addr2 = cloneAddr(addr);
 
-      // when we have 1 ref, so probability should be 50%.
-      // then we have 2 refs, probability will be 25%.
-      // ... until we have 8 refs.
+      // when we have 1 ref, so probability of adding second one
+      // is 50% (1/2).
+      // then we have 2 refs, probability of adding will be 25% (1/4).
+      // ... until we have 8 refs. (last one being 1/128)
       // Because we are reusing src, we will get same bucket
       // so it will only get added once.
       let added = 0;
-      for (let i = 0; i < 100; i++) {
-        const res = hosts.add(addr2, srcs[added]);
+      for (let i = 0; i < 7; i++) {
+        const res = hosts.add(addr2, srcs[i]);
 
-        if (res)
-          added++;
-
-        if (added === 2)
-          break;
+        // our custom random method always returns 0.
+        assert.strictEqual(res, true);
+        added++;
       }
 
+      // make sure factors are calculated properly.
+      assert.strictEqual(factors.length, 7);
+
+      for (let i = 0; i < 7; i++)
+        assert.strictEqual(factors[i], 1 << (i + 1));
+
       // at this point address should be in another bucket as well.
-      assert.strictEqual(added, 2);
-      assert.strictEqual(entry.refCount, 3);
+      assert.strictEqual(added, 7);
+      assert.strictEqual(entry.refCount, 8);
       const entries = getFreshEntries(hosts);
-      assert.strictEqual(entries.length, 3);
+      assert.strictEqual(entries.length, 8);
       assert.strictEqual(hosts.needsFlush, true);
       hosts.needsFlush = false;
+      hosts.random = _random;
     }
 
     // should fail with max ref
@@ -721,12 +849,9 @@ describe('Net HostList', function() {
 
   it('should add address (update time)', () => {
     const getHosts = (time) => {
-      const hosts = new HostList({
-        network: regtest
-      });
-
-      const addr = NetAddress.fromHostname(getRandomIPv4(), regtest);
-      const src = NetAddress.fromHostname(getRandomIPv4(), regtest);
+      const hosts = new HostList();
+      const addr = getRandomNetAddr();
+      const src = getRandomNetAddr();
 
       if (time)
         addr.time = time;
@@ -738,11 +863,12 @@ describe('Net HostList', function() {
 
       const entries = getFreshEntries(hosts);
       assert.strictEqual(entries.length, 1);
+      const entry = hosts.map.get(addr.hostname);
 
       // make sure we stop after updating time.
       entries[0].used = true;
 
-      return [hosts, entries[0], addr, src];
+      return [hosts, entry, addr, src];
     };
 
     // Update time - Online?
@@ -846,6 +972,65 @@ describe('Net HostList', function() {
       assert.strictEqual(entry.addr.time, now);
       assert.strictEqual(hosts.needsFlush, true);
     }
+  });
+
+  it('should mark attempt', () => {
+    const hosts = new HostList();
+
+    // if we don't have the entry.
+    {
+      const addr = getRandomIPv4();
+      hosts.markAttempt(addr);
+    }
+
+    const src = getRandomNetAddr();
+    const addr = getRandomNetAddr();
+
+    hosts.add(addr, src);
+
+    const entry = hosts.map.get(addr.hostname);
+    assert.strictEqual(entry.attempts, 0);
+    assert.strictEqual(entry.lastAttempt, 0);
+
+    hosts.markAttempt(addr.hostname);
+    assert.strictEqual(entry.attempts, 1);
+    assert(entry.lastAttempt > util.now() - 10);
+  });
+
+  it('should mark success', () => {
+    const hosts = new HostList();
+
+    // we don't have entry.
+    {
+      const addr = getRandomIPv4();
+      hosts.markSuccess(addr);
+    }
+
+    // Don't update time, it's recent.
+    {
+      const src = getRandomNetAddr();
+      const addr = getRandomNetAddr();
+      const oldTime = util.now() - 10 * 60; // last connection 11 minutes ago.
+      addr.time = oldTime;
+
+      hosts.add(addr, src);
+      hosts.markSuccess(addr.hostname);
+
+      const entry = hosts.map.get(addr.hostname);
+      assert.strictEqual(entry.addr.time, oldTime);
+    }
+
+    // we update time.
+    const src = getRandomNetAddr();
+    const addr = getRandomNetAddr();
+    const oldTime = util.now() - 21 * 60; // last connection 21 minutes ago.
+    addr.time = oldTime;
+
+    hosts.add(addr, src);
+    hosts.markSuccess(addr.hostname);
+
+    const entry = hosts.map.get(addr.hostname);
+    assert(entry.addr.time > oldTime);
   });
 });
 
