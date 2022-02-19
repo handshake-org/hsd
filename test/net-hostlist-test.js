@@ -13,6 +13,7 @@ const util = require('../lib/utils/util');
 const Network = require('../lib/protocol/network');
 const NetAddress = require('../lib/net/netaddress');
 const HostList = require('../lib/net/hostlist');
+const {HostEntry} = HostList;
 
 const regtest = Network.get('regtest');
 const mainnet = Network.get('main');
@@ -382,6 +383,29 @@ describe('Net HostList', function() {
       assert.strictEqual(hosts.dnsSeeds.length, sumExpected.dnsNodes);
       assert.strictEqual(hosts.map.size, sumExpected.map);
     }
+  });
+
+  it('should remove node', () => {
+    const hosts = new HostList();
+    const key = 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const ips = [getRandomIPv4(), getRandomIPv4(), getRandomIPv4()];
+    const nodes = [
+      ips[0],
+      `${key}@${ips[1]}`,
+      `${ips[2]}:1000`,
+      `${ips[2]}:2000`
+    ];
+
+    for (const node of nodes)
+      assert(hosts.addNode(node));
+
+    assert.strictEqual(hosts.nodes.length, nodes.length);
+
+    for (const node of nodes.reverse())
+      assert(hosts.removeNode(node));
+
+    assert.strictEqual(hosts.removeNode(nodes[0]), false);
+    assert.strictEqual(hosts.nodes.length, 0);
   });
 
   it('should add push/local addresses', () => {
@@ -792,6 +816,12 @@ describe('Net HostList', function() {
       };
       hosts.random = random;
 
+      let index = 0;
+      const _freshBucket = hosts.freshBucket;
+      hosts.freshBucket = function () {
+        return this.fresh[index++];
+      };
+
       const addr2 = cloneAddr(addr);
 
       // when we have 1 ref, so probability of adding second one
@@ -823,6 +853,7 @@ describe('Net HostList', function() {
       assert.strictEqual(hosts.needsFlush, true);
       hosts.needsFlush = false;
       hosts.random = _random;
+      hosts.freshBucket = _freshBucket;
     }
 
     // should fail with max ref
@@ -1031,6 +1062,429 @@ describe('Net HostList', function() {
 
     const entry = hosts.map.get(addr.hostname);
     assert(entry.addr.time > oldTime);
+  });
+
+  it('should remove host', () => {
+    const hosts = new HostList();
+
+    const src = getRandomNetAddr();
+    const addrs = [
+      getRandomNetAddr(),
+      getRandomNetAddr(),
+      getRandomNetAddr(),
+      getRandomNetAddr()
+    ];
+
+    const used = addrs.slice(2);
+
+    for (const addr of addrs)
+      hosts.add(addr, src);
+
+    for (const addr of used)
+      hosts.markAck(addr.hostname, 0);
+
+    assert.strictEqual(hosts.map.size, addrs.length);
+    assert.strictEqual(hosts.totalUsed, 2);
+    assert.strictEqual(hosts.totalFresh, 2);
+    const fresh = getFreshEntries(hosts);
+    assert.strictEqual(fresh.length, 2);
+
+    assert.strictEqual(hosts.remove(getRandomIPv6()), null);
+    for (const addr of addrs.reverse())
+      assert.strictEqual(hosts.remove(addr.hostname), addr);
+    assert.strictEqual(hosts.totalUsed, 0);
+    assert.strictEqual(hosts.totalFresh, 0);
+  });
+
+  it('should mark ack', () => {
+    // we don't have the entry
+    {
+      const hosts = new HostList();
+      const addr = getRandomIPv4();
+      hosts.markAck(addr);
+    }
+
+    // Should update services, lastSuccess, lastAttempt and attempts
+    // even if it's already in the used.
+    {
+      const hosts = new HostList();
+      const naddr = getRandomNetAddr();
+      const nsrc = getRandomNetAddr();
+
+      naddr.services = 0x01;
+      hosts.add(naddr, nsrc);
+
+      const entry = hosts.map.get(naddr.hostname);
+      const oldLastAttempt = util.now() - 1000;
+      const oldLastSuccess = util.now() - 1000;
+      const oldAttempts = 2;
+
+      entry.lastAttempt = oldLastAttempt;
+      entry.lastSuccess = oldLastSuccess;
+      entry.attempts = oldAttempts;
+      entry.used = true;
+
+      hosts.markAck(naddr.hostname, 0x02);
+
+      assert(entry.lastSuccess > oldLastSuccess);
+      assert(entry.lastAttempt > oldLastAttempt);
+      assert.strictEqual(entry.attempts, 0);
+      assert.strictEqual(entry.addr.services, 0x01 | 0x02);
+    }
+
+    // Should remove from fresh
+    {
+      const hosts = new HostList();
+
+      // make sure we have all 8 refs.
+      let index = 0;
+      hosts.random = () => 0;
+
+      // make sure we always get different bucket.
+      hosts.freshBucket = function () {
+        return this.fresh[index++];
+      };
+
+      const addr = getRandomNetAddr();
+
+      for (let i = 0; i < 8; i++) {
+        const src = getRandomNetAddr();
+        const addr2 = addr.clone();
+        addr2.time = addr.time + i + 1;
+
+        const added = hosts.add(addr2, src);
+        assert.strictEqual(added, true);
+      }
+
+      assert.strictEqual(hosts.totalFresh, 1);
+      assert.strictEqual(hosts.totalUsed, 0);
+      assert.strictEqual(getFreshEntries(hosts).length, 8);
+      const entry = hosts.map.get(addr.hostname);
+      assert.strictEqual(entry.refCount, 8);
+
+      hosts.markAck(addr.hostname);
+
+      assert.strictEqual(getFreshEntries(hosts).length, 0);
+      assert.strictEqual(entry.refCount, 0);
+      assert.strictEqual(hosts.totalFresh, 0);
+      assert.strictEqual(hosts.totalUsed, 1);
+      assert.strictEqual(entry.used, true);
+    }
+
+    // evict used
+    {
+      const hosts = new HostList();
+
+      const addr = getRandomNetAddr();
+      const src = getRandomNetAddr();
+
+      hosts.add(addr, src);
+      const entry = hosts.map.get(addr.hostname);
+      const bucket = hosts.usedBucket(entry);
+
+      assert.strictEqual(hosts.totalFresh, 1);
+      assert.strictEqual(hosts.totalUsed, 0);
+
+      // add 64 entries to the bucket.
+      const entries = [];
+      let expectedEvicted = null;
+      for (let i = 0; i < hosts.maxEntries; i++) {
+        const addr = getRandomNetAddr();
+        const src = getRandomNetAddr();
+        addr.time = util.now() - (i);
+
+        const entry = new HostEntry(addr, src);
+        entry.used = true;
+        bucket.push(entry);
+        entries.push(entry);
+      }
+
+      expectedEvicted = entries[0];
+      hosts.markAck(addr.hostname);
+      assert.strictEqual(bucket.tail, entry);
+      assert.strictEqual(expectedEvicted.used, true);
+    }
+  });
+
+  it('should ban/unban', () => {
+    const hosts = new HostList();
+
+    const banIPs = [
+      getRandomIPv4(),
+      getRandomIPv4(),
+      getRandomIPv4()
+    ];
+
+    assert.strictEqual(hosts.banned.size, 0);
+
+    {
+      for (const ip of banIPs)
+        hosts.ban(ip);
+
+      assert.strictEqual(hosts.banned.size, banIPs.length);
+    }
+
+    {
+      for (const ip of banIPs)
+        hosts.unban(ip);
+
+      assert.strictEqual(hosts.banned.size, 0);
+    }
+
+    {
+      assert.strictEqual(hosts.banned.size, 0);
+      for (const ip of banIPs)
+        hosts.ban(ip);
+      assert.strictEqual(hosts.banned.size, banIPs.length);
+
+      for (const ip of banIPs)
+        assert(hosts.isBanned(ip));
+
+      hosts.clearBanned();
+
+      for (const ip of banIPs)
+        assert.strictEqual(hosts.isBanned(ip), false);
+    }
+
+    // ban time
+    {
+      assert.strictEqual(hosts.banned.size, 0);
+
+      for (const ip of banIPs)
+        hosts.ban(ip);
+
+      // change ban time for the first IP.
+      const banExpired = banIPs[0];
+      hosts.banned.set(banExpired, util.now() - hosts.options.banTime - 1);
+
+      const [, ...stillBanned] = banIPs;
+      for (const ip of stillBanned)
+        assert(hosts.isBanned(ip));
+
+      assert.strictEqual(hosts.banned.size, banIPs.length);
+      assert.strictEqual(hosts.isBanned(banExpired), false);
+      assert.strictEqual(hosts.banned.size, banIPs.length - 1);
+    }
+  });
+
+  it('should check if entry is stale', () => {
+    const hosts = new HostList();
+
+    const src = getRandomNetAddr();
+    const addrs = [];
+    const entries = [];
+
+    for (let i = 0; i < 10; i++) {
+      const addr = getRandomNetAddr();
+      hosts.add(addr, src);
+      const entry = hosts.map.get(addr.hostname);
+      entries.push(entry);
+      addrs.push(addr);
+    }
+
+    const A_DAY = 24 * 60 * 60;
+
+    // address from the future?
+    entries[0].addr.time = util.now() + 30 * 60;
+
+    entries[1].addr.time = 0;
+
+    // too old
+    entries[2].addr.time = util.now() - HostList.HORIZON_DAYS * A_DAY - 1;
+
+    // many attempts, no success
+    entries[3].attempts = HostList.RETRIES;
+
+    // last success got old.
+    // and we failed max times.
+    entries[4].lastSuccess = util.now() - HostList.MIN_FAIL_DAYS * A_DAY - 1;
+    entries[4].attempts = HostList.MAX_FAILURES;
+
+    // last attempt in last minute
+    entries[5].lastAttempt = util.now();
+
+    entries[6].lastSuccess = entries[5].lastSuccess;
+    entries[7].lastSuccess = entries[5].lastSuccess + A_DAY;
+
+    for (let i = 0; i < entries.length; i++) {
+      const entry = entries[i];
+
+      if (i < 5)
+        assert.strictEqual(hosts.isStale(entry), true);
+      else
+        assert.strictEqual(hosts.isStale(entry), false);
+    }
+  });
+
+  it('should evict entry from fresh bucket', () => {
+    const hosts = new HostList();
+    const bucket = hosts.fresh[0];
+
+    const src = getRandomNetAddr();
+    const entries = [];
+
+    // Sort them young -> old
+    for (let i = 0; i < 10; i++) {
+      const entry = new HostEntry(getRandomNetAddr(), src);
+      entry.addr.time = util.now() - i;
+      entry.refCount = 1;
+      bucket.set(entry.key(), entry);
+      hosts.map.set(entry.key(), entry);
+      entries.push(entry);
+      hosts.totalFresh++;
+    }
+
+    {
+      const staleEntry = entries[0];
+      const expectedEvicted = entries[entries.length - 1];
+
+      // stales are evicted anyway.
+      staleEntry.addr.time = 0;
+
+      // so we evict 2.
+      assert.strictEqual(hosts.isStale(staleEntry), true);
+      assert.strictEqual(bucket.has(staleEntry.key()), true);
+      assert.strictEqual(bucket.has(expectedEvicted.key()), true);
+      assert.strictEqual(hosts.map.has(staleEntry.key()), true);
+      hosts.evictFresh(bucket);
+      assert.strictEqual(bucket.has(staleEntry.key()), false);
+      assert.strictEqual(bucket.has(expectedEvicted.key()), false);
+      assert.strictEqual(hosts.map.has(staleEntry.key()), false);
+    }
+
+    {
+      // evict older even if it's stale but is in another bucket as well.?
+      const staleEntry = entries[1];
+      const expectedEvicted = entries[entries.length - 2];
+
+      staleEntry.attempts = HostList.RETRIES;
+      staleEntry.refCount = 2;
+
+      assert.strictEqual(hosts.isStale(staleEntry), true);
+
+      assert.strictEqual(bucket.has(staleEntry.key()), true);
+      assert.strictEqual(bucket.has(expectedEvicted.key()), true);
+      assert.strictEqual(hosts.map.has(staleEntry.key()), true);
+      hosts.evictFresh(bucket);
+      assert.strictEqual(bucket.has(staleEntry.key()), false);
+      assert.strictEqual(bucket.has(expectedEvicted.key()), false);
+      assert.strictEqual(hosts.map.has(staleEntry.key()), true);
+    }
+
+    {
+      const expectedEvicted = entries[entries.length - 3];
+      expectedEvicted.refCount = 2;
+
+      assert.strictEqual(bucket.has(expectedEvicted.key()), true);
+      assert.strictEqual(hosts.map.has(expectedEvicted.key()), true);
+      hosts.evictFresh(bucket);
+      assert.strictEqual(bucket.has(expectedEvicted.key()), false);
+      assert.strictEqual(hosts.map.has(expectedEvicted.key()), true);
+    }
+
+    assert.strictEqual(bucket.size, 5);
+    for (let i = entries.length - 4; i > 1; i--) {
+      const entry = entries[i];
+      assert.strictEqual(bucket.has(entry.key()), true);
+      assert.strictEqual(hosts.map.has(entry.key()), true);
+      hosts.evictFresh(bucket);
+      assert.strictEqual(bucket.has(entry.key()), false);
+      assert.strictEqual(hosts.map.has(entry.key()), false);
+    }
+
+    assert.strictEqual(bucket.size, 0);
+    hosts.evictFresh(bucket);
+    assert.strictEqual(bucket.size, 0);
+  });
+
+  it('should return array of entries', () => {
+    const hosts = new HostList();
+
+    const src = getRandomNetAddr();
+    const addrs = [];
+    const entries = [];
+
+    for (let i = 0; i < 20; i++) {
+      const addr = getRandomNetAddr();
+      addrs.push(addr);
+      hosts.add(addr, src);
+      entries.push(hosts.map.get(addr.hostname));
+    }
+
+    // have first 2 entries stale.
+    entries[0].addr.time = 0;
+    entries[1].addr.time = util.now() + 20 * 60;
+
+    const arr = hosts.toArray();
+    const set = new Set(arr);
+
+    assert.strictEqual(arr.length, entries.length - 2);
+    assert.strictEqual(set.size, entries.length - 2);
+
+    for (let i = 0; i < 2; i++)
+      assert.strictEqual(set.has(addrs[i]), false);
+
+    for (let i = 2; i < entries.length; i++)
+      assert.strictEqual(set.has(addrs[i]), true);
+  });
+
+  it('should get host', () => {
+    const add2bucket = (hosts, bucketIndex, entry, fresh = true) => {
+      if (fresh) {
+        assert(bucketIndex < hosts.maxFreshBuckets);
+        entry.refCount++;
+        hosts.totalFresh++;
+        hosts.map.set(entry.key(), entry);
+        hosts.fresh[bucketIndex].set(entry.key(), entry);
+        return;
+      }
+
+      assert(bucketIndex < hosts.maxUsedBuckets);
+      assert(entry.refCount === 0);
+      entry.used = true;
+      hosts.map.set(entry.key(), entry);
+      hosts.used[bucketIndex].push(entry);
+      hosts.totalUsed++;
+    };
+
+    {
+      // empty
+      const hosts = new HostList();
+      const host = hosts.getHost();
+      assert.strictEqual(host, null);
+    }
+
+    {
+      // fresh buckets
+      const hosts = new HostList();
+
+      const freshEntries = [];
+
+      for (let i = 0; i < 100; i++) {
+        const entry = new HostEntry(getRandomNetAddr(), getRandomNetAddr());
+        freshEntries.push(entry);
+        add2bucket(hosts, 0, entry, true);
+      }
+
+      const found = hosts.getHost();
+      assert.strictEqual(new Set(freshEntries).has(found), true);
+    }
+
+    {
+      // used bucket - this is random.
+      const hosts = new HostList();
+      // put 10 entries in the used.
+      const usedEntries = [];
+
+      for (let i = 0; i < 100; i++) {
+        const entry = new HostEntry(getRandomNetAddr(), getRandomNetAddr());
+        usedEntries.push(entry);
+        add2bucket(hosts, 0, usedEntries[i], false);
+      }
+
+      const foundEntry = hosts.getHost();
+      assert.strictEqual(new Set(usedEntries).has(foundEntry), true);
+    }
   });
 });
 
