@@ -21,6 +21,7 @@ const network = Network.get('regtest');
 
 // sighash types
 const {
+  ALL,
   SINGLEREVERSE,
   NOINPUT,
   ANYONECANPAY
@@ -248,6 +249,81 @@ describe('Signature Hashes', function () {
       // invalidating the signature. All prevouts and sequences are nullified
       // before commitment.
       assert.bufferEqual(sighash1, sighash2);
+    });
+
+    it('should create different hash for different sequence', () => {
+      const mtx = new MTX();
+      mtx.addOutput(receives[0], 40000);
+      mtx.addCoin(coin1);
+      const sighash1 = mtx.signatureHash(
+        0,
+        script,
+        coin1.value,
+        ANYONECANPAY
+      );
+      mtx.input(0).sequence = 0xfffffffe;
+      const sighash2 = mtx.signatureHash(
+        0,
+        script,
+        coin1.value,
+        ANYONECANPAY
+      );
+
+      assert.notBufferEqual(sighash1, sighash2);
+    });
+
+    it('should give same hash for different sequence values', () => {
+      const mtx = new MTX();
+      mtx.addOutput(receives[0], 40000);
+      mtx.addCoin(coin1);
+      const sighash1 = mtx.signatureHash(
+        0,
+        script,
+        coin1.value,
+        NOINPUT | ANYONECANPAY
+      );
+      mtx.input(0).sequence = 0xfffffffe;
+      const sighash2 = mtx.signatureHash(
+        0,
+        script,
+        coin1.value,
+        NOINPUT | ANYONECANPAY
+      );
+      // Normally sequence value of input is commited to the sighash
+      // However due to how NOINPUT is implemented, the sequence value
+      // both at the time of signing and verifying the signature is
+      // set to 0xffffffff. This means that the signature is valid
+      // for any sequence value.
+      // This deviates away from the orignal implementation of NOINPUT
+      // in the eltoo paper (and the current implementation at BIP-0118).
+
+      assert.bufferEqual(sighash1, sighash2);
+    });
+    it('signature is valid for any sequence', () => {
+      const mtx = new MTX();
+      mtx.addOutput(receives[0], 70000);
+      const coin = new Coin({
+        height: 0,
+        value: 70000,
+        address: addr,
+        hash: ONE_HASH,
+        index: 0
+      });
+
+      mtx.addCoin(coin);
+      mtx.input(0).sequence = 0xaaaaaaaa;
+
+      mtx.sign(
+        keyring,
+        ALL | NOINPUT | ANYONECANPAY
+      );
+
+      assert(mtx.verify());
+      // A malacious user can simply change the sequence of the input and spend
+      // it rendering relative timelocks uneffective, use nLockTime to enforce
+      // timelocks.
+      mtx.input(0).sequence = 0xffffffff;
+      assert(mtx.verify());
     });
   });
 });
