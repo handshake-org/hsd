@@ -1633,7 +1633,7 @@ describe('Net HostList', function() {
     beforeEach(async () => {
       testdir = common.testdir('hostlist');
 
-      assert(await fs.mkdirp(testdir));
+      await fs.mkdirp(testdir);
     });
 
     afterEach(async () => {
