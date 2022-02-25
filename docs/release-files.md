@@ -16,6 +16,7 @@ distributing the files.
   * [Deploying latest version, minor and patches included](#deploying-latest-version-minor-and-patches-included)
   * [Deploying support versions (previous and life-support)](#deploying-support-versions-previous-and-life-support)
 - [Deploying to homebrew](#deploying-to-homebrew)
+- [Deploying to handshake.org](#deploying-to-handshakeorg)
 
 <!-- tocstop -->
 
@@ -70,8 +71,21 @@ Formula for the `hsd` can be found at `homebrew-core/Formula/hsd.rb`
     [Guidelines][homebrew-guidelines].
   - Additionally double check if `nodejs` version needs update.
 
+## Deploying to handshake.org
+  Handshake.org website is hosted via github and can be found at
+[handshake-org/handshake-web][handshake-web]. You can create PR with
+the relevant updates to the `download/index.html` and `files/` directory.
+  - Grab tarball of the relevant project (`hsd`, `hs-client`,
+    `hs-airdrop`, `hs-miner`).
+  - Generate signature (default key):
+    `gpg --detach-sign --armor project-version.tar.gz`
+  - Commit binary and generated `.asc` files.
+  - Update `download/index.html`
+  - Create PR to the main repository.
+
 [homebrew]: https://brew.sh/
 [homebrew-repo]: https://github.com/Homebrew/homebrew-core
 [homebrew-new-formula]: https://github.com/Homebrew/homebrew-core/pull/51014
 [homebrew-update]: https://github.com/Homebrew/homebrew-core/pull/87779/files
 [homebrew-guidelines]: https://github.com/Homebrew/homebrew-core/blob/master/CONTRIBUTING.md
+[handshake-web]: https://github.com/handshake-org/handshake-web/
