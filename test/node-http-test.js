@@ -19,73 +19,88 @@ const mnemonics = require('./data/mnemonic-english.json');
 // Commonly used test mnemonic
 const phrase = mnemonics[0][1];
 
-const network = Network.get('regtest');
-const {types} = rules;
-
-const node = new FullNode({
-  network: 'regtest',
-  apiKey: 'foo',
-  walletAuth: true,
-  memory: true,
-  indexTx: true,
-  indexAddress: true,
-  rejectAbsurdFees: false
-});
-
-const nclient = new NodeClient({
-  port: network.rpcPort,
-  apiKey: 'foo'
-});
-
-let cbAddress, privkey, pubkey;
-let socketData, mempoolData;
-
-const {treeInterval} = network.names;
-
 describe('Node HTTP', function() {
-  this.timeout(15000);
-
-  before(async () => {
-    await node.open();
-    await nclient.open();
-    await nclient.call('watch chain');
-
-    const mnemonic = Mnemonic.fromPhrase(phrase);
-    const priv = HDPrivateKey.fromMnemonic(mnemonic);
-    const type = network.keyPrefix.coinType;
-    const key = priv.derive(44, true).derive(type, true).derive(0, true);
-    const xkey = key.derive(0).derive(0);
-
-    pubkey = xkey.publicKey;
-    privkey = xkey.privateKey;
-
-    cbAddress = Address.fromPubkey(pubkey).toString(network.type);
-
-    nclient.bind('tree commit', (root, entry, block) => {
-      assert.ok(root);
-      assert.ok(block);
-      assert.ok(entry);
-
-      socketData.push({root, entry, block});
-    });
-
-    node.mempool.on('tx', (tx) => {
-      mempoolData[tx.txid()] = true;
-    });
-  });
-
-  beforeEach(() => {
-    socketData = [];
-    mempoolData = {};
-  });
-
-  after(async () => {
-    await nclient.close();
-    await node.close();
-  });
-
   describe('Websockets', function () {
+    this.timeout(15000);
+
     describe('tree commit', () => {
+      const network = Network.get('regtest');
+      const {types} = rules;
+
+      const node = new FullNode({
+        network: 'regtest',
+        apiKey: 'foo',
+        walletAuth: true,
+        memory: true,
+        indexTx: true,
+        indexAddress: true,
+        rejectAbsurdFees: false
+      });
+
+      const nclient = new NodeClient({
+        port: network.rpcPort,
+        apiKey: 'foo'
+      });
+
+      const {treeInterval} = network.names;
+
+      let privkey, pubkey;
+      let socketData, mempoolData;
+      let cbAddress;
+
+      // take into account race conditions
+      async function mineBlocks(count, address) {
+        for (let i = 0; i < count; i++) {
+          const obj = { complete: false };
+          node.once('block', () => {
+            obj.complete = true;
+          });
+          await nclient.execute('generatetoaddress', [1, address]);
+          await common.forValue(obj, 'complete', true);
+        }
+      }
+
+      before(async () => {
+        await node.open();
+        await nclient.open();
+        await nclient.call('watch chain');
+
+        const mnemonic = Mnemonic.fromPhrase(phrase);
+        const priv = HDPrivateKey.fromMnemonic(mnemonic);
+        const type = network.keyPrefix.coinType;
+        const key = priv.derive(44, true).derive(type, true).derive(0, true);
+        const xkey = key.derive(0).derive(0);
+
+        socketData = [];
+        mempoolData = {};
+        pubkey = xkey.publicKey;
+        privkey = xkey.privateKey;
+
+        cbAddress = Address.fromPubkey(pubkey).toString(network.type);
+
+        nclient.bind('tree commit', (root, entry, block) => {
+          assert.ok(root);
+          assert.ok(block);
+          assert.ok(entry);
+
+          socketData.push({root, entry, block});
+        });
+
+        node.mempool.on('tx', (tx) => {
+          mempoolData[tx.txid()] = true;
+        });
+      });
+
+      after(async () => {
+        await nclient.close();
+        await node.close();
+      });
+
+      beforeEach(() => {
+        socketData = [];
+        mempoolData = {};
+      });
+
       it('should mine 1 tree interval', async () => {
         await mineBlocks(treeInterval, cbAddress);
         assert.equal(socketData.length, 1);
@@ -153,14 +168,3 @@ describe('Node HTTP', function() {
   });
 });
 
-// take into account race conditions
-async function mineBlocks(count, address) {
-  for (let i = 0; i < count; i++) {
-    const obj = { complete: false };
-    node.once('block', () => {
-      obj.complete = true;
-    });
-    await nclient.execute('generatetoaddress', [1, address]);
-    await common.forValue(obj, 'complete', true);
-  }
-}
