@@ -20,6 +20,157 @@ const mnemonics = require('./data/mnemonic-english.json');
 const phrase = mnemonics[0][1];
 
 describe('Node HTTP', function() {
+  describe('Networking info', function() {
+    it('should not have public address: regtest', async () => {
+      const network = Network.get('regtest');
+
+      const node = new FullNode({
+        network: network.type
+      });
+
+      const nclient = new NodeClient({
+        port: network.rpcPort
+      });
+
+      await node.open();
+      await node.connect();
+      const {pool} = await nclient.getInfo();
+      await node.close();
+
+      assert.strictEqual(pool.host, '0.0.0.0');
+      assert.strictEqual(pool.port, network.port);
+      assert.strictEqual(pool.brontidePort, network.brontidePort);
+
+      const {public: pub} = pool;
+
+      assert.strictEqual(pub.listen, false);
+      assert.strictEqual(pub.host, null);
+      assert.strictEqual(pub.port, null);
+      assert.strictEqual(pub.brontidePort, null);
+    });
+
+    it('should have public address: regtest, listen', async () => {
+      const network = Network.get('regtest');
+
+      const node = new FullNode({
+        network: network.type,
+        listen: true
+      });
+
+      const nclient = new NodeClient({
+        port: network.rpcPort
+      });
+
+      await node.open();
+      await node.connect();
+      const {pool} = await nclient.getInfo();
+      await node.close();
+
+      assert.strictEqual(pool.host, '0.0.0.0');
+      assert.strictEqual(pool.port, network.port);
+      assert.strictEqual(pool.brontidePort, network.brontidePort);
+
+      const {public: pub} = pool;
+
+      assert.strictEqual(pub.listen, true);
+      assert.notStrictEqual(pub.host, null); // will be "discovered" using DNS
+      assert.strictEqual(pub.port, network.port);
+      assert.strictEqual(pub.brontidePort, network.brontidePort);
+    });
+
+    it('should not have public address: main', async () => {
+      const network = Network.get('main');
+
+      const node = new FullNode({
+        network: network.type
+      });
+
+      const nclient = new NodeClient({
+        port: network.rpcPort
+      });
+
+      await node.open();
+      await node.connect();
+      const {pool} = await nclient.getInfo();
+      await node.close();
+
+      assert.strictEqual(pool.host, '0.0.0.0');
+      assert.strictEqual(pool.port, network.port);
+      assert.strictEqual(pool.brontidePort, network.brontidePort);
+
+      const {public: pub} = pool;
+
+      assert.strictEqual(pub.listen, false);
+      assert.strictEqual(pub.host, null);
+      assert.strictEqual(pub.port, null);
+      assert.strictEqual(pub.brontidePort, null);
+    });
+
+    it('should not have public address: main, listen', async () => {
+      const network = Network.get('main');
+
+      const node = new FullNode({
+        network: network.type,
+        listen: true
+      });
+
+      const nclient = new NodeClient({
+        port: network.rpcPort
+      });
+
+      await node.open();
+      await node.connect();
+      const {pool} = await nclient.getInfo();
+      await node.close();
+
+      assert.strictEqual(pool.host, '0.0.0.0');
+      assert.strictEqual(pool.port, network.port);
+      assert.strictEqual(pool.brontidePort, network.brontidePort);
+
+      const {public: pub} = pool;
+
+      assert.strictEqual(pub.listen, true);
+      assert.strictEqual(pub.host, null);
+      assert.strictEqual(pub.port, null);
+      assert.strictEqual(pub.brontidePort, null);
+    });
+
+    it('should have public address: main, listen, publicHost', async () => {
+      const network = Network.get('main');
+      const publicHost = '100.200.11.22';
+      const publicPort = 11111;
+      const publicBrontidePort = 22222;
+
+      const node = new FullNode({
+        network: network.type,
+        listen: true,
+        publicHost,
+        publicPort,
+        publicBrontidePort
+      });
+
+      const nclient = new NodeClient({
+        port: network.rpcPort
+      });
+
+      await node.open();
+      await node.connect();
+      const {pool} = await nclient.getInfo();
+      await node.close();
+
+      assert.strictEqual(pool.host, '0.0.0.0');
+      assert.strictEqual(pool.port, network.port);
+      assert.strictEqual(pool.brontidePort, network.brontidePort);
+
+      const {public: pub} = pool;
+
+      assert.strictEqual(pub.listen, true);
+      assert.strictEqual(pub.host, publicHost);
+      assert.strictEqual(pub.port, publicPort);
+      assert.strictEqual(pub.brontidePort, publicBrontidePort);
+    });
+  });
+
   describe('Websockets', function () {
     this.timeout(15000);
 
