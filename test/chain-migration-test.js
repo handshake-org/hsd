@@ -773,7 +773,7 @@ describe('Chain Migrations', function() {
       }
 
       await ldbBatch.write();
-      await blocksBatch.write();
+      await blocksBatch.commit();
     });
 
     it('should fail getting blocks', async () => {
