@@ -299,6 +299,7 @@ describe('Signature Hashes', function () {
 
       assert.bufferEqual(sighash1, sighash2);
     });
+
     it('signature is valid for any sequence', () => {
       const mtx = new MTX();
       mtx.addOutput(receives[0], 70000);
