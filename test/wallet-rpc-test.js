@@ -738,8 +738,11 @@ describe('Wallet RPC Methods', function() {
     it('should bid on names', async () => {
       // wallet1 will win name1
       await wclient.execute('selectwallet', ['wallet1']);
-      await wclient.execute('sendbid', [name1, 10, 10]);
-      await wclient.execute('sendbid', [name2, 5, 5]);
+      const bid1 = await wclient.execute('sendbid', [name1, 10, 10, addr1]); // using addr to bid
+      const bid2 = await wclient.execute('sendbid', [name2, 5, 5]);
+
+      assert.equal(addr1, bid1.outputs[0].address);
+      assert.notEqual(addr1, bid2.outputs[0].address);
 
       // wallet2 will win name2
       await wclient.execute('selectwallet', ['wallet2']);
