@@ -73,14 +73,29 @@ Formula for the `hsd` can be found at `homebrew-core/Formula/hsd.rb`
 
 ## Deploying to handshake.org
   Handshake.org website is hosted via github and can be found at
-[handshake-org/handshake-web][handshake-web]. You can create PR with
-the relevant updates to the `download/index.html` and `files/` directory.
-  - Grab tarball of the relevant project (`hsd`, `hs-client`,
-    `hs-airdrop`, `hs-miner`).
+[handshake-org/handshake-web][handshake-web]. Website contains easy to install
+tarball with signatures from the maintainers.
+
+### Building tarball
+  In order to build tarball, you will need [bpkg][bpkg] tool.
+(We'll use `v3.0.1` as an example)
+  - Checkout to the correct version you want to release.
+  - Remove `node_modules/`.
+  - Install deps using: `npm ci --ignore-scripts`.
+  - Generate tarball: `bpkg --verbose --release --output=../hsd-3.0.1.tar.gz .`
+  - You can see the tarball at `../hsd-3.0.1.tar.gz`
+NOTE: Everything in the existing directory of `hsd` will be bundled, so make
+sure there are no external files there. (Check `git status` there's nothing to
+commit and working tree is clean)
+
+### Signing and upload
+  Now that we have tarball, we can sign and upload. Next step is to sign
+and create PR with the relevant updates to the `download/index.html` and
+`files/` directory.
   - Generate signature (default key):
     `gpg --detach-sign --armor project-version.tar.gz`
-  - Commit binary and generated `.asc` files.
-  - Update `download/index.html`
+  - Move `.asc` and `.tar.gz` tarball files to `files/` directory and commit.
+  - Update `download/index.html` with new links.
   - Create PR to the main repository.
 
 [homebrew]: https://brew.sh/
@@ -89,3 +104,4 @@ the relevant updates to the `download/index.html` and `files/` directory.
 [homebrew-update]: https://github.com/Homebrew/homebrew-core/pull/87779/files
 [homebrew-guidelines]: https://github.com/Homebrew/homebrew-core/blob/master/CONTRIBUTING.md
 [handshake-web]: https://github.com/handshake-org/handshake-web/
+[bpkg]: https://github.com/chjj/bpkg

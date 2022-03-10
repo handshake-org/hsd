@@ -31,7 +31,7 @@ keys. You can get keys following [Security](../SECURITY.md) document.
 
 ## Building From Source (git and npm)
 ```
-git clone --depth 1 --branch v3.0.1 https://github.com/handshake-org/hsd.git
+git clone --depth 1 --branch latest https://github.com/handshake-org/hsd.git
 cd hsd
 npm install --production
 # run full node in foreground with default configuration
@@ -47,7 +47,7 @@ information.
 they are downloaded from the `npm`.
   ```
   cd hsd
-  git verify-tag v3.0.1
+  git verify-tag latest
   ```
 ## npm
 
@@ -61,7 +61,7 @@ $ npm install -g https://github.com/handshake-org/hsd.git
 
 A `git` ref can be used to install a particular version by appending
 a `#` and the name of the `git` ref to the URL. For example,
-`https://github.com/handshake-org/hsd.git#v3.0.1`. It is recommended
+`https://github.com/handshake-org/hsd.git#latest`. It is recommended
 to use the [latest tagged release](https://github.com/handshake-org/hsd/releases).
 
 If adding `hsd` as a dependency to a project, use the command:

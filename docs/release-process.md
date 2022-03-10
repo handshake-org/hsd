@@ -40,7 +40,7 @@ This document uses following definitions for the versions:
   - `latest` version (`major.x.x`) - Last released major version where
     we push the minor and patch updates actively.
   - `next` version (`major+1.x.x`) - The version that will be released
-    on the next release date.
+    on the next major release date.
   - `previous` version (`major-1.x.x`).
   - `life-support` version (`major-2.x.x`).
 
@@ -108,9 +108,9 @@ At the same time only these branches should exist in the repo
 ### master branch and package.json version
   `master` branch only accumulates changes from PRs and is mostly untested(other
 than PR testing). `next` release candidate will branch off from the master.
-Package version in the `master` branch will always be set to the `next` but
-will have `patch` version set to `99` to signify the unsafe version
-(`latestMajor+1.0.99`).
+Package version in the `master` branch will always be set to the `latest` but
+will have `minor` version set to `99` to signify the unsafe version
+(`latestMajor.99.0`).
 
 ### Release candidate and major release
   `master` branch already contains everything that needs to be released
@@ -125,7 +125,7 @@ only `patch`es until release(feature lock).
 Process example (e.g. `latest` was `3.1.0` and we are releasing `4.0.0-rc.1`):
   - create branch `4.x` from the `master`.
   - create branch `4.x-proposal` from the `master`.
-  - update `package.json` version to `5.0.99` in `master` branch.
+  - update `package.json` version to `4.99.0` in `master` branch.
   - update `package.json` version to `4.0.0-rc.1` in `4.x-proposal` branch.
   - optional: In case we want to omit some changes from the `master`,
     you can also rebase and discard those commits.
@@ -157,6 +157,8 @@ Process example:
     - PR lists new PRs that are being added.
   - Quick review and merge
   - Create the [release files][release-files] for the `4.0.0-rc.2`.
+  - Next release candidate does not need to update main version tags.
+    (see release below)
 
 #### Release the major version
 Above process continues until last week where we do the actual release:
@@ -170,6 +172,9 @@ Above process continues until last week where we do the actual release:
   - Final review before release
   - [Release files][release-files] for the `4.0.0`
   - Update [schedule][schedule] if necessary
+  - Update `latest` tag.
+  - Update `previous` tag.
+  - Update `life-support` tag.
 
 ### Release minor and patches
   This applies to all minor and patches that are being backported to the
@@ -185,6 +190,10 @@ release minor(process is the same for `previous` minor and patch releases):
   - Review and merge.
   - Tag `v4.1.0` from the `4.x`.
   - [Release files][release-files] for the `4.1.0`.
+  - Depending on the version we are upgrading, update relevant tag:
+    - `latest` if we are releasing from the last `major`.
+    - `previous` if we are updating `previous` versions `minor`.
+    - `life-support` if we are updating `life-support` versions `minor`.
 
 [release-files]: ./release-files.md
 [schedule]: ./release-schedule.md
