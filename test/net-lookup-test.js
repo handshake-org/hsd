@@ -9,6 +9,7 @@ const main = Network.get('main');
 const notAHost = 'not-a-domain.not-a-domain';
 
 describe('Lookup', function() {
+  this.timeout(10000);
   it('should lookup seed', async () => {
     for (const host of main.seeds) {
       const addresses = await lookup(host);
@@ -30,8 +31,6 @@ describe('Lookup', function() {
   });
 
   it('should lookup seed', async () => {
-    this.timeout(10000);
-
     for (const host of main.seeds) {
       const addresses = await resolve(host);
 
