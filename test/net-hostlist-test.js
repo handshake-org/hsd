@@ -630,12 +630,12 @@ describe('Net HostList', function() {
       // See: binet.getReachability
       // TLDR:
       // UNREACHABLE = 0
-      // < DEFAULT = 1 - non-ipv4 -> ipv4, onion -> ipv6, ...
-      // < TEREDO = 2 - teredo -> teredo, teredo -> ipv6
-      // < IPV6_WEAK = 3 - ipv4 -> ipv6 tunnels, ipv6 -> teredo
-      // < IPV4 = 4 - ipv4 -> ipv4, ipv4 -> others
-      // < IPV6_STRONG = 5 - ipv6 -> ipv6
-      // < PRIVATE = 6 - ONION -> ONION
+      // < DEFAULT     = 1 -- non-ipv4 -> ipv4, onion -> ipv6, ...
+      // < TEREDO      = 2 -- teredo -> teredo, teredo -> ipv6
+      // < IPV6_WEAK   = 3 -- ipv4 -> ipv6 tunnels, ipv6 -> teredo
+      // < IPV4        = 4 -- ipv4 -> ipv4, ipv4 -> others
+      // < IPV6_STRONG = 5 -- ipv6 -> ipv6
+      // < PRIVATE     = 6 -- ONION -> ONION
 
       const {MANUAL} = HostList.scores;
 
@@ -647,7 +647,7 @@ describe('Net HostList', function() {
           getRandomIPv4(),   // DEFAULT = 1
           getRandomOnion(),  // DEFAULT = 1
           getRandomTEREDO(), // TEREDO = 2
-          getRandomIPv6()   // TEREDO = 2
+          getRandomIPv6()    // TEREDO = 2
         ],
         [getRandomIPv4()]: [
           getRandomIPv4(),   // IPV4 = 4
@@ -906,8 +906,8 @@ describe('Net HostList', function() {
         // is 50% (1/2).
         // then we have 2 refs, probability of adding will be 25% (1/4).
         // ... until we have 8 refs. (last one being 1/128)
-        // Because we are reusing src, we will get same bucket
-        // so it will only get added once.
+        // We use different SRC for the same host, so we don't get the
+        // same bucket.
         let added = 0;
         for (let i = 0; i < 7; i++) {
           const res = hosts.add(addr2, srcs[i]);
@@ -1347,7 +1347,6 @@ describe('Net HostList', function() {
 
         // add 64 entries to the bucket.
         const entries = [];
-        let expectedEvicted = null;
         for (let i = 0; i < hosts.maxEntries; i++) {
           const addr = getRandomNetAddr();
           const src = getRandomNetAddr();
@@ -1359,7 +1358,7 @@ describe('Net HostList', function() {
           entries.push(entry);
         }
 
-        expectedEvicted = entries[0];
+        const expectedEvicted = entries[0];
         hosts.markAck(addr.hostname);
         assert.strictEqual(bucket.tail, entry);
         assert.strictEqual(expectedEvicted.used, true);
