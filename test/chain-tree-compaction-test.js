@@ -384,7 +384,7 @@ describe('Tree Compacting', function() {
   }
 
   describe('SPV', function() {
-    it('should refuse to compact tree via RPC', async () => {
+    it('should ignore compact tree option', async () => {
       const prefix = path.join(
         os.tmpdir(),
         `hsd-tree-compacting-test-${Date.now()}`
@@ -393,17 +393,13 @@ describe('Tree Compacting', function() {
       const node = new SPVNode({
         prefix,
         network: 'regtest',
-        memory: false
+        memory: false,
+        compactTree: true,
+        prune: true // also ignored
       });
 
       await node.ensure();
       await node.open();
-
-      await assert.rejects(
-        node.rpc.compactTree([]),
-        {message: 'Cannot compact tree in SPV mode.'}
-      );
-
       await node.close();
     });
   });
@@ -428,29 +424,6 @@ describe('Tree Compacting', function() {
         node.open(),
         {message: 'Chain is too short to compact tree.'}
       );
-    });
-
-    it('should throw if chain is too short to compact via RPC', async () => {
-      const prefix = path.join(
-        os.tmpdir(),
-        `hsd-tree-compacting-test-${Date.now()}`
-      );
-
-      const node = new FullNode({
-        prefix,
-        network: 'regtest',
-        memory: false
-      });
-
-      await node.ensure();
-      await node.open();
-
-      await assert.rejects(
-        node.rpc.compactTree([]),
-        {message: 'Chain is too short to compact tree.'}
-      );
-
-      await node.close();
     });
 
     it('should compact tree on launch', async () => {

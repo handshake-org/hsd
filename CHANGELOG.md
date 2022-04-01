@@ -3,15 +3,16 @@
 ## unreleased
 
 ### Node changes
-  - `FullNode` and `SPVNode` now accept the option `--agent` which adds a string
+ - `FullNode` and `SPVNode` now accept the option `--agent` which adds a string
   to the user-agent of the node (which will already contain hsd version) and is
   sent to peers in the version packet. Strings must not contain slashes and total
-  user-agent string must be 255 characters or less.
+  user-agent string must be 255 charact
 
-- `FullNode` parses new configuration option `--compact-tree` which will compact
-the Urkel Tree only when the node first opens. This is the preferred method
-because it will run before the node connects to the network and the processing
-time will not affect peers.
+  - `FullNode` parses new configuration option `--compact-tree` which will compact
+  the Urkel Tree when the node first opens, by deleting historical data. It will
+  keep up to the last 288 blocks worth of tree data on disk (7-8 tree intervals)
+  exposing the node to a similar deep reorganization vulnerability as a
+  chain-pruning node.
 
 ## v3.0.0
 
