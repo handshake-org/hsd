@@ -12,28 +12,49 @@ distributing the files.
 
 - [Deploying to github (tag)](#deploying-to-github-tag)
   * [Major, minor and patches](#major-minor-and-patches)
+    + [Major](#major)
+    + [Minor, Patch](#minor-patch)
 - [Deploying to npm](#deploying-to-npm)
   * [Deploying latest version, minor and patches included](#deploying-latest-version-minor-and-patches-included)
   * [Deploying support versions (previous and life-support)](#deploying-support-versions-previous-and-life-support)
 - [Deploying to homebrew](#deploying-to-homebrew)
 - [Deploying to handshake.org](#deploying-to-handshakeorg)
+  * [Building tarball](#building-tarball)
+  * [Signing and upload](#signing-and-upload)
 
 <!-- tocstop -->
 
 ## Deploying to github (tag)
 
   This does not need many additional actions as we use github as our primary
-git platform. After each release we need to update INSTALL.md versions. Tags
-MUST to be signed.
-
-NOTE: `package.json` should have been updated in `v4.1.0` tag to `4.1.0`.
+git platform. Tags MUST to be signed.
 
 ### Major, minor and patches
-After you are [ready](./release-process.md) to publish files
-(for example `v4.0.0`)
+After you are [ready](./release-process.md) to publish files (for example
+`v4.0.0`)
   - `git checkout 4.x` - switch to proper branch `4.x`.
   - `git tag -s v4.0.0` - tag and sign the release.
   - `git push origin v4.0.0` - publish the tag. (origin is the main repo)
+  - Add release to `github` on the `releases` page.
+
+#### Major
+  When updating major version, we need to move forward all tags.
+  - `git checkout v4.0.0` - latest version.
+  - `git tag --force -s latest` - Tag `v4.0.0` as `latest`.
+  - `git checkout v3.x.x` - latest `v3` version.
+  - `git tag --force -s previous` - Tag latest `v3` as `previous`.
+  - `git checkout v2.x.x` - latest `v2` version.
+  - `git tag --force -s life-support` - Tag latest `v2` as `life-support`.
+
+#### Minor, Patch
+  If we are updating minor/patch versions, regardless of the `major`, we
+need to update tag related to it. E.g. `latest` minor/patch release will
+retag the `latest`. If `previous` major version got minor/patch update
+it will update `previous` tag. We will have full example with `major`:
+  - `git checkout v4.x.x` - Checkout the `latest` tagged version we just tagged
+    with minor/patch.
+  - `git tag --force -s latest` - Update `latest` tag with the major/minor
+    update.
 
 ## Deploying to npm
   Maintainer needs access rights to the npm repository. Releasing

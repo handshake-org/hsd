@@ -132,6 +132,8 @@ Process example (e.g. `latest` was `3.1.0` and we are releasing `4.0.0-rc.1`):
   - Create Release doc file for the
     `docs/release-notes/release-notes-4.0.0-draft.md`.
   - Update CHANGELOG file with the incompatibilities and actions to take.
+  - Update network seeds.
+  - Add new checkpoint. Last checkpoint + 6 months.
   - Create PR: `Release v4.0.0-rc.1` from branch `4.x-proposal` to `4.x`.
     - PR description containing list of PRs (similar to release notes)
     - We can discuss if we want to add something the release candidate for
