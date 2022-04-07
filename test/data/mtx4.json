@@ -1,0 +1,58 @@
+{
+  "hash": "4518da07c8495ed4516f24428e2c24aa158e0293d081f7ef7041cbeb2728e315",
+  "witnessHash": "42491fb69fa16a90c34aa84986ab9e4bd0061737a0c51407682c93df2055ec02",
+  "fee": 10040,
+  "rate": 45636,
+  "mtime": 1649348358,
+  "version": 0,
+  "inputs": [
+    {
+      "prevout": {
+        "hash": "b744112694bd91fce21604b7f289475b83342c29f5d78f74b41568049b666601",
+        "index": 0
+      },
+      "witness": [
+        "",
+        "f756b5f2607b40ac3b1bab60f8e1aa1577dbec55e8647437c93bf91101c49bc6645f4481e9f25c966b667d7ee06bfab0b9c85625d49fbd7b3f6c424d9ff3b32f01",
+        "919973a460b3d06e39b08a59fdb176b157833345249aaa2fbd61cc2d4bbf6c465c67f14f2712a4a6b5ffc6a3207d90e4a607abdd4f34a663455ca2f69148f9c101",
+        "c8e9adb07374ce91befff8d4c4f4c57c8250aeda9165947a920ffd7f616c84bd0d36c7e62849691866e89cf3a491384dcb23ea5a9ac18c0d14acb90b4b93ab4101",
+        "5321028bc7fd60c184b66f748986c5911c1878d945acd73f0cc9730412fb6227a17e6b21036e01e69727a2d38b11b2d5bd80ba8b37c53ee26a0d53092637080e18a4d0b08b2103d26a0d09224184d42013d933456ffa03765f9a0e7bfbfa1bd89be79f48b4e4352103e3d0fbe96cf9ca9805bfd04a9c0f19f18d953f5a5a1365a104fb0b98c42d10b52103faabdd11a97a6bed004b0493199f234ac6af36a59ee504ca6547d1cfc550e21055ae"
+      ],
+      "sequence": 4294967295,
+      "coin": {
+        "version": 0,
+        "height": 410,
+        "value": 2000000000,
+        "address": "rs1qtqtrjtpd736y3dm48nns7gj2ugquhyegr0k757tngpxx9pdxd6wsnfmtmr",
+        "covenant": {
+          "type": 0,
+          "action": "NONE",
+          "items": []
+        },
+        "coinbase": true
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "value": 1000000,
+      "address": "rs1q2387n2xz0rdcp6eugurfnsmexf3s92eezdutye",
+      "covenant": {
+        "type": 0,
+        "action": "NONE",
+        "items": []
+      }
+    },
+    {
+      "value": 1998989960,
+      "address": "rs1qvvq3kkwl4werdwe4e4y6g9zecpgrrydcamjwrfecf55vdd4lw76sag0e9f",
+      "covenant": {
+        "type": 0,
+        "action": "NONE",
+        "items": []
+      }
+    }
+  ],
+  "locktime": 0,
+  "hex": "0000000001b744112694bd91fce21604b7f289475b83342c29f5d78f74b41568049b66660100000000ffffffff0240420f00000000000014544fe9a8c278db80eb3c470699c379326302ab390000882a267700000000002063011b59dfabb236bb35cd49a41459c0503191b8eee4e1a7384d28c6b6bf77b5000000000000050041f756b5f2607b40ac3b1bab60f8e1aa1577dbec55e8647437c93bf91101c49bc6645f4481e9f25c966b667d7ee06bfab0b9c85625d49fbd7b3f6c424d9ff3b32f0141919973a460b3d06e39b08a59fdb176b157833345249aaa2fbd61cc2d4bbf6c465c67f14f2712a4a6b5ffc6a3207d90e4a607abdd4f34a663455ca2f69148f9c10141c8e9adb07374ce91befff8d4c4f4c57c8250aeda9165947a920ffd7f616c84bd0d36c7e62849691866e89cf3a491384dcb23ea5a9ac18c0d14acb90b4b93ab4101ad5321028bc7fd60c184b66f748986c5911c1878d945acd73f0cc9730412fb6227a17e6b21036e01e69727a2d38b11b2d5bd80ba8b37c53ee26a0d53092637080e18a4d0b08b2103d26a0d09224184d42013d933456ffa03765f9a0e7bfbfa1bd89be79f48b4e4352103e3d0fbe96cf9ca9805bfd04a9c0f19f18d953f5a5a1365a104fb0b98c42d10b52103faabdd11a97a6bed004b0493199f234ac6af36a59ee504ca6547d1cfc550e21055ae"
+}

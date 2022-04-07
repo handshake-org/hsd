@@ -1,0 +1,57 @@
+{
+  "hash": "91d91fd61a8d084d6404fe090747c6d7300760cb49e92b3f352c52737f1db9e1",
+  "witnessHash": "1be8536363828117119f13061c41f006d01b9c5269a01d022a923fb99020e0ef",
+  "fee": 3740,
+  "rate": 20107,
+  "mtime": 1649345186,
+  "version": 0,
+  "inputs": [
+    {
+      "prevout": {
+        "hash": "4c29777bacfb3ba55d530861217a903db3eb8028d47654cc525196f39df238c9",
+        "index": 0
+      },
+      "witness": [
+        "",
+        "fbf6d36dc5b9b999d2c07b57d82cbcb686069c9e5b401fb12fcb4b713026d7d52c8e8961f2f4bd0426644d4c283cf7ec9d909c6f7034696f65d5a0e658cb5e6701",
+        "bfb18cb3df786f2a5a627aa5e77272290830c579c7ba76e8fb8d9865b110921e3a82f436c427d691d53e8a9618595b62cd0da04ca8ad2f49574b30dd09b79dfc01",
+        "52210204765910dd41e2318a601e8d79dbff730eef468e5a0f18b71fbde40753989f472102251d5cfc891654a394281c6a61fa6fe2b3cc3e925527d491280d52494253c9872102d3b610ab42c289f9353111337fc9af5cc23e3df4beecd8f4468a8a63ec0f51b553ae"
+      ],
+      "sequence": 4294967295,
+      "coin": {
+        "version": 0,
+        "height": 406,
+        "value": 2000000000,
+        "address": "rs1qkndzr6cg3604h8hqp3qkg4l4llwm7vk5x02et2mmykns235zkcesc6xmc9",
+        "covenant": {
+          "type": 0,
+          "action": "NONE",
+          "items": []
+        },
+        "coinbase": true
+      }
+    }
+  ],
+  "outputs": [
+    {
+      "value": 1000000,
+      "address": "rs1qf3t02q76dr4pt70ejhynv7yyceacseaxkvp0nu",
+      "covenant": {
+        "type": 0,
+        "action": "NONE",
+        "items": []
+      }
+    },
+    {
+      "value": 1998996260,
+      "address": "rs1q45u8mt679yps8l9jkuvsn02pyjmdqv4a8f3devmu7vkd70q0qghqv4saca",
+      "covenant": {
+        "type": 0,
+        "action": "NONE",
+        "items": []
+      }
+    }
+  ],
+  "locktime": 0,
+  "hex": "00000000014c29777bacfb3ba55d530861217a903db3eb8028d47654cc525196f39df238c900000000ffffffff0240420f000000000000144c56f503da68ea15f9f995c9367884c67b8867a6000024432677000000000020ad387daf5e290303fcb2b71909bd4124b6d032bd3a62dcb37cf32cdf3c0f022e000000000000040041fbf6d36dc5b9b999d2c07b57d82cbcb686069c9e5b401fb12fcb4b713026d7d52c8e8961f2f4bd0426644d4c283cf7ec9d909c6f7034696f65d5a0e658cb5e670141bfb18cb3df786f2a5a627aa5e77272290830c579c7ba76e8fb8d9865b110921e3a82f436c427d691d53e8a9618595b62cd0da04ca8ad2f49574b30dd09b79dfc016952210204765910dd41e2318a601e8d79dbff730eef468e5a0f18b71fbde40753989f472102251d5cfc891654a394281c6a61fa6fe2b3cc3e925527d491280d52494253c9872102d3b610ab42c289f9353111337fc9af5cc23e3df4beecd8f4468a8a63ec0f51b553ae"
+}
