@@ -3273,4 +3273,120 @@ describe('Wallet', function() {
       assert.strictEqual(bal.clocked, secondHighest);
     });
   });
+
+  describe('Policy Weight Limits', function () {
+    this.timeout(300000);
+
+    const network = Network.get('regtest');
+    const workers = new WorkerPool({ enabled, size });
+    const wdb = new WalletDB({ network, workers });
+    // rollout all names
+    const height = network.names.rolloutInterval * 52;
+
+    const name = rules.grindName(4, height, network);
+    // We hit policy limit for p2pkh around 600 BIDs,
+    // but it takes a lot more REDEEMS since they are smaller.
+    const BIDS = 750;
+    let revealsRemaining = BIDS;
+    // One of these bids must be the winner!
+    let redeemsRemaining = BIDS - 1;
+    let wallet, reveal1, reveal2, redeem1, redeem2;
+
+    // Force biddable NameState on all names
+    wdb.getNameStatus = async (nameHash) => {
+      return {
+        height,
+        maybeExpire: () => {},
+        isOpening: () => false,
+        isBidding: () => true
+      };
+    };
+
+    wdb.getRenewalBlock = () => {
+      return network.genesis.hash;
+    };
+
+    before(async () => {
+      await wdb.open();
+      wallet = await wdb.create();
+      wdb.height += height + network.names.treeInterval + 1;
+    });
+
+    after(async () => {
+      await wdb.close();
+    });
+
+    it('should fill wallet with coins', async () => {
+      // Dummy block
+      const block = {
+        height: wdb.height,
+        hash: Buffer.alloc(32, 1),
+        time: Date.now()
+      };
+
+      for (let i = 0; i < 1000; i++) {
+        const addr = await wallet.receiveAddress();
+
+        const mtx = new MTX();
+        mtx.addOutpoint(new Outpoint(Buffer.alloc(32), i));
+        mtx.addOutput(addr, 1e6);
+        const tx = mtx.toTX();
+
+        // Add confirmed funding TX to wallet
+        await wallet.txdb.add(tx, block);
+      }
+    });
+
+    it('should fill wallet with bids', async () => {
+      const block = {
+        height: wdb.height++,
+        hash: Buffer.alloc(32, 2),
+        time: Date.now()
+      };
+
+      for (let i = 0; i < BIDS; i++) {
+        // No extra blind means an extra input will be needed to pay fee
+        const tx = await wallet.sendBid(name, 1000, 1000);
+        await wallet.txdb.add(tx, block);
+      }
+    });
+
+    it('should safely REVEAL some (not all) bids', async () => {
+      wdb.height += network.names.biddingPeriod;
+      reveal1 = await wallet.sendRevealAll();
+      // All outputs all reveals except the change
+      revealsRemaining -= reveal1.outputs.length - 1;
+    });
+
+    it('should REVEAL all remaining bids', async () => {
+      reveal2 = await wallet.sendRevealAll();
+      revealsRemaining -= reveal2.outputs.length - 1;
+      assert.strictEqual(revealsRemaining, 0);
+    });
+
+    it('should safely REDEEM some (not all) bids', async () => {
+      // Confirm those REVEALs first
+      const block = {
+        height: wdb.height++,
+        hash: Buffer.alloc(32, 3),
+        time: Date.now()
+      };
+      await wallet.txdb.add(reveal1, block);
+      await wallet.txdb.add(reveal2, block);
+
+      wdb.height += network.names.revealPeriod;
+      redeem1 = await wallet.sendRedeemAll();
+      redeemsRemaining -= redeem1.outputs.length - 1;
+    });
+
+    it('should REDEEM all remaining losing bids', async () => {
+      redeem2 = await wallet.sendRedeemAll();
+      redeemsRemaining -= redeem2.outputs.length - 1;
+      assert.strictEqual(redeemsRemaining, 0);
+    });
+
+    it('should REGISTER winning bid', async () => {
+      await wallet.sendUpdate(name, new Resource());
+    });
+  });
 });
