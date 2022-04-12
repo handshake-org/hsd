@@ -23,21 +23,21 @@ const {
 } = network.names;
 
 describe('Tree Compacting', function() {
-    const oldKeepBlocks = network.block.keepBlocks;
-    const oldpruneAfterHeight = network.block.pruneAfterHeight;
+  const oldKeepBlocks = network.block.keepBlocks;
+  const oldpruneAfterHeight = network.block.pruneAfterHeight;
 
-    before(async () => {
-      // Copy the 1:8 ratio from mainnet
-      network.block.keepBlocks = treeInterval * 8;
+  before(async () => {
+    // Copy the 1:8 ratio from mainnet
+    network.block.keepBlocks = treeInterval * 8;
 
-      // Ensure old blocks are pruned right away
-      network.block.pruneAfterHeight = 1;
-    });
+    // Ensure old blocks are pruned right away
+    network.block.pruneAfterHeight = 1;
+  });
 
-    after(async () => {
-      network.block.keepBlocks = oldKeepBlocks;
-      network.block.pruneAfterHeight = oldpruneAfterHeight;
-    });
+  after(async () => {
+    network.block.keepBlocks = oldKeepBlocks;
+    network.block.pruneAfterHeight = oldpruneAfterHeight;
+  });
 
   for (const prune of [true, false]) {
     describe(`Chain: ${prune ? 'Pruning' : 'Archival'}`, function() {
@@ -47,17 +47,33 @@ describe('Tree Compacting', function() {
       );
       const treePath = path.join(prefix, 'tree', '0000000001');
 
+      // This is the chain we are testing,
+      // we are going to compact its tree
+      // and try to corrupt its database.
       const blocks = blockstore.create({
         prefix,
         network
       });
-
       const chain = new Chain({
         memory: false,
         prefix,
         blocks,
         network,
         prune
+      });
+
+      // This second, in-memory chain is our control.
+      // Every block we add to the test chain will also
+      // be added to the memChain so we can check for consensus
+      // failures or other inconsistencies caused by tree compacting.
+      const memBlocks = blockstore.create({
+        memory: true,
+        network
+      });
+      const memChain = new Chain({
+        memory: true,
+        blocks: memBlocks,
+        network
       });
 
       const miner = new Miner({chain});
@@ -84,15 +100,18 @@ describe('Tree Compacting', function() {
         job.refresh();
         const block = await job.mineAsync();
         const entry = await chain.add(block);
+        assert(await memChain.add(block));
         wallet.addBlock(entry, block.txs);
 
         for (num--; num > 0; num--) {
           const job = await cpu.createJob();
           const block = await job.mineAsync();
           const entry = await chain.add(block);
+          assert(await memChain.add(block));
           wallet.addBlock(entry, block.txs);
         }
       }
+
       let name, nameHash;
       const treeRoots = [];
 
@@ -101,6 +120,9 @@ describe('Tree Compacting', function() {
         await blocks.open();
         await chain.open();
         await miner.open();
+
+        await memBlocks.open();
+        await memChain.open();
       });
 
       after(async () => {
@@ -108,6 +130,9 @@ describe('Tree Compacting', function() {
         await chain.close();
         await blocks.close();
         await fs.rimraf(prefix);
+
+        await memChain.close();
+        await memBlocks.close();
       });
 
       it('should throw if chain is too short to compact', async () => {
@@ -367,6 +392,75 @@ describe('Tree Compacting', function() {
         assert.bufferEqual(ns.data, Buffer.from([counter + 20]));
       });
 
+      it('should recover from failure during block connect', async () => {
+        // Get current counter value.
+        let raw = await chain.db.tree.get(nameHash);
+        let ns = NameState.decode(raw);
+        const counter = ns.data[0];
+
+        // Approach next tree interval so next block will commit.
+        const numBlocks = chain.height % treeInterval;
+        await mineBlocks(numBlocks);
+
+        // Prepare UPDATE
+        const update = await wallet.createUpdate(
+          name,
+          Buffer.from([counter + 1])
+        );
+
+        // Put actual batch-write function aside
+        const CHAIN_DB_COMMIT = chain.db.commit;
+
+        // Current tree root before crash
+        const treeRoot = chain.db.treeRoot();
+
+        // Implement bug where node crashes before database batch is written.
+        // When the next block is connected, it should successfully write
+        // new data to the Urkel Tree but fail to write data to blockstore
+        // or levelDB indexes.
+        chain.db.commit = async () => {
+          // Tree root has been updated inside Urkel
+          const newRoot1 = chain.db.treeRoot();
+          assert(!treeRoot.equals(newRoot1));
+
+          // Reset batch, otherwise assert(!this.current) fails
+          chain.db.drop();
+          // Node has crashed...
+          await chain.close();
+        };
+
+        // Update name and attempt to confirm
+        send(update, mempool);
+        // Will "crash" node before completing operation
+        await mineBlocks(1, mempool);
+        assert(!chain.opened);
+
+        // Restore proper batch-write function
+        chain.db.commit = CHAIN_DB_COMMIT;
+
+        // Restarting chain should recover from crash
+        await chain.open();
+
+        // Tree root has been restored from pre-crash state
+        const newRoot2 = chain.db.treeRoot();
+        assert(treeRoot.equals(newRoot2));
+
+        // Try that update again with healthy chainDB
+        send(update, mempool);
+        await mineBlocks(1, mempool);
+
+        // Tree has been updated but tree root won't be committed
+        // to a block header until the next block.
+        assert(!chain.db.tree.rootHash().equals(chain.tip.treeRoot));
+        await mineBlocks(1);
+
+        // Everything is in order
+        assert.bufferEqual(chain.db.tree.rootHash(), chain.tip.treeRoot);
+        raw = await chain.db.tree.get(nameHash);
+        ns = NameState.decode(raw);
+        assert.bufferEqual(ns.data, Buffer.from([counter + 1]));
+      });
+
       it(`should ${prune ? '' : 'not '}have pruned chain`, async () => {
         // Sanity check. Everything worked on a chain that is indeed pruning.
         // Start at height 2 because pruneAfterHeight == 1
@@ -427,6 +521,8 @@ describe('Tree Compacting', function() {
     });
 
     it('should compact tree on launch', async () => {
+      this.timeout(10000);
+
       const prefix = path.join(
         os.tmpdir(),
         `hsd-tree-compacting-test-${Date.now()}`
