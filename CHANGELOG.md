@@ -1,5 +1,13 @@
 # HSD Release Notes & Changelog
 
+## unreleased
+
+### Node changes
+  - `FullNode` and `SPVNode` now accept the option `--agent` which adds a string
+  to the user-agent of the node (which will already contain hsd version) and is
+  sent to peers in the version packet. Strings must not contain slashes and total
+  user-agent string must be 255 characters or less.
+
 ## v3.0.0
 
 **When upgrading to this version of hsd you must pass
