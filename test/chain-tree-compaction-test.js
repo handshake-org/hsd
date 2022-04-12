@@ -201,6 +201,7 @@ describe('Tree Compacting', function() {
       it('should compact tree', async () => {
         const before = await fs.stat(treePath);
         await chain.compactTree();
+        await chain.syncTree();
         const after = await fs.stat(treePath);
 
         // Urkel Tree should be smaller now.
@@ -271,6 +272,7 @@ describe('Tree Compacting', function() {
         // it shouldn't break anything.
         const before = await fs.stat(treePath);
         await chain.compactTree();
+        await chain.syncTree();
         const after = await fs.stat(treePath);
 
         // Should be no change
@@ -330,6 +332,7 @@ describe('Tree Compacting', function() {
         // Compact
         const before = await fs.stat(treePath);
         await chain.compactTree();
+        await chain.syncTree();
         const after = await fs.stat(treePath);
         assert(before.size > after.size);
 
@@ -371,11 +374,8 @@ describe('Tree Compacting', function() {
         await chain.close();
         await blocks.close();
 
-        // Restart -- chainDB used to open tree with what it thought
-        // was the latest tree state (saved in levelDB). If the actual
-        // tree on disk was still 6 intervals behind, chain.open() would
-        // fail with `Missing node` error. The updated logic relies on the
-        // tree itself to find its own state (saved in Meta nodes) then
+        // Restart -- chainDB will open tree with what it thinks
+        // is the latest tree state (saved in levelDB). Then
         // chain.syncTree() will catch it up from there to tip.
         await blocks.open();
         await chain.open();
