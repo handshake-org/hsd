@@ -1,0 +1,5 @@
+git clone https://github.com/handshake-org/hsd
+cd hsd
+npm install
+# Just leave this running in it's own terminal window for now
+./bin/hsd
