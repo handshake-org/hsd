@@ -25,6 +25,9 @@ const blake2b = require('bcrypto/lib/blake2b');
 const AirdropProof = require('../lib/primitives/airdropproof');
 const util = require('../lib/utils/util');
 const pkg = require('../lib/pkg');
+const Pool = require('../lib/net/pool');
+const Chain = require('../lib/blockchain/chain');
+const BlockStore = require('../lib/blockstore/level');
 
 const AIRDROP_PROOF_FILE = resolve(__dirname, 'data', 'airdrop-proof.base64');
 const read = file => Buffer.from(fs.readFileSync(file, 'binary'), 'base64');
@@ -1112,6 +1115,94 @@ describe('Net', function() {
       const n = nonce();
       assert(Buffer.isBuffer(n));
       assert.equal(n.length, 8);
+    });
+  });
+
+  describe('User Agent', function() {
+    const blocks = new BlockStore({memory: true});
+    const chain = new Chain({blocks, memory: true});
+
+    it('should reject slashes', async () => {
+      let err;
+      try {
+        new Pool({
+          chain,
+          agent: 'face/off'
+        });
+      } catch (e) {
+        err = e.message;
+      }
+      assert.strictEqual(err, 'User agent can not include /');
+    });
+
+    it('should reject too long', async () => {
+      let err;
+      try {
+        new Pool({
+          chain,
+          agent: '*'.repeat(255)
+        });
+      } catch (e) {
+        err = e.message;
+      }
+      assert.strictEqual(err, 'User agent exceeds maximum length');
+    });
+
+    it('should extend user agent with comment', async () => {
+      const pool = new Pool({
+        chain,
+        agent: 'bob-wallet:v0.9.0'
+      });
+
+      const peer = pool.createOutbound(
+        new NetAddress({
+          host: '100.200.0.1',
+          port: 10000
+        })
+      );
+
+      let agent;
+      peer.send = (packet) => {
+        agent = packet.agent;
+      };
+
+      pool.peers.add(peer);
+
+      peer.sendVersion();
+      peer.destroy();
+
+      assert.strictEqual(
+        agent,
+        `/${pkg.name}:${pkg.version}/bob-wallet:v0.9.0/`
+      );
+    });
+
+    it('should send default user agent', async () => {
+      const pool = new Pool({
+        chain
+      });
+
+      const peer = pool.createOutbound(
+        new NetAddress({
+          host: '100.200.0.1',
+          port: 10000
+        })
+      );
+
+      let agent;
+      peer.send = (packet) => {
+        agent = packet.agent;
+      };
+
+      pool.peers.add(peer);
+
+      peer.sendVersion();
+      peer.destroy();
+
+      assert.strictEqual(
+        agent,
+        `/${pkg.name}:${pkg.version}/`
+      );
     });
   });
 });
