@@ -478,12 +478,20 @@ describe('Tree Compacting', function() {
   }
 
   describe('SPV', function() {
-    it('should ignore compact tree option', async () => {
-      const prefix = path.join(
+    let prefix;
+
+    beforeEach(async () => {
+      prefix = path.join(
         os.tmpdir(),
         `hsd-tree-compacting-test-${Date.now()}`
       );
+    });
 
+    afterEach(async () => {
+      await fs.rimraf(prefix);
+    });
+
+    it('should ignore compact tree option', async () => {
       const node = new SPVNode({
         prefix,
         network: 'regtest',
@@ -499,12 +507,20 @@ describe('Tree Compacting', function() {
   });
 
   describe('Full Node', function() {
-    it('should throw if chain is too short to compact on launch', async () => {
-      const prefix = path.join(
+    let prefix;
+
+    beforeEach(async () => {
+      prefix = path.join(
         os.tmpdir(),
         `hsd-tree-compacting-test-${Date.now()}`
       );
+    });
 
+    afterEach(async () => {
+      await fs.rimraf(prefix);
+    });
+
+    it('should throw if chain is too short to compact on launch', async () => {
       const node = new FullNode({
         prefix,
         network: 'regtest',
@@ -523,10 +539,6 @@ describe('Tree Compacting', function() {
     it('should compact tree on launch', async () => {
       this.timeout(10000);
 
-      const prefix = path.join(
-        os.tmpdir(),
-        `hsd-tree-compacting-test-${Date.now()}`
-      );
       const treePath = path.join(prefix, 'regtest', 'tree', '0000000001');
 
       // Fresh start
