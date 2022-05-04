@@ -46,7 +46,7 @@
     "goosig": "~0.10.0",
     "hs-client": "~0.0.10",
     "n64": "~0.2.10",
-    "urkel": "~0.7.0"
+    "urkel": "github:nodech/urkel#root-cache"
   },
   "devDependencies": {
     "bmocha": "^2.1.5"
