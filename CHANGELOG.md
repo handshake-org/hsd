@@ -1,5 +1,13 @@
 # HSD Release Notes & Changelog
 
+## unreleased
+
+### Node changes
+
+- New RPC methods:
+  - `decoderesource` like `decodescript` accepts hex string as input and returns
+  JSON formatted DNS records resource.
+
 ## v4.0.0
 
 **When upgrading to this version of hsd you must pass
