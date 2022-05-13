@@ -160,12 +160,14 @@ for (const type of ['full', 'spv']) {
         assert(!await chain.isMainChain(tip2));
         assert(await testChain.isMainChain(tip1));
         assert(!await testChain.isMainChain(tip2));
+        assert.strictEqual(tip1.height, 11 + i);
       }
     });
 
     if (type === 'spv') {
       it('should reorg to alternative chain and back (spv)', async () => {
         const reorgs = [];
+        let resets = 0;
 
         const handleReorg = (tip, competitor) => {
           reorgs.push({
@@ -173,8 +175,10 @@ for (const type of ['full', 'spv']) {
             tip
           });
         };
+        const handleReset = () => resets++;
 
         testChain.on('reorganize', handleReorg);
+        testChain.on('reset', handleReset);
 
         // Replay main chain to the SPV node.
         const replayChain = async (fork) => {
@@ -208,6 +212,7 @@ for (const type of ['full', 'spv']) {
           assert(await chain.isMainChain(tip2));
         }
 
+        // sync chain with spv.
         await replayChain(fork);
         assert.bufferEqual(testChain.tip.hash, tip2.hash);
 
@@ -226,19 +231,19 @@ for (const type of ['full', 'spv']) {
 
           assert(await chain.add(blk));
 
+          // i = 1 will give use new best chain tip and tip1 will become best.
           tip1 = await chain.getEntry(hash);
-          // last one.
           assert(tip1);
           assert.strictEqual(await testChain.getEntry(hash), null);
         }
 
         // Replay current best chain. This should
         // cause SPV to reset chain to the fork.
+        // above reset will catch it and replay again.
         await replayChain(fork);
-
         assert.bufferEqual(testChain.tip.hash, fork.hash);
 
-        // Now we need to replay network once again,
+        // Now we need to replay blocks once again,
         // because above replay caused it to reorg and reset.
         await replayChain(fork);
         assert.bufferEqual(testChain.tip.hash, tip1.hash);
@@ -265,8 +270,10 @@ for (const type of ['full', 'spv']) {
 
         assert.bufferEqual(testChain.tip.hash, tip1.hash);
         assert.strictEqual(reorgs.length, 2);
+        assert.strictEqual(resets, 2);
 
         testChain.removeListener('reorganize', handleReorg);
+        testChain.removeListener('reset', handleReset);
       });
     }
 
