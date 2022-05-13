@@ -1,7 +1,6 @@
 'use strict';
 
 const assert = require('bsert');
-const chainCommon = require('../lib/blockchain/common');
 const Chain = require('../lib/blockchain/chain');
 const BlockStore = require('../lib/blockstore/level');
 const WorkerPool = require('../lib/workers/workerpool');
@@ -19,9 +18,8 @@ const workers = new WorkerPool({
 
 function addBlock(chain, block, wallet) {
   if (chain.options.spv) {
-    const flags = chainCommon.flags.VERIFY_NONE;
     const mblock = MerkleBlock.fromBlock(block, wallet.filter);
-    return chain.add(mblock, flags);
+    return chain.add(mblock);
   }
 
   return chain.add(block);

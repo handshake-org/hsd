@@ -85,9 +85,6 @@ describe('SPV Node Sync', function() {
   // back up
   const coinbaseMaturity = node.network.coinbaseMaturity;
 
-  if (process.browser)
-    this.skip();
-
   before(async () => {
     await node.open();
     await spvnode.open();
@@ -238,6 +235,7 @@ describe('SPV Node Sync', function() {
     assert(chain.tip.chainwork.gt(tip1.chainwork));
 
     // Wait for all events.
+    // And collect event responses for later checks.
     const [reorgs, resets, blocks] = await Promise.all([
       spvReorgedEvent,
       spvResetEvent,
@@ -245,6 +243,10 @@ describe('SPV Node Sync', function() {
     ]);
 
     {
+      // We only had 1 reorganize event, make sure
+      // tip, competitor, fork of the reorg match with
+      // chain reorganize event. Checking SPV is doing
+      // the exact same reorg.
       const [tip, competitor, fork] = reorgs[0].values;
       assert.bufferEqual(tip.hash, tipHash);
       assert.bufferEqual(competitor.hash, competitorHash);
@@ -252,11 +254,14 @@ describe('SPV Node Sync', function() {
     }
 
     {
+      // Make sure SPV reset to the FORK point.
       const [resetToEntry] = resets[0].values;
       assert.bufferEqual(resetToEntry.hash, forkHash);
     }
 
     {
+      // We receive competitorHash.height - fork.height block events.
+      // Make sure last block event is the same as full node chain.tip.
       const lastBlockHash = blocks.pop().values[0].hash();
       assert.bufferEqual(lastBlockHash, node.chain.tip.hash);
     }
