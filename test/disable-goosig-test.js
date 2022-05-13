@@ -43,10 +43,11 @@ function createNode(type) {
  * Create a mock block with a
  * known previous blockhash.
  * @param {Buffer} prev
+ * @param {Number} mtp
  * @returns {Block}
  */
 
-function mockBlock(prev) {
+function mockBlock(prev, mtp) {
   assert(Buffer.isBuffer(prev));
   assert(prev.length === 32);
 
@@ -57,7 +58,7 @@ function mockBlock(prev) {
     witnessRoot: random.randomBytes(32),
     treeRoot: random.randomBytes(32),
     reservedRoot: random.randomBytes(32),
-    time: 0,
+    time: Math.max(network.now(), mtp + 1),
     bits: network.pow.bits,
     nonce: 0,
     extraNonce: random.randomBytes(24),
@@ -229,7 +230,8 @@ describe('Disable GooSig', function() {
 
       let prev = genesis.hash;
       while (node.chain.height < node.network.goosigStop) {
-        const block = mockBlock(prev);
+        const mtp = await node.chain.getMedianTime(node.chain.tip);
+        const block = mockBlock(prev, mtp);
         await node.chain.add(block, VERIFY_NONE);
         prev = block.hash();
       }
