@@ -37,7 +37,7 @@ const clientOptions = {
 };
 
 const errs = {
-  MISC_ERROR: -1 >>> 0
+  MISC_ERROR: -1
 };
 
 describe('RPC', function() {
