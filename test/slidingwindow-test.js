@@ -124,7 +124,7 @@ describe('SlidingWindow (Functional)', function() {
       }
     }
 
-    assert.equal(err.message, 'Timed out.');
+    assert.equal(err.message, 'Peer removed.');
     assert.strictEqual(packets, maxProofRPS);
     assert.strictEqual(count, maxProofRPS);
 
