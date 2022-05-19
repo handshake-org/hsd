@@ -364,7 +364,7 @@ describe('Tree Compacting', function() {
 
         // Rewind the tree 6 intervals and compact, but do not sync to tip yet.
         const entry = await chain.getEntry(chain.height - 6 * treeInterval);
-        await chain.db.compactTree(entry.treeRoot);
+        await chain.db.compactTree(entry);
 
         // Confirm tree state has been rewound
         assert.notBufferEqual(chain.db.tree.rootHash(), chain.tip.treeRoot);
