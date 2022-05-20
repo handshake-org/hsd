@@ -47,7 +47,8 @@ describe('Tree Compacting', function() {
         os.tmpdir(),
         `hsd-tree-compacting-test-${Date.now()}`
       );
-      const treePath = path.join(prefix, 'tree', '0000000001');
+      const treePath = path.join(prefix, 'tree');
+      const treePart1 = path.join(prefix, 'tree', '0000000001');
 
       // This is the chain we are testing,
       // we are going to compact its tree
@@ -216,10 +217,10 @@ describe('Tree Compacting', function() {
       });
 
       it('should compact tree', async () => {
-        const before = await fs.stat(treePath);
+        const before = await fs.stat(treePart1);
         await chain.compactTree();
         await chain.syncTree();
-        const after = await fs.stat(treePath);
+        const after = await fs.stat(treePart1);
 
         // Urkel Tree should be smaller now.
         // Urkel Tree files are padded to ensure that Meta nodes are written
@@ -272,10 +273,10 @@ describe('Tree Compacting', function() {
       it('should compact tree a second time with no new data', async () => {
         // If user executes rpc compacttree repeatedly,
         // it shouldn't break anything.
-        const before = await fs.stat(treePath);
+        const before = await fs.stat(treePart1);
         await chain.compactTree();
         await chain.syncTree();
-        const after = await fs.stat(treePath);
+        const after = await fs.stat(treePart1);
 
         // Should be no change
         assert.strictEqual(before.size, after.size);
@@ -316,10 +317,10 @@ describe('Tree Compacting', function() {
         const treeRootBefore = chain.db.tree.rootHash();
 
         // Compact
-        const before = await fs.stat(treePath);
+        const before = await fs.stat(treePart1);
         await chain.compactTree();
         await chain.syncTree();
-        const after = await fs.stat(treePath);
+        const after = await fs.stat(treePart1);
         assert(before.size > after.size);
 
         // Check
@@ -346,7 +347,7 @@ describe('Tree Compacting', function() {
           await mineBlocks(treeInterval, mempool);
         }
 
-        const before = await fs.stat(treePath);
+        const before = await fs.stat(treePart1);
 
         // Rewind the tree 6 intervals and compact, but do not sync to tip yet.
         const entry = await chain.getEntry(chain.height - 6 * treeInterval);
@@ -368,7 +369,7 @@ describe('Tree Compacting', function() {
         await miner.open();
 
         // Tree was compacted
-        const after = await fs.stat(treePath);
+        const after = await fs.stat(treePart1);
         assert(before.size > after.size);
 
         // Tree was re-synced automatically to chain tip on restart
@@ -469,9 +470,9 @@ describe('Tree Compacting', function() {
 
         await checkTree(chain.db.tree, true);
 
-        const before = await fs.stat(treePath);
+        const before = await fs.stat(treePart1);
         await chain.reconstructTree();
-        const after = await fs.stat(treePath);
+        const after = await fs.stat(treePart1);
 
         assert(before.size < after.size);
 
@@ -486,9 +487,9 @@ describe('Tree Compacting', function() {
         await checkTree(chain.db.tree, false);
 
         // let's compact again and reconstruct
-        const before = await fs.stat(treePath);
+        const before = await fs.stat(treePart1);
         await chain.compactTree();
-        const after = await fs.stat(treePath);
+        const after = await fs.stat(treePart1);
 
         assert(before.size > after.size);
 
@@ -504,6 +505,29 @@ describe('Tree Compacting', function() {
         await assert.rejects(chain.reset(0), {
           message: error
         });
+      });
+
+      it('should remove existing tmp dir', async () => {
+        if (prune)
+          this.skip();
+
+        const tmpPath = treePath + '~';
+        const beforeRecovery = await fs.stat(treePart1);
+        await chain.reconstructTree();
+        const afterRecovery = await fs.stat(treePart1);
+        assert(beforeRecovery.size < afterRecovery.size);
+
+        await fs.copy(treePath, tmpPath);
+        // Normally tmp directory lock would have expired.
+        await fs.remove(path.join(tmpPath, 'lock'));
+
+        await chain.compactTree();
+        const afterCompaction = await fs.stat(treePart1);
+
+        // If we don't remove existing TMP directory
+        // afterCompaction would be bigger than afterRecovery.
+        assert(afterCompaction.size < afterRecovery.size);
+        assert(!await fs.exists(tmpPath));
       });
 
       it(`should ${prune ? '' : 'not '}have pruned chain`, async () => {
