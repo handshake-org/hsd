@@ -2,6 +2,8 @@
 
 const assert = require('bsert');
 const fs = require('bfile');
+const {encoding} = require('bufio');
+const {ZERO_HASH} = require('../lib/protocol/consensus');
 const Network = require('../lib/protocol/network');
 const WorkerPool = require('../lib/workers/workerpool');
 const Miner = require('../lib/mining/miner');
@@ -935,7 +937,10 @@ describe('Chain Migrations', function() {
 
       await chain.open();
       const state = chaindb.treeState;
-      assert.bufferEqual(state.encode(), Buffer.alloc(68, 0));
+      const encoded = Buffer.alloc(72, 0);
+
+      encoding.writeU32(encoded, chain.height, 32);
+      assert.bufferEqual(state.encode(), encoded);
     });
 
     it('should migrate tree state (2)', async () => {
@@ -971,7 +976,7 @@ describe('Chain Migrations', function() {
       const version = getVersion(await ldb.get(layout.V.encode()), 'chain');
       assert.strictEqual(version, 3);
       assert.bufferEqual(chaindb.treeState.treeRoot, root);
-      assert.bufferEqual(chaindb.treeState.compactionRoot, Buffer.alloc(32, 0));
+      assert.bufferEqual(chaindb.treeState.compactionRoot, ZERO_HASH);
       assert.strictEqual(chaindb.treeState.compactionHeight, 0);
     });
   });

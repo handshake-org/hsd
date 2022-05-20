@@ -4,6 +4,7 @@ const os = require('os');
 const path = require('path');
 const fs = require('bfile');
 const assert = require('bsert');
+const consensus = require('../lib/protocol/consensus');
 const Network = require('../lib/protocol/network');
 const Miner = require('../lib/mining/miner');
 const Chain = require('../lib/blockchain/chain');
@@ -113,14 +114,42 @@ describe('Tree Compacting', function() {
         }
       }
 
-      let name, nameHash;
-      const treeRoots = [];
+      let name, nameHash, listener;
+      let treeRoots = [];
+
+      const checkTree = async (tree, compacted = false) => {
+        for (const [index, hash] of treeRoots.entries()) {
+          if (compacted && index < (treeRoots.length - 8)) {
+            // Old root node has been deleted, tree state can not be restored.
+            await assert.rejects(
+              chain.db.tree.inject(hash),
+              {message: `Missing node: ${hash.toString('hex')}.`}
+            );
+            continue;
+          }
+
+          // Last 8 tree roots are recovered successfully like before compaction.
+          await chain.db.tree.inject(hash);
+          const raw = await chain.db.tree.get(nameHash);
+          const ns = NameState.decode(raw);
+          assert.bufferEqual(ns.data, Buffer.from([index + 1]));
+        }
+      };
 
       before(async () => {
         await blocks.ensure();
         await blocks.open();
         await chain.open();
         await miner.open();
+
+        listener = (root) => {
+          if (root.equals(consensus.ZERO_HASH))
+            return;
+
+          treeRoots.push(root);
+        };
+
+        chain.on('tree commit', listener);
 
         await memBlocks.open();
         await memChain.open();
@@ -131,6 +160,8 @@ describe('Tree Compacting', function() {
         await chain.close();
         await blocks.close();
         await fs.rimraf(prefix);
+
+        chain.removeListener('tree commit', listener);
 
         await memChain.close();
         await memBlocks.close();
@@ -166,12 +197,7 @@ describe('Tree Compacting', function() {
       });
 
       it('should update Urkel Tree 20 times', async () => {
-        let count = 0;
-        chain.on('tree commit', (rootHash, entry, block) => {
-          count++;
-          // Keep track of all new tree root hashes.
-          treeRoots.push(rootHash);
-        });
+        treeRoots = [];
 
         for (let i = 1; i <= 20; i++) {
           // Every namestate update, increment the name's 1-byte data resource.
@@ -179,24 +205,14 @@ describe('Tree Compacting', function() {
           await mineBlocks(treeInterval, mempool);
         }
 
-        assert.strictEqual(count, 20);
+        assert.strictEqual(treeRoots.length, 20);
 
         const ns = await chain.db.getNameStateByName(name);
         assert.bufferEqual(ns.data, Buffer.from([20]));
       });
 
       it('should restore tree state from any historical root', async () => {
-        for (let i = 0; i < treeRoots.length; i++) {
-          // Restore old tree state using historical root hash.
-          await chain.db.tree.inject(treeRoots[i]);
-
-          // Get old namestate from old tree state.
-          const raw = await chain.db.tree.get(nameHash);
-          const ns = NameState.decode(raw);
-
-          // Counter in the name's data resource should match.
-          assert.bufferEqual(ns.data, Buffer.from([i + 1]));
-        }
+        await checkTree(chain.db.tree, false);
       });
 
       it('should compact tree', async () => {
@@ -250,22 +266,7 @@ describe('Tree Compacting', function() {
       });
 
       it('should ONLY restore tree state from most recent roots', async () => {
-        for (let i = 0; i < treeRoots.length; i++) {
-          if (i < (treeRoots.length - 8)) {
-            // Old root node has been deleted, tree state can not be restored.
-            await assert.rejects(
-              chain.db.tree.inject(treeRoots[i]),
-              {message: `Missing node: ${treeRoots[i].toString('hex')}.`}
-            );
-            continue;
-          }
-
-          // Last 8 tree roots are recovered successfully like before compaction.
-          await chain.db.tree.inject(treeRoots[i]);
-          const raw = await chain.db.tree.get(nameHash);
-          const ns = NameState.decode(raw);
-          assert.bufferEqual(ns.data, Buffer.from([i + 1]));
-        }
+        await checkTree(chain.db.tree, true);
       });
 
       it('should compact tree a second time with no new data', async () => {
@@ -281,23 +282,7 @@ describe('Tree Compacting', function() {
       });
 
       it('should ONLY restore tree state from most recent roots', async () => {
-        // Data recovery conditions are the same after second compacttree.
-        for (let i = 0; i < treeRoots.length; i++) {
-          if (i < (treeRoots.length - 8)) {
-            // Old root node has been deleted, tree state can not be restored.
-            await assert.rejects(
-              chain.db.tree.inject(treeRoots[i]),
-              {message: `Missing node: ${treeRoots[i].toString('hex')}.`}
-            );
-            continue;
-          }
-
-          // Last 8 tree roots are recovered successfully like before compaction.
-          await chain.db.tree.inject(treeRoots[i]);
-          const raw = await chain.db.tree.get(nameHash);
-          const ns = NameState.decode(raw);
-          assert.bufferEqual(ns.data, Buffer.from([i + 1]));
-        }
+        await checkTree(chain.db.tree, true);
       });
 
       it('should recover txn between tree intervals', async () => {
@@ -357,7 +342,7 @@ describe('Tree Compacting', function() {
 
         // Add 20 tree intervals
         for (let i = counter; i <= counter + 20; i++) {
-          send(await wallet.sendUpdate(name, Buffer.from([i])), mempool);
+          send(await wallet.sendUpdate(name, Buffer.from([i + 1])), mempool);
           await mineBlocks(treeInterval, mempool);
         }
 
@@ -390,7 +375,7 @@ describe('Tree Compacting', function() {
         assert.bufferEqual(chain.db.tree.rootHash(), chain.tip.treeRoot);
         raw = await chain.db.tree.get(nameHash);
         ns = NameState.decode(raw);
-        assert.bufferEqual(ns.data, Buffer.from([counter + 20]));
+        assert.bufferEqual(ns.data, Buffer.from([counter + 21]));
       });
 
       it('should recover from failure during block connect', async () => {
@@ -462,6 +447,65 @@ describe('Tree Compacting', function() {
         assert.bufferEqual(ns.data, Buffer.from([counter + 1]));
       });
 
+      it('should not reconstruct tree (prune)', async () => {
+        if (!prune)
+          this.skip();
+
+        let error;
+        try {
+          await chain.reconstructTree();
+        } catch (e) {
+          error = e;
+        }
+
+        assert(error, 'reconstructTree should throw an error in prune mode.');
+        assert.strictEqual(error.message,
+          'Cannot reconstruct tree in pruned mode.');
+      });
+
+      it('should reconstruct tree (archival)', async () => {
+        if (prune)
+          this.skip();
+
+        await checkTree(chain.db.tree, true);
+
+        const before = await fs.stat(treePath);
+        await chain.reconstructTree();
+        const after = await fs.stat(treePath);
+
+        assert(before.size < after.size);
+
+        // Should have all roots.
+        await checkTree(chain.db.tree, false);
+      });
+
+      it('should recover reconstructing tree (archival)', async () => {
+        if (prune)
+          this.skip();
+
+        await checkTree(chain.db.tree, false);
+
+        // let's compact again and reconstruct
+        const before = await fs.stat(treePath);
+        await chain.compactTree();
+        const after = await fs.stat(treePath);
+
+        assert(before.size > after.size);
+
+        await checkTree(chain.db.tree, true);
+      });
+
+      it('should fail to reset when compacted', async () => {
+        let error = 'Cannot reset when tree is compacted.';
+
+        if (prune)
+          error = 'Cannot reset when pruned.';
+
+        await assert.rejects(chain.reset(0), {
+          message: error
+        });
+      });
+
       it(`should ${prune ? '' : 'not '}have pruned chain`, async () => {
         // Sanity check. Everything worked on a chain that is indeed pruning.
         // Start at height 2 because pruneAfterHeight == 1
@@ -511,7 +555,7 @@ describe('Tree Compacting', function() {
       await node.close();
     });
 
-    it('should refuse to compact tree via RPC', async () => {
+    it('should refuse to compact/reconstruct tree via RPC', async () => {
       node = new SPVNode({
         prefix,
         network: 'regtest',
@@ -525,18 +569,24 @@ describe('Tree Compacting', function() {
         message: 'Cannot compact tree in SPV mode.'
       });
 
+      await assert.rejects(node.rpc.reconstructTree([]), {
+        message: 'Cannot reconstruct tree in SPV mode.'
+      });
+
       await node.close();
     });
   });
 
   describe('Full Node', function() {
-    let prefix, node;
+    let prefix, node, treePath;
 
     beforeEach(async () => {
       prefix = path.join(
         os.tmpdir(),
         `hsd-tree-compacting-test-${Date.now()}`
       );
+
+      treePath = path.join(prefix, 'regtest', 'tree', '0000000001');
     });
 
     afterEach(async () => {
@@ -544,7 +594,7 @@ describe('Tree Compacting', function() {
         try {
           await node.close();
         } catch (e) {
-          console.log('Error closing..', e.message);
+          ;
         }
       }
 
@@ -624,7 +674,7 @@ describe('Tree Compacting', function() {
       await node.close();
     });
 
-    it('should compact tree when chain is long enought', async () => {
+    it('should compact tree when chain is long enough', async () => {
       this.timeout(2000);
       const compactTimeout = 500;
 
@@ -673,7 +723,7 @@ describe('Tree Compacting', function() {
 
       const [rootHash, entry] = endEvent[0].values;
       // We don't have anything in the tree.
-      assert.bufferEqual(rootHash, Buffer.alloc(32, 0x00));
+      assert.bufferEqual(rootHash, consensus.ZERO_HASH);
       // 100 - 40 = 60
       // 60 % 5 = 0
       // So nearest one is 61.
@@ -684,10 +734,8 @@ describe('Tree Compacting', function() {
 
     it('should compact tree on launch (disk sizes)', async () => {
       this.timeout(4000);
-      const treePath = path.join(prefix, 'regtest', 'tree', '0000000001');
-
       // Fresh start
-      let node = new FullNode({
+      node = new FullNode({
         prefix,
         network: 'regtest',
         memory: false
@@ -697,7 +745,7 @@ describe('Tree Compacting', function() {
       const fresh = await fs.stat(treePath);
 
       // Grow
-      const blocks = 300;
+      const blocks = 200;
       const waiter = forEventCondition(node, 'connect', (entry) => {
         return entry.height >= blocks;
       }, 2000);
@@ -728,16 +776,82 @@ describe('Tree Compacting', function() {
       const [endEvent] = await waiterEnd;
       const [hash, entry] = endEvent.values;
       assert.bufferEqual(hash, Buffer.alloc(32, 0x00));
-      assert.strictEqual(entry.height, 261);
+      assert.strictEqual(entry.height, 161);
 
       // Tree is compacted
       const compacted = await fs.stat(treePath);
       assert(compacted.size < grown.size);
 
-      // Bonus: since there are no namestate updates in this test,
-      // all the nodes committed to the tree during "growth" are identically
-      // empty. When we compact, only the original empty node will remain.
-      assert.strictEqual(fresh.size, compacted.size);
+      // Because syncTree will read tree roots
+      // since compaction (8 tree roots) compacted
+      // will be bigger than fresh.
+      assert(fresh.size < compacted.size);
+
+      // done
+      await node.close();
+    });
+
+    it('should compact/reconstruct tree on rpc', async () => {
+      this.timeout(4000);
+
+      // Fresh start
+      node = new FullNode({
+        prefix,
+        network: 'regtest',
+        memory: false
+      });
+      await node.ensure();
+      await node.open();
+      const fresh = await fs.stat(treePath);
+
+      // Grow
+      const blocks = 200;
+      const waiter = forEventCondition(node, 'connect', (entry) => {
+        return entry.height >= blocks;
+      }, 2000);
+
+      await node.rpc.generateToAddress(
+        [blocks, new Address().toString('regtest')]
+      );
+      await waiter;
+
+      // Tree has grown
+      const grown = await fs.stat(treePath);
+      assert(fresh.size < grown.size);
+
+      await node.close();
+
+      // Now use RPC for compaction.
+      node = new FullNode({
+        prefix,
+        network: 'regtest',
+        memory: false
+      });
+
+      await node.open();
+
+      const compactEnd = forEvent(node, 'tree compact end', 1, 1000);
+      await node.rpc.compactTree([]);
+      const [endEvent] = await compactEnd;
+      const [hash, entry] = endEvent.values;
+      assert.bufferEqual(hash, consensus.ZERO_HASH);
+      assert.strictEqual(entry.height, 161);
+
+      // Tree is compacted
+      const compacted = await fs.stat(treePath);
+      assert(compacted.size < grown.size);
+      assert(fresh.size < compacted.size);
+
+      // Reconstruct
+      const reconstructEnd = forEvent(node, 'tree reconstruct end', 1, 1000);
+      await node.rpc.reconstructTree([]);
+      await reconstructEnd;
+
+      const reconstructed = await fs.stat(treePath);
+      assert(reconstructed.size > compacted.size);
+
+      // This is same as grown, because we did not have any reorgs.
+      assert.strictEqual(reconstructed.size, grown.size);
 
       // done
       await node.close();
