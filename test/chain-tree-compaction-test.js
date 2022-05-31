@@ -118,7 +118,7 @@ describe('Tree Compacting', function() {
       let name, nameHash, listener;
       let treeRoots = [];
 
-      const checkTree = async (tree, compacted = false) => {
+      const checkTree = async (compacted = false) => {
         for (const [index, hash] of treeRoots.entries()) {
           if (compacted && index < (treeRoots.length - 8)) {
             // Old root node has been deleted, tree state can not be restored.
@@ -213,7 +213,7 @@ describe('Tree Compacting', function() {
       });
 
       it('should restore tree state from any historical root', async () => {
-        await checkTree(chain.db.tree, false);
+        await checkTree(false);
       });
 
       it('should compact tree', async () => {
@@ -267,7 +267,7 @@ describe('Tree Compacting', function() {
       });
 
       it('should ONLY restore tree state from most recent roots', async () => {
-        await checkTree(chain.db.tree, true);
+        await checkTree(true);
       });
 
       it('should compact tree a second time with no new data', async () => {
@@ -283,7 +283,7 @@ describe('Tree Compacting', function() {
       });
 
       it('should ONLY restore tree state from most recent roots', async () => {
-        await checkTree(chain.db.tree, true);
+        await checkTree(true);
       });
 
       it('should recover txn between tree intervals', async () => {
@@ -468,7 +468,7 @@ describe('Tree Compacting', function() {
         if (prune)
           this.skip();
 
-        await checkTree(chain.db.tree, true);
+        await checkTree(true);
 
         const before = await fs.stat(treePart1);
         await chain.reconstructTree();
@@ -477,14 +477,14 @@ describe('Tree Compacting', function() {
         assert(before.size < after.size);
 
         // Should have all roots.
-        await checkTree(chain.db.tree, false);
+        await checkTree(false);
       });
 
       it('should recover reconstructing tree (archival)', async () => {
         if (prune)
           this.skip();
 
-        await checkTree(chain.db.tree, false);
+        await checkTree(false);
 
         // let's compact again and reconstruct
         const before = await fs.stat(treePart1);
@@ -493,7 +493,7 @@ describe('Tree Compacting', function() {
 
         assert(before.size > after.size);
 
-        await checkTree(chain.db.tree, true);
+        await checkTree(true);
       });
 
       it('should fail to reset when compacted', async () => {
@@ -720,7 +720,7 @@ describe('Tree Compacting', function() {
       await node.open();
       assert.strictEqual(compacted, false);
 
-      const blocks = 100;
+      const blocks = network.block.keepBlocks + (treeInterval * 10);
       const waiter = forEventCondition(node, 'connect', e => e.height >= blocks);
 
       await node.rpc.generateToAddress(
@@ -748,10 +748,18 @@ describe('Tree Compacting', function() {
       const [rootHash, entry] = endEvent[0].values;
       // We don't have anything in the tree.
       assert.bufferEqual(rootHash, consensus.ZERO_HASH);
+      // blocks = keepBlocks + treeInterval * 10;
+      // so what we can prune is `blocks - keepBlocks`
+      // what's left is `treeInterval * 10`
+      // Because we are at the edge, nearest should be
+      // (treeInterval * 10) + 1
+      //
+      // e.g. if blocks was 100, keepBlocks 40 and interval 5:
       // 100 - 40 = 60
       // 60 % 5 = 0
-      // So nearest one is 61.
-      assert.strictEqual(entry.height, 61);
+      // So nearest one would be 61.
+      const nearest = treeInterval * 10 + 1;
+      assert.strictEqual(entry.height, nearest);
 
       await node.close();
     });

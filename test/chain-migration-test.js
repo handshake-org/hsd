@@ -980,6 +980,101 @@ describe('Chain Migrations', function() {
       assert.strictEqual(chaindb.treeState.compactionHeight, 0);
     });
   });
+
+  describe('Migration Tree State SPV (integration)', function() {
+    const location = testdir('migrate-tree-state-spv');
+    const migrationsBAK = ChainMigrator.migrations;
+
+    const workers = new WorkerPool({
+      enabled: true,
+      size: 2
+    });
+
+    const chainOptions = {
+      prefix: location,
+      memory: false,
+      spv: true,
+      network,
+      workers
+    };
+
+    let chain, chaindb, ldb;
+    before(async () => {
+      ChainMigrator.migrations = {};
+      await fs.mkdirp(location);
+      await workers.open();
+    });
+
+    after(async () => {
+      ChainMigrator.migrations = migrationsBAK;
+      await rimraf(location);
+      await workers.close();
+    });
+
+    beforeEach(async () => {
+      chain = new Chain(chainOptions);
+      chaindb = chain.db;
+      ldb = chaindb.db;
+
+      chaindb.version = 3;
+    });
+
+    afterEach(async () => {
+      if (chain.opened)
+        await chain.close();
+    });
+
+    it('should throw version check error', async () => {
+      // Previous state
+      await chain.open();
+      const b = ldb.batch();
+      writeVersion(b, 'chain', 2);
+      await b.write();
+      await chain.close();
+
+      let error;
+      try {
+        await chain.open();
+      } catch (e) {
+        error = e;
+      }
+
+      assert(error);
+      assert.strictEqual(error.message, VERSION_ERROR);
+    });
+
+    it('should enable tree state migration', async () => {
+      ChainMigrator.migrations = {
+        0: ChainMigrator.MigrateTreeState
+      };
+    });
+
+    it('should throw when new migration is available', async () => {
+      const expected = migrationError(ChainMigrator.migrations, [0],
+        chainFlagError(0));
+
+      let error;
+      try {
+        await chain.open();
+      } catch (e) {
+        error = e;
+      }
+
+      assert(error, 'Chain must throw an error.');
+      assert.strictEqual(error.message, expected);
+    });
+
+    it('should migrate db version', async () => {
+      chain.options.chainMigrate = 0;
+
+      await chain.open();
+      const state = chaindb.treeState;
+      const encoded = Buffer.alloc(72, 0);
+
+      encoding.writeU32(encoded, chain.height, 32);
+      assert.bufferEqual(state.encode(), encoded);
+    });
+  });
 });
 
 function writeVersion(b, name, version) {
