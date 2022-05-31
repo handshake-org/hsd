@@ -5,14 +5,15 @@
 ### Node changes
  - `FullNode` and `SPVNode` now accept the option `--agent` which adds a string
   to the user-agent of the node (which will already contain hsd version) and is
-  sent to peers in the version packet. Strings must not contain slashes and total
-  user-agent string must be 255 charact
+  sent to peers in the version packet. Strings must not contain slashes and
+  total user-agent string must be less than 255 characters.
 
-  - `FullNode` parses new configuration option `--compact-tree` which will compact
-  the Urkel Tree when the node first opens, by deleting historical data. It will
-  keep up to the last 288 blocks worth of tree data on disk (7-8 tree intervals)
-  exposing the node to a similar deep reorganization vulnerability as a
-  chain-pruning node.
+  - `FullNode` parses new configuration option `--compact-tree-on-init` and
+  `--compact-tree-init-interval` which will compact the Urkel Tree when the node
+  first opens, by deleting historical data. It will try to compact it again
+  after `tree-init-interval` has passed. Compaction will keep up to the last 288
+  blocks worth of tree data on disk (7-8 tree intervals) exposing the node to a
+  similar deep reorganization vulnerability as a chain-pruning node.
 
 ## v3.0.0
 
@@ -32,8 +33,10 @@
 ### Wallet API changes
 
 - New RPC methods:
-  - `signmessagewithname`: Like `signmessage` but uses a name instead of an address. The owner's address will be used to sign the message.
-  - `verifymessagewithname`: Like `verifymessage` but uses a name instead of an address. The owner's address will be used to verify the message.
+  - `signmessagewithname`: Like `signmessage` but uses a name instead of an
+    address. The owner's address will be used to sign the message.
+  - `verifymessagewithname`: Like `verifymessage` but uses a name instead of an
+    address. The owner's address will be used to verify the message.
 
 - New wallet creation accepts parameter `language` to generate the mnemonic phrase.
 
