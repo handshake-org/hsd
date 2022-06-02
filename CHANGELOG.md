@@ -2,6 +2,9 @@
 
 ## unreleased
 
+**When upgrading to this version of hsd you must pass
+`--chain-migrate=3` when you run it for the first time.**
+
 ### Node changes
  - `FullNode` and `SPVNode` now accept the option `--agent` which adds a string
   to the user-agent of the node (which will already contain hsd version) and is
