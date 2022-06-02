@@ -219,7 +219,6 @@ describe('Tree Compacting', function() {
       it('should compact tree', async () => {
         const before = await fs.stat(treePart1);
         await chain.compactTree();
-        await chain.syncTree();
         const after = await fs.stat(treePart1);
 
         // Urkel Tree should be smaller now.
@@ -275,7 +274,6 @@ describe('Tree Compacting', function() {
         // it shouldn't break anything.
         const before = await fs.stat(treePart1);
         await chain.compactTree();
-        await chain.syncTree();
         const after = await fs.stat(treePart1);
 
         // Should be no change
@@ -319,7 +317,6 @@ describe('Tree Compacting', function() {
         // Compact
         const before = await fs.stat(treePart1);
         await chain.compactTree();
-        await chain.syncTree();
         const after = await fs.stat(treePart1);
         assert(before.size > after.size);
 
@@ -887,6 +884,174 @@ describe('Tree Compacting', function() {
 
       // done
       await node.close();
+    });
+  });
+
+  describe('Boundary checks', function() {
+    const prefix = path.join(
+      os.tmpdir(),
+      `hsd-tree-compacting-test-${Date.now()}`
+    );
+
+    const blocks = blockstore.create({
+      memory: false,
+      prefix,
+      network
+    });
+    const chain = new Chain({
+      memory: false,
+      prefix,
+      blocks: blocks,
+      network
+    });
+    const miner = new Miner({chain});
+    const cpu = miner.cpu;
+
+    const wallet = new MemWallet({network});
+    wallet.getNameStatus = async (nameHash) => {
+      assert(Buffer.isBuffer(nameHash));
+      const height = chain.height + 1;
+      return chain.db.getNameStatus(nameHash, height);
+    };
+
+    async function mineBlocks(num, open = false) {
+      for (; num > 0; num--) {
+        const job = await cpu.createJob();
+
+        // Include an OPEN for some new name in every block.
+        // This ensures that every single block results in a different
+        // tree and treeRoot without any auctions.
+        if (open) {
+          const name = rules.grindName(4, chain.height - 1, network);
+          const tx = await wallet.sendOpen(name);
+          job.pushTX(tx.toTX());
+          job.refresh();
+        }
+
+        const block = await job.mineAsync();
+        const entry = await chain.add(block);
+        wallet.addBlock(entry, block.txs);
+      }
+    }
+
+    const treeRoots = [];
+    chain.on('tree commit', root => treeRoots.push(root));
+
+    const checkTree = async (expected) => {
+      for (let i = treeRoots.length - 1; i >= 0; i--) {
+        const root = treeRoots[i];
+
+        if (expected > 0) {
+          await chain.db.tree.inject(root);
+          expected--;
+        } else {
+          await assert.rejects(
+            chain.db.tree.inject(root),
+            {message: `Missing node: ${root.toString('hex')}.`}
+          );
+        }
+      }
+    };
+
+    before(async () => {
+      await blocks.ensure();
+      await blocks.open();
+      await chain.open();
+    });
+
+    after(async () => {
+      await chain.close();
+      await blocks.close();
+    });
+
+    it('should fund wallet', async () => {
+      miner.addresses.length = 0;
+      miner.addAddress(wallet.getReceive());
+      await mineBlocks(treeInterval * 2);
+    });
+
+    it('should generate blocks to treeInterval - 3 and compact', async () => {
+      treeRoots.length = 0;
+      let num = treeInterval - (chain.height % treeInterval);
+      num += treeInterval * 20 - 3;
+      await mineBlocks(num, true);
+      assert(chain.height % treeInterval === treeInterval - 3);
+
+      // All roots available before compacting
+      await checkTree(Infinity);
+
+      await chain.compactTree();
+      await checkTree(8);
+    });
+
+    it('should generate blocks to treeInterval - 2 and compact', async () => {
+      treeRoots.length = 0;
+      let num = treeInterval - (chain.height % treeInterval);
+      num += treeInterval * 20 - 2;
+      await mineBlocks(num, true);
+      assert(chain.height % treeInterval === treeInterval - 2);
+
+      // All roots available before compacting
+      await checkTree(Infinity);
+
+      await chain.compactTree();
+      await checkTree(8);
+    });
+
+    it('should generate blocks to treeInterval - 1 and compact', async () => {
+      treeRoots.length = 0;
+      let num = treeInterval - (chain.height % treeInterval);
+      num += treeInterval * 20 - 1;
+      await mineBlocks(num, true);
+      assert(chain.height % treeInterval === treeInterval - 1);
+
+      // All roots available before compacting
+      await checkTree(Infinity);
+
+      await chain.compactTree();
+      await checkTree(8);
+    });
+
+    it('should generate blocks to treeInterval + 0 and compact', async () => {
+      treeRoots.length = 0;
+      let num = treeInterval - (chain.height % treeInterval);
+      num += treeInterval * 20 + 0;
+      await mineBlocks(num, true);
+      assert(chain.height % treeInterval === 0);
+
+      // All roots available before compacting
+      await checkTree(Infinity);
+
+      await chain.compactTree();
+      await checkTree(9);
+    });
+
+    it('should generate blocks to treeInterval + 1 and compact', async () => {
+      treeRoots.length = 0;
+      let num = treeInterval - (chain.height % treeInterval);
+      num += treeInterval * 20 + 1;
+      await mineBlocks(num, true);
+      assert(chain.height % treeInterval === 1);
+
+      // All roots available before compacting
+      await checkTree(Infinity);
+
+      await chain.compactTree();
+      await checkTree(8);
+    });
+
+    it('should generate blocks to treeInterval + 2 and compact', async () => {
+      treeRoots.length = 0;
+      let num = treeInterval - (chain.height % treeInterval);
+      num += treeInterval * 20 + 2;
+      await mineBlocks(num, true);
+      assert(chain.height % treeInterval === 2);
+
+      // All roots available before compacting
+      await checkTree(Infinity);
+
+      await chain.compactTree();
+      await checkTree(8);
     });
   });
 });
