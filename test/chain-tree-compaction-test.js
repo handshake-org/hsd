@@ -761,6 +761,88 @@ describe('Tree Compacting', function() {
       await node.close();
     });
 
+    it('should recompact tree if tree init interval passed', async () => {
+      const {keepBlocks} = network.block;
+      const compactInterval = keepBlocks;
+      const nodeOptions = {
+        prefix,
+        network: 'regtest',
+        memory: false,
+        compactTreeOnInit: true,
+        compactTreeInitInterval: compactInterval
+      };
+
+      node = new FullNode(nodeOptions);
+
+      await node.ensure();
+
+      let compacted = false;
+      const compactWrapper = (node) => {
+        const compactTree = node.chain.compactTree.bind(node.chain);
+
+        node.chain.compactTree = () => {
+          compacted = true;
+          return compactTree();
+        };
+      };
+
+      compactWrapper(node);
+      await node.open();
+      assert.strictEqual(compacted, false);
+
+      // get enough blocks for the compaction check.
+      let blocks = compactInterval + keepBlocks + 1;
+      let waiter = forEventCondition(node, 'connect', e => e.height >= blocks);
+
+      await node.rpc.generateToAddress(
+        [blocks, new Address().toString('regtest')]
+      );
+
+      await waiter;
+      await node.close();
+
+      // Should compact, because we have enough blocks.
+      node = new FullNode(nodeOptions);
+      compactWrapper(node);
+
+      await node.open();
+      assert.strictEqual(compacted, true);
+
+      // setup interval - 1 blocks for next test.
+      blocks = compactInterval + network.names.treeInterval - 1;
+      waiter = forEvent(node, 'connect', blocks);
+      await node.rpc.generateToAddress(
+        [blocks, new Address().toString('regtest')]
+      );
+      await waiter;
+      await node.close();
+
+      // Should not recompact because interval has not passed.
+      compacted = false;
+      node = new FullNode(nodeOptions);
+      compactWrapper(node);
+
+      await node.open();
+      assert.strictEqual(compacted, false);
+
+      waiter = forEvent(node, 'connect');
+      // commit 1 to recompact.
+      await node.rpc.generateToAddress(
+        [1, new Address().toString('regtest')]
+      );
+      await waiter;
+      await node.close();
+
+      // Should recompact because interval has passed
+      compacted = false;
+      node = new FullNode(nodeOptions);
+      compactWrapper(node);
+
+      await node.open();
+      assert.strictEqual(compacted, true);
+      await node.close();
+    });
+
     it('should compact tree on launch (disk sizes)', async () => {
       this.timeout(4000);
       // Fresh start
