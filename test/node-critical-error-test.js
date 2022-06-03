@@ -88,6 +88,14 @@ describe('Node Critical Error', function() {
       node.once('closed', () => resolve());
     });
 
+    node.on('abort', async () => {
+      try {
+        await node.close();
+      } catch (e) {
+        ;
+      }
+    });
+
     await mineBlocks(node, 99);
     node.chain.db.db.batch = () => {
       return {
@@ -110,6 +118,14 @@ describe('Node Critical Error', function() {
   it('should run out of disk space on tree commit and abort', async () => {
     const waiter = new Promise((resolve) => {
       node.once('closed', () => resolve());
+    });
+
+    node.on('abort', async () => {
+      try {
+        await node.close();
+      } catch (e) {
+        ;
+      }
     });
 
     await mineBlocks(node, 50);
