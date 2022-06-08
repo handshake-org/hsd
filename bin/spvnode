@@ -67,6 +67,26 @@ process.on('SIGINT', async () => {
   await node.close();
 });
 
+node.on('abort', async (err) => {
+  const timeout = setTimeout(() => {
+    console.error('Shutdown is taking a long time. Exitting.');
+    process.exit(3);
+  }, 5000);
+
+  timeout.unref();
+
+  try {
+    console.error('Shutting down...');
+    await node.close();
+    clearTimeout(timeout);
+    console.error(err.stack);
+    process.exit(2);
+  } catch (e) {
+    console.error(`Error occurred during shutdown: ${e.message}`);
+    process.exit(3);
+  }
+});
+
 (async () => {
   await node.ensure();
   await node.open();
