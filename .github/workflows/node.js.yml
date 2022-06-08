@@ -1,4 +1,4 @@
-name: Build
+name: Node.js
 
 on:
   push:
@@ -7,21 +7,19 @@ on:
     branches: [master]
 
 jobs:
-  build:
-
+  general-build:
+    name: Lint and Test Coverage
     runs-on: ubuntu-latest
 
-    strategy:
-      matrix:
-        node-version: [12.x, 14.x, 16.x, 18.x]
-
     steps:
+    - uses: actions/checkout@v3
 
-    - uses: actions/checkout@v2
     - name: Setup
-      uses: actions/setup-node@v1
+      uses: actions/setup-node@v3
+      with:
+        node-version: 18.x
 
-    - name: Install
+    - name: Install dependencies
       run: sudo apt-get install -y libunbound-dev |
            npm install nyc coveralls bslint @hns-dev/bsdoc
 
@@ -38,3 +36,53 @@ jobs:
       uses: coverallsapp/github-action@master
       with:
         github-token: ${{ secrets.GITHUB_TOKEN }}
+
+  build:
+    name: Build & Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macOS-latest]
+        node: [12.x, 14.x, 16.x, 18.x]
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup Node.js ${{ matrix.node }}
+      uses: actions/setup-node@v3
+      with:
+        node-version: ${{ matrix.node }}
+
+    - name: Update npm
+      run: npm i -g npm
+
+    - name: Install libunbound
+      if: contains(matrix.os, 'ubuntu')
+      run: sudo apt-get install -y libunbound-dev
+
+    - name: Install
+      run: npm install
+
+    - name: Test
+      run: npm run test
+
+  build-windows:
+    name: Build windows & node.js v18
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: 18.x
+
+    - name: Update npm
+      run: npm i -g npm
+
+    - name: Install
+      run: npm install
+
+    - name: Test
+      run: npm run test
