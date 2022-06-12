@@ -5,6 +5,7 @@ v4.x Release notes
 
 - [v4.0](#v40)
   * [How to Upgrade](#how-to-upgrade)
+    + [Clean Install](#Clean-Install)
   * [Notable Changes](#notable-changes)
     + [Node and Chain](#node-and-chain)
     + [Wallet changes](#wallet-changes)
@@ -17,6 +18,9 @@ v4.x Release notes
 ## How to Upgrade
   When upgrading to this version from **hsd v3.x** you must pass `--chain-migrate=3` when you run it for the first time.
   If you are upgrading from **hsd v2.x**, then you also need to pass `--wallet-migrate=1`.
+
+### Clean Install
+  - Delete first ./hsd folder, disclaimer: you will lose everything. Then run: git clone --depth 1 --branch 4.x https://github.com/handshake-org/hsd.git command.
 
 ## Notable Changes
 ### Urkel Tree Compaction
