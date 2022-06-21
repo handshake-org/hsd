@@ -12,7 +12,7 @@ const rules = require('../lib/covenants/rules');
 const Address = require('../lib/primitives/address');
 
 const network = Network.get('regtest');
-const NAME1 = rules.grindName(5, 2, network);
+const NAME1 = rules.grindName(10, 2, network);
 const {
   treeInterval,
   biddingPeriod,

@@ -30,9 +30,10 @@ const wclient = new WalletClient({
 
 const {wdb} = node.require('walletdb');
 
-const name = rules.grindName(5, 1, network);
+const GNAME_SIZE = 10;
+const name = rules.grindName(GNAME_SIZE, 1, network);
 const nameHash = rules.hashName(name);
-const wrongName = rules.grindName(5, 1, network);
+const wrongName = rules.grindName(GNAME_SIZE, 1, network);
 const wrongNameHash = rules.hashName(wrongName);
 
 let alice, bob, aliceReceive, bobReceive;
@@ -232,9 +233,9 @@ describe('Wallet Import Name', function() {
   });
 
   describe('import multiple / overlapping names', function() {
-    const name1 = rules.grindName(4, 1, network);
-    const name2 = rules.grindName(5, 1, network);
-    const name3 = rules.grindName(6, 1, network);
+    const name1 = rules.grindName(GNAME_SIZE, 1, network);
+    const name2 = rules.grindName(GNAME_SIZE, 1, network);
+    const name3 = rules.grindName(GNAME_SIZE, 1, network);
     let startHeight;
 
     it('should open and bid from Alice\'s wallet', async () => {
