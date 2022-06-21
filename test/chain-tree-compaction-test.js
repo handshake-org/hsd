@@ -24,6 +24,8 @@ const {
   revealPeriod
 } = network.names;
 
+const GNAME_SIZE = 10;
+
 describe('Tree Compacting', function() {
   const oldKeepBlocks = network.block.keepBlocks;
   const oldpruneAfterHeight = network.block.pruneAfterHeight;
@@ -182,7 +184,7 @@ describe('Tree Compacting', function() {
       });
 
       it('should win an auction and register', async () => {
-        name = rules.grindName(3, chain.height, network);
+        name = rules.grindName(GNAME_SIZE, chain.height, network);
         nameHash = rules.hashName(name);
         send(await wallet.sendOpen(name), mempool);
         await mineBlocks(treeInterval + 1, mempool);
@@ -761,6 +763,81 @@ describe('Tree Compacting', function() {
       await node.close();
     });
 
+    it('should continue compaction on restart if it did not finish', async () => {
+      const {keepBlocks} = network.block;
+      const compactInterval = keepBlocks;
+      const nodeOptions = {
+        prefix,
+        network: 'regtest',
+        memory: false,
+        compactTreeOnInit: true,
+        compactTreeInitInterval: compactInterval
+      };
+
+      node = new FullNode(nodeOptions);
+
+      await node.ensure();
+      let compacted = false;
+      const compactWrapper = (node) => {
+        const compactTree = node.chain.compactTree.bind(node.chain);
+
+        compacted = false;
+        node.chain.compactTree = () => {
+          compacted = true;
+          return compactTree();
+        };
+      };
+
+      compactWrapper(node);
+      await node.open();
+      assert.strictEqual(compacted, false);
+
+      // get enough blocks for the compaction check.
+      const blocks = compactInterval + keepBlocks + 1;
+      const waiter = forEventCondition(node, 'connect', e => e.height >= blocks);
+
+      await node.rpc.generateToAddress(
+        [blocks, new Address().toString('regtest')]
+      );
+
+      await waiter;
+      await node.close();
+
+      // Should try compact, because we have enough blocks.
+      // but we make sure it fails.
+      node = new FullNode(nodeOptions);
+      compactWrapper(node);
+      node.chain.db.tree.compact = () => {
+        throw new Error('STOP');
+      };
+
+      let err;
+      try {
+        await node.open();
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message, 'Critical Error: STOP');
+      assert.strictEqual(compacted, true);
+
+      try {
+        await node.blocks.close();
+        await node.chain.close();
+        await node.close();
+      } catch (e) {
+        ;
+      }
+
+      // It should retry compaction on restart.
+      node = new FullNode(nodeOptions);
+      compactWrapper(node);
+
+      await node.open();
+      assert.strictEqual(compacted, true);
+    });
+
     it('should recompact tree if tree init interval passed', async () => {
       const {keepBlocks} = network.block;
       const compactInterval = keepBlocks;
@@ -1004,7 +1081,7 @@ describe('Tree Compacting', function() {
         // This ensures that every single block results in a different
         // tree and treeRoot without any auctions.
         if (open) {
-          const name = rules.grindName(4, chain.height - 1, network);
+          const name = rules.grindName(GNAME_SIZE, chain.height - 1, network);
           const tx = await wallet.sendOpen(name);
           job.pushTX(tx.toTX());
           job.refresh();

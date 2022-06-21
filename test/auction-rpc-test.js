@@ -136,11 +136,13 @@ class TestUtil {
   }
 }
 
+const GNAME_SIZE = 10;
+
 describe('Auction RPCs', function() {
   this.timeout(60000);
 
   const util = new TestUtil();
-  const name = rules.grindName(2, 0, Network.get('regtest'));
+  const name = rules.grindName(GNAME_SIZE, 0, Network.get('regtest'));
   let winner, loser;
   const winnerBid = {
     bid: 5,

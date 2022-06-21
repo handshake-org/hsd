@@ -38,7 +38,7 @@ let alice, bob, aliceReceive, bobReceive;
 let aliceOriginalBalance, bobOriginalBalance, bobFee;
 
 // These are data that will be communicated between Alice and Bob
-const name = rules.grindName(5, 1, network);
+const name = rules.grindName(10, 1, network);
 const nameHash = rules.hashName(name);
 const price = 1234567; // 1.234567 HNS
 let blob;

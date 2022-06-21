@@ -62,6 +62,7 @@ v4.x Release notes
  - \[[`03a306b9`](https://github.com/handshake-org/hsd/commit/03a306b9)] - [#734](https://github.com/handshake-org/hsd/pull/734) - **SEMVER-MINOR protocol**: add checkpoint at height 100000 (Dec 2021) (@pinheadmz - Matthew Zipkin)
  - \[[`febc91c8`](https://github.com/handshake-org/hsd/commit/febc91c8)] - [#707](https://github.com/handshake-org/hsd/pull/707) - **SEMVER-MINOR wallet**: emit 'block connect' events. (@rithvikvibhu - Rithvik Vibhu)
  - \[[`dfccf4ef`](https://github.com/handshake-org/hsd/commit/dfccf4ef)] - [#650](https://github.com/handshake-org/hsd/pull/650) - **SEMVER-MINOR chain**: Gracefully shut down node on critical errors like full disk. (@pinheadmz - Matthew Zipkin & @nodech - Nodari Chkuaselidze)
+ - \[[`7822f572`](https://github.com/handshake-org/hsd/commit/7822f572)] - [#743](https://github.com/handshake-org/hsd/pull/743) - **SEMVER-MAJOR chain**: Continue compaction on restart if node quit. (@nodech - Nodari Chkuaselidze)
  - \[[`925db38a`](https://github.com/handshake-org/hsd/commit/925db38a)] - [#735](https://github.com/handshake-org/hsd/pull/735) - **ci**: add macos to the test matrix. (@nodech - Nodari Chkuaselidze)
  - \[[`e33ed104`](https://github.com/handshake-org/hsd/commit/e33ed104)] - [#733](https://github.com/handshake-org/hsd/pull/733) - **net**: update seeds. (@pinheadmz - Matthew Zipkin)
  - \[[`e77546c9`](https://github.com/handshake-org/hsd/commit/e77546c9)] - [#710](https://github.com/handshake-org/hsd/pull/710) - **net**: propagate the user agent from node to pool. (@Falci - Fernando Falci & @pinheadmz - Matthew Zipkin)
@@ -93,3 +94,4 @@ v4.x Release notes
  - \[[`3b83199e`](https://github.com/handshake-org/hsd/commit/3b83199e)] - [#653](https://github.com/handshake-org/hsd/pull/653) - **test**: sighash_noinput is not implemented correctly. (@pinheadmz - Matthew Zipkin)
  - \[[`e8c9632c`](https://github.com/handshake-org/hsd/commit/e8c9632c)] - [#652](https://github.com/handshake-org/hsd/pull/652) - **dockerfile**: upgrade use node v14. (@skottler - Sam Kottler)
  - \[[`37731e63`](https://github.com/handshake-org/hsd/commit/37731e63)] - [#640](https://github.com/handshake-org/hsd/pull/640) - **ci**: Add node v16 to ci matrix, and remove v10. (@Anunayj - Anunay Jain)
+ - \[[`7c00f019`](https://github.com/handshake-org/hsd/commit/7c00f019)] - [#742](https://github.com/handshake-org/hsd/pull/742) - **test**: Update urkel and fix grindName tests. (@nodech - Nodari Chkuaselidze)

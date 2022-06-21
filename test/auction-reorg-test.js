@@ -15,8 +15,9 @@ const ownership = require('../lib/covenants/ownership');
 
 const network = Network.get('regtest');
 const {treeInterval} = network.names;
-const NAME1 = rules.grindName(10, 20, network);
-const NAME2 = rules.grindName(10, 20, network);
+const GNAME_SIZE = 10;
+const NAME1 = rules.grindName(GNAME_SIZE, 20, network);
+const NAME2 = rules.grindName(GNAME_SIZE, 20, network);
 
 const workers = new WorkerPool({
   // Must be disabled for `ownership.ignore`.

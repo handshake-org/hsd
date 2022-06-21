@@ -42,7 +42,7 @@ const {wdb} = node.require('walletdb');
 let alice, aliceReceive;
 let bob, bobReceive;
 
-const name = rules.grindName(5, 1, network);
+const name = rules.grindName(10, 1, network);
 const nameHash = rules.hashName(name);
 let heightBeforeOpen, heightBeforeRegister, heightBeforeFinalize;
 let coin;
