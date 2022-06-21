@@ -58,6 +58,8 @@ const wclient = new WalletClient({
 
 const {wdb} = node.require('walletdb');
 
+const GNAME_SIZE = 10;
+
 describe('Wallet RPC Methods', function() {
   this.timeout(15000);
 
@@ -364,8 +366,8 @@ describe('Wallet RPC Methods', function() {
   });
 
   describe('signmessagewithname & verifymessagewithname', () => {
-    const name = rules.grindName(5, 1, network);
-    const nonWalletName = rules.grindName(5, 1, network);
+    const name = rules.grindName(GNAME_SIZE, 1, network);
+    const nonWalletName = rules.grindName(GNAME_SIZE, 1, network);
     const message = 'Decentralized naming and certificate authority';
     const invalidNames = ['', null, '\'null\'', 'localhost'];
 
@@ -596,8 +598,8 @@ describe('Wallet RPC Methods', function() {
     });
 
     it('should do an auction', async () => {
-      const NAME1 = rules.grindName(5, 2, network);
-      const NAME2 = rules.grindName(6, 3, network);
+      const NAME1 = rules.grindName(GNAME_SIZE, 2, network);
+      const NAME2 = rules.grindName(GNAME_SIZE, 3, network);
       const addr = await wclient.execute('getnewaddress', []);
       await nclient.execute('generatetoaddress', [10, addr]);
       await forValue(wdb, 'height', node.chain.height);

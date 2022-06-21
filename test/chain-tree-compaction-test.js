@@ -24,6 +24,8 @@ const {
   revealPeriod
 } = network.names;
 
+const GNAME_SIZE = 10;
+
 describe('Tree Compacting', function() {
   const oldKeepBlocks = network.block.keepBlocks;
   const oldpruneAfterHeight = network.block.pruneAfterHeight;
@@ -182,7 +184,7 @@ describe('Tree Compacting', function() {
       });
 
       it('should win an auction and register', async () => {
-        name = rules.grindName(3, chain.height, network);
+        name = rules.grindName(GNAME_SIZE, chain.height, network);
         nameHash = rules.hashName(name);
         send(await wallet.sendOpen(name), mempool);
         await mineBlocks(treeInterval + 1, mempool);
@@ -1079,7 +1081,7 @@ describe('Tree Compacting', function() {
         // This ensures that every single block results in a different
         // tree and treeRoot without any auctions.
         if (open) {
-          const name = rules.grindName(4, chain.height - 1, network);
+          const name = rules.grindName(GNAME_SIZE, chain.height - 1, network);
           const tx = await wallet.sendOpen(name);
           job.pushTX(tx.toTX());
           job.refresh();

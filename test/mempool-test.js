@@ -848,7 +848,7 @@ describe('Mempool', function() {
       const addr = chaincoins.createReceive().getAddress();
       open.addOutput(addr, 90000);
 
-      const name = rules.grindName(5, 0, mempool.network);
+      const name = rules.grindName(10, 0, mempool.network);
       const rawName = Buffer.from(name, 'ascii');
       const nameHash = rules.hashName(rawName);
       open.outputs[0].covenant.type = types.OPEN;
