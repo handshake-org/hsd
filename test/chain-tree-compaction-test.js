@@ -761,6 +761,81 @@ describe('Tree Compacting', function() {
       await node.close();
     });
 
+    it('should continue compaction on restart if it did not finish', async () => {
+      const {keepBlocks} = network.block;
+      const compactInterval = keepBlocks;
+      const nodeOptions = {
+        prefix,
+        network: 'regtest',
+        memory: false,
+        compactTreeOnInit: true,
+        compactTreeInitInterval: compactInterval
+      };
+
+      node = new FullNode(nodeOptions);
+
+      await node.ensure();
+      let compacted = false;
+      const compactWrapper = (node) => {
+        const compactTree = node.chain.compactTree.bind(node.chain);
+
+        compacted = false;
+        node.chain.compactTree = () => {
+          compacted = true;
+          return compactTree();
+        };
+      };
+
+      compactWrapper(node);
+      await node.open();
+      assert.strictEqual(compacted, false);
+
+      // get enough blocks for the compaction check.
+      const blocks = compactInterval + keepBlocks + 1;
+      const waiter = forEventCondition(node, 'connect', e => e.height >= blocks);
+
+      await node.rpc.generateToAddress(
+        [blocks, new Address().toString('regtest')]
+      );
+
+      await waiter;
+      await node.close();
+
+      // Should try compact, because we have enough blocks.
+      // but we make sure it fails.
+      node = new FullNode(nodeOptions);
+      compactWrapper(node);
+      node.chain.db.tree.compact = () => {
+        throw new Error('STOP');
+      };
+
+      let err;
+      try {
+        await node.open();
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message, 'Critical Error: STOP');
+      assert.strictEqual(compacted, true);
+
+      try {
+        await node.blocks.close();
+        await node.chain.close();
+        await node.close();
+      } catch (e) {
+        ;
+      }
+
+      // It should retry compaction on restart.
+      node = new FullNode(nodeOptions);
+      compactWrapper(node);
+
+      await node.open();
+      assert.strictEqual(compacted, true);
+    });
+
     it('should recompact tree if tree init interval passed', async () => {
       const {keepBlocks} = network.block;
       const compactInterval = keepBlocks;
