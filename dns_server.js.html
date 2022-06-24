@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: dns/server.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: dns/server.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/*!
+ * dns.js - dns server for hsd
+ * Copyright (c) 2017-2018, Christopher Jeffrey (MIT License).
+ * https://github.com/handshake-org/hsd
+ */
+
+'use strict';
+
+const assert = require('bsert');
+const IP = require('binet');
+const Logger = require('blgr');
+const bns = require('bns');
+const UnboundResolver = require('bns/lib/resolver/unbound');
+const RecursiveResolver = require('bns/lib/resolver/recursive');
+const RootResolver = require('bns/lib/resolver/root');
+const secp256k1 = require('bcrypto/lib/secp256k1');
+const LRU = require('blru');
+const base32 = require('bcrypto/lib/encoding/base32');
+const NameState = require('../covenants/namestate');
+const rules = require('../covenants/rules');
+const reserved = require('../covenants/reserved');
+const {Resource} = require('./resource');
+const key = require('./key');
+const nsec = require('./nsec');
+const {
+  DEFAULT_TTL,
+  TYPE_MAP_ROOT,
+  TYPE_MAP_EMPTY,
+  TYPE_MAP_NS,
+  TYPE_MAP_A,
+  TYPE_MAP_AAAA
+} = require('./common');
+
+const {
+  DNSServer,
+  hsig,
+  wire,
+  util
+} = bns;
+
+const {
+  Message,
+  Record,
+  ARecord,
+  AAAARecord,
+  NSRecord,
+  SOARecord,
+  types,
+  codes
+} = wire;
+
+/*
+ * Constants
+ */
+
+const RES_OPT = { inet6: false, tcp: true };
+const CACHE_TTL = 30 * 60 * 1000;
+
+/**
+ * RootCache
+ */
+
+class RootCache {
+  constructor(size) {
+    this.cache = new LRU(size);
+  }
+
+  set(name, type, msg) {
+    const key = toKey(name, type);
+    const raw = msg.compress();
+
+    this.cache.set(key, {
+      time: Date.now(),
+      raw
+    });
+
+    return this;
+  }
+
+  get(name, type) {
+    const key = toKey(name, type);
+    const item = this.cache.get(key);
+
+    if (!item)
+      return null;
+
+    if (Date.now() > item.time + CACHE_TTL)
+      return null;
+
+    return Message.decode(item.raw);
+  }
+
+  reset() {
+    this.cache.reset();
+  }
+}
+
+/**
+ * RootServer
+ * @extends {DNSServer}
+ */
+
+class RootServer extends DNSServer {
+  constructor(options) {
+    super(RES_OPT);
+
+    this.ra = false;
+    this.edns = true;
+    this.dnssec = true;
+    this.noSig0 = false;
+    this.icann = new RootResolver(RES_OPT);
+
+    this.logger = Logger.global;
+    this.key = secp256k1.privateKeyGenerate();
+    this.host = '127.0.0.1';
+    this.port = 5300;
+    this.lookup = null;
+    this.middle = null;
+    this.publicHost = '127.0.0.1';
+
+    // Plugins can add or remove items from
+    // this set before the server is opened.
+    this.blacklist = new Set([
+      'bit', // Namecoin
+      'eth', // ENS
+      'exit', // Tor
+      'gnu', // GNUnet (GNS)
+      'i2p', // Invisible Internet Project
+      'onion', // Tor
+      'tor', // OnioNS
+      'zkey' // GNS
+    ]);
+
+    this.cache = new RootCache(3000);
+
+    if (options)
+      this.initOptions(options);
+
+    // Create SYNTH record to use for root zone NS
+    let ip = IP.toBuffer(this.publicHost);
+    if (IP.family(this.publicHost) === 4)
+      ip = ip.slice(12);
+    this.synth = `_${base32.encodeHex(ip)}._synth.`;
+
+    this.initNode();
+  }
+
+  initOptions(options) {
+    assert(options);
+
+    this.parseOptions(options);
+
+    if (options.logger != null) {
+      assert(typeof options.logger === 'object');
+      this.logger = options.logger.context('ns');
+    }
+
+    if (options.key != null) {
+      assert(Buffer.isBuffer(options.key));
+      assert(options.key.length === 32);
+      this.key = options.key;
+    }
+
+    if (options.host != null) {
+      assert(typeof options.host === 'string');
+      this.host = IP.normalize(options.host);
+      this.publicHost = this.host;
+    }
+
+    if (options.port != null) {
+      assert((options.port &amp; 0xffff) === options.port);
+      assert(options.port !== 0);
+      this.port = options.port;
+    }
+
+    if (options.lookup != null) {
+      assert(typeof options.lookup === 'function');
+      this.lookup = options.lookup;
+    }
+
+    if (options.noSig0 != null) {
+      assert(typeof options.noSig0 === 'boolean');
+      this.noSig0 = options.noSig0;
+    }
+
+    if (options.publicHost != null) {
+      assert(typeof options.publicHost === 'string');
+      this.publicHost = IP.normalize(options.publicHost);
+    }
+
+    return this;
+  }
+
+  initNode() {
+    this.on('error', (err) => {
+      this.logger.error(err);
+    });
+
+    this.on('query', (req, res) => {
+      this.logMessage('\n\nDNS Request:', req);
+      this.logMessage('\n\nDNS Response:', res);
+    });
+
+    return this;
+  }
+
+  logMessage(prefix, msg) {
+    if (this.logger.level &lt; 5)
+      return;
+
+    const logs = msg.toString().trim().split('\n');
+
+    this.logger.spam(prefix);
+
+    for (const log of logs)
+      this.logger.spam(log);
+  }
+
+  signSize() {
+    if (!this.sig0)
+      return 94;
+
+    return 0;
+  }
+
+  sign(msg, host, port) {
+    if (!this.noSig0)
+      return hsig.sign(msg, this.key);
+
+    return msg;
+  }
+
+  async lookupName(name) {
+    if (!this.lookup)
+      throw new Error('Tree not available.');
+
+    const hash = rules.hashName(name);
+    const data = await this.lookup(hash);
+
+    if (!data)
+      return null;
+
+    const ns = NameState.decode(data);
+
+    if (ns.data.length === 0)
+      return null;
+
+    return ns.data;
+  }
+
+  async response(req, rinfo) {
+    const [qs] = req.question;
+    const name = qs.name.toLowerCase();
+    const type = qs.type;
+
+    // Our root zone.
+    if (name === '.') {
+      const res = new Message();
+
+      res.aa = true;
+
+      switch (type) {
+        case types.ANY:
+        case types.NS:
+          res.answer.push(this.toNS());
+          key.signZSK(res.answer, types.NS);
+
+          if (IP.family(this.publicHost) === 4) {
+            res.additional.push(this.toA());
+            key.signZSK(res.additional, types.A);
+          } else {
+            res.additional.push(this.toAAAA());
+            key.signZSK(res.additional, types.AAAA);
+          }
+
+          break;
+        case types.SOA:
+          res.answer.push(this.toSOA());
+          key.signZSK(res.answer, types.SOA);
+
+          res.authority.push(this.toNS());
+          key.signZSK(res.authority, types.NS);
+
+          if (IP.family(this.publicHost) === 4) {
+            res.additional.push(this.toA());
+            key.signZSK(res.additional, types.A);
+          } else {
+            res.additional.push(this.toAAAA());
+            key.signZSK(res.additional, types.AAAA);
+          }
+
+          break;
+        case types.DNSKEY:
+          res.answer.push(key.ksk.deepClone());
+          res.answer.push(key.zsk.deepClone());
+          key.signKSK(res.answer, types.DNSKEY);
+          break;
+        default:
+          // Minimally covering NSEC proof:
+          res.authority.push(this.toNSEC());
+          key.signZSK(res.authority, types.NSEC);
+          res.authority.push(this.toSOA());
+          key.signZSK(res.authority, types.SOA);
+          break;
+      }
+
+      return res;
+    }
+
+    // Process the name.
+    const labels = util.split(name);
+    const tld = util.label(name, labels, -1);
+
+    // Handle reverse pointers.
+    if (tld === '_synth' &amp;&amp; labels.length &lt;= 2 &amp;&amp; name[0] === '_') {
+      const res = new Message();
+      const rr = new Record();
+
+      res.aa = true;
+      rr.name = name;
+      rr.ttl = 21600;
+
+      // TLD '._synth' is being queried on its own, send SOA
+      // so recursive asks again with complete synth record.
+      if (labels.length === 1) {
+        // Empty non-terminal proof:
+        res.authority.push(
+          nsec.create(
+            '_synth.',
+            '\\000._synth.',
+            TYPE_MAP_EMPTY
+          )
+        );
+        key.signZSK(res.authority, types.NSEC);
+
+        res.authority.push(this.toSOA());
+        key.signZSK(res.authority, types.SOA);
+
+        return res;
+      }
+
+      const hash = util.label(name, labels, -2);
+      const ip = IP.map(base32.decodeHex(hash.substring(1)));
+      const synthType = IP.isIPv4(ip) ? types.A : types.AAAA;
+
+      // Query must be for the correct synth version
+      if (type !== synthType) {
+        // SYNTH4/6 proof:
+        const typeMap = synthType === types.A ? TYPE_MAP_A : TYPE_MAP_AAAA;
+        res.authority.push(nsec.create(name, '\\000.' + name, typeMap));
+        key.signZSK(res.authority, types.NSEC);
+
+        res.authority.push(this.toSOA());
+        key.signZSK(res.authority, types.SOA);
+
+        return res;
+      }
+
+      if (synthType === types.A) {
+        rr.type = types.A;
+        rr.data = new ARecord();
+      } else {
+        rr.type = types.AAAA;
+        rr.data = new AAAARecord();
+      }
+
+      rr.data.address = IP.toString(ip);
+
+      res.answer.push(rr);
+      key.signZSK(res.answer, rr.type);
+
+      return res;
+    }
+
+    // REFUSED for invalid names
+    // this simplifies NSEC proofs
+    // by avoiding octets like \000
+    // Also, this decreases load on
+    // the server since it avoids signing
+    // useless proofs for invalid TLDs
+    // (These requests are most
+    // likely bad anyways)
+    if (!rules.verifyName(tld)) {
+      const res = new Message();
+      res.code = codes.REFUSED;
+      return res;
+    }
+
+    // Ask the urkel tree for the name data.
+    const data = !this.blacklist.has(tld)
+      ? (await this.lookupName(tld))
+      : null;
+
+    // Non-existent domain.
+    if (!data) {
+      const item = this.getReserved(tld);
+
+      // This name is in the existing root zone.
+      // Fall back to ICANN's servers if not yet
+      // registered on the handshake blockchain.
+      // This is an example of "Dynamic Fallback"
+      // as mentioned in the whitepaper.
+      if (item &amp;&amp; item.root) {
+        const res = await this.icann.lookup(tld);
+
+        if (res.ad &amp;&amp; res.code !== codes.NXDOMAIN) {
+          // answer must be a referral since lookup
+          // function always asks for NS
+          assert(res.code === codes.NOERROR);
+          assert(res.answer.length === 0);
+          assert(hasValidOwner(res.authority, tld));
+
+          res.ad = false;
+          res.question = [qs];
+          const secure = util.hasType(res.authority, types.DS);
+
+          // no DS referrals for TLDs
+          if (type === types.DS &amp;&amp; labels.length === 1) {
+            const dsSet = util.extractSet(res.authority,
+              util.fqdn(tld), types.DS);
+
+            res.aa = true;
+            res.answer = dsSet;
+            key.signZSK(res.answer, types.DS);
+            res.authority = [];
+            res.additional = [];
+
+            if (res.answer.length === 0) {
+              res.authority.push(this.toSOA());
+              key.signZSK(res.authority, types.SOA);
+            }
+          }
+
+          // No DS we must add a minimally covering proof
+          if (!secure) {
+            // Replace any NSEC/NSEC3 records
+            const filterTypes = [types.NSEC, types.NSEC3];
+            res.authority = util.filterSet(res.authority, ...filterTypes);
+            const next = nsec.nextName(tld);
+            const rr = nsec.create(tld, next, TYPE_MAP_NS);
+            res.authority.push(rr);
+            key.signZSK(res.authority, types.NSEC);
+          } else {
+            key.signZSK(res.authority, types.DS);
+          }
+
+          return res;
+        }
+      }
+
+      const res = new Message();
+
+      res.code = codes.NXDOMAIN;
+      res.aa = true;
+
+      // Doesn't exist.
+      //
+      // We should be giving a real NSEC proof
+      // here, but I don't think it's possible
+      // with the current construction.
+      //
+      // I imagine this would only be possible
+      // if NSEC3 begins to support BLAKE2b for
+      // name hashing. Even then, it's still
+      // not possible for SPV nodes since they
+      // can't arbitrarily iterate over the tree.
+      //
+      // Instead, we give a minimally covering
+      // NSEC record based on rfc4470
+      // https://tools.ietf.org/html/rfc4470
+
+      // Proving the name doesn't exist
+      const prev = nsec.prevName(tld);
+      const next = nsec.nextName(tld);
+      const nameSet = [nsec.create(prev, next, TYPE_MAP_EMPTY)];
+      key.signZSK(nameSet, types.NSEC);
+
+      // Proving a wildcard doesn't exist
+      const wildcardSet = [nsec.create('!.', '+.', TYPE_MAP_EMPTY)];
+      key.signZSK(wildcardSet, types.NSEC);
+
+      res.authority = res.authority.concat(nameSet, wildcardSet);
+      res.authority.push(this.toSOA());
+      key.signZSK(res.authority, types.SOA);
+
+      return res;
+    }
+
+    // Our resolution.
+    const resource = Resource.decode(data);
+    const res = resource.toDNS(name, type);
+
+    if (res.answer.length === 0 &amp;&amp; res.aa) {
+      res.authority.push(this.toSOA());
+      key.signZSK(res.authority, types.SOA);
+    }
+
+    return res;
+  }
+
+  async resolve(req, rinfo) {
+    const [qs] = req.question;
+    const {name, type} = qs;
+    const tld = util.from(name, -1);
+
+    // Plugins can insert middleware here and hijack the
+    // lookup for special TLDs before checking Urkel tree.
+    // We also pass the entire question in case a plugin
+    // is able to return an authoritative (non-referral) answer.
+    if (typeof this.middle === 'function') {
+      let res;
+      try {
+        res = await this.middle(tld, req, rinfo);
+      } catch (e) {
+        this.logger.warning(
+          'Root server middleware resolution failed for name: %s',
+          name
+        );
+        this.logger.debug(e.stack);
+      }
+
+      if (res) {
+        return res;
+      }
+    }
+
+    // Hit the cache first.
+    const cache = this.cache.get(name, type);
+
+    if (cache)
+      return cache;
+
+    const res = await this.response(req, rinfo);
+
+    if (!util.equal(tld, '_synth.'))
+      this.cache.set(name, type, res);
+
+    return res;
+  }
+
+  async open() {
+    await super.open(this.port, this.host);
+
+    this.logger.info('Root nameserver listening on port %d.', this.port);
+  }
+
+  getReserved(tld) {
+    return reserved.getByName(tld);
+  }
+
+  // Intended to be called by plugin.
+  signRRSet(rrset, type) {
+    key.signZSK(rrset, type);
+  }
+
+  resetCache() {
+    this.cache.reset();
+  }
+
+  serial() {
+    const date = new Date();
+    const y = date.getUTCFullYear() * 1e6;
+    const m = (date.getUTCMonth() + 1) * 1e4;
+    const d = date.getUTCDate() * 1e2;
+    const h = date.getUTCHours();
+    return y + m + d + h;
+  }
+
+  toSOA() {
+    const rr = new Record();
+    const rd = new SOARecord();
+
+    rr.name = '.';
+    rr.type = types.SOA;
+    rr.ttl = 86400;
+    rr.data = rd;
+    rd.ns = '.';
+    rd.mbox = '.';
+    rd.serial = this.serial();
+    rd.refresh = 1800;
+    rd.retry = 900;
+    rd.expire = 604800;
+    rd.minttl = DEFAULT_TTL;
+
+    return rr;
+  }
+
+  toNS() {
+    const rr = new Record();
+    const rd = new NSRecord();
+    rr.name = '.';
+    rr.type = types.NS;
+    rr.ttl = 518400;
+    rr.data = rd;
+    rd.ns = this.synth;
+    return rr;
+  }
+
+  // Glue only
+  toA() {
+    const rr = new Record();
+    const rd = new ARecord();
+    rr.name = this.synth;
+    rr.type = types.A;
+    rr.ttl = 518400;
+    rr.data = rd;
+    rd.address = this.publicHost;
+    return rr;
+  }
+
+  // Glue only
+  toAAAA() {
+    const rr = new Record();
+    const rd = new AAAARecord();
+    rr.name = this.synth;
+    rr.type = types.AAAA;
+    rr.ttl = 518400;
+    rr.data = rd;
+    rd.address = this.publicHost;
+    return rr;
+  }
+
+  toNSEC() {
+    const next = nsec.nextName('.');
+    return nsec.create('.', next, TYPE_MAP_ROOT);
+  }
+}
+
+/**
+ * RecursiveServer
+ * @extends {DNSServer}
+ */
+
+class RecursiveServer extends DNSServer {
+  constructor(options) {
+    super(RES_OPT);
+
+    this.ra = true;
+    this.edns = true;
+    this.dnssec = true;
+    this.noSig0 = false;
+    this.noAny = true;
+
+    this.logger = Logger.global;
+    this.key = secp256k1.privateKeyGenerate();
+
+    this.host = '127.0.0.1';
+    this.port = 5301;
+    this.stubHost = '127.0.0.1';
+    this.stubPort = 5300;
+
+    this.hns = new UnboundResolver({
+      inet6: false,
+      tcp: true,
+      edns: true,
+      dnssec: true,
+      minimize: true
+    });
+
+    if (options)
+      this.initOptions(options);
+
+    this.initNode();
+
+    this.hns.setStub(this.stubHost, this.stubPort, key.ds);
+  }
+
+  initOptions(options) {
+    assert(options);
+
+    this.parseOptions(options);
+
+    if (options.logger != null) {
+      assert(typeof options.logger === 'object');
+      this.logger = options.logger.context('rs');
+    }
+
+    if (options.key != null) {
+      assert(Buffer.isBuffer(options.key));
+      assert(options.key.length === 32);
+      this.key = options.key;
+    }
+
+    if (options.host != null) {
+      assert(typeof options.host === 'string');
+      this.host = IP.normalize(options.host);
+    }
+
+    if (options.port != null) {
+      assert((options.port &amp; 0xffff) === options.port);
+      assert(options.port !== 0);
+      this.port = options.port;
+    }
+
+    if (options.stubHost != null) {
+      assert(typeof options.stubHost === 'string');
+
+      this.stubHost = IP.normalize(options.stubHost);
+
+      if (this.stubHost === '0.0.0.0' || this.stubHost === '::')
+        this.stubHost = '127.0.0.1';
+    }
+
+    if (options.stubPort != null) {
+      assert((options.stubPort &amp; 0xffff) === options.stubPort);
+      assert(options.stubPort !== 0);
+      this.stubPort = options.stubPort;
+    }
+
+    if (options.noSig0 != null) {
+      assert(typeof options.noSig0 === 'boolean');
+      this.noSig0 = options.noSig0;
+    }
+
+    if (options.noUnbound != null) {
+      assert(typeof options.noUnbound === 'boolean');
+      if (options.noUnbound) {
+        this.hns = new RecursiveResolver({
+          inet6: false,
+          tcp: true,
+          edns: true,
+          dnssec: true,
+          minimize: true
+        });
+      }
+    }
+
+    return this;
+  }
+
+  initNode() {
+    this.hns.on('log', (...args) => {
+      this.logger.debug(...args);
+    });
+
+    this.on('error', (err) => {
+      this.logger.error(err);
+    });
+
+    this.on('query', (req, res) => {
+      this.logMessage('\n\nDNS Request:', req);
+      this.logMessage('\n\nDNS Response:', res);
+    });
+
+    return this;
+  }
+
+  logMessage(prefix, msg) {
+    if (this.logger.level &lt; 5)
+      return;
+
+    const logs = msg.toString().trim().split('\n');
+
+    this.logger.spam(prefix);
+
+    for (const log of logs)
+      this.logger.spam(log);
+  }
+
+  signSize() {
+    if (!this.noSig0)
+      return 94;
+
+    return 0;
+  }
+
+  sign(msg, host, port) {
+    if (!this.noSig0)
+      return hsig.sign(msg, this.key);
+
+    return msg;
+  }
+
+  async open(...args) {
+    await this.hns.open();
+
+    await super.open(this.port, this.host);
+
+    this.logger.info('Recursive server listening on port %d.', this.port);
+  }
+
+  async close() {
+    await super.close();
+    await this.hns.close();
+  }
+
+  async resolve(req, rinfo) {
+    const [qs] = req.question;
+    return this.hns.resolve(qs);
+  }
+
+  async lookup(name, type) {
+    return this.hns.lookup(name, type);
+  }
+}
+
+/*
+ * Helpers
+ */
+
+function toKey(name, type) {
+  const labels = util.split(name);
+  const label = util.from(name, labels, -1);
+
+  // Ignore type if we're a referral.
+  if (labels.length > 1)
+    return label.toLowerCase();
+
+  let key = '';
+  key += label.toLowerCase();
+  key += ';';
+  key += type.toString(10);
+
+  return key;
+}
+
+function hasValidOwner(section, owner) {
+  owner = util.fqdn(owner);
+
+  for (const rr of section) {
+    if (rr.type === types.NS)
+      continue;
+
+    if (!util.equal(rr.name, owner))
+      return false;
+  }
+
+  return true;
+}
+
+/*
+ * Expose
+ */
+
+exports.RootServer = RootServer;
+exports.RecursiveServer = RecursiveServer;
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-blockchain.html">blockchain</a></li><li><a href="module-blockchain_common.html">blockchain/common</a></li><li><a href="module-blockstore.html">blockstore</a></li><li><a href="module-blockstore_common.html">blockstore/common</a></li><li><a href="module-blockstore_records.html">blockstore/records</a></li><li><a href="module-coins.html">coins</a></li><li><a href="module-covenants.html">covenants</a></li><li><a href="module-dns_common.html">dns/common</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-hd.html">hd</a></li><li><a href="module-hsd.html">hsd</a></li><li><a href="module-mempool.html">mempool</a></li><li><a href="module-mining.html">mining</a></li><li><a href="module-mining_common.html">mining/common</a></li><li><a href="module-net.html">net</a></li><li><a href="module-net_bip152.html">net/bip152</a></li><li><a href="module-net_common.html">net/common</a></li><li><a href="module-net_packets.html">net/packets</a></li><li><a href="module-node.html">node</a></li><li><a href="module-primitives.html">primitives</a></li><li><a href="module-protocol.html">protocol</a></li><li><a href="module-protocol_consensus.html">protocol/consensus</a></li><li><a href="module-protocol_errors.html">protocol/errors</a></li><li><a href="module-protocol_networks.html">protocol/networks</a></li><li><a href="module-protocol_policy.html">protocol/policy</a></li><li><a href="module-script.html">script</a></li><li><a href="module-script_common.html">script/common</a></li><li><a href="module-ui.html">ui</a></li><li><a href="module-utils.html">utils</a></li><li><a href="module-utils_util.html">utils/util</a></li><li><a href="module-wallet.html">wallet</a></li><li><a href="module-wallet_common.html">wallet/common</a></li><li><a href="module-wallet_plugin.html">wallet/plugin</a></li><li><a href="module-wallet_records.html">wallet/records</a></li><li><a href="module-workers.html">workers</a></li><li><a href="module-workers_jobs.html">workers/jobs</a></li><li><a href="module-workers_packets.html">workers/packets</a></li></ul><h3>Classes</h3><ul><li><a href="AirdropKey.html">AirdropKey</a></li><li><a href="AirdropProof.html">AirdropProof</a></li><li><a href="BidReveal.html">BidReveal</a></li><li><a href="BitField.html">BitField</a></li><li><a href="BitView.html">BitView</a></li><li><a href="BlindBid.html">BlindBid</a></li><li><a href="BlindValue.html">BlindValue</a></li><li><a href="BlockProof.html">BlockProof</a></li><li><a href="Brontide.html">Brontide</a></li><li><a href="BrontideStream.html">BrontideStream</a></li><li><a href="ChainFlags.html">ChainFlags</a></li><li><a href="ChainState.html">ChainState</a></li><li><a href="CipherState.html">CipherState</a></li><li><a href="Claim.html">Claim</a></li><li><a href="DetailsMember.html">DetailsMember</a></li><li><a href="DS.html">DS</a></li><li><a href="Field.html">Field</a></li><li><a href="GLUE4.html">GLUE4</a></li><li><a href="GLUE6.html">GLUE6</a></li><li><a href="HandshakeState.html">HandshakeState</a></li><li><a href="HashList.html">HashList</a></li><li><a href="MigrateBlockStore.html">MigrateBlockStore</a></li><li><a href="MigrateChainState.html">MigrateChainState</a></li><li><a href="MigrateChangeAddress.html">MigrateChangeAddress</a></li><li><a href="MigrateMigrations.html">MigrateMigrations</a></li><li><a href="MigrateTreeState.html">MigrateTreeState</a></li><li><a href="module.migrations.MigrationState.html">MigrationState</a></li><li><a href="module-blockchain.Chain.html">Chain</a></li><li><a href="module-blockchain.ChainDB.html">ChainDB</a></li><li><a href="module-blockchain.ChainEntry.html">ChainEntry</a></li><li><a href="module-blockchain.ChainMigrator.html">ChainMigrator</a></li><li><a href="module-blockchain.ChainMigratorOptions.html">ChainMigratorOptions</a></li><li><a href="module-blockchain.ChainOptions.html">ChainOptions</a></li><li><a href="module-blockchain.DeploymentState.html">DeploymentState</a></li><li><a href="module-blockchain.WalletMigrationResult.html">WalletMigrationResult</a></li><li><a href="module-blockchain.WalletMigrator.html">WalletMigrator</a></li><li><a href="module-blockstore.AbstractBatch.html">AbstractBatch</a></li><li><a href="module-blockstore.AbstractBlockStore.html">AbstractBlockStore</a></li><li><a href="module-blockstore.FileBatch.html">FileBatch</a></li><li><a href="module-blockstore.LevelBatch.html">LevelBatch</a></li><li><a href="module-blockstore_records-BlockRecord.html">BlockRecord</a></li><li><a href="module-blockstore_records-FileRecord.html">FileRecord</a></li><li><a href="module-blockstore_FileBlockStore.html">blockstore:FileBlockStore</a></li><li><a href="module-blockstore_LevelBlockStore.html">blockstore:LevelBlockStore</a></li><li><a href="module-coins.CoinEntry.html">CoinEntry</a></li><li><a href="module-coins.Coins.html">Coins</a></li><li><a href="module-coins.CoinView.html">CoinView</a></li><li><a href="module-coins.UndoCoins.html">UndoCoins</a></li><li><a href="module-currency.Amount.html">Amount</a></li><li><a href="module-errors-CriticalError.html">CriticalError</a></li><li><a href="module-hd.Mnemonic.html">Mnemonic</a></li><li><a href="module-hd.PrivateKey.html">PrivateKey</a></li><li><a href="module-hd.PublicKey.html">PublicKey</a></li><li><a href="module-http.HTTPOptions.html">HTTPOptions</a></li><li><a href="module-http.RPC.html">RPC</a></li><li><a href="module-http.Server.html">Server</a></li><li><a href="module-http.TransactionOptions.html">TransactionOptions</a></li><li><a href="module-mempool.AirdropEntry.html">AirdropEntry</a></li><li><a href="module-mempool.ClaimEntry.html">ClaimEntry</a></li><li><a href="module-mempool.ConfirmStats.html">ConfirmStats</a></li><li><a href="module-mempool.Mempool.html">Mempool</a></li><li><a href="module-mempool.MempoolEntry.html">MempoolEntry</a></li><li><a href="module-mempool.MempoolOptions.html">MempoolOptions</a></li><li><a href="module-mempool.PolicyEstimator.html">PolicyEstimator</a></li><li><a href="module-migrations.AbstractMigration.html">AbstractMigration</a></li><li><a href="module-migrations.MigrationResult.html">MigrationResult</a></li><li><a href="module-migrations.Migrator.html">Migrator</a></li><li><a href="module-mining.BlockAirdrop.html">BlockAirdrop</a></li><li><a href="module-mining.BlockClaim.html">BlockClaim</a></li><li><a href="module-mining.BlockEntry.html">BlockEntry</a></li><li><a href="module-mining.BlockTemplate.html">BlockTemplate</a></li><li><a href="module-mining.CPUMiner.html">CPUMiner</a></li><li><a href="module-mining.Miner.html">Miner</a></li><li><a href="module-mining.MinerOptions.html">MinerOptions</a></li><li><a href="module-net.BroadcastItem.html">BroadcastItem</a></li><li><a href="module-net.Framer.html">Framer</a></li><li><a href="module-net.HostEntry.html">HostEntry</a></li><li><a href="module-net.HostList.html">HostList</a></li><li><a href="module-net.HostListOptions.html">HostListOptions</a></li><li><a href="module-net.LocalAddress.html">LocalAddress</a></li><li><a href="module-net.NetAddress.html">NetAddress</a></li><li><a href="module-net.Parser.html">Parser</a></li><li><a href="module-net.Peer.html">Peer</a></li><li><a href="module-net.PeerList.html">PeerList</a></li><li><a href="module-net.PeerOptions.html">PeerOptions</a></li><li><a href="module-net.Pool.html">Pool</a></li><li><a href="module-net.PoolOptions.html">PoolOptions</a></li><li><a href="module-net_bip152-CompactBlock.html">CompactBlock</a></li><li><a href="module-net_bip152-TXRequest.html">TXRequest</a></li><li><a href="module-net_bip152-TXResponse.html">TXResponse</a></li><li><a href="module-net_packets-AddrPacket.html">AddrPacket</a></li><li><a href="module-net_packets-AirdropPacket.html">AirdropPacket</a></li><li><a href="module-net_packets-BlockPacket.html">BlockPacket</a></li><li><a href="module-net_packets-BlockTxnPacket.html">BlockTxnPacket</a></li><li><a href="module-net_packets-ClaimPacket.html">ClaimPacket</a></li><li><a href="module-net_packets-CmpctBlockPacket.html">CmpctBlockPacket</a></li><li><a href="module-net_packets-FeeFilterPacket.html">FeeFilterPacket</a></li><li><a href="module-net_packets-FilterAddPacket.html">FilterAddPacket</a></li><li><a href="module-net_packets-FilterClearPacket.html">FilterClearPacket</a></li><li><a href="module-net_packets-FilterLoadPacket.html">FilterLoadPacket</a></li><li><a href="module-net_packets-GetAddrPacket.html">GetAddrPacket</a></li><li><a href="module-net_packets-GetBlocksPacket.html">GetBlocksPacket</a></li><li><a href="module-net_packets-GetBlockTxnPacket.html">GetBlockTxnPacket</a></li><li><a href="module-net_packets-GetDataPacket.html">GetDataPacket</a></li><li><a href="module-net_packets-GetHeadersPacket.html">GetHeadersPacket</a></li><li><a href="module-net_packets-GetProofPacket.html">GetProofPacket</a></li><li><a href="module-net_packets-HeadersPacket.html">HeadersPacket</a></li><li><a href="module-net_packets-InvPacket.html">InvPacket</a></li><li><a href="module-net_packets-MempoolPacket.html">MempoolPacket</a></li><li><a href="module-net_packets-MerkleBlockPacket.html">MerkleBlockPacket</a></li><li><a href="module-net_packets-NotFoundPacket.html">NotFoundPacket</a></li><li><a href="module-net_packets-Packet.html">Packet</a></li><li><a href="module-net_packets-PingPacket.html">PingPacket</a></li><li><a href="module-net_packets-PongPacket.html">PongPacket</a></li><li><a href="module-net_packets-ProofPacket.html">ProofPacket</a></li><li><a href="module-net_packets-RejectPacket.html">RejectPacket</a></li><li><a href="module-net_packets-SendCmpctPacket.html">SendCmpctPacket</a></li><li><a href="module-net_packets-SendHeadersPacket.html">SendHeadersPacket</a></li><li><a href="module-net_packets-TXPacket.html">TXPacket</a></li><li><a href="module-net_packets-UnknownPacket.html">UnknownPacket</a></li><li><a href="module-net_packets-VerackPacket.html">VerackPacket</a></li><li><a href="module-net_packets-VersionPacket.html">VersionPacket</a></li><li><a href="module-node.FullNode.html">FullNode</a></li><li><a href="module-node.Node.html">Node</a></li><li><a href="module-node.NodeClient.html">NodeClient</a></li><li><a href="module-node.NullClient.html">NullClient</a></li><li><a href="module-node.SPVNode.html">SPVNode</a></li><li><a href="module-primitives.AbstractBlock.html">AbstractBlock</a></li><li><a href="module-primitives.Address.html">Address</a></li><li><a href="module-primitives.Block.html">Block</a></li><li><a href="module-primitives.Coin.html">Coin</a></li><li><a href="module-primitives.CoinSelector.html">CoinSelector</a></li><li><a href="module-primitives.Covenant.html">Covenant</a></li><li><a href="module-primitives.Headers.html">Headers</a></li><li><a href="module-primitives.Input.html">Input</a></li><li><a href="module-primitives.InvItem.html">InvItem</a></li><li><a href="module-primitives.KeyRing.html">KeyRing</a></li><li><a href="module-primitives.MemBlock.html">MemBlock</a></li><li><a href="module-primitives.MerkleBlock.html">MerkleBlock</a></li><li><a href="module-primitives.MTX.html">MTX</a></li><li><a href="module-primitives.Outpoint.html">Outpoint</a></li><li><a href="module-primitives.Output.html">Output</a></li><li><a href="module-primitives.TX.html">TX</a></li><li><a href="module-primitives.TXMeta.html">TXMeta</a></li><li><a href="module-protocol.Network.html">Network</a></li><li><a href="module-protocol.TimeData.html">TimeData</a></li><li><a href="module-protocol_errors-VerifyError.html">VerifyError</a></li><li><a href="module-script.Opcode.html">Opcode</a></li><li><a href="module-script.Script.html">Script</a></li><li><a href="module-script.ScriptError.html">ScriptError</a></li><li><a href="module-script.ScriptNum.html">ScriptNum</a></li><li><a href="module-script.SigCache.html">SigCache</a></li><li><a href="module-script.Stack.html">Stack</a></li><li><a href="module-script.Witness.html">Witness</a></li><li><a href="module-ui.URI.html">URI</a></li><li><a href="module-wallet.Account.html">Account</a></li><li><a href="module-wallet.Balance.html">Balance</a></li><li><a href="module-wallet.BlockRecord.html">BlockRecord</a></li><li><a href="module-wallet.Credit.html">Credit</a></li><li><a href="module-wallet.Details.html">Details</a></li><li><a href="module-wallet.HTTP.html">HTTP</a></li><li><a href="module-wallet.MasterKey.html">MasterKey</a></li><li><a href="module-wallet.Path.html">Path</a></li><li><a href="module-wallet.Paths.html">Paths</a></li><li><a href="module-wallet.RPC.html">RPC</a></li><li><a href="module-wallet.TXDB.html">TXDB</a></li><li><a href="module-wallet.Wallet.html">Wallet</a></li><li><a href="module-wallet.WalletCoinView.html">WalletCoinView</a></li><li><a href="module-wallet.WalletDB.html">WalletDB</a></li><li><a href="module-wallet.WalletKey.html">WalletKey</a></li><li><a href="module-wallet.WalletMigratorOptions.html">WalletMigratorOptions</a></li><li><a href="module-wallet.WalletOptions.html">WalletOptions</a></li><li><a href="module-wallet_plugin-Plugin.html">Plugin</a></li><li><a href="module-wallet_records-BlockMeta.html">BlockMeta</a></li><li><a href="module-wallet_records-ChainState.html">ChainState</a></li><li><a href="module-wallet_records-MapRecord.html">MapRecord</a></li><li><a href="module-wallet_records-TXRecord.html">TXRecord</a></li><li><a href="module-workers.Framer.html">Framer</a></li><li><a href="module-workers.Master.html">Master</a></li><li><a href="module-workers.Parent.html">Parent</a></li><li><a href="module-workers.Parser.html">Parser</a></li><li><a href="module-workers.Worker.html">Worker</a></li><li><a href="module-workers.WorkerPool.html">WorkerPool</a></li><li><a href="module-workers_packets-CheckInputPacket.html">CheckInputPacket</a></li><li><a href="module-workers_packets-CheckInputResultPacket.html">CheckInputResultPacket</a></li><li><a href="module-workers_packets-CheckPacket.html">CheckPacket</a></li><li><a href="module-workers_packets-CheckResultPacket.html">CheckResultPacket</a></li><li><a href="module-workers_packets-ECSignPacket.html">ECSignPacket</a></li><li><a href="module-workers_packets-ECSignResultPacket.html">ECSignResultPacket</a></li><li><a href="module-workers_packets-ECVerifyPacket.html">ECVerifyPacket</a></li><li><a href="module-workers_packets-ECVerifyResultPacket.html">ECVerifyResultPacket</a></li><li><a href="module-workers_packets-EnvPacket.html">EnvPacket</a></li><li><a href="module-workers_packets-ErrorPacket.html">ErrorPacket</a></li><li><a href="module-workers_packets-ErrorResultPacket.html">ErrorResultPacket</a></li><li><a href="module-workers_packets-EventPacket.html">EventPacket</a></li><li><a href="module-workers_packets-LogPacket.html">LogPacket</a></li><li><a href="module-workers_packets-MinePacket.html">MinePacket</a></li><li><a href="module-workers_packets-MineResultPacket.html">MineResultPacket</a></li><li><a href="module-workers_packets-Packet.html">Packet</a></li><li><a href="module-workers_packets-ScryptPacket.html">ScryptPacket</a></li><li><a href="module-workers_packets-ScryptResultPacket.html">ScryptResultPacket</a></li><li><a href="module-workers_packets-SignInputPacket.html">SignInputPacket</a></li><li><a href="module-workers_packets-SignInputResultPacket.html">SignInputResultPacket</a></li><li><a href="module-workers_packets-SignPacket.html">SignPacket</a></li><li><a href="module-workers_packets-SignResultPacket.html">SignResultPacket</a></li><li><a href="NameDelta.html">NameDelta</a></li><li><a href="NameState.html">NameState</a></li><li><a href="NS.html">NS</a></li><li><a href="Ownership.html">Ownership</a></li><li><a href="Proof.html">Proof</a></li><li><a href="ProofData.html">ProofData</a></li><li><a href="RecursiveServer.html">RecursiveServer</a></li><li><a href="Reserved.html">Reserved</a></li><li><a href="Resource.html">Resource</a></li><li><a href="RootCache.html">RootCache</a></li><li><a href="RootServer.html">RootServer</a></li><li><a href="Seeder.html">Seeder</a></li><li><a href="SlidingWindow.html">SlidingWindow</a></li><li><a href="StateCache.html">StateCache</a></li><li><a href="SymmetricState.html">SymmetricState</a></li><li><a href="SYNTH4.html">SYNTH4</a></li><li><a href="SYNTH6.html">SYNTH6</a></li><li><a href="TXT.html">TXT</a></li><li><a href="WalletNode.html">WalletNode</a></li></ul><h3>Global</h3><ul><li><a href="global.html#bindExit">bindExit</a></li><li><a href="global.html#checksig">checksig</a></li><li><a href="global.html#decode">decode</a></li><li><a href="global.html#encode">encode</a></li><li><a href="global.html#fromFloat">fromFloat</a></li><li><a href="global.html#groupKey">groupKey</a></li><li><a href="global.html#insert">insert</a></li><li><a href="global.html#listenExit">listenExit</a></li><li><a href="global.html#migrationLayout">migrationLayout</a></li><li><a href="global.html#oldLayout">oldLayout</a></li><li><a href="global.html#remove">remove</a></li><li><a href="global.html#search">search</a></li><li><a href="global.html#toFloat">toFloat</a></li><li><a href="global.html#validateKey">validateKey</a></li><li><a href="global.html#validateSignature">validateSignature</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 1.0.0</a> on Fri Jun 24 2022 16:08:43 GMT+0000 (Coordinated Universal Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

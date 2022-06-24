@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Home</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Home</h1>
+
+    
+
+
+
+    
+
+
+    <h3> </h3>
+
+
+
+
+
+
+
+
+
+
+    
+
+
+
+
+    <section>
+        <article><h1>HSD</h1>
+<p><a href="https://github.com/handshake-org/hsd/tree/master"><img src="https://github.com/handshake-org/hsd/workflows/Build/badge.svg" alt="Build Status"></a>
+<a href="https://coveralls.io/github/handshake-org/hsd?branch=master"><img src="https://coveralls.io/repos/github/handshake-org/hsd/badge.svg?branch=master" alt="Coverage Status"></a></p>
+<p><strong>HSD</strong> is an implementation of the <a href="https://handshake.org/">Handshake</a> Protocol.</p>
+<h2>Documentation</h2>
+<ul>
+<li><a href="./docs/install.md">Install guide</a></li>
+<li>Documentation Site: <a href="https://hsd-dev.org">https://hsd-dev.org</a></li>
+<li>API Docs: <a href="https://hsd-dev.org/api-docs">https://hsd-dev.org/api-docs</a></li>
+<li>JSDoc: <a href="https://hsd-dev.org/hsd">https://hsd-dev.org/hsd</a></li>
+</ul>
+<h2>CLI</h2>
+<p>HSD comes with command-line interface tools <code>hsd-cli</code> (to interact with the node
+server) and <code>hsw-cli</code> (to interact with the wallet server). These applications
+are available in <code>./bin</code> (for example the command <code>./bin/hsd-cli info</code> returns
+basic node info). CLI usage in the API docs refers to these applications.</p>
+<p>When <code>hsd</code> is installed globally, CLI commands are available without the path:</p>
+<pre class="prettyprint source"><code>$ hsd-cli info
+</code></pre>
+<p>RPC commands are available with <code>hsd-cli rpc &lt;command&gt;</code> and <code>hsw-cli rpc &lt;command&gt;</code>.
+The shortcuts <code>hsd-rpc</code> and <code>hsw-rpc</code> are available if you install hs-client globally:</p>
+<pre class="prettyprint source"><code>$ npm install -g hs-client
+</code></pre>
+<h2>Contributing</h2>
+<p>Handshake is a community project, we welcome contributions of all kinds from
+everyone. Before opening a pull request, please review the style guide and
+workflow tips in <a href="CONTRIBUTING.md">CONTRIBUTING.md</a>.</p>
+<h2>Quickstart</h2>
+<h3>API</h3>
+<p>Several RPC calls have been exposed in addition to the standard bitcoind-style
+RPC. There is also a RESTful HTTP API with different features. The full node
+and wallet node each run their own API servers on different ports.</p>
+<p>For more details and a complete list of API calls, review the documentation
+at https://hsd-dev.org/api-docs</p>
+<h3>Unbound support</h3>
+<p>HSD currently has a built-in recursive resolver written in javascript, however,
+for the best performance and best DNS conformance, HSD also includes native
+bindings to <code>libunbound</code> -- to make use of this, be sure to have <a href="https://www.nlnetlabs.nl/projects/unbound/download/">unbound</a>
+installed on your system <em>before</em> installing <code>hsd</code>.</p>
+<h3>Booting with a local recursive and authoritative nameserver</h3>
+<p>By default HSD will listen on an authoritative and recursive nameserver (ports
+<code>5349</code> and <code>5350</code> respectively). To configure this:</p>
+<pre class="prettyprint source lang-bash"><code># Have the authoritative server listen on port 5300.
+$ hsd --ns-port 5300
+
+# Have the recursive server listen on port 53.
+$ hsd --rs-host 0.0.0.0 --rs-port 53 # Warning: public!
+</code></pre>
+<p>Your localhost should now be diggable:</p>
+<pre class="prettyprint source lang-bash"><code>$ dig @127.0.0.1 www.ietf.org +dnssec
+$ dig @127.0.0.1 -p 5300 org +dnssec
+</code></pre>
+<h3>Accepting Inbound</h3>
+<p>To accept inbound connections, add the <code>--listen</code> flag.</p>
+<pre class="prettyprint source"><code>$ hsd --listen --max-inbound 50
+</code></pre>
+<p>Note that this will not advertise your address on the p2p network by default.
+In order to notify peers that you are accepting inbound, you <em>must</em> pass
+<code>--public-host</code>.</p>
+<pre class="prettyprint source"><code>$ hsd --listen --public-host [my-public-ip-address] --max-inbound 50
+</code></pre>
+<h3>Mining</h3>
+<p>To mine with a CPU, HSD should be used in combination with <a href="https://github.com/handshake-org/hs-client">hs-client</a>.</p>
+<pre class="prettyprint source lang-bash"><code># To boot and listen publicly on the HTTP server...
+# Optionally pass in a custom coinbase address.
+$ hsd --http-host '::' --api-key 'hunter2' \
+  --coinbase-address 'ts1qsu62stru80svj5xk6mescy65v0lhg8xxtweqsr'
+</code></pre>
+<p>Once HSD is running, we can use <a href="https://github.com/handshake-org/hs-client">hs-client</a> to activate the miner
+using the <code>setgenerate</code> RPC.</p>
+<pre class="prettyprint source lang-bash"><code>$ hsd-rpc --http-host 'my-ip-address' \
+  --api-key 'hunter2' setgenerate true 1
+</code></pre>
+<h3>Airdrop &amp; Faucet</h3>
+<p>Testnet3 now implements a decentralized airdrop &amp; faucet for open source
+developers. See <a href="https://github.com/handshake-org/hs-airdrop">hs-airdrop</a> for instructions on how to redeem coins.</p>
+<h3>Auctions</h3>
+<p>First we should look at the current status of a name we want.</p>
+<pre class="prettyprint source lang-bash"><code>$ hsd-rpc getnameinfo handshake
+</code></pre>
+<p>Once we know the name is available, we can send an &quot;open transaction&quot;, this is
+necessary to start the bidding process. After an open transaction is mined,
+there is a short delay before bidding begins. This delay is necessary to ensure
+the auction's state is inserted into the <a href="https://github.com/handshake-org/urkel">urkel</a> tree.</p>
+<pre class="prettyprint source lang-bash"><code># Attempt to open bidding for `handshake`.
+$ hsw-rpc sendopen handshake
+</code></pre>
+<p>Using <code>getnameinfo</code> we can check to see when bidding will begin. Once the
+auction enters the bidding state, we can send a bid, with a lockup-value to
+conceal our true bid.</p>
+<pre class="prettyprint source lang-bash"><code># Send a bid of 5 coins, with a lockup value of 10 coins.
+# These units are in HNS (1 HNS = 1,000,000 dollarydoos).
+$ hsw-rpc sendbid handshake 5 10
+</code></pre>
+<p>After the appropriate amount of time has passed, (1 day in the case of
+testnet), we should reveal our bid.</p>
+<pre class="prettyprint source lang-bash"><code># Reveal our bid for `handshake`.
+$ hsw-rpc sendreveal handshake
+</code></pre>
+<p>We can continue monitoring the status, now with the wallet's version of
+getnameinfo:</p>
+<pre class="prettyprint source lang-bash"><code>$ hsw-rpc getnameinfo handshake
+# To see other bids and reveals
+$ hsw-rpc getauctioninfo handshake
+</code></pre>
+<p>If we end up losing, we can redeem our money from the covenant with
+<code>$ hsw-rpc sendredeem handshake</code>.</p>
+<p>If we won, we can now register and update the name using <code>sendupdate</code>.</p>
+<pre class="prettyprint source lang-bash"><code>$ hsw-rpc sendupdate handshake \
+  '{&quot;records&quot;:[{&quot;type&quot;:&quot;GLUE4&quot;,&quot;ns&quot;:&quot;ns1.example.com.&quot;,&quot;address&quot;:&quot;127.0.0.1&quot;}]}'
+</code></pre>
+<p>Note that the <code>ns</code> field's <code>domain@ip</code> format symbolizes glue.</p>
+<p>Expiration on testnet is around 30 days, so be sure to send a renewal soon!</p>
+<pre class="prettyprint source lang-bash"><code>$ hsw-rpc sendrenewal handshake
+</code></pre>
+<h3>Claiming a name</h3>
+<p>If you own a name in the existing root zone or the Alexa top 100k, your name is
+waiting for you on the blockchain. You are able to claim it by publishing a
+<em>DNSSEC ownership proof</em> -- a cryptographic proof that you own the name on
+ICANN's system.</p>
+<p>Your name <em>must</em> have a valid DNSSEC setup in order for the claim to be
+created. If you do not have DNSSEC set up, don't worry -- you can set it up
+<em>after</em> the handshake blockchain launches and proofs will still be accepted
+retroactively. Here's some useful guides for setting DNSSEC up on popular DNS
+services:</p>
+<ul>
+<li>Namecheap: https://www.namecheap.com/support/knowledgebase/subcategory.aspx/2232/dnssec</li>
+<li>GoDaddy: https://www.godaddy.com/help/dnssec-faq-6135</li>
+<li>Gandi: https://wiki.gandi.net/en/domains/dnssec</li>
+<li>Name.com: https://www.name.com/support/articles/205439058-Managing-DNSSEC</li>
+<li>Hover: https://help.hover.com/hc/en-us/articles/217281647-Understanding-and-managing-DNSSEC</li>
+<li>Cloudflare: https://support.cloudflare.com/hc/en-us/articles/209114378</li>
+</ul>
+<p>If you run your own nameserver, you're going to need some tools for managing
+keys and signing your zonefile. BIND has a number of command-line tools for
+accomplishing this:</p>
+<ul>
+<li>https://linux.die.net/man/8/dnssec-keygen</li>
+<li>https://linux.die.net/man/8/dnssec-dsfromkey</li>
+<li>https://linux.die.net/man/8/dnssec-signzone</li>
+</ul>
+<hr>
+<p>First, we need to create a TXT record which we will sign in our zone (say we
+own example.com for instance):</p>
+<pre class="prettyprint source lang-bash"><code>$ hsw-rpc createclaim example
+{
+  &quot;name&quot;: &quot;example&quot;,
+  &quot;target&quot;: &quot;example.com.&quot;,
+  &quot;value&quot;: 1133761643,
+  &quot;size&quot;: 3583,
+  &quot;fee&quot;: 17900,
+  &quot;address&quot;: &quot;ts1qd6u7vhu084494kf9cejkp4qel69vsk82takamu&quot;,
+  &quot;txt&quot;: &quot;hns-testnet:aakbvmygsp7rrhmsauhwlnwx6srd5m2v4m3p3eidadl5yn2f&quot;
+}
+</code></pre>
+<p>The <code>txt</code> field is what we need: it includes a commitment to a handshake
+address we want the name to be associated with, along with a fee that we're
+willing to pay the miner to mine our claim. This TXT record must be added to
+our name's zone file and signed:</p>
+<pre class="prettyprint source lang-zone"><code>...
+example.com. 1800 IN TXT &quot;hns-testnet:aakbvmygsp7rrhmsauhwlnwx6srd5m2v4m3p3eidadl5yn2f&quot;
+example.com. 1800 IN RRSIG TXT 5 2 1800 20190615140933 20180615131108 ...
+</code></pre>
+<p>The RR name of the TXT record (<code>example.com.</code> in this case) <em>must</em> be equal
+to the name shown in the <code>target</code> field output by <code>createclaim</code> (note: case
+insensitive). Note that DNSSEC ownership proofs are a stricter subset of DNSSEC
+proofs: your parent zones must operate through a series of typical <code>DS-&gt;DNSKEY</code>
+referrals. No CNAMEs or wildcards are allowed, and each label separation (<code>.</code>)
+must behave like a zone cut (with an appropriate child zone referral).</p>
+<p>The ZSK which signs our TXT record must be signed by our zone's KSK. As per the
+typical DNSSEC setup, our zone's KSK must be committed as a DS record in the
+parent zone.</p>
+<p>The final proof is an aggregation of all signed DNS referrals plus our signed
+TXT record (<a href="https://github.com/handshake-org/hsd/blob/master/test/data/ownership-cloudflare.zone">example here</a>).</p>
+<p>Once our proof is published on the DNS layer, we can use <code>sendclaim</code> to crawl
+the relevant zones and create the proof.</p>
+<pre class="prettyprint source lang-bash"><code>$ hsw-rpc sendclaim example
+</code></pre>
+<p>This will create and broadcast the proof to all of your peers, ultimately
+ending up in a miner's mempool. Your claim should be mined within 5-20 minutes.
+Once the transaction is mined, you must wait about 30 days (4,320 blocks) before your claim is considered
+&quot;mature&quot;.</p>
+<p>Once the claim has reached maturity, you are able to bypass the auction process
+by calling <code>sendupdate</code> on your claimed name.</p>
+<pre class="prettyprint source lang-bash"><code>$ hsw-rpc sendupdate example \
+  '{&quot;ttl&quot;:3600,&quot;canonical&quot;:&quot;icanhazip.com.&quot;}'
+</code></pre>
+<h4>Creating a proof by hand</h4>
+<p>If you already have DNSSEC setup, you can avoid publishing a TXT record
+publicly by creating the proof locally. This requires that you have direct
+access to your zone-signing keys. The private keys themselves must be stored in
+BIND's private key format and naming convention.</p>
+<p>We use <a href="https://github.com/chjj/bns">bns</a> for this task, which includes a command-line tool for creating
+ownership proofs.</p>
+<pre class="prettyprint source lang-bash"><code>$ npm install bns
+$ bns-prove -b -K /path/to/keys example.com. \
+  'hns-testnet:aakbvmygsp7rrhmsauhwlnwx6srd5m2v4m3p3eidadl5yn2f'
+</code></pre>
+<p>The above will output a base64 string which can then be passed to the RPC:</p>
+<pre class="prettyprint source lang-bash"><code>$ hsd-rpc sendrawclaim 'base64-string'
+</code></pre>
+<h2>Support</h2>
+<p>Join us on <a href="https://libera.chat/">libera</a> in the <a href="https://web.libera.chat#handshake">#handshake</a> channel.</p>
+<h2>Disclaimer</h2>
+<p>HSD does not guarantee you against theft or lost funds due to bugs, mishaps,
+or your own incompetence. You and you alone are responsible for securing your
+money.</p>
+<h2>Contribution and License Agreement</h2>
+<p>If you contribute code to this project, you are implicitly allowing your code
+to be distributed under the MIT license. You are also implicitly verifying that
+all code is your original work. <code>&lt;/legalese&gt;</code></p>
+<h2>License</h2>
+<p>MIT License.</p>
+<h3>Bcoin</h3>
+<ul>
+<li>Copyright (c) 2014-2015, Fedor Indutny (https://github.com/indutny)</li>
+<li>Copyright (c) 2014-2018, Christopher Jeffrey (https://github.com/chjj)</li>
+<li>Copyright (c) 2014-2018, Bcoin Contributors (https://github.com/bcoin-org)</li>
+</ul>
+<h3>HSD</h3>
+<ul>
+<li>Copyright (c) 2017-2018, Christopher Jeffrey (https://github.com/chjj)</li>
+<li>Copyright (c) 2018, Handshake Contributors (https://github.com/handshake-org)</li>
+</ul>
+<p>See LICENSE for more info.</p></article>
+    </section>
+
+
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-blockchain.html">blockchain</a></li><li><a href="module-blockchain_common.html">blockchain/common</a></li><li><a href="module-blockstore.html">blockstore</a></li><li><a href="module-blockstore_common.html">blockstore/common</a></li><li><a href="module-blockstore_records.html">blockstore/records</a></li><li><a href="module-coins.html">coins</a></li><li><a href="module-covenants.html">covenants</a></li><li><a href="module-dns_common.html">dns/common</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-hd.html">hd</a></li><li><a href="module-hsd.html">hsd</a></li><li><a href="module-mempool.html">mempool</a></li><li><a href="module-mining.html">mining</a></li><li><a href="module-mining_common.html">mining/common</a></li><li><a href="module-net.html">net</a></li><li><a href="module-net_bip152.html">net/bip152</a></li><li><a href="module-net_common.html">net/common</a></li><li><a href="module-net_packets.html">net/packets</a></li><li><a href="module-node.html">node</a></li><li><a href="module-primitives.html">primitives</a></li><li><a href="module-protocol.html">protocol</a></li><li><a href="module-protocol_consensus.html">protocol/consensus</a></li><li><a href="module-protocol_errors.html">protocol/errors</a></li><li><a href="module-protocol_networks.html">protocol/networks</a></li><li><a href="module-protocol_policy.html">protocol/policy</a></li><li><a href="module-script.html">script</a></li><li><a href="module-script_common.html">script/common</a></li><li><a href="module-ui.html">ui</a></li><li><a href="module-utils.html">utils</a></li><li><a href="module-utils_util.html">utils/util</a></li><li><a href="module-wallet.html">wallet</a></li><li><a href="module-wallet_common.html">wallet/common</a></li><li><a href="module-wallet_plugin.html">wallet/plugin</a></li><li><a href="module-wallet_records.html">wallet/records</a></li><li><a href="module-workers.html">workers</a></li><li><a href="module-workers_jobs.html">workers/jobs</a></li><li><a href="module-workers_packets.html">workers/packets</a></li></ul><h3>Classes</h3><ul><li><a href="AirdropKey.html">AirdropKey</a></li><li><a href="AirdropProof.html">AirdropProof</a></li><li><a href="BidReveal.html">BidReveal</a></li><li><a href="BitField.html">BitField</a></li><li><a href="BitView.html">BitView</a></li><li><a href="BlindBid.html">BlindBid</a></li><li><a href="BlindValue.html">BlindValue</a></li><li><a href="BlockProof.html">BlockProof</a></li><li><a href="Brontide.html">Brontide</a></li><li><a href="BrontideStream.html">BrontideStream</a></li><li><a href="ChainFlags.html">ChainFlags</a></li><li><a href="ChainState.html">ChainState</a></li><li><a href="CipherState.html">CipherState</a></li><li><a href="Claim.html">Claim</a></li><li><a href="DetailsMember.html">DetailsMember</a></li><li><a href="DS.html">DS</a></li><li><a href="Field.html">Field</a></li><li><a href="GLUE4.html">GLUE4</a></li><li><a href="GLUE6.html">GLUE6</a></li><li><a href="HandshakeState.html">HandshakeState</a></li><li><a href="HashList.html">HashList</a></li><li><a href="MigrateBlockStore.html">MigrateBlockStore</a></li><li><a href="MigrateChainState.html">MigrateChainState</a></li><li><a href="MigrateChangeAddress.html">MigrateChangeAddress</a></li><li><a href="MigrateMigrations.html">MigrateMigrations</a></li><li><a href="MigrateTreeState.html">MigrateTreeState</a></li><li><a href="module.migrations.MigrationState.html">MigrationState</a></li><li><a href="module-blockchain.Chain.html">Chain</a></li><li><a href="module-blockchain.ChainDB.html">ChainDB</a></li><li><a href="module-blockchain.ChainEntry.html">ChainEntry</a></li><li><a href="module-blockchain.ChainMigrator.html">ChainMigrator</a></li><li><a href="module-blockchain.ChainMigratorOptions.html">ChainMigratorOptions</a></li><li><a href="module-blockchain.ChainOptions.html">ChainOptions</a></li><li><a href="module-blockchain.DeploymentState.html">DeploymentState</a></li><li><a href="module-blockchain.WalletMigrationResult.html">WalletMigrationResult</a></li><li><a href="module-blockchain.WalletMigrator.html">WalletMigrator</a></li><li><a href="module-blockstore.AbstractBatch.html">AbstractBatch</a></li><li><a href="module-blockstore.AbstractBlockStore.html">AbstractBlockStore</a></li><li><a href="module-blockstore.FileBatch.html">FileBatch</a></li><li><a href="module-blockstore.LevelBatch.html">LevelBatch</a></li><li><a href="module-blockstore_records-BlockRecord.html">BlockRecord</a></li><li><a href="module-blockstore_records-FileRecord.html">FileRecord</a></li><li><a href="module-blockstore_FileBlockStore.html">blockstore:FileBlockStore</a></li><li><a href="module-blockstore_LevelBlockStore.html">blockstore:LevelBlockStore</a></li><li><a href="module-coins.CoinEntry.html">CoinEntry</a></li><li><a href="module-coins.Coins.html">Coins</a></li><li><a href="module-coins.CoinView.html">CoinView</a></li><li><a href="module-coins.UndoCoins.html">UndoCoins</a></li><li><a href="module-currency.Amount.html">Amount</a></li><li><a href="module-errors-CriticalError.html">CriticalError</a></li><li><a href="module-hd.Mnemonic.html">Mnemonic</a></li><li><a href="module-hd.PrivateKey.html">PrivateKey</a></li><li><a href="module-hd.PublicKey.html">PublicKey</a></li><li><a href="module-http.HTTPOptions.html">HTTPOptions</a></li><li><a href="module-http.RPC.html">RPC</a></li><li><a href="module-http.Server.html">Server</a></li><li><a href="module-http.TransactionOptions.html">TransactionOptions</a></li><li><a href="module-mempool.AirdropEntry.html">AirdropEntry</a></li><li><a href="module-mempool.ClaimEntry.html">ClaimEntry</a></li><li><a href="module-mempool.ConfirmStats.html">ConfirmStats</a></li><li><a href="module-mempool.Mempool.html">Mempool</a></li><li><a href="module-mempool.MempoolEntry.html">MempoolEntry</a></li><li><a href="module-mempool.MempoolOptions.html">MempoolOptions</a></li><li><a href="module-mempool.PolicyEstimator.html">PolicyEstimator</a></li><li><a href="module-migrations.AbstractMigration.html">AbstractMigration</a></li><li><a href="module-migrations.MigrationResult.html">MigrationResult</a></li><li><a href="module-migrations.Migrator.html">Migrator</a></li><li><a href="module-mining.BlockAirdrop.html">BlockAirdrop</a></li><li><a href="module-mining.BlockClaim.html">BlockClaim</a></li><li><a href="module-mining.BlockEntry.html">BlockEntry</a></li><li><a href="module-mining.BlockTemplate.html">BlockTemplate</a></li><li><a href="module-mining.CPUMiner.html">CPUMiner</a></li><li><a href="module-mining.Miner.html">Miner</a></li><li><a href="module-mining.MinerOptions.html">MinerOptions</a></li><li><a href="module-net.BroadcastItem.html">BroadcastItem</a></li><li><a href="module-net.Framer.html">Framer</a></li><li><a href="module-net.HostEntry.html">HostEntry</a></li><li><a href="module-net.HostList.html">HostList</a></li><li><a href="module-net.HostListOptions.html">HostListOptions</a></li><li><a href="module-net.LocalAddress.html">LocalAddress</a></li><li><a href="module-net.NetAddress.html">NetAddress</a></li><li><a href="module-net.Parser.html">Parser</a></li><li><a href="module-net.Peer.html">Peer</a></li><li><a href="module-net.PeerList.html">PeerList</a></li><li><a href="module-net.PeerOptions.html">PeerOptions</a></li><li><a href="module-net.Pool.html">Pool</a></li><li><a href="module-net.PoolOptions.html">PoolOptions</a></li><li><a href="module-net_bip152-CompactBlock.html">CompactBlock</a></li><li><a href="module-net_bip152-TXRequest.html">TXRequest</a></li><li><a href="module-net_bip152-TXResponse.html">TXResponse</a></li><li><a href="module-net_packets-AddrPacket.html">AddrPacket</a></li><li><a href="module-net_packets-AirdropPacket.html">AirdropPacket</a></li><li><a href="module-net_packets-BlockPacket.html">BlockPacket</a></li><li><a href="module-net_packets-BlockTxnPacket.html">BlockTxnPacket</a></li><li><a href="module-net_packets-ClaimPacket.html">ClaimPacket</a></li><li><a href="module-net_packets-CmpctBlockPacket.html">CmpctBlockPacket</a></li><li><a href="module-net_packets-FeeFilterPacket.html">FeeFilterPacket</a></li><li><a href="module-net_packets-FilterAddPacket.html">FilterAddPacket</a></li><li><a href="module-net_packets-FilterClearPacket.html">FilterClearPacket</a></li><li><a href="module-net_packets-FilterLoadPacket.html">FilterLoadPacket</a></li><li><a href="module-net_packets-GetAddrPacket.html">GetAddrPacket</a></li><li><a href="module-net_packets-GetBlocksPacket.html">GetBlocksPacket</a></li><li><a href="module-net_packets-GetBlockTxnPacket.html">GetBlockTxnPacket</a></li><li><a href="module-net_packets-GetDataPacket.html">GetDataPacket</a></li><li><a href="module-net_packets-GetHeadersPacket.html">GetHeadersPacket</a></li><li><a href="module-net_packets-GetProofPacket.html">GetProofPacket</a></li><li><a href="module-net_packets-HeadersPacket.html">HeadersPacket</a></li><li><a href="module-net_packets-InvPacket.html">InvPacket</a></li><li><a href="module-net_packets-MempoolPacket.html">MempoolPacket</a></li><li><a href="module-net_packets-MerkleBlockPacket.html">MerkleBlockPacket</a></li><li><a href="module-net_packets-NotFoundPacket.html">NotFoundPacket</a></li><li><a href="module-net_packets-Packet.html">Packet</a></li><li><a href="module-net_packets-PingPacket.html">PingPacket</a></li><li><a href="module-net_packets-PongPacket.html">PongPacket</a></li><li><a href="module-net_packets-ProofPacket.html">ProofPacket</a></li><li><a href="module-net_packets-RejectPacket.html">RejectPacket</a></li><li><a href="module-net_packets-SendCmpctPacket.html">SendCmpctPacket</a></li><li><a href="module-net_packets-SendHeadersPacket.html">SendHeadersPacket</a></li><li><a href="module-net_packets-TXPacket.html">TXPacket</a></li><li><a href="module-net_packets-UnknownPacket.html">UnknownPacket</a></li><li><a href="module-net_packets-VerackPacket.html">VerackPacket</a></li><li><a href="module-net_packets-VersionPacket.html">VersionPacket</a></li><li><a href="module-node.FullNode.html">FullNode</a></li><li><a href="module-node.Node.html">Node</a></li><li><a href="module-node.NodeClient.html">NodeClient</a></li><li><a href="module-node.NullClient.html">NullClient</a></li><li><a href="module-node.SPVNode.html">SPVNode</a></li><li><a href="module-primitives.AbstractBlock.html">AbstractBlock</a></li><li><a href="module-primitives.Address.html">Address</a></li><li><a href="module-primitives.Block.html">Block</a></li><li><a href="module-primitives.Coin.html">Coin</a></li><li><a href="module-primitives.CoinSelector.html">CoinSelector</a></li><li><a href="module-primitives.Covenant.html">Covenant</a></li><li><a href="module-primitives.Headers.html">Headers</a></li><li><a href="module-primitives.Input.html">Input</a></li><li><a href="module-primitives.InvItem.html">InvItem</a></li><li><a href="module-primitives.KeyRing.html">KeyRing</a></li><li><a href="module-primitives.MemBlock.html">MemBlock</a></li><li><a href="module-primitives.MerkleBlock.html">MerkleBlock</a></li><li><a href="module-primitives.MTX.html">MTX</a></li><li><a href="module-primitives.Outpoint.html">Outpoint</a></li><li><a href="module-primitives.Output.html">Output</a></li><li><a href="module-primitives.TX.html">TX</a></li><li><a href="module-primitives.TXMeta.html">TXMeta</a></li><li><a href="module-protocol.Network.html">Network</a></li><li><a href="module-protocol.TimeData.html">TimeData</a></li><li><a href="module-protocol_errors-VerifyError.html">VerifyError</a></li><li><a href="module-script.Opcode.html">Opcode</a></li><li><a href="module-script.Script.html">Script</a></li><li><a href="module-script.ScriptError.html">ScriptError</a></li><li><a href="module-script.ScriptNum.html">ScriptNum</a></li><li><a href="module-script.SigCache.html">SigCache</a></li><li><a href="module-script.Stack.html">Stack</a></li><li><a href="module-script.Witness.html">Witness</a></li><li><a href="module-ui.URI.html">URI</a></li><li><a href="module-wallet.Account.html">Account</a></li><li><a href="module-wallet.Balance.html">Balance</a></li><li><a href="module-wallet.BlockRecord.html">BlockRecord</a></li><li><a href="module-wallet.Credit.html">Credit</a></li><li><a href="module-wallet.Details.html">Details</a></li><li><a href="module-wallet.HTTP.html">HTTP</a></li><li><a href="module-wallet.MasterKey.html">MasterKey</a></li><li><a href="module-wallet.Path.html">Path</a></li><li><a href="module-wallet.Paths.html">Paths</a></li><li><a href="module-wallet.RPC.html">RPC</a></li><li><a href="module-wallet.TXDB.html">TXDB</a></li><li><a href="module-wallet.Wallet.html">Wallet</a></li><li><a href="module-wallet.WalletCoinView.html">WalletCoinView</a></li><li><a href="module-wallet.WalletDB.html">WalletDB</a></li><li><a href="module-wallet.WalletKey.html">WalletKey</a></li><li><a href="module-wallet.WalletMigratorOptions.html">WalletMigratorOptions</a></li><li><a href="module-wallet.WalletOptions.html">WalletOptions</a></li><li><a href="module-wallet_plugin-Plugin.html">Plugin</a></li><li><a href="module-wallet_records-BlockMeta.html">BlockMeta</a></li><li><a href="module-wallet_records-ChainState.html">ChainState</a></li><li><a href="module-wallet_records-MapRecord.html">MapRecord</a></li><li><a href="module-wallet_records-TXRecord.html">TXRecord</a></li><li><a href="module-workers.Framer.html">Framer</a></li><li><a href="module-workers.Master.html">Master</a></li><li><a href="module-workers.Parent.html">Parent</a></li><li><a href="module-workers.Parser.html">Parser</a></li><li><a href="module-workers.Worker.html">Worker</a></li><li><a href="module-workers.WorkerPool.html">WorkerPool</a></li><li><a href="module-workers_packets-CheckInputPacket.html">CheckInputPacket</a></li><li><a href="module-workers_packets-CheckInputResultPacket.html">CheckInputResultPacket</a></li><li><a href="module-workers_packets-CheckPacket.html">CheckPacket</a></li><li><a href="module-workers_packets-CheckResultPacket.html">CheckResultPacket</a></li><li><a href="module-workers_packets-ECSignPacket.html">ECSignPacket</a></li><li><a href="module-workers_packets-ECSignResultPacket.html">ECSignResultPacket</a></li><li><a href="module-workers_packets-ECVerifyPacket.html">ECVerifyPacket</a></li><li><a href="module-workers_packets-ECVerifyResultPacket.html">ECVerifyResultPacket</a></li><li><a href="module-workers_packets-EnvPacket.html">EnvPacket</a></li><li><a href="module-workers_packets-ErrorPacket.html">ErrorPacket</a></li><li><a href="module-workers_packets-ErrorResultPacket.html">ErrorResultPacket</a></li><li><a href="module-workers_packets-EventPacket.html">EventPacket</a></li><li><a href="module-workers_packets-LogPacket.html">LogPacket</a></li><li><a href="module-workers_packets-MinePacket.html">MinePacket</a></li><li><a href="module-workers_packets-MineResultPacket.html">MineResultPacket</a></li><li><a href="module-workers_packets-Packet.html">Packet</a></li><li><a href="module-workers_packets-ScryptPacket.html">ScryptPacket</a></li><li><a href="module-workers_packets-ScryptResultPacket.html">ScryptResultPacket</a></li><li><a href="module-workers_packets-SignInputPacket.html">SignInputPacket</a></li><li><a href="module-workers_packets-SignInputResultPacket.html">SignInputResultPacket</a></li><li><a href="module-workers_packets-SignPacket.html">SignPacket</a></li><li><a href="module-workers_packets-SignResultPacket.html">SignResultPacket</a></li><li><a href="NameDelta.html">NameDelta</a></li><li><a href="NameState.html">NameState</a></li><li><a href="NS.html">NS</a></li><li><a href="Ownership.html">Ownership</a></li><li><a href="Proof.html">Proof</a></li><li><a href="ProofData.html">ProofData</a></li><li><a href="RecursiveServer.html">RecursiveServer</a></li><li><a href="Reserved.html">Reserved</a></li><li><a href="Resource.html">Resource</a></li><li><a href="RootCache.html">RootCache</a></li><li><a href="RootServer.html">RootServer</a></li><li><a href="Seeder.html">Seeder</a></li><li><a href="SlidingWindow.html">SlidingWindow</a></li><li><a href="StateCache.html">StateCache</a></li><li><a href="SymmetricState.html">SymmetricState</a></li><li><a href="SYNTH4.html">SYNTH4</a></li><li><a href="SYNTH6.html">SYNTH6</a></li><li><a href="TXT.html">TXT</a></li><li><a href="WalletNode.html">WalletNode</a></li></ul><h3>Global</h3><ul><li><a href="global.html#bindExit">bindExit</a></li><li><a href="global.html#checksig">checksig</a></li><li><a href="global.html#decode">decode</a></li><li><a href="global.html#encode">encode</a></li><li><a href="global.html#fromFloat">fromFloat</a></li><li><a href="global.html#groupKey">groupKey</a></li><li><a href="global.html#insert">insert</a></li><li><a href="global.html#listenExit">listenExit</a></li><li><a href="global.html#migrationLayout">migrationLayout</a></li><li><a href="global.html#oldLayout">oldLayout</a></li><li><a href="global.html#remove">remove</a></li><li><a href="global.html#search">search</a></li><li><a href="global.html#toFloat">toFloat</a></li><li><a href="global.html#validateKey">validateKey</a></li><li><a href="global.html#validateSignature">validateSignature</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 1.0.0</a> on Fri Jun 24 2022 16:08:43 GMT+0000 (Coordinated Universal Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

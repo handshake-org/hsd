@@ -1,0 +1,2687 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: wallet/walletdb.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: wallet/walletdb.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/*!
+ * walletdb.js - storage for wallets
+ * Copyright (c) 2017-2018, Christopher Jeffrey (MIT License).
+ * https://github.com/handshake-org/hsd
+ */
+
+'use strict';
+
+const assert = require('bsert');
+const path = require('path');
+const EventEmitter = require('events');
+const bio = require('bufio');
+const {BloomFilter} = require('bfilter');
+const {Lock, MapLock} = require('bmutex');
+const bdb = require('bdb');
+const Logger = require('blgr');
+const {safeEqual} = require('bcrypto/lib/safe');
+const aes = require('bcrypto/lib/aes');
+const Network = require('../protocol/network');
+const Path = require('./path');
+const common = require('./common');
+const Wallet = require('./wallet');
+const Account = require('./account');
+const Outpoint = require('../primitives/outpoint');
+const layouts = require('./layout');
+const records = require('./records');
+const NullClient = require('./nullclient');
+const WalletMigrator = require('./migrations');
+const layout = layouts.wdb;
+const tlayout = layouts.txdb;
+const {states} = require('../covenants/namestate');
+
+const {
+  ChainState,
+  BlockMeta,
+  TXRecord,
+  MapRecord
+} = records;
+
+/**
+ * WalletDB
+ * @alias module:wallet.WalletDB
+ * @extends EventEmitter
+ */
+
+class WalletDB extends EventEmitter {
+  /**
+   * Create a wallet db.
+   * @constructor
+   * @param {Object} options
+   */
+
+  constructor(options) {
+    super();
+
+    this.options = new WalletOptions(options);
+
+    this.network = this.options.network;
+    this.logger = this.options.logger.context('wallet');
+    this.workers = this.options.workers;
+    this.client = this.options.client || new NullClient(this);
+    this.feeRate = this.options.feeRate;
+    this.db = bdb.create(this.options);
+    this.name = 'wallet';
+    this.version = 1;
+
+    this.primary = null;
+    this.state = new ChainState();
+    this.confirming = false;
+    this.height = 0;
+    this.wallets = new Map();
+    this.depth = 0;
+    this.rescanning = false;
+    this.filterSent = false;
+
+    // Wallet read lock.
+    this.readLock = new MapLock();
+
+    // Wallet write lock (creation and rename).
+    this.writeLock = new Lock();
+
+    // Lock for handling anything tx related.
+    this.txLock = new Lock();
+
+    // Address and outpoint filter.
+    this.filter = new BloomFilter();
+
+    this.init();
+  }
+
+  /**
+   * Initialize walletdb.
+   * @private
+   */
+
+  init() {
+    let items = 3000000;
+    let flag = -1;
+
+    // Highest number of items with an
+    // FPR of 0.001. We have to do this
+    // by hand because BloomFilter.fromRate's
+    // policy limit enforcing is fairly
+    // naive.
+    if (this.options.spv) {
+      items = 20000;
+      flag = BloomFilter.flags.ALL;
+    }
+
+    this.filter = BloomFilter.fromRate(items, 0.001, flag);
+    this._bind();
+  }
+
+  /**
+   * Bind to node events.
+   * @private
+   */
+
+  _bind() {
+    this.client.on('error', (err) => {
+      this.emit('error', err);
+    });
+
+    this.client.on('connect', async () => {
+      try {
+        await this.syncNode();
+      } catch (e) {
+        this.emit('error', e);
+      }
+    });
+
+    this.client.on('disconnect', async () => {
+      this.filterSent = false;
+    });
+
+    this.client.bind('block connect', async (entry, txs) => {
+      try {
+        await this.addBlock(entry, txs);
+      } catch (e) {
+        this.emit('error', e);
+      }
+    });
+
+    this.client.bind('block disconnect', async (entry) => {
+      try {
+        await this.removeBlock(entry);
+      } catch (e) {
+        this.emit('error', e);
+      }
+    });
+
+    this.client.hook('block rescan', async (entry, txs) => {
+      try {
+        await this.rescanBlock(entry, txs);
+      } catch (e) {
+        this.emit('error', e);
+      }
+    });
+
+    this.client.bind('tx', async (tx) => {
+      try {
+        await this.addTX(tx);
+      } catch (e) {
+        this.emit('error', e);
+      }
+    });
+
+    this.client.bind('chain reset', async (tip) => {
+      try {
+        await this.resetChain(tip);
+      } catch (e) {
+        this.emit('error', e);
+      }
+    });
+  }
+
+  /**
+   * Open the walletdb, wait for the database to load.
+   * @returns {Promise}
+   */
+
+  async open() {
+    this.logger.info('Opening WalletDB...');
+    await this.db.open();
+
+    const migrator = new WalletMigrator({
+      ...this.options,
+      walletDB: this,
+      dbVersion: this.version
+    });
+
+    const migrationResult = await migrator.migrate();
+
+    await this.db.verify(layout.V.encode(), this.name, this.version);
+    await this.verifyNetwork();
+
+    this.depth = await this.getDepth();
+
+    if (this.options.wipeNoReally)
+      await this.wipe();
+
+    await this.watch();
+    await this.connect();
+
+    this.logger.info(
+      'WalletDB loaded (depth=%d, height=%d, start=%d).',
+      this.depth,
+      this.state.height,
+      this.state.startHeight);
+
+    const wallet = await this.ensure({
+      id: 'primary'
+    });
+
+    const addr = await wallet.receiveAddress();
+
+    this.logger.info(
+      'Loaded primary wallet (id=%s, wid=%d, address=%s)',
+      wallet.id, wallet.wid, addr.toString(this.network));
+
+    this.primary = wallet;
+
+    if (migrationResult.rescan) {
+      this.logger.info('Rescanning...');
+      await this.scan(0);
+    }
+
+    await this.checkLookahead();
+  }
+
+  /**
+   * Write chaindb version.
+   * @param {Batch} b
+   * @param {Number} version
+   */
+
+  writeVersion(b, version) {
+    const value = Buffer.alloc(this.name.length + 4);
+
+    value.write(this.name, 0, 'ascii');
+    value.writeUInt32LE(version, this.name.length);
+
+    b.put(layout.V.encode(), value);
+  }
+
+  /**
+   * Update account lookahead &amp; depth
+   * @returns {Promise}
+   */
+
+   async checkLookahead() {
+    if (!this.options.checkLookahead)
+      return;
+
+    const b = this.db.batch();
+
+    const wids = await this.db.keys({
+      gte: layout.W.min(),
+      lte: layout.W.max(),
+      parse: key => layout.W.decode(key)[0]
+    });
+
+    for (const wid of wids) {
+      const wallet = await this.get(wid);
+
+      for (let i = 0; i &lt; wallet.accountDepth; i++) {
+        this.logger.warning(
+          'Setting lookahead for wallet %s account %d',
+          wallet.id,
+          i
+        );
+        const account = await wallet.getAccount(i);
+        await account.setLookahead(b, Account.MAX_LOOKAHEAD);
+      }
+    }
+
+    await b.write();
+   }
+
+  /**
+   * Verify network.
+   * @returns {Promise}
+   */
+
+  async verifyNetwork() {
+    const raw = await this.db.get(layout.O.encode());
+
+    if (!raw) {
+      const b = this.db.batch();
+      b.put(layout.O.encode(), fromU32(this.network.magic));
+      return b.write();
+    }
+
+    const magic = raw.readUInt32LE(0, true);
+
+    if (magic !== this.network.magic)
+      throw new Error('Network mismatch for WalletDB.');
+
+    return undefined;
+  }
+
+  /**
+   * Close the walletdb, wait for the database to close.
+   * @returns {Promise}
+   */
+
+  async close() {
+    await this.disconnect();
+
+    for (const wallet of this.wallets.values()) {
+      await wallet.destroy();
+      this.unregister(wallet);
+    }
+
+    return this.db.close();
+  }
+
+  /**
+   * Watch addresses and outpoints.
+   * @private
+   * @returns {Promise}
+   */
+
+  async watch() {
+    const piter = this.db.iterator({
+      gte: layout.p.min(),
+      lte: layout.p.max()
+    });
+
+    let hashes = 0;
+
+    await piter.each((key) => {
+      const [data] = layout.p.decode(key);
+
+      this.filter.add(data);
+
+      hashes += 1;
+    });
+
+    this.logger.info('Added %d hashes to WalletDB filter.', hashes);
+
+    const oiter = this.db.iterator({
+      gte: layout.o.min(),
+      lte: layout.o.max()
+    });
+
+    let outpoints = 0;
+
+    await oiter.each((key) => {
+      const [hash, index] = layout.o.decode(key);
+      const outpoint = new Outpoint(hash, index);
+      const data = outpoint.encode();
+
+      this.filter.add(data);
+
+      outpoints += 1;
+    });
+
+    this.logger.info('Added %d outpoints to WalletDB filter.', outpoints);
+
+    const niter = this.db.iterator({
+      gte: layout.N.min(),
+      lte: layout.N.max()
+    });
+
+    let names = 0;
+
+    await niter.each((key) => {
+      const [data] = layout.N.decode(key);
+
+      this.filter.add(data);
+
+      names += 1;
+    });
+
+    this.logger.info('Added %d names to WalletDB filter.', names);
+  }
+
+  /**
+   * Connect to the node server (client required).
+   * @returns {Promise}
+   */
+
+  async connect() {
+    return this.client.open();
+  }
+
+  /**
+   * Disconnect from node server (client required).
+   * @returns {Promise}
+   */
+
+  async disconnect() {
+    return this.client.close();
+  }
+
+  /**
+   * Sync state with server on every connect.
+   * @returns {Promise}
+   */
+
+  async syncNode() {
+    const unlock = await this.txLock.lock();
+    try {
+      this.logger.info('Resyncing from server...');
+      await this.syncState();
+      await this.syncFilter();
+      await this.syncChain();
+      await this.resend();
+    } finally {
+      unlock();
+    }
+  }
+
+  /**
+   * Initialize and write initial sync state.
+   * @returns {Promise}
+   */
+
+  async syncState() {
+    const cache = await this.getState();
+
+    if (cache) {
+      this.state = cache;
+      this.height = cache.height;
+      return undefined;
+    }
+
+    this.logger.info('Initializing database state from server.');
+
+    const b = this.db.batch();
+    const hashes = await this.client.getHashes();
+
+    let tip = null;
+
+    for (let height = 0; height &lt; hashes.length; height++) {
+      const hash = hashes[height];
+      const meta = new BlockMeta(hash, height);
+      b.put(layout.h.encode(height), meta.toHash());
+      tip = meta;
+    }
+
+    assert(tip);
+
+    const state = this.state.clone();
+    state.startHeight = tip.height;
+    state.startHash = tip.hash;
+    state.height = tip.height;
+    state.marked = false;
+
+    b.put(layout.R.encode(), state.encode());
+
+    await b.write();
+
+    this.state = state;
+    this.height = state.height;
+
+    return undefined;
+  }
+
+  /**
+   * Connect and sync with the chain server.
+   * @private
+   * @returns {Promise}
+   */
+
+  async syncChain() {
+    let height = this.state.height;
+
+    this.logger.info('Syncing state from height %d.', height);
+
+    for (;;) {
+      const tip = await this.getBlock(height);
+      assert(tip);
+
+      if (await this.client.getEntry(tip.hash))
+        break;
+
+      assert(height !== 0);
+      height -= 1;
+    }
+
+    return this.scan(height);
+  }
+
+  /**
+   * Rescan blockchain from a given height.
+   * @private
+   * @param {Number?} height
+   * @returns {Promise}
+   */
+
+  async scan(height) {
+    if (height == null)
+      height = this.state.startHeight;
+
+    assert((height >>> 0) === height, 'WDB: Must pass in a height.');
+
+    await this.rollback(height);
+
+    this.logger.info(
+      'WalletDB is scanning %d blocks.',
+      this.state.height - height + 1);
+
+    const tip = await this.getTip();
+
+    try {
+      this.rescanning = true;
+      await this.client.rescan(tip.hash);
+    } finally {
+      this.rescanning = false;
+    }
+  }
+
+  /**
+   * Deep Clean:
+   * Keep all keys, account data, wallet maps (name and path).
+   * Dump all TX history and balance state.
+   * A rescan will be required but is not initiated automatically.
+   * @returns {Promise}
+   */
+
+  async deepClean() {
+    const unlock1 = await this.txLock.lock();
+    const unlock2 = await this.writeLock.lock();
+    const unlock3 = await this.readLock.lock();
+    try {
+      return await this._deepClean();
+    } finally {
+      unlock3();
+      unlock2();
+      unlock1();
+    }
+  }
+
+  /**
+   * Deep Clean (without locks):
+   * Keep all keys, account data, wallet maps (name and path).
+   * Dump all TX history and balance state.
+   * A rescan will be required but is not initiated automatically.
+   * @returns {Promise}
+   */
+
+  async _deepClean() {
+    this.logger.warning('Initiating Deep Clean...');
+
+    const b = this.db.batch();
+    const removeRange = (opt) => {
+      return this.db.iterator(opt).each(key => b.del(key));
+    };
+
+    this.logger.warning('Clearing block map, tx map and outpoint map...');
+    // b[height] -> block->wid map
+    await removeRange({
+      gte: layout.b.min(),
+      lte: layout.b.max()
+    });
+
+    // o[hash][index] -> outpoint->wid map
+    await removeRange({
+      gte: layout.o.min(),
+      lte: layout.o.max()
+    });
+
+    // T[hash] -> tx->wid map
+    await removeRange({
+      gte: layout.T.min(),
+      lte: layout.T.max()
+    });
+
+    const wids = await this.db.keys({
+      gte: layout.W.min(),
+      lte: layout.W.max(),
+      parse: key => layout.W.decode(key)[0]
+    });
+
+    for (const wid of wids) {
+      const wallet = await this.get(wid);
+      this.logger.warning(
+        'Clearing all tx history for wallet: %s (%d)',
+        wallet.id, wid
+      );
+
+      // remove all txdb data *except* blinds ('v')
+      const key = 'v'.charCodeAt();
+      const prefix = layout.t.encode(wid);
+      await removeRange({
+        gte: Buffer.concat([prefix, Buffer.alloc(1)]),
+        lt:  Buffer.concat([prefix, Buffer.from([key])])
+      });
+      await removeRange({
+        gt: Buffer.concat([prefix, Buffer.from([key + 1])]),
+        lte: Buffer.concat([prefix, Buffer.from([0xff])])
+      });
+    }
+
+    await b.write();
+
+    this.logger.warning('Deep Clean complete. A rescan is now required.');
+  }
+
+  /**
+   * Force a rescan.
+   * @param {Number} height
+   * @returns {Promise}
+   */
+
+  async rescan(height) {
+    const unlock = await this.txLock.lock();
+    try {
+      return await this._rescan(height);
+    } finally {
+      unlock();
+    }
+  }
+
+  /**
+   * Force a rescan (without a lock).
+   * @private
+   * @param {Number} height
+   * @returns {Promise}
+   */
+
+  async _rescan(height) {
+    return this.scan(height);
+  }
+
+  /**
+   * Broadcast a transaction via chain server.
+   * @param {TX} tx
+   * @returns {Promise}
+   */
+
+  async send(tx) {
+    return this.client.send(tx);
+  }
+
+  /**
+   * Broadcast a claim via chain server.
+   * @param {Claim} claim
+   * @returns {Promise}
+   */
+
+  async sendClaim(claim) {
+    return this.client.sendClaim(claim);
+  }
+
+  /**
+   * Estimate smart fee from chain server.
+   * @param {Number} blocks
+   * @returns {Promise}
+   */
+
+  async estimateFee(blocks) {
+    if (this.feeRate > 0)
+      return this.feeRate;
+
+    const rate = await this.client.estimateFee(blocks);
+
+    if (rate &lt; this.network.feeRate)
+      return this.network.feeRate;
+
+    if (rate > this.network.maxFeeRate)
+      return this.network.maxFeeRate;
+
+    return rate;
+  }
+
+  /**
+   * Get name state.
+   * @param {Buffer} nameHash
+   * @returns {Object}
+   */
+
+  async getNameStatus(nameHash) {
+    return this.client.getNameStatus(nameHash);
+  }
+
+  /**
+   * Get UTXO from node.
+   * @param {Hash} hash
+   * @param {Number} index
+   * @returns {Object}
+   */
+
+  async getCoin(hash, index) {
+    return this.client.getCoin(hash, index);
+  }
+
+  /**
+   * Test whether name is available for CLAIM.
+   * @param {Buffer} nameHash
+   * @returns {Boolean}
+   */
+
+  async isAvailable(nameHash) {
+    const ns = await this.getNameStatus(nameHash);
+    const state = ns.state(this.height + 1, this.network);
+    return state === states.OPENING
+        || state === states.LOCKED
+        || (state === states.CLOSED &amp;&amp; !ns.registered);
+  }
+
+  /**
+   * Send filter to the remote node.
+   * @private
+   * @returns {Promise}
+   */
+
+  syncFilter() {
+    this.logger.info('Sending filter to server (%dmb).',
+      this.filter.size / 8 / (1 &lt;&lt; 20));
+
+    this.filterSent = true;
+    return this.client.setFilter(this.filter);
+  }
+
+  /**
+   * Add data to remote filter.
+   * @private
+   * @param {Buffer} data
+   * @returns {Promise}
+   */
+
+  addFilter(data) {
+    if (!this.filterSent)
+      return undefined;
+    return this.client.addFilter(data);
+  }
+
+  /**
+   * Reset remote filter.
+   * @private
+   * @returns {Promise}
+   */
+
+  resetFilter() {
+    if (!this.filterSent)
+      return undefined;
+    return this.client.resetFilter();
+  }
+
+  /**
+   * Backup the wallet db.
+   * @param {String} path
+   * @returns {Promise}
+   */
+
+  backup(path) {
+    return this.db.backup(path);
+  }
+
+  /**
+   * Wipe the txdb - NEVER USE.
+   * @returns {Promise}
+   */
+
+  async wipe() {
+    this.logger.warning('Wiping WalletDB TXDB...');
+    this.logger.warning('I hope you know what you\'re doing.');
+
+    const iter = this.db.iterator();
+    const b = this.db.batch();
+
+    let total = 0;
+
+    await iter.each((key) => {
+      switch (key[0]) {
+        case 0x62: // b
+        case 0x63: // c
+        case 0x65: // e
+        case 0x74: // t
+        case 0x6f: // o
+        case 0x68: // h
+        case 0x52: // R
+          b.del(key);
+          total += 1;
+          break;
+      }
+    });
+
+    this.logger.warning('Wiped %d txdb records.', total);
+
+    return b.write();
+  }
+
+  /**
+   * Get current wallet wid depth.
+   * @private
+   * @returns {Promise}
+   */
+
+  async getDepth() {
+    const raw = await this.db.get(layout.D.encode());
+
+    if (!raw)
+      return 0;
+
+    return raw.readUInt32LE(0, true);
+  }
+
+  /**
+   * Test the bloom filter against a tx or address hash.
+   * @private
+   * @param {Hash} hash
+   * @returns {Boolean}
+   */
+
+  testFilter(data) {
+    return this.filter.test(data);
+  }
+
+  /**
+   * Add hash to local and remote filters.
+   * @private
+   * @param {Hash} hash
+   */
+
+  addHash(hash) {
+    this.filter.add(hash);
+    return this.addFilter(hash);
+  }
+
+  /**
+   * Add hash to local and remote filters.
+   * @private
+   * @param {Hash} nameHash
+   */
+
+  addName(nameHash) {
+    this.filter.add(nameHash);
+    return this.addFilter(nameHash);
+  }
+
+  /**
+   * Add outpoint to local filter.
+   * @private
+   * @param {Hash} hash
+   * @param {Number} index
+   */
+
+  addOutpoint(hash, index) {
+    const outpoint = new Outpoint(hash, index);
+    this.filter.add(outpoint.encode());
+  }
+
+  /**
+   * Dump database (for debugging).
+   * @returns {Promise} - Returns Object.
+   */
+
+  dump() {
+    return this.db.dump();
+  }
+
+  /**
+   * Register an object with the walletdb.
+   * @param {Object} object
+   */
+
+  register(wallet) {
+    assert(!this.wallets.has(wallet.wid));
+    this.wallets.set(wallet.wid, wallet);
+  }
+
+  /**
+   * Unregister a object with the walletdb.
+   * @param {Object} object
+   * @returns {Boolean}
+   */
+
+  unregister(wallet) {
+    assert(this.wallets.has(wallet.wid));
+    this.wallets.delete(wallet.wid);
+  }
+
+  /**
+   * Map wallet id to wid.
+   * @param {String|Number} id
+   * @returns {Promise} - Returns {Number}.
+   */
+
+  async ensureWID(id) {
+    if (typeof id === 'number') {
+      if (!await this.db.has(layout.W.encode(id)))
+        return -1;
+      return id;
+    }
+
+    return this.getWID(id);
+  }
+
+  /**
+   * Map wallet id to wid.
+   * @param {String} id
+   * @returns {Promise} - Returns {Number}.
+   */
+
+  async getWID(id) {
+    const data = await this.db.get(layout.l.encode(id));
+
+    if (!data)
+      return -1;
+
+    assert(data.length === 4);
+
+    return data.readUInt32LE(0, true);
+  }
+
+  /**
+   * Map wallet wid to id.
+   * @param {Number} wid
+   * @returns {Promise} - Returns {String}.
+   */
+
+  async getID(wid) {
+    const data = await this.db.get(layout.W.encode(wid));
+
+    if (!data)
+      return null;
+
+    return toString(data);
+  }
+
+  /**
+   * Get a wallet from the database, setup watcher.
+   * @param {Number|String} id
+   * @returns {Promise} - Returns {@link Wallet}.
+   */
+
+  async get(id) {
+    const wid = await this.ensureWID(id);
+
+    if (wid === -1)
+      return null;
+
+    const unlock = await this.readLock.lock(wid);
+
+    try {
+      return await this._get(wid);
+    } finally {
+      unlock();
+    }
+  }
+
+  /**
+   * Get a wallet from the database without a lock.
+   * @private
+   * @param {Number} wid
+   * @returns {Promise} - Returns {@link Wallet}.
+   */
+
+  async _get(wid) {
+    const cache = this.wallets.get(wid);
+
+    if (cache)
+      return cache;
+
+    const id = await this.getID(wid);
+
+    if (!id)
+      return null;
+
+    const data = await this.db.get(layout.w.encode(wid));
+    assert(data);
+
+    const wallet = Wallet.decode(this, data);
+
+    wallet.wid = wid;
+    wallet.id = id;
+
+    await wallet.open();
+
+    this.register(wallet);
+
+    return wallet;
+  }
+
+  /**
+   * Save a wallet to the database.
+   * @param {Wallet} wallet
+   */
+
+  save(b, wallet) {
+    const wid = wallet.wid;
+    const id = wallet.id;
+
+    b.put(layout.w.encode(wid), wallet.encode());
+    b.put(layout.W.encode(wid), fromString(id));
+    b.put(layout.l.encode(id), fromU32(wid));
+  }
+
+  /**
+   * Increment the wid depth.
+   * @param {Batch} b
+   * @param {Number} wid
+   */
+
+  increment(b, wid) {
+    b.put(layout.D.encode(), fromU32(wid + 1));
+  }
+
+  /**
+   * Rename a wallet.
+   * @param {Wallet} wallet
+   * @param {String} id
+   * @returns {Promise}
+   */
+
+  async rename(wallet, id) {
+    const unlock = await this.writeLock.lock();
+    try {
+      return await this._rename(wallet, id);
+    } finally {
+      unlock();
+    }
+  }
+
+  /**
+   * Rename a wallet without a lock.
+   * @private
+   * @param {Wallet} wallet
+   * @param {String} id
+   * @returns {Promise}
+   */
+
+  async _rename(wallet, id) {
+    if (!common.isName(id))
+      throw new Error('WDB: Bad wallet ID.');
+
+    if (await this.has(id))
+      throw new Error('WDB: ID not available.');
+
+    const b = this.db.batch();
+
+    // Update wid->id index.
+    b.put(layout.W.encode(wallet.wid), fromString(id));
+
+    // Delete old id->wid index.
+    b.del(layout.l.encode(wallet.id));
+
+    // Add new id->wid index.
+    b.put(layout.l.encode(id), fromU32(wallet.wid));
+
+    await b.write();
+
+    wallet.id = id;
+  }
+
+  /**
+   * Rename an account.
+   * @param {Account} account
+   * @param {String} name
+   */
+
+  renameAccount(b, account, name) {
+    const wid = account.wid;
+    const index = account.accountIndex;
+
+    // Remove old wid/name->account index.
+    b.del(layout.i.encode(wid, account.name));
+
+    // Name->Index lookups
+    b.put(layout.i.encode(wid, name), fromU32(index));
+
+    // Index->Name lookups
+    b.put(layout.n.encode(wid, index), fromString(name));
+
+    account.name = name;
+  }
+
+  /**
+   * Remove a wallet.
+   * @param {Number|String} id
+   * @returns {Promise}
+   */
+
+  async remove(id) {
+    const wid = await this.ensureWID(id);
+
+    if (wid === -1)
+      return false;
+
+    // Grab all locks.
+    const unlock1 = await this.readLock.lock(wid);
+    const unlock2 = await this.writeLock.lock();
+    const unlock3 = await this.txLock.lock();
+
+    try {
+      return await this._remove(wid);
+    } finally {
+      unlock3();
+      unlock2();
+      unlock1();
+    }
+  }
+
+  /**
+   * Remove a wallet (without a lock).
+   * @private
+   * @param {Number} wid
+   * @returns {Promise}
+   */
+
+  async _remove(wid) {
+    const id = await this.getID(wid);
+
+    if (!id)
+      return false;
+
+    if (id === 'primary')
+      throw new Error('Cannot remove primary wallet.');
+
+    const b = this.db.batch();
+
+    b.del(layout.w.encode(wid));
+    b.del(layout.W.encode(wid));
+    b.del(layout.l.encode(id));
+
+    const piter = this.db.iterator({
+      gte: layout.P.min(wid),
+      lte: layout.P.max(wid)
+    });
+
+    await piter.each((key, value) => {
+      const [, hash] = layout.P.decode(key);
+      b.del(key);
+      return this.removePathMap(b, hash, wid);
+    });
+
+    const niter = this.db.iterator({
+      gte: layout.N.min(),
+      lte: layout.N.max()
+    });
+
+    await niter.each((key) => {
+      const [hash] = layout.N.decode(key);
+      return this.removeNameMap(b, hash, wid);
+    });
+
+    const removeRange = (opt) => {
+      return this.db.iterator(opt).each(key => b.del(key));
+    };
+
+    await removeRange({
+      gte: layout.r.min(wid),
+      lte: layout.r.max(wid)
+    });
+
+    await removeRange({
+      gte: layout.a.min(wid),
+      lte: layout.a.max(wid)
+    });
+
+    await removeRange({
+      gte: layout.i.min(wid),
+      lte: layout.i.max(wid)
+    });
+
+    await removeRange({
+      gte: layout.n.min(wid),
+      lte: layout.n.max(wid)
+    });
+
+    await removeRange({
+      gt: layout.t.encode(wid),
+      lt: layout.t.encode(wid + 1)
+    });
+
+    const bucket = this.db.bucket(layout.t.encode(wid));
+
+    const biter = bucket.iterator({
+      gte: tlayout.b.min(),
+      lte: tlayout.b.max()
+    });
+
+    await biter.each((key, value) => {
+      const [height] = tlayout.b.decode(key);
+      return this.removeBlockMap(b, height, wid);
+    });
+
+    const siter = bucket.iterator({
+      gte: tlayout.s.min(),
+      lte: tlayout.s.max(),
+      keys: true
+    });
+
+    await siter.each((key, value) => {
+      const [hash, index] = tlayout.s.decode(key);
+      return this.removeOutpointMap(b, hash, index, wid);
+    });
+
+    const uiter = bucket.iterator({
+      gte: tlayout.p.min(),
+      lte: tlayout.p.max(),
+      keys: true
+    });
+
+    await uiter.each((key, value) => {
+      const [hash] = tlayout.p.decode(key);
+      return this.removeTXMap(b, hash, wid);
+    });
+
+    const wallet = this.wallets.get(wid);
+
+    if (wallet) {
+      await wallet.destroy();
+      this.unregister(wallet);
+    }
+
+    await b.write();
+
+    return true;
+  }
+
+  /**
+   * Get a wallet with token auth first.
+   * @param {Number|String} id
+   * @param {Buffer} token
+   * @returns {Promise} - Returns {@link Wallet}.
+   */
+
+  async auth(id, token) {
+    const wallet = await this.get(id);
+
+    if (!wallet)
+      return null;
+
+    // Compare in constant time:
+    if (!safeEqual(token, wallet.token))
+      throw new Error('WDB: Authentication error.');
+
+    return wallet;
+  }
+
+  /**
+   * Create a new wallet, save to database, setup watcher.
+   * @param {Object} options - See {@link Wallet}.
+   * @returns {Promise} - Returns {@link Wallet}.
+   */
+
+  async create(options) {
+    const unlock = await this.writeLock.lock();
+
+    if (!options)
+      options = {};
+
+    try {
+      return await this._create(options);
+    } finally {
+      unlock();
+    }
+  }
+
+  /**
+   * Create a new wallet, save to database without a lock.
+   * @private
+   * @param {Object} options - See {@link Wallet}.
+   * @returns {Promise} - Returns {@link Wallet}.
+   */
+
+  async _create(options) {
+    if (options.id) {
+      if (await this.has(options.id))
+        throw new Error('WDB: Wallet already exists.');
+    }
+
+    const wallet = Wallet.fromOptions(this, options);
+
+    wallet.wid = this.depth;
+
+    await wallet.init(options, options.passphrase);
+
+    this.depth += 1;
+
+    this.register(wallet);
+
+    this.logger.info('Created wallet %s in WalletDB.', wallet.id);
+
+    return wallet;
+  }
+
+  /**
+   * Test for the existence of a wallet.
+   * @param {Number|String} id
+   * @returns {Promise}
+   */
+
+  async has(id) {
+    const wid = await this.ensureWID(id);
+    return wid !== -1;
+  }
+
+  /**
+   * Attempt to create wallet, return wallet if already exists.
+   * @param {Object} options - See {@link Wallet}.
+   * @returns {Promise}
+   */
+
+  async ensure(options) {
+    if (options.id) {
+      const wallet = await this.get(options.id);
+
+      if (wallet)
+        return wallet;
+    }
+
+    return this.create(options);
+  }
+
+  /**
+   * Get an account from the database by wid.
+   * @private
+   * @param {Number} wid
+   * @param {Number} index - Account index.
+   * @returns {Promise} - Returns {@link Wallet}.
+   */
+
+  async getAccount(wid, index) {
+    const name = await this.getAccountName(wid, index);
+
+    if (!name)
+      return null;
+
+    const data = await this.db.get(layout.a.encode(wid, index));
+    assert(data);
+
+    const account = Account.decode(this, data);
+
+    account.accountIndex = index;
+    account.name = name;
+
+    return account;
+  }
+
+  /**
+   * List account names and indexes from the db.
+   * @param {Number} wid
+   * @returns {Promise} - Returns Array.
+   */
+
+  async getAccounts(wid) {
+    return this.db.values({
+      gte: layout.n.min(wid),
+      lte: layout.n.max(wid),
+      parse: toString
+    });
+  }
+
+  /**
+   * Lookup the corresponding account name's index.
+   * @param {Number} wid
+   * @param {String} name - Account name/index.
+   * @returns {Promise} - Returns Number.
+   */
+
+  async getAccountIndex(wid, name) {
+    const index = await this.db.get(layout.i.encode(wid, name));
+
+    if (!index)
+      return -1;
+
+    return index.readUInt32LE(0, true);
+  }
+
+  /**
+   * Lookup the corresponding account index's name.
+   * @param {Number} wid
+   * @param {Number} index
+   * @returns {Promise} - Returns Number.
+   */
+
+  async getAccountName(wid, index) {
+    const name = await this.db.get(layout.n.encode(wid, index));
+
+    if (!name)
+      return null;
+
+    return toString(name);
+  }
+
+  /**
+   * Save an account to the database.
+   * @param {Account} account
+   * @returns {Promise}
+   */
+
+  saveAccount(b, account) {
+    const wid = account.wid;
+    const index = account.accountIndex;
+    const name = account.name;
+
+    // Account data
+    b.put(layout.a.encode(wid, index), account.encode());
+
+    // Name->Index lookups
+    b.put(layout.i.encode(wid, name), fromU32(index));
+
+    // Index->Name lookups
+    b.put(layout.n.encode(wid, index), fromString(name));
+  }
+
+  /**
+   * Test for the existence of an account.
+   * @param {Number} wid
+   * @param {String|Number} acct
+   * @returns {Promise} - Returns Boolean.
+   */
+
+  async hasAccount(wid, index) {
+    return this.db.has(layout.a.encode(wid, index));
+  }
+
+  /**
+   * Save an address to the path map.
+   * @param {Wallet} wallet
+   * @param {WalletKey} ring
+   * @returns {Promise}
+   */
+
+  async saveKey(b, wid, ring) {
+    return this.savePath(b, wid, ring.toPath());
+  }
+
+  /**
+   * Save a path to the path map.
+   *
+   * The path map exists in the form of:
+   *   - `p[address-hash] -> wid map`
+   *   - `P[wid][address-hash] -> path data`
+   *   - `r[wid][account-index][address-hash] -> dummy`
+   *
+   * @param {Wallet} wallet
+   * @param {Path} path
+   * @returns {Promise}
+   */
+
+  async savePath(b, wid, path) {
+    // Address Hash -> Wallet Map
+    await this.addPathMap(b, path.hash, wid);
+
+    // Wallet ID + Address Hash -> Path Data
+    b.put(layout.P.encode(wid, path.hash), path.encode());
+
+    // Wallet ID + Account Index + Address Hash -> Dummy
+    b.put(layout.r.encode(wid, path.account, path.hash), null);
+  }
+
+  /**
+   * Retrieve path by hash.
+   * @param {Number} wid
+   * @param {Hash} hash
+   * @returns {Promise}
+   */
+
+  async getPath(wid, hash) {
+    const path = await this.readPath(wid, hash);
+
+    if (!path)
+      return null;
+
+    path.name = await this.getAccountName(wid, path.account);
+    assert(path.name);
+
+    return path;
+  }
+
+  /**
+   * Retrieve path by hash.
+   * @param {Number} wid
+   * @param {Hash} hash
+   * @returns {Promise}
+   */
+
+  async readPath(wid, hash) {
+    const data = await this.db.get(layout.P.encode(wid, hash));
+
+    if (!data)
+      return null;
+
+    const path = Path.decode(data);
+    path.hash = hash;
+
+    return path;
+  }
+
+  /**
+   * Test whether a wallet contains a path.
+   * @param {Number} wid
+   * @param {Hash} hash
+   * @returns {Promise}
+   */
+
+  async hasPath(wid, hash) {
+    return this.db.has(layout.P.encode(wid, hash));
+  }
+
+  /**
+   * Get all address hashes.
+   * @returns {Promise}
+   */
+
+  async getHashes() {
+    return this.db.keys({
+      gte: layout.p.min(),
+      lte: layout.p.max(),
+      parse: key => layout.p.decode(key)[0]
+    });
+  }
+
+  /**
+   * Get all outpoints.
+   * @returns {Promise}
+   */
+
+  async getOutpoints() {
+    return this.db.keys({
+      gte: layout.o.min(),
+      lte: layout.o.max(),
+      parse: (key) => {
+        const [hash, index] = layout.o.decode(key);
+        return new Outpoint(hash, index);
+      }
+    });
+  }
+
+  /**
+   * Get all address hashes.
+   * @param {Number} wid
+   * @returns {Promise}
+   */
+
+  async getWalletHashes(wid) {
+    return this.db.keys({
+      gte: layout.P.min(wid),
+      lte: layout.P.max(wid),
+      parse: key => layout.P.decode(key)[1]
+    });
+  }
+
+  /**
+   * Get all account address hashes.
+   * @param {Number} wid
+   * @param {Number} account
+   * @returns {Promise}
+   */
+
+  async getAccountHashes(wid, account) {
+    return this.db.keys({
+      gte: layout.r.min(wid, account),
+      lte: layout.r.max(wid, account),
+      parse: key => layout.r.decode(key)[2]
+    });
+  }
+
+  /**
+   * Get all paths for a wallet.
+   * @param {Number} wid
+   * @returns {Promise}
+   */
+
+  async getWalletPaths(wid) {
+    const items = await this.db.range({
+      gte: layout.P.min(wid),
+      lte: layout.P.max(wid)
+    });
+
+    const paths = [];
+
+    for (const {key, value} of items) {
+      const [, hash] = layout.P.decode(key);
+      const path = Path.decode(value);
+
+      path.hash = hash;
+      path.name = await this.getAccountName(wid, path.account);
+      assert(path.name);
+
+      paths.push(path);
+    }
+
+    return paths;
+  }
+
+  /**
+   * Get all wallet ids.
+   * @returns {Promise}
+   */
+
+  async getWallets() {
+    return this.db.values({
+      gte: layout.W.min(),
+      lte: layout.W.max(),
+      parse: toString
+    });
+  }
+
+  /**
+   * Encrypt all imported keys for a wallet.
+   * @param {Number} wid
+   * @param {Buffer} key
+   * @returns {Promise}
+   */
+
+  async encryptKeys(b, wid, key) {
+    const iter = this.db.iterator({
+      gte: layout.P.min(wid),
+      lte: layout.P.max(wid),
+      values: true
+    });
+
+    await iter.each((k, value) => {
+      const [, hash] = layout.P.decode(k);
+      const path = Path.decode(value);
+
+      if (!path.data)
+        return;
+
+      assert(!path.encrypted);
+
+      const iv = hash.slice(0, 16);
+
+      path.data = aes.encipher(path.data, key, iv);
+      path.encrypted = true;
+
+      b.put(k, path.encode());
+    });
+  }
+
+  /**
+   * Decrypt all imported keys for a wallet.
+   * @param {Number} wid
+   * @param {Buffer} key
+   * @returns {Promise}
+   */
+
+  async decryptKeys(b, wid, key) {
+    const iter = this.db.iterator({
+      gte: layout.P.min(wid),
+      lte: layout.P.max(wid),
+      values: true
+    });
+
+    await iter.each((k, value) => {
+      const [, hash] = layout.P.decode(k);
+      const path = Path.decode(value);
+
+      if (!path.data)
+        return;
+
+      assert(path.encrypted);
+
+      const iv = hash.slice(0, 16);
+
+      path.data = aes.decipher(path.data, key, iv);
+      path.encrypted = false;
+
+      b.put(k, path.encode());
+    });
+  }
+
+  /**
+   * Resend all pending transactions.
+   * @returns {Promise}
+   */
+
+  async resend() {
+    const wids = await this.db.keys({
+      gte: layout.w.min(),
+      lte: layout.w.max(),
+      parse: key => layout.w.decode(key)[0]
+    });
+
+    this.logger.info('Resending from %d wallets.', wids.length);
+
+    for (const wid of wids)
+      await this.resendPending(wid);
+  }
+
+  /**
+   * Resend all pending transactions for a specific wallet.
+   * @private
+   * @param {Number} wid
+   * @returns {Promise}
+   */
+
+  async resendPending(wid) {
+    const prefix = layout.t.encode(wid);
+    const b = this.db.bucket(prefix);
+
+    const hashes = await b.keys({
+      gte: tlayout.p.min(),
+      lte: tlayout.p.max(),
+      parse: key => tlayout.p.decode(key)[0]
+    });
+
+    if (hashes.length === 0)
+      return;
+
+    this.logger.info(
+      'Rebroadcasting %d transactions for %d.',
+      hashes.length,
+      wid);
+
+    const txs = [];
+
+    for (const hash of hashes) {
+      const data = await b.get(tlayout.t.encode(hash));
+
+      if (!data)
+        continue;
+
+      const wtx = TXRecord.decode(data);
+
+      if (wtx.tx.isCoinbase())
+        continue;
+
+      txs.push(wtx.tx);
+    }
+
+    for (const tx of common.sortDeps(txs))
+      await this.send(tx);
+  }
+
+  /**
+   * Get all wallet ids by output addresses and outpoints.
+   * @param {Hash[]} hashes
+   * @returns {Promise}
+   */
+
+  async getWalletsByTX(tx) {
+    const wids = new Set();
+
+    if (!tx.isCoinbase()) {
+      for (const {prevout} of tx.inputs) {
+        const {hash, index} = prevout;
+
+        if (!this.testFilter(prevout.encode()))
+          continue;
+
+        const map = await this.getOutpointMap(hash, index);
+
+        if (!map)
+          continue;
+
+        for (const wid of map.wids)
+          wids.add(wid);
+      }
+    }
+
+    const hashes = tx.getOutputHashes();
+
+    for (const hash of hashes) {
+      if (!this.testFilter(hash))
+        continue;
+
+      const map = await this.getPathMap(hash);
+
+      if (!map)
+        continue;
+
+      for (const wid of map.wids)
+        wids.add(wid);
+    }
+
+    for (const {covenant} of tx.outputs) {
+      if (!covenant.isName())
+        continue;
+
+      const nameHash = covenant.getHash(0);
+
+      if (!this.testFilter(nameHash))
+        continue;
+
+      const map = await this.getNameMap(nameHash);
+
+      if (!map)
+        continue;
+
+      for (const wid of map.wids)
+        wids.add(wid);
+    }
+
+    if (wids.size === 0)
+      return null;
+
+    return wids;
+  }
+
+  /**
+   * Get the best block hash.
+   * @returns {Promise}
+   */
+
+  async getState() {
+    const data = await this.db.get(layout.R.encode());
+
+    if (!data)
+      return null;
+
+    return ChainState.decode(data);
+  }
+
+  /**
+   * Sync the current chain state to tip.
+   * @param {BlockMeta} tip
+   * @returns {Promise}
+   */
+
+  async setTip(tip) {
+    const b = this.db.batch();
+    const state = this.state.clone();
+
+    if (tip.height &lt; state.height) {
+      // Hashes ahead of our new tip
+      // that we need to delete.
+      while (state.height !== tip.height) {
+        b.del(layout.h.encode(state.height));
+        state.height -= 1;
+      }
+    } else if (tip.height > state.height) {
+      assert(tip.height === state.height + 1, 'Bad chain sync.');
+      state.height += 1;
+    }
+
+    if (tip.height &lt; state.startHeight) {
+      state.startHeight = tip.height;
+      state.startHash = tip.hash;
+      state.marked = false;
+    }
+
+    // Save tip and state.
+    b.put(layout.h.encode(tip.height), tip.toHash());
+    b.put(layout.R.encode(), state.encode());
+
+    await b.write();
+
+    this.state = state;
+    this.height = state.height;
+  }
+
+  /**
+   * Will return the current height and will increment
+   * to the current height of a block currently being
+   * added to the wallet.
+   * @returns {Number}
+   */
+
+  liveHeight() {
+    let height = this.height;
+
+    if (this.confirming)
+      height += 1;
+
+    return height;
+  }
+
+  /**
+   * Mark current state.
+   * @param {BlockMeta} block
+   * @returns {Promise}
+   */
+
+  async markState(block) {
+    const state = this.state.clone();
+    state.startHeight = block.height;
+    state.startHash = block.hash;
+    state.marked = true;
+
+    const b = this.db.batch();
+    b.put(layout.R.encode(), state.encode());
+    await b.write();
+
+    this.state = state;
+    this.height = state.height;
+  }
+
+  /**
+   * Get a wallet map.
+   * @param {Buffer} key
+   * @returns {Promise}
+   */
+
+  async getMap(key) {
+    const data = await this.db.get(key);
+
+    if (!data)
+      return null;
+
+    return MapRecord.decode(data);
+  }
+
+  /**
+   * Add wid to a wallet map.
+   * @param {Wallet} wallet
+   * @param {Buffer} key
+   * @param {Number} wid
+   */
+
+  async addMap(b, key, wid) {
+    const data = await this.db.get(key);
+
+    if (!data) {
+      const map = new MapRecord();
+      map.add(wid);
+      b.put(key, map.encode());
+      return;
+    }
+
+    const len = bio.readU32(data, 0);
+    const bw = bio.write(data.length + 4);
+
+    bw.writeU32(len + 1);
+    bw.copy(data, 4, data.length);
+    bw.writeU32(wid);
+
+    b.put(key, bw.render());
+  }
+
+  /**
+   * Remove wid from a wallet map.
+   * @param {Wallet} wallet
+   * @param {Buffer} key
+   * @param {Number} wid
+   */
+
+  async removeMap(b, key, wid) {
+    const map = await this.getMap(key);
+
+    if (!map)
+      return;
+
+    if (!map.remove(wid))
+      return;
+
+    if (map.wids.size === 0) {
+      b.del(key);
+      return;
+    }
+
+    b.put(key, map.encode());
+  }
+
+  /**
+   * Get a wallet map.
+   * @param {Buffer} key
+   * @returns {Promise}
+   */
+
+  async getPathMap(hash) {
+    return this.getMap(layout.p.encode(hash));
+  }
+
+  /**
+   * Add wid to a wallet map.
+   * @param {Wallet} wallet
+   * @param {Buffer} key
+   * @param {Number} wid
+   */
+
+  async addPathMap(b, hash, wid) {
+    await this.addHash(hash);
+    return this.addMap(b, layout.p.encode(hash), wid);
+  }
+
+  /**
+   * Remove wid from a wallet map.
+   * @param {Wallet} wallet
+   * @param {Buffer} key
+   * @param {Number} wid
+   */
+
+  async removePathMap(b, hash, wid) {
+    return this.removeMap(b, layout.p.encode(hash), wid);
+  }
+
+  /**
+   * Get a wallet map.
+   * @param {Buffer} key
+   * @returns {Promise}
+   */
+
+  async getBlockMap(height) {
+    return this.getMap(layout.b.encode(height));
+  }
+
+  /**
+   * Add wid to a wallet map.
+   * @param {Wallet} wallet
+   * @param {Buffer} key
+   * @param {Number} wid
+   */
+
+  async addBlockMap(b, height, wid) {
+    return this.addMap(b, layout.b.encode(height), wid);
+  }
+
+  /**
+   * Remove wid from a wallet map.
+   * @param {Wallet} wallet
+   * @param {Buffer} key
+   * @param {Number} wid
+   */
+
+  async removeBlockMap(b, height, wid) {
+    return this.removeMap(b, layout.b.encode(height), wid);
+  }
+
+  /**
+   * Get a wallet map.
+   * @param {Buffer} key
+   * @returns {Promise}
+   */
+
+  async getTXMap(hash) {
+    return this.getMap(layout.T.encode(hash));
+  }
+
+  /**
+   * Add wid to a wallet map.
+   * @param {Wallet} wallet
+   * @param {Buffer} key
+   * @param {Number} wid
+   */
+
+  async addTXMap(b, hash, wid) {
+    return this.addMap(b, layout.T.encode(hash), wid);
+  }
+
+  /**
+   * Remove wid from a wallet map.
+   * @param {Wallet} wallet
+   * @param {Buffer} key
+   * @param {Number} wid
+   */
+
+  async removeTXMap(b, hash, wid) {
+    return this.removeMap(b, layout.T.encode(hash), wid);
+  }
+
+  /**
+   * Get a wallet map.
+   * @param {Buffer} key
+   * @returns {Promise}
+   */
+
+  async getOutpointMap(hash, index) {
+    return this.getMap(layout.o.encode(hash, index));
+  }
+
+  /**
+   * Add wid to a wallet map.
+   * @param {Wallet} wallet
+   * @param {Buffer} key
+   * @param {Number} wid
+   */
+
+  async addOutpointMap(b, hash, index, wid) {
+    await this.addOutpoint(hash, index);
+    return this.addMap(b, layout.o.encode(hash, index), wid);
+  }
+
+  /**
+   * Remove wid from a wallet map.
+   * @param {Wallet} wallet
+   * @param {Buffer} key
+   * @param {Number} wid
+   */
+
+  async removeOutpointMap(b, hash, index, wid) {
+    return this.removeMap(b, layout.o.encode(hash, index), wid);
+  }
+
+  /**
+   * Get a wallet map.
+   * @param {Buffer} key
+   * @returns {Promise}
+   */
+
+  async getNameMap(nameHash) {
+    return this.getMap(layout.N.encode(nameHash));
+  }
+
+  /**
+   * Add wid to a wallet map.
+   * @param {Wallet} wallet
+   * @param {Buffer} key
+   * @param {Number} wid
+   */
+
+  async addNameMap(b, nameHash, wid) {
+    await this.addName(nameHash);
+    return this.addMap(b, layout.N.encode(nameHash), wid);
+  }
+
+  /**
+   * Remove wid from a wallet map.
+   * @param {Wallet} wallet
+   * @param {Buffer} key
+   * @param {Number} wid
+   */
+
+  async removeNameMap(b, nameHash, wid) {
+    return this.removeMap(b, layout.N.encode(nameHash), wid);
+  }
+
+  /**
+   * Get a wallet block meta.
+   * @param {Hash} hash
+   * @returns {Promise}
+   */
+
+  async getBlock(height) {
+    const hash = await this.db.get(layout.h.encode(height));
+
+    if (!hash)
+      return null;
+
+    return new BlockMeta(hash, height);
+  }
+
+  /**
+   * Get wallet tip.
+   * @param {Hash} hash
+   * @returns {Promise}
+   */
+
+  async getTip() {
+    const tip = await this.getBlock(this.state.height);
+
+    if (!tip)
+      throw new Error('WDB: Tip not found!');
+
+    return tip;
+  }
+
+  /**
+   * Get renewal block hash.
+   * @returns {Buffer}
+   */
+
+  async getRenewalBlock() {
+    let height = this.height - this.network.names.renewalMaturity * 2;
+
+    if (height &lt; 0)
+      height = 0;
+
+    const block = await this.getBlock(height);
+    assert(block);
+
+    return block.hash;
+  }
+
+  /**
+   * Sync with chain height.
+   * @param {Number} height
+   * @returns {Promise}
+   */
+
+  async rollback(height) {
+    if (height > this.state.height)
+      throw new Error('WDB: Cannot rollback to the future.');
+
+    if (height === this.state.height) {
+      this.logger.info('Rolled back to same height (%d).', height);
+      return;
+    }
+
+    this.logger.info(
+      'Rolling back %d WalletDB blocks to height %d.',
+      this.state.height - height, height);
+
+    const tip = await this.getBlock(height);
+    assert(tip);
+
+    await this.revert(tip.height);
+    await this.setTip(tip);
+  }
+
+  /**
+   * Revert TXDB to an older state.
+   * @param {Number} target
+   * @returns {Promise}
+   */
+
+  async revert(target) {
+    const iter = this.db.iterator({
+      gte: layout.b.encode(target + 1),
+      lte: layout.b.max(),
+      reverse: true,
+      values: true
+    });
+
+    let total = 0;
+
+    await iter.each(async (key, value) => {
+      const [height] = layout.b.decode(key);
+      const block = MapRecord.decode(value);
+
+      for (const wid of block.wids) {
+        const wallet = await this.get(wid);
+        assert(wallet);
+        total += await wallet.revert(height);
+      }
+    });
+
+    this.logger.info('Rolled back %d WalletDB transactions.', total);
+  }
+
+  /**
+   * Add a block's transactions and write the new best hash.
+   * @param {ChainEntry} entry
+   * @returns {Promise}
+   */
+
+  async addBlock(entry, txs) {
+    const unlock = await this.txLock.lock();
+    try {
+      return await this._addBlock(entry, txs);
+    } finally {
+      unlock();
+    }
+  }
+
+  /**
+   * Add a block's transactions without a lock.
+   * @private
+   * @param {ChainEntry} entry
+   * @param {TX[]} txs
+   * @returns {Promise}
+   */
+
+  async _addBlock(entry, txs) {
+    const tip = BlockMeta.fromEntry(entry);
+
+    if (tip.height &lt; this.state.height) {
+      this.logger.warning(
+        'WalletDB is connecting low blocks (%d).',
+        tip.height);
+      return 0;
+    }
+
+    if (tip.height >= this.network.block.slowHeight)
+      this.logger.debug('Adding block: %d.', tip.height);
+
+    if (tip.height === this.state.height) {
+      // We let blocks of the same height
+      // through specifically for rescans:
+      // we always want to rescan the last
+      // block since the state may have
+      // updated before the block was fully
+      // processed (in the case of a crash).
+      this.logger.warning('Already saw WalletDB block (%d).', tip.height);
+    } else if (tip.height !== this.state.height + 1) {
+      await this.scan(this.state.height);
+      return 0;
+    }
+
+    const walletTxs = [];
+
+    try {
+      // We set the state as confirming so that
+      // anything that uses the current height can
+      // increment by one until the block is fully
+      // added and the height is updated.
+      this.confirming = true;
+      for (const tx of txs) {
+        if (await this._addTX(tx, tip)) {
+          walletTxs.push(tx);
+        }
+      }
+
+      // Sync the state to the new tip.
+      await this.setTip(tip);
+    } finally {
+      this.confirming = false;
+    }
+
+    if (walletTxs.length > 0) {
+      this.logger.info('Connected WalletDB block %x (tx=%d).',
+        tip.hash, walletTxs.length);
+    }
+
+    this.emit('block connect', entry, walletTxs);
+
+    return walletTxs.length;
+  }
+
+  /**
+   * Unconfirm a block's transactions
+   * and write the new best hash (SPV version).
+   * @param {ChainEntry} entry
+   * @returns {Promise}
+   */
+
+  async removeBlock(entry) {
+    const unlock = await this.txLock.lock();
+    try {
+      return await this._removeBlock(entry);
+    } finally {
+      unlock();
+    }
+  }
+
+  /**
+   * Unconfirm a block's transactions.
+   * @private
+   * @param {ChainEntry} entry
+   * @returns {Promise}
+   */
+
+  async _removeBlock(entry) {
+    const tip = BlockMeta.fromEntry(entry);
+
+    if (tip.height === 0)
+      throw new Error('WDB: Bad disconnection (genesis block).');
+
+    if (tip.height > this.state.height) {
+      this.logger.warning(
+        'WalletDB is disconnecting high blocks (%d).',
+        tip.height);
+      return 0;
+    }
+
+    if (tip.height !== this.state.height)
+      throw new Error('WDB: Bad disconnection (height mismatch).');
+
+    const prev = await this.getBlock(tip.height - 1);
+    assert(prev);
+
+    // Get the map of block->wids.
+    const map = await this.getBlockMap(tip.height);
+
+    if (!map) {
+      await this.setTip(prev);
+      this.emit('block disconnect', entry);
+      return 0;
+    }
+
+    let total = 0;
+
+    for (const wid of map.wids) {
+      const wallet = await this.get(wid);
+      assert(wallet);
+      total += await wallet.revert(tip.height);
+    }
+
+    // Sync the state to the previous tip.
+    await this.setTip(prev);
+
+    this.logger.warning('Disconnected wallet block %x (tx=%d).',
+      tip.hash, total);
+
+    this.emit('block disconnect', entry);
+
+    return total;
+  }
+
+  /**
+   * Rescan a block.
+   * @private
+   * @param {ChainEntry} entry
+   * @param {TX[]} txs
+   * @returns {Promise}
+   */
+
+  async rescanBlock(entry, txs) {
+    if (!this.rescanning) {
+      this.logger.warning('Unsolicited rescan block: %d.', entry.height);
+      return;
+    }
+
+    if (entry.height > this.state.height + 1) {
+      this.logger.warning('Rescan block too high: %d.', entry.height);
+      return;
+    }
+
+    try {
+      await this._addBlock(entry, txs);
+    } catch (e) {
+      this.emit('error', e);
+      throw e;
+    }
+  }
+
+  /**
+   * Add a transaction to the database, map addresses
+   * to wallet IDs, potentially store orphans, resolve
+   * orphans, or confirm a transaction.
+   * @param {TX} tx
+   * @returns {Promise}
+   */
+
+  async addTX(tx) {
+    const unlock = await this.txLock.lock();
+    try {
+      return await this._addTX(tx);
+    } finally {
+      unlock();
+    }
+  }
+
+  /**
+   * Add a transaction to the database without a lock.
+   * @private
+   * @param {TX} tx
+   * @param {BlockMeta} block
+   * @returns {Promise}
+   */
+
+  async _addTX(tx, block) {
+    const wids = await this.getWalletsByTX(tx);
+
+    assert(!tx.mutable, 'WDB: Cannot add mutable TX.');
+
+    if (!wids)
+      return null;
+
+    if (block &amp;&amp; !this.state.marked)
+      await this.markState(block);
+
+    this.logger.info(
+      'Incoming transaction for %d wallets in WalletDB (%s).',
+      wids.size, tx.txid());
+
+    let result = false;
+
+    // Insert the transaction
+    // into every matching wallet.
+    for (const wid of wids) {
+      const wallet = await this.get(wid);
+
+      assert(wallet);
+
+      if (await wallet.add(tx, block)) {
+        this.logger.info(
+          'Added transaction to wallet in WalletDB: %s (%d).',
+          wallet.id, wid);
+        result = true;
+      }
+    }
+
+    if (!result)
+      return null;
+
+    return wids;
+  }
+
+  /**
+   * Handle a chain reset.
+   * @param {ChainEntry} entry
+   * @returns {Promise}
+   */
+
+  async resetChain(entry) {
+    const unlock = await this.txLock.lock();
+    try {
+      return await this._resetChain(entry);
+    } finally {
+      unlock();
+    }
+  }
+
+  /**
+   * Handle a chain reset without a lock.
+   * @private
+   * @param {ChainEntry} entry
+   * @returns {Promise}
+   */
+
+  async _resetChain(entry) {
+    if (entry.height > this.state.height)
+      throw new Error('WDB: Bad reset height.');
+
+    return this.rollback(entry.height);
+  }
+}
+
+/**
+ * Wallet Options
+ * @alias module:wallet.WalletOptions
+ */
+
+class WalletOptions {
+  /**
+   * Create wallet options.
+   * @constructor
+   * @param {Object} options
+   */
+
+  constructor(options) {
+    this.network = Network.primary;
+    this.logger = Logger.global;
+    this.workers = null;
+    this.client = null;
+    this.feeRate = 0;
+
+    this.prefix = null;
+    this.location = null;
+    this.memory = true;
+    this.maxFiles = 64;
+    this.cacheSize = 16 &lt;&lt; 20;
+    this.compression = true;
+
+    this.spv = false;
+    this.wipeNoReally = false;
+    this.walletMigrate = -1;
+    this.checkLookahead = false;
+
+    if (options)
+      this.fromOptions(options);
+  }
+
+  /**
+   * Inject properties from object.
+   * @private
+   * @param {Object} options
+   * @returns {WalletOptions}
+   */
+
+  fromOptions(options) {
+    if (options.network != null)
+      this.network = Network.get(options.network);
+
+    if (options.logger != null) {
+      assert(typeof options.logger === 'object');
+      this.logger = options.logger;
+    }
+
+    if (options.workers != null) {
+      assert(typeof options.workers === 'object');
+      this.workers = options.workers;
+    }
+
+    if (options.client != null) {
+      assert(typeof options.client === 'object');
+      this.client = options.client;
+    }
+
+    if (options.feeRate != null) {
+      assert((options.feeRate >>> 0) === options.feeRate);
+      this.feeRate = options.feeRate;
+    }
+
+    if (options.prefix != null) {
+      assert(typeof options.prefix === 'string');
+      this.prefix = options.prefix;
+      this.location = path.join(this.prefix, 'wallet');
+    }
+
+    if (options.location != null) {
+      assert(typeof options.location === 'string');
+      this.location = options.location;
+    }
+
+    if (options.memory != null) {
+      assert(typeof options.memory === 'boolean');
+      this.memory = options.memory;
+    }
+
+    if (options.maxFiles != null) {
+      assert((options.maxFiles >>> 0) === options.maxFiles);
+      this.maxFiles = options.maxFiles;
+    }
+
+    if (options.cacheSize != null) {
+      assert(Number.isSafeInteger(options.cacheSize) &amp;&amp; options.cacheSize >= 0);
+      this.cacheSize = options.cacheSize;
+    }
+
+    if (options.compression != null) {
+      assert(typeof options.compression === 'boolean');
+      this.compression = options.compression;
+    }
+
+    if (options.spv != null) {
+      assert(typeof options.spv === 'boolean');
+      this.spv = options.spv;
+    }
+
+    if (options.wipeNoReally != null) {
+      assert(typeof options.wipeNoReally === 'boolean');
+      this.wipeNoReally = options.wipeNoReally;
+    }
+
+    if (options.walletMigrate != null) {
+      assert(typeof options.walletMigrate === 'number');
+      this.walletMigrate = options.walletMigrate;
+    }
+
+    if (options.checkLookahead != null) {
+      assert(typeof options.checkLookahead === 'boolean');
+      this.checkLookahead = options.checkLookahead;
+    }
+
+    return this;
+  }
+
+  /**
+   * Instantiate chain options from object.
+   * @param {Object} options
+   * @returns {WalletOptions}
+   */
+
+  static fromOptions(options) {
+    return new this().fromOptions(options);
+  }
+}
+
+/*
+ * Helpers
+ */
+
+function fromU32(num) {
+  const data = Buffer.allocUnsafe(4);
+  data.writeUInt32LE(num, 0, true);
+  return data;
+}
+
+function fromString(str) {
+  const buf = Buffer.alloc(1 + str.length);
+  buf[0] = str.length;
+  buf.write(str, 1, str.length, 'ascii');
+  return buf;
+}
+
+function toString(buf) {
+  assert(buf.length > 0);
+  assert(buf[0] === buf.length - 1);
+  return buf.toString('ascii', 1, buf.length);
+}
+
+/*
+ * Expose
+ */
+
+module.exports = WalletDB;
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-blockchain.html">blockchain</a></li><li><a href="module-blockchain_common.html">blockchain/common</a></li><li><a href="module-blockstore.html">blockstore</a></li><li><a href="module-blockstore_common.html">blockstore/common</a></li><li><a href="module-blockstore_records.html">blockstore/records</a></li><li><a href="module-coins.html">coins</a></li><li><a href="module-covenants.html">covenants</a></li><li><a href="module-dns_common.html">dns/common</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-hd.html">hd</a></li><li><a href="module-hsd.html">hsd</a></li><li><a href="module-mempool.html">mempool</a></li><li><a href="module-mining.html">mining</a></li><li><a href="module-mining_common.html">mining/common</a></li><li><a href="module-net.html">net</a></li><li><a href="module-net_bip152.html">net/bip152</a></li><li><a href="module-net_common.html">net/common</a></li><li><a href="module-net_packets.html">net/packets</a></li><li><a href="module-node.html">node</a></li><li><a href="module-primitives.html">primitives</a></li><li><a href="module-protocol.html">protocol</a></li><li><a href="module-protocol_consensus.html">protocol/consensus</a></li><li><a href="module-protocol_errors.html">protocol/errors</a></li><li><a href="module-protocol_networks.html">protocol/networks</a></li><li><a href="module-protocol_policy.html">protocol/policy</a></li><li><a href="module-script.html">script</a></li><li><a href="module-script_common.html">script/common</a></li><li><a href="module-ui.html">ui</a></li><li><a href="module-utils.html">utils</a></li><li><a href="module-utils_util.html">utils/util</a></li><li><a href="module-wallet.html">wallet</a></li><li><a href="module-wallet_common.html">wallet/common</a></li><li><a href="module-wallet_plugin.html">wallet/plugin</a></li><li><a href="module-wallet_records.html">wallet/records</a></li><li><a href="module-workers.html">workers</a></li><li><a href="module-workers_jobs.html">workers/jobs</a></li><li><a href="module-workers_packets.html">workers/packets</a></li></ul><h3>Classes</h3><ul><li><a href="AirdropKey.html">AirdropKey</a></li><li><a href="AirdropProof.html">AirdropProof</a></li><li><a href="BidReveal.html">BidReveal</a></li><li><a href="BitField.html">BitField</a></li><li><a href="BitView.html">BitView</a></li><li><a href="BlindBid.html">BlindBid</a></li><li><a href="BlindValue.html">BlindValue</a></li><li><a href="BlockProof.html">BlockProof</a></li><li><a href="Brontide.html">Brontide</a></li><li><a href="BrontideStream.html">BrontideStream</a></li><li><a href="ChainFlags.html">ChainFlags</a></li><li><a href="ChainState.html">ChainState</a></li><li><a href="CipherState.html">CipherState</a></li><li><a href="Claim.html">Claim</a></li><li><a href="DetailsMember.html">DetailsMember</a></li><li><a href="DS.html">DS</a></li><li><a href="Field.html">Field</a></li><li><a href="GLUE4.html">GLUE4</a></li><li><a href="GLUE6.html">GLUE6</a></li><li><a href="HandshakeState.html">HandshakeState</a></li><li><a href="HashList.html">HashList</a></li><li><a href="MigrateBlockStore.html">MigrateBlockStore</a></li><li><a href="MigrateChainState.html">MigrateChainState</a></li><li><a href="MigrateChangeAddress.html">MigrateChangeAddress</a></li><li><a href="MigrateMigrations.html">MigrateMigrations</a></li><li><a href="MigrateTreeState.html">MigrateTreeState</a></li><li><a href="module.migrations.MigrationState.html">MigrationState</a></li><li><a href="module-blockchain.Chain.html">Chain</a></li><li><a href="module-blockchain.ChainDB.html">ChainDB</a></li><li><a href="module-blockchain.ChainEntry.html">ChainEntry</a></li><li><a href="module-blockchain.ChainMigrator.html">ChainMigrator</a></li><li><a href="module-blockchain.ChainMigratorOptions.html">ChainMigratorOptions</a></li><li><a href="module-blockchain.ChainOptions.html">ChainOptions</a></li><li><a href="module-blockchain.DeploymentState.html">DeploymentState</a></li><li><a href="module-blockchain.WalletMigrationResult.html">WalletMigrationResult</a></li><li><a href="module-blockchain.WalletMigrator.html">WalletMigrator</a></li><li><a href="module-blockstore.AbstractBatch.html">AbstractBatch</a></li><li><a href="module-blockstore.AbstractBlockStore.html">AbstractBlockStore</a></li><li><a href="module-blockstore.FileBatch.html">FileBatch</a></li><li><a href="module-blockstore.LevelBatch.html">LevelBatch</a></li><li><a href="module-blockstore_records-BlockRecord.html">BlockRecord</a></li><li><a href="module-blockstore_records-FileRecord.html">FileRecord</a></li><li><a href="module-blockstore_FileBlockStore.html">blockstore:FileBlockStore</a></li><li><a href="module-blockstore_LevelBlockStore.html">blockstore:LevelBlockStore</a></li><li><a href="module-coins.CoinEntry.html">CoinEntry</a></li><li><a href="module-coins.Coins.html">Coins</a></li><li><a href="module-coins.CoinView.html">CoinView</a></li><li><a href="module-coins.UndoCoins.html">UndoCoins</a></li><li><a href="module-currency.Amount.html">Amount</a></li><li><a href="module-errors-CriticalError.html">CriticalError</a></li><li><a href="module-hd.Mnemonic.html">Mnemonic</a></li><li><a href="module-hd.PrivateKey.html">PrivateKey</a></li><li><a href="module-hd.PublicKey.html">PublicKey</a></li><li><a href="module-http.HTTPOptions.html">HTTPOptions</a></li><li><a href="module-http.RPC.html">RPC</a></li><li><a href="module-http.Server.html">Server</a></li><li><a href="module-http.TransactionOptions.html">TransactionOptions</a></li><li><a href="module-mempool.AirdropEntry.html">AirdropEntry</a></li><li><a href="module-mempool.ClaimEntry.html">ClaimEntry</a></li><li><a href="module-mempool.ConfirmStats.html">ConfirmStats</a></li><li><a href="module-mempool.Mempool.html">Mempool</a></li><li><a href="module-mempool.MempoolEntry.html">MempoolEntry</a></li><li><a href="module-mempool.MempoolOptions.html">MempoolOptions</a></li><li><a href="module-mempool.PolicyEstimator.html">PolicyEstimator</a></li><li><a href="module-migrations.AbstractMigration.html">AbstractMigration</a></li><li><a href="module-migrations.MigrationResult.html">MigrationResult</a></li><li><a href="module-migrations.Migrator.html">Migrator</a></li><li><a href="module-mining.BlockAirdrop.html">BlockAirdrop</a></li><li><a href="module-mining.BlockClaim.html">BlockClaim</a></li><li><a href="module-mining.BlockEntry.html">BlockEntry</a></li><li><a href="module-mining.BlockTemplate.html">BlockTemplate</a></li><li><a href="module-mining.CPUMiner.html">CPUMiner</a></li><li><a href="module-mining.Miner.html">Miner</a></li><li><a href="module-mining.MinerOptions.html">MinerOptions</a></li><li><a href="module-net.BroadcastItem.html">BroadcastItem</a></li><li><a href="module-net.Framer.html">Framer</a></li><li><a href="module-net.HostEntry.html">HostEntry</a></li><li><a href="module-net.HostList.html">HostList</a></li><li><a href="module-net.HostListOptions.html">HostListOptions</a></li><li><a href="module-net.LocalAddress.html">LocalAddress</a></li><li><a href="module-net.NetAddress.html">NetAddress</a></li><li><a href="module-net.Parser.html">Parser</a></li><li><a href="module-net.Peer.html">Peer</a></li><li><a href="module-net.PeerList.html">PeerList</a></li><li><a href="module-net.PeerOptions.html">PeerOptions</a></li><li><a href="module-net.Pool.html">Pool</a></li><li><a href="module-net.PoolOptions.html">PoolOptions</a></li><li><a href="module-net_bip152-CompactBlock.html">CompactBlock</a></li><li><a href="module-net_bip152-TXRequest.html">TXRequest</a></li><li><a href="module-net_bip152-TXResponse.html">TXResponse</a></li><li><a href="module-net_packets-AddrPacket.html">AddrPacket</a></li><li><a href="module-net_packets-AirdropPacket.html">AirdropPacket</a></li><li><a href="module-net_packets-BlockPacket.html">BlockPacket</a></li><li><a href="module-net_packets-BlockTxnPacket.html">BlockTxnPacket</a></li><li><a href="module-net_packets-ClaimPacket.html">ClaimPacket</a></li><li><a href="module-net_packets-CmpctBlockPacket.html">CmpctBlockPacket</a></li><li><a href="module-net_packets-FeeFilterPacket.html">FeeFilterPacket</a></li><li><a href="module-net_packets-FilterAddPacket.html">FilterAddPacket</a></li><li><a href="module-net_packets-FilterClearPacket.html">FilterClearPacket</a></li><li><a href="module-net_packets-FilterLoadPacket.html">FilterLoadPacket</a></li><li><a href="module-net_packets-GetAddrPacket.html">GetAddrPacket</a></li><li><a href="module-net_packets-GetBlocksPacket.html">GetBlocksPacket</a></li><li><a href="module-net_packets-GetBlockTxnPacket.html">GetBlockTxnPacket</a></li><li><a href="module-net_packets-GetDataPacket.html">GetDataPacket</a></li><li><a href="module-net_packets-GetHeadersPacket.html">GetHeadersPacket</a></li><li><a href="module-net_packets-GetProofPacket.html">GetProofPacket</a></li><li><a href="module-net_packets-HeadersPacket.html">HeadersPacket</a></li><li><a href="module-net_packets-InvPacket.html">InvPacket</a></li><li><a href="module-net_packets-MempoolPacket.html">MempoolPacket</a></li><li><a href="module-net_packets-MerkleBlockPacket.html">MerkleBlockPacket</a></li><li><a href="module-net_packets-NotFoundPacket.html">NotFoundPacket</a></li><li><a href="module-net_packets-Packet.html">Packet</a></li><li><a href="module-net_packets-PingPacket.html">PingPacket</a></li><li><a href="module-net_packets-PongPacket.html">PongPacket</a></li><li><a href="module-net_packets-ProofPacket.html">ProofPacket</a></li><li><a href="module-net_packets-RejectPacket.html">RejectPacket</a></li><li><a href="module-net_packets-SendCmpctPacket.html">SendCmpctPacket</a></li><li><a href="module-net_packets-SendHeadersPacket.html">SendHeadersPacket</a></li><li><a href="module-net_packets-TXPacket.html">TXPacket</a></li><li><a href="module-net_packets-UnknownPacket.html">UnknownPacket</a></li><li><a href="module-net_packets-VerackPacket.html">VerackPacket</a></li><li><a href="module-net_packets-VersionPacket.html">VersionPacket</a></li><li><a href="module-node.FullNode.html">FullNode</a></li><li><a href="module-node.Node.html">Node</a></li><li><a href="module-node.NodeClient.html">NodeClient</a></li><li><a href="module-node.NullClient.html">NullClient</a></li><li><a href="module-node.SPVNode.html">SPVNode</a></li><li><a href="module-primitives.AbstractBlock.html">AbstractBlock</a></li><li><a href="module-primitives.Address.html">Address</a></li><li><a href="module-primitives.Block.html">Block</a></li><li><a href="module-primitives.Coin.html">Coin</a></li><li><a href="module-primitives.CoinSelector.html">CoinSelector</a></li><li><a href="module-primitives.Covenant.html">Covenant</a></li><li><a href="module-primitives.Headers.html">Headers</a></li><li><a href="module-primitives.Input.html">Input</a></li><li><a href="module-primitives.InvItem.html">InvItem</a></li><li><a href="module-primitives.KeyRing.html">KeyRing</a></li><li><a href="module-primitives.MemBlock.html">MemBlock</a></li><li><a href="module-primitives.MerkleBlock.html">MerkleBlock</a></li><li><a href="module-primitives.MTX.html">MTX</a></li><li><a href="module-primitives.Outpoint.html">Outpoint</a></li><li><a href="module-primitives.Output.html">Output</a></li><li><a href="module-primitives.TX.html">TX</a></li><li><a href="module-primitives.TXMeta.html">TXMeta</a></li><li><a href="module-protocol.Network.html">Network</a></li><li><a href="module-protocol.TimeData.html">TimeData</a></li><li><a href="module-protocol_errors-VerifyError.html">VerifyError</a></li><li><a href="module-script.Opcode.html">Opcode</a></li><li><a href="module-script.Script.html">Script</a></li><li><a href="module-script.ScriptError.html">ScriptError</a></li><li><a href="module-script.ScriptNum.html">ScriptNum</a></li><li><a href="module-script.SigCache.html">SigCache</a></li><li><a href="module-script.Stack.html">Stack</a></li><li><a href="module-script.Witness.html">Witness</a></li><li><a href="module-ui.URI.html">URI</a></li><li><a href="module-wallet.Account.html">Account</a></li><li><a href="module-wallet.Balance.html">Balance</a></li><li><a href="module-wallet.BlockRecord.html">BlockRecord</a></li><li><a href="module-wallet.Credit.html">Credit</a></li><li><a href="module-wallet.Details.html">Details</a></li><li><a href="module-wallet.HTTP.html">HTTP</a></li><li><a href="module-wallet.MasterKey.html">MasterKey</a></li><li><a href="module-wallet.Path.html">Path</a></li><li><a href="module-wallet.Paths.html">Paths</a></li><li><a href="module-wallet.RPC.html">RPC</a></li><li><a href="module-wallet.TXDB.html">TXDB</a></li><li><a href="module-wallet.Wallet.html">Wallet</a></li><li><a href="module-wallet.WalletCoinView.html">WalletCoinView</a></li><li><a href="module-wallet.WalletDB.html">WalletDB</a></li><li><a href="module-wallet.WalletKey.html">WalletKey</a></li><li><a href="module-wallet.WalletMigratorOptions.html">WalletMigratorOptions</a></li><li><a href="module-wallet.WalletOptions.html">WalletOptions</a></li><li><a href="module-wallet_plugin-Plugin.html">Plugin</a></li><li><a href="module-wallet_records-BlockMeta.html">BlockMeta</a></li><li><a href="module-wallet_records-ChainState.html">ChainState</a></li><li><a href="module-wallet_records-MapRecord.html">MapRecord</a></li><li><a href="module-wallet_records-TXRecord.html">TXRecord</a></li><li><a href="module-workers.Framer.html">Framer</a></li><li><a href="module-workers.Master.html">Master</a></li><li><a href="module-workers.Parent.html">Parent</a></li><li><a href="module-workers.Parser.html">Parser</a></li><li><a href="module-workers.Worker.html">Worker</a></li><li><a href="module-workers.WorkerPool.html">WorkerPool</a></li><li><a href="module-workers_packets-CheckInputPacket.html">CheckInputPacket</a></li><li><a href="module-workers_packets-CheckInputResultPacket.html">CheckInputResultPacket</a></li><li><a href="module-workers_packets-CheckPacket.html">CheckPacket</a></li><li><a href="module-workers_packets-CheckResultPacket.html">CheckResultPacket</a></li><li><a href="module-workers_packets-ECSignPacket.html">ECSignPacket</a></li><li><a href="module-workers_packets-ECSignResultPacket.html">ECSignResultPacket</a></li><li><a href="module-workers_packets-ECVerifyPacket.html">ECVerifyPacket</a></li><li><a href="module-workers_packets-ECVerifyResultPacket.html">ECVerifyResultPacket</a></li><li><a href="module-workers_packets-EnvPacket.html">EnvPacket</a></li><li><a href="module-workers_packets-ErrorPacket.html">ErrorPacket</a></li><li><a href="module-workers_packets-ErrorResultPacket.html">ErrorResultPacket</a></li><li><a href="module-workers_packets-EventPacket.html">EventPacket</a></li><li><a href="module-workers_packets-LogPacket.html">LogPacket</a></li><li><a href="module-workers_packets-MinePacket.html">MinePacket</a></li><li><a href="module-workers_packets-MineResultPacket.html">MineResultPacket</a></li><li><a href="module-workers_packets-Packet.html">Packet</a></li><li><a href="module-workers_packets-ScryptPacket.html">ScryptPacket</a></li><li><a href="module-workers_packets-ScryptResultPacket.html">ScryptResultPacket</a></li><li><a href="module-workers_packets-SignInputPacket.html">SignInputPacket</a></li><li><a href="module-workers_packets-SignInputResultPacket.html">SignInputResultPacket</a></li><li><a href="module-workers_packets-SignPacket.html">SignPacket</a></li><li><a href="module-workers_packets-SignResultPacket.html">SignResultPacket</a></li><li><a href="NameDelta.html">NameDelta</a></li><li><a href="NameState.html">NameState</a></li><li><a href="NS.html">NS</a></li><li><a href="Ownership.html">Ownership</a></li><li><a href="Proof.html">Proof</a></li><li><a href="ProofData.html">ProofData</a></li><li><a href="RecursiveServer.html">RecursiveServer</a></li><li><a href="Reserved.html">Reserved</a></li><li><a href="Resource.html">Resource</a></li><li><a href="RootCache.html">RootCache</a></li><li><a href="RootServer.html">RootServer</a></li><li><a href="Seeder.html">Seeder</a></li><li><a href="SlidingWindow.html">SlidingWindow</a></li><li><a href="StateCache.html">StateCache</a></li><li><a href="SymmetricState.html">SymmetricState</a></li><li><a href="SYNTH4.html">SYNTH4</a></li><li><a href="SYNTH6.html">SYNTH6</a></li><li><a href="TXT.html">TXT</a></li><li><a href="WalletNode.html">WalletNode</a></li></ul><h3>Global</h3><ul><li><a href="global.html#bindExit">bindExit</a></li><li><a href="global.html#checksig">checksig</a></li><li><a href="global.html#decode">decode</a></li><li><a href="global.html#encode">encode</a></li><li><a href="global.html#fromFloat">fromFloat</a></li><li><a href="global.html#groupKey">groupKey</a></li><li><a href="global.html#insert">insert</a></li><li><a href="global.html#listenExit">listenExit</a></li><li><a href="global.html#migrationLayout">migrationLayout</a></li><li><a href="global.html#oldLayout">oldLayout</a></li><li><a href="global.html#remove">remove</a></li><li><a href="global.html#search">search</a></li><li><a href="global.html#toFloat">toFloat</a></li><li><a href="global.html#validateKey">validateKey</a></li><li><a href="global.html#validateSignature">validateSignature</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 1.0.0</a> on Fri Jun 24 2022 16:08:43 GMT+0000 (Coordinated Universal Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

@@ -1,0 +1,1476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: covenants/rules.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: covenants/rules.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/*!
+ * rules.js - covenant rules for hsd
+ * Copyright (c) 2017-2018, Christopher Jeffrey (MIT License).
+ * https://github.com/handshake-org/hsd
+ */
+
+'use strict';
+
+const assert = require('bsert');
+const bio = require('bufio');
+const {BufferSet} = require('buffer-map');
+const blake2b = require('bcrypto/lib/blake2b');
+const sha3 = require('bcrypto/lib/sha3');
+const consensus = require('../protocol/consensus');
+const reserved = require('./reserved');
+const {OwnershipProof} = require('./ownership');
+const AirdropProof = require('../primitives/airdropproof');
+const rules = exports;
+
+/*
+ * Constants
+ */
+
+const NAME_BUFFER = Buffer.allocUnsafe(63);
+
+const CHARSET = new Uint8Array([
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+  0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 4, 0, 0,
+  1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0,
+  0, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2,
+  2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 2, 0, 0, 0, 0, 4,
+  0, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
+  3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 0, 0, 0, 0, 0
+]);
+
+/**
+ * Covenant Types.
+ * @enum {Number}
+ * @default
+ */
+
+rules.types = {
+  NONE: 0,
+  CLAIM: 1,
+  OPEN: 2,
+  BID: 3,
+  REVEAL: 4,
+  REDEEM: 5,
+  REGISTER: 6,
+  UPDATE: 7,
+  RENEW: 8,
+  TRANSFER: 9,
+  FINALIZE: 10,
+  REVOKE: 11
+};
+
+const types = rules.types;
+
+/**
+ * Covenant types by value.
+ * @const {Object}
+ */
+
+rules.typesByVal = {
+  [types.NONE]: 'NONE',
+  [types.CLAIM]: 'CLAIM',
+  [types.OPEN]: 'OPEN',
+  [types.BID]: 'BID',
+  [types.REVEAL]: 'REVEAL',
+  [types.REDEEM]: 'REDEEM',
+  [types.REGISTER]: 'REGISTER',
+  [types.UPDATE]: 'UPDATE',
+  [types.RENEW]: 'RENEW',
+  [types.TRANSFER]: 'TRANSFER',
+  [types.FINALIZE]: 'FINALIZE',
+  [types.REVOKE]: 'REVOKE'
+};
+
+/**
+ * Blacklisted names.
+ * @const {Set}
+ */
+
+rules.blacklist = new Set([
+  'example', // ICANN reserved
+  'invalid', // ICANN reserved
+  'local', // mDNS
+  'localhost', // ICANN reserved
+  'test' // ICANN reserved
+]);
+
+/**
+ * Maximum name size for a TLD.
+ * @const {Number}
+ * @default
+ */
+
+rules.MAX_NAME_SIZE = 63;
+
+/**
+ * Maximum resource size.
+ * @const {Number}
+ * @default
+ */
+
+rules.MAX_RESOURCE_SIZE = 512;
+
+/**
+ * Maximum covenant size.
+ * @const {Number}
+ * @default
+ */
+
+rules.MAX_COVENANT_SIZE = (0
+  + 1 + 32
+  + 1 + 4
+  + 2 + rules.MAX_RESOURCE_SIZE
+  + 1 + 32);
+
+/**
+ * Hash a domain name.
+ * @param {String|Buffer} name
+ * @returns {Buffer}
+ */
+
+rules.hashName = function hashName(name) {
+  if (Buffer.isBuffer(name))
+    return rules.hashBinary(name);
+  return rules.hashString(name);
+};
+
+/**
+ * Hash a domain name.
+ * @param {String} name
+ * @returns {Buffer}
+ */
+
+rules.hashString = function hashString(name) {
+  assert(typeof name === 'string');
+  assert(rules.verifyString(name));
+
+  const slab = NAME_BUFFER;
+  const written = slab.write(name, 0, slab.length, 'ascii');
+
+  assert(name.length === written);
+
+  const buf = slab.slice(0, written);
+
+  return rules.hashBinary(buf);
+};
+
+/**
+ * Hash a domain name.
+ * @param {Buffer} name
+ * @returns {Buffer}
+ */
+
+rules.hashBinary = function hashBinary(name) {
+  assert(Buffer.isBuffer(name));
+  assert(rules.verifyBinary(name));
+  return sha3.digest(name);
+};
+
+/**
+ * Verify a domain name meets handshake requirements.
+ * @param {String|Buffer} name
+ * @returns {Boolean}
+ */
+
+rules.verifyName = function verifyName(name) {
+  if (Buffer.isBuffer(name))
+    return rules.verifyBinary(name);
+  return rules.verifyString(name);
+};
+
+/**
+ * Verify a domain name meets handshake requirements.
+ * @param {String} name
+ * @returns {Boolean}
+ */
+
+rules.verifyString = function verifyString(str) {
+  assert(typeof str === 'string');
+
+  if (str.length === 0)
+    return false;
+
+  if (str.length > rules.MAX_NAME_SIZE)
+    return false;
+
+  for (let i = 0; i &lt; str.length; i++) {
+    const ch = str.charCodeAt(i);
+
+    // No unicode characters.
+    if (ch &amp; 0xff80)
+      return false;
+
+    const type = CHARSET[ch];
+
+    switch (type) {
+      case 0: // non-printable
+        return false;
+      case 1: // 0-9
+        break;
+      case 2: // A-Z
+        return false;
+      case 3: // a-z
+        break;
+      case 4: // - and _
+        // Do not allow at end or beginning.
+        if (i === 0 || i === str.length - 1)
+          return false;
+        break;
+    }
+  }
+
+  if (rules.blacklist.has(str))
+    return false;
+
+  return true;
+};
+
+/**
+ * Verify a domain name meets handshake requirements.
+ * @param {Buffer} name
+ * @returns {Boolean}
+ */
+
+rules.verifyBinary = function verifyBinary(buf) {
+  assert(Buffer.isBuffer(buf));
+
+  if (buf.length === 0)
+    return false;
+
+  if (buf.length > rules.MAX_NAME_SIZE)
+    return false;
+
+  for (let i = 0; i &lt; buf.length; i++) {
+    const ch = buf[i];
+
+    // No unicode characters.
+    if (ch &amp; 0x80)
+      return false;
+
+    const type = CHARSET[ch];
+
+    switch (type) {
+      case 0: // non-printable
+        return false;
+      case 1: // 0-9
+        break;
+      case 2: // A-Z
+        return false;
+      case 3: // a-z
+        break;
+      case 4: // - and _
+        // Do not allow at end or beginning.
+        if (i === 0 || i === buf.length - 1)
+          return false;
+        break;
+    }
+  }
+
+  const str = buf.toString('binary');
+
+  if (rules.blacklist.has(str))
+    return false;
+
+  return true;
+};
+
+/**
+ * Get height and week of name hash rollout.
+ * @param {Buffer} nameHash
+ * @param {Network} network
+ * @returns {Array} [height, week]
+ */
+
+rules.getRollout = function getRollout(nameHash, network) {
+  assert(Buffer.isBuffer(nameHash) &amp;&amp; nameHash.length === 32);
+  assert(network &amp;&amp; network.names);
+
+  if (network.names.noRollout)
+    return [0, 0];
+
+  // Modulo the hash by 52 to get week number.
+  const week = modBuffer(nameHash, 52);
+
+  // Multiply result by a number of blocks-per-week.
+  const height = week * network.names.rolloutInterval;
+
+  // Add the auction start height to the rollout height.
+  return [network.names.auctionStart + height, week];
+};
+
+/**
+ * Verify a name hash meets the rollout.
+ * @param {Buffer} hash
+ * @param {Number} height
+ * @param {Network} network
+ * @returns {Boolean}
+ */
+
+rules.hasRollout = function hasRollout(hash, height, network) {
+  assert((height >>> 0) === height);
+  assert(network);
+
+  const [start] = rules.getRollout(hash, network);
+
+  if (height &lt; start)
+    return false;
+
+  return true;
+};
+
+/**
+ * Grind a name for rollout.
+ * Used for testing.
+ * @param {Number} size
+ * @param {Number} height
+ * @param {Network} network
+ * @returns {String}
+ */
+
+rules.grindName = function grindName(size, height, network) {
+  assert((size >>> 0) === size);
+  assert((height >>> 0) === height);
+  assert(network &amp;&amp; network.names);
+
+  if (height &lt; network.names.auctionStart)
+    height = network.names.auctionStart;
+
+  for (let i = 0; i &lt; 500000; i++) {
+    const name = randomString(size);
+
+    if (rules.blacklist.has(name))
+      continue;
+
+    const hash = rules.hashName(name);
+    const [start] = rules.getRollout(hash, network);
+
+    if (height &lt; start)
+      continue;
+
+    if (reserved.has(hash))
+      continue;
+
+    return name;
+  }
+
+  throw new Error('Could not find available name.');
+};
+
+/**
+ * Test whether a name is reserved.
+ * @param {Buffer} nameHash
+ * @param {Number} height
+ * @param {Network} network
+ * @returns {Boolean}
+ */
+
+rules.isReserved = function isReserved(nameHash, height, network) {
+  assert(Buffer.isBuffer(nameHash));
+  assert((height >>> 0) === height);
+  assert(network &amp;&amp; network.names);
+
+  if (network.names.noReserved)
+    return false;
+
+  if (height >= network.names.claimPeriod)
+    return false;
+
+  return reserved.has(nameHash);
+};
+
+/**
+ * Create a blind bid hash from a value and nonce.
+ * @param {Amount} value
+ * @param {Buffer} nonce
+ * @returns {Buffer}
+ */
+
+rules.blind = function blind(value, nonce) {
+  assert(Number.isSafeInteger(value) &amp;&amp; value >= 0);
+  assert(Buffer.isBuffer(nonce) &amp;&amp; nonce.length === 32);
+
+  const bw = bio.write(40);
+  bw.writeU64(value);
+  bw.writeBytes(nonce);
+
+  return blake2b.digest(bw.render());
+};
+
+/**
+ * Test whether a transaction has
+ * names contained in the set.
+ * @param {TX} tx
+ * @param {BufferSet} set
+ * @returns {Boolean}
+ */
+
+rules.hasNames = function hasNames(tx, set) {
+  assert(tx);
+  assert(set instanceof BufferSet);
+
+  for (const {covenant} of tx.outputs) {
+    if (!covenant.isName())
+      continue;
+
+    const nameHash = covenant.getHash(0);
+
+    switch (covenant.type) {
+      case types.CLAIM:
+      case types.OPEN:
+        if (set.has(nameHash))
+          return true;
+        break;
+      case types.BID:
+      case types.REVEAL:
+      case types.REDEEM:
+        break;
+      case types.REGISTER:
+      case types.UPDATE:
+      case types.RENEW:
+      case types.TRANSFER:
+      case types.FINALIZE:
+      case types.REVOKE:
+        if (set.has(nameHash))
+          return true;
+        break;
+    }
+  }
+
+  return false;
+};
+
+/**
+ * Add names to set.
+ * @param {TX} tx
+ * @param {BufferSet} set
+ */
+
+rules.addNames = function addNames(tx, set) {
+  assert(tx);
+  assert(set instanceof BufferSet);
+
+  for (const {covenant} of tx.outputs) {
+    if (!covenant.isName())
+      continue;
+
+    const nameHash = covenant.getHash(0);
+
+    switch (covenant.type) {
+      case types.CLAIM:
+      case types.OPEN:
+        set.add(nameHash);
+        break;
+      case types.BID:
+      case types.REVEAL:
+      case types.REDEEM:
+        break;
+      case types.REGISTER:
+      case types.UPDATE:
+      case types.RENEW:
+      case types.TRANSFER:
+      case types.FINALIZE:
+      case types.REVOKE:
+        set.add(nameHash);
+        break;
+    }
+  }
+};
+
+/**
+ * Remove names from set.
+ * @param {TX} tx
+ * @param {BufferSet} set
+ */
+
+rules.removeNames = function removeNames(tx, set) {
+  assert(tx);
+  assert(set instanceof BufferSet);
+
+  for (const {covenant} of tx.outputs) {
+    if (!covenant.isName())
+      continue;
+
+    const nameHash = covenant.getHash(0);
+
+    switch (covenant.type) {
+      case types.CLAIM:
+      case types.OPEN:
+        set.delete(nameHash);
+        break;
+      case types.BID:
+      case types.REVEAL:
+      case types.REDEEM:
+        break;
+      case types.REGISTER:
+      case types.UPDATE:
+      case types.RENEW:
+      case types.TRANSFER:
+      case types.FINALIZE:
+      case types.REVOKE:
+        set.delete(nameHash);
+        break;
+    }
+  }
+};
+
+/**
+ * Count name opens.
+ * @param {TX} tx
+ * @returns {Number}
+ */
+
+rules.countOpens = function countOpens(tx) {
+  assert(tx);
+
+  let total = 0;
+
+  for (const {covenant} of tx.outputs) {
+    if (covenant.isOpen())
+      total += 1;
+  }
+
+  return total;
+};
+
+/**
+ * Count name updates.
+ * @param {TX} tx
+ * @returns {Number}
+ */
+
+rules.countUpdates = function countUpdates(tx) {
+  assert(tx);
+
+  let total = 0;
+
+  for (const {covenant} of tx.outputs) {
+    switch (covenant.type) {
+      case types.NONE:
+        break;
+      case types.CLAIM:
+      case types.OPEN:
+        total += 1;
+        break;
+      case types.BID:
+      case types.REVEAL:
+      case types.REDEEM:
+        break;
+      case types.REGISTER:
+        break;
+      case types.UPDATE:
+        total += 1;
+        break;
+      case types.RENEW:
+        break;
+      case types.TRANSFER:
+        total += 1;
+        break;
+      case types.FINALIZE:
+        break;
+      case types.REVOKE:
+        total += 1;
+        break;
+    }
+  }
+
+  return total;
+};
+
+/**
+ * Count name renewals.
+ * @param {TX} tx
+ * @returns {Number}
+ */
+
+rules.countRenewals = function countRenewals(tx) {
+  assert(tx);
+
+  let total = 0;
+
+  for (const {covenant} of tx.outputs) {
+    switch (covenant.type) {
+      case types.REGISTER:
+        total += 1;
+        break;
+      case types.RENEW:
+        total += 1;
+        break;
+      case types.FINALIZE:
+        total += 1;
+        break;
+    }
+  }
+
+  return total;
+};
+
+/**
+ * Check covenant sanity (called from `tx.checkSanity()`).
+ * @param {TX} tx
+ * @returns {Boolean}
+ */
+
+rules.hasSaneCovenants = function hasSaneCovenants(tx) {
+  assert(tx);
+
+  // Coinbases are only capable of creating claims.
+  if (tx.isCoinbase()) {
+    if (tx.inputs.length > tx.outputs.length)
+      return false;
+
+    for (let i = 0; i &lt; tx.outputs.length; i++) {
+      const output = tx.outputs[i];
+      const {covenant} = output;
+
+      switch (covenant.type) {
+        case types.NONE: {
+          // Just a regular payment.
+          if (covenant.items.length !== 0)
+            return false;
+
+          // Airdrop proof.
+          if (i > 0 &amp;&amp; i &lt; tx.inputs.length) {
+            const input = tx.inputs[i];
+            const {witness} = input;
+
+            // Must have exactly 1 witness item.
+            if (witness.items.length !== 1)
+              return false;
+
+            let proof;
+
+            try {
+              proof = AirdropProof.decode(witness.items[0]);
+            } catch (e) {
+              return false;
+            }
+
+            if (!proof.isSane())
+              return false;
+          }
+
+          break;
+        }
+
+        case types.CLAIM: {
+          // Must not be the first input/output.
+          if (i === 0)
+            return false;
+
+          // Must be linked.
+          if (i >= tx.inputs.length)
+            return false;
+
+          const input = tx.inputs[i];
+          const {witness} = input;
+
+          // Must have exactly 1 witness item.
+          if (witness.items.length !== 1)
+            return false;
+
+          // Should contain a name hash, height,
+          // name, flags, block hash, and block height.
+          if (covenant.items.length !== 6)
+            return false;
+
+          // Name hash is 32 bytes.
+          if (covenant.items[0].length !== 32)
+            return false;
+
+          // Height must be 4 bytes.
+          if (covenant.items[1].length !== 4)
+            return false;
+
+          // Name must be valid.
+          if (!rules.verifyName(covenant.items[2]))
+            return false;
+
+          // Flags must be 1 byte.
+          if (covenant.items[3].length !== 1)
+            return false;
+
+          // Block hash must be 32 bytes.
+          if (covenant.items[4].length !== 32)
+            return false;
+
+          // Block height must be 4 bytes.
+          if (covenant.items[5].length !== 4)
+            return false;
+
+          // Must be a reserved name.
+          const nameHash = covenant.items[0];
+
+          if (!reserved.has(nameHash))
+            return false;
+
+          // Must match the hash.
+          const name = covenant.items[2];
+          const key = rules.hashName(name);
+
+          if (!key.equals(nameHash))
+            return false;
+
+          let proof;
+
+          try {
+            proof = OwnershipProof.decode(witness.items[0]);
+          } catch (e) {
+            return false;
+          }
+
+          if (!proof.isSane())
+            return false;
+
+          if (proof.getName() !== name.toString('binary'))
+            return false;
+
+          const flags = covenant.getU8(3);
+          const weak = (flags &amp; 1) !== 0;
+
+          if (proof.isWeak() !== weak)
+            return false;
+
+          break;
+        }
+
+        default: {
+          return false;
+        }
+      }
+    }
+
+    return true;
+  }
+
+  for (let i = 0; i &lt; tx.outputs.length; i++) {
+    const output = tx.outputs[i];
+    const {covenant} = output;
+
+    switch (covenant.type) {
+      case types.NONE: {
+        // Just a regular payment.
+        // Can come from a NONE or a REDEEM.
+        if (covenant.items.length !== 0)
+          return false;
+
+        break;
+      }
+      case types.CLAIM: {
+        // Cannot exist in a non-coinbase.
+        return false;
+      }
+      case types.OPEN: {
+        // Has to come from NONE or REDEEM.
+
+        // Should contain a name hash, zero height, and name.
+        if (covenant.items.length !== 3)
+          return false;
+
+        // Name hash is 32 bytes.
+        if (covenant.items[0].length !== 32)
+          return false;
+
+        // Height is 4 bytes.
+        if (covenant.items[1].length !== 4)
+          return false;
+
+        // Height must be zero.
+        if (covenant.getU32(1) !== 0)
+          return false;
+
+        // Name must be valid.
+        if (!rules.verifyName(covenant.items[2]))
+          return false;
+
+        const key = rules.hashName(covenant.items[2]);
+
+        if (!key.equals(covenant.items[0]))
+          return false;
+
+        break;
+      }
+      case types.BID: {
+        // Has to come from NONE or REDEEM.
+
+        // Should contain a name hash, name, height, and hash.
+        if (covenant.items.length !== 4)
+          return false;
+
+        // Name hash is 32 bytes.
+        if (covenant.items[0].length !== 32)
+          return false;
+
+        // Height must be 4 bytes.
+        if (covenant.items[1].length !== 4)
+          return false;
+
+        // Name must be valid.
+        if (!rules.verifyName(covenant.items[2]))
+          return false;
+
+        // Hash must be 32 bytes.
+        if (covenant.items[3].length !== 32)
+          return false;
+
+        const key = rules.hashName(covenant.items[2]);
+
+        if (!key.equals(covenant.items[0]))
+          return false;
+
+        break;
+      }
+      case types.REVEAL: {
+        // Has to come from a BID.
+        if (i >= tx.inputs.length)
+          return false;
+
+        // Should contain name hash, height, and nonce.
+        if (covenant.items.length !== 3)
+          return false;
+
+        // Name hash must be valid.
+        if (covenant.items[0].length !== 32)
+          return false;
+
+        // Height must be 4 bytes.
+        if (covenant.items[1].length !== 4)
+          return false;
+
+        // Nonce must be 32 bytes.
+        if (covenant.items[2].length !== 32)
+          return false;
+
+        break;
+      }
+      case types.REDEEM: {
+        // Has to come from a REVEAL.
+        if (i >= tx.inputs.length)
+          return false;
+
+        // Should contain name hash and height.
+        if (covenant.items.length !== 2)
+          return false;
+
+        // Name hash must be valid.
+        if (covenant.items[0].length !== 32)
+          return false;
+
+        // Height must be 4 bytes.
+        if (covenant.items[1].length !== 4)
+          return false;
+
+        break;
+      }
+      case types.REGISTER: {
+        // Has to come from a REVEAL.
+        if (i >= tx.inputs.length)
+          return false;
+
+        // Should contain name hash, height,
+        // record data and block hash.
+        if (covenant.items.length !== 4)
+          return false;
+
+        // Name hash must be valid.
+        if (covenant.items[0].length !== 32)
+          return false;
+
+        // Height must be 4 bytes.
+        if (covenant.items[1].length !== 4)
+          return false;
+
+        // Record data is limited to 512 bytes.
+        if (covenant.items[2].length > rules.MAX_RESOURCE_SIZE)
+          return false;
+
+        // Must be a block hash.
+        if (covenant.items[3].length !== 32)
+          return false;
+
+        break;
+      }
+      case types.UPDATE: {
+        // Has to come from a REGISTER, UPDATE, RENEW, or FINALIZE.
+        if (i >= tx.inputs.length)
+          return false;
+
+        // Should contain name hash, height, and record data.
+        if (covenant.items.length !== 3)
+          return false;
+
+        // Name hash must be valid.
+        if (covenant.items[0].length !== 32)
+          return false;
+
+        // Height must be 4 bytes.
+        if (covenant.items[1].length !== 4)
+          return false;
+
+        // Record data is limited to 512 bytes.
+        if (covenant.items[2].length > rules.MAX_RESOURCE_SIZE)
+          return false;
+
+        break;
+      }
+      case types.RENEW: {
+        // Has to come from a REGISTER, UPDATE, RENEW, or FINALIZE.
+        if (i >= tx.inputs.length)
+          return false;
+
+        // Should contain name hash, height,
+        // and a block hash.
+        if (covenant.items.length !== 3)
+          return false;
+
+        // Name hash must be valid.
+        if (covenant.items[0].length !== 32)
+          return false;
+
+        // Height must be 4 bytes.
+        if (covenant.items[1].length !== 4)
+          return false;
+
+        // Must be a block hash.
+        if (covenant.items[2].length !== 32)
+          return false;
+
+        break;
+      }
+      case types.TRANSFER: {
+        // Has to come from a REGISTER, UPDATE, RENEW, or FINALIZE.
+        if (i >= tx.inputs.length)
+          return false;
+
+        // Should contain the address we
+        // _intend_ to transfer to.
+        if (covenant.items.length !== 4)
+          return false;
+
+        // Name hash must be valid.
+        if (covenant.items[0].length !== 32)
+          return false;
+
+        // Height must be 4 bytes.
+        if (covenant.items[1].length !== 4)
+          return false;
+
+        // Version must be 1 byte.
+        if (covenant.items[2].length !== 1)
+          return false;
+
+        // Must have an address.
+        const version = covenant.getU8(2);
+        const hash = covenant.items[3];
+
+        // Todo: Add policy rule for high versions.
+        if (version > 31)
+          return false;
+
+        // Must obey address size limits.
+        if (hash.length &lt; 2 || hash.length > 40)
+          return false;
+
+        break;
+      }
+      case types.FINALIZE: {
+        // Has to come from a TRANSFER.
+        if (i >= tx.inputs.length)
+          return false;
+
+        // Should contain name hash and state.
+        if (covenant.items.length !== 7)
+          return false;
+
+        // Name hash must be valid.
+        if (covenant.items[0].length !== 32)
+          return false;
+
+        // Must be height.
+        if (covenant.items[1].length !== 4)
+          return false;
+
+        // Name must be valid.
+        if (!rules.verifyName(covenant.items[2]))
+          return false;
+
+        // Must be flags byte.
+        if (covenant.items[3].length !== 1)
+          return false;
+
+        // Must be claim height.
+        if (covenant.items[4].length !== 4)
+          return false;
+
+        // Must be renewal count.
+        if (covenant.items[5].length !== 4)
+          return false;
+
+        // Must be a block hash.
+        if (covenant.items[6].length !== 32)
+          return false;
+
+        const key = rules.hashName(covenant.items[2]);
+
+        if (!key.equals(covenant.items[0]))
+          return false;
+
+        break;
+      }
+      case types.REVOKE: {
+        // Has to come from a REGISTER, UPDATE, RENEW, or FINALIZE.
+        if (i >= tx.inputs.length)
+          return false;
+
+        // Should contain name hash and height.
+        if (covenant.items.length !== 2)
+          return false;
+
+        // Name hash must be valid.
+        if (covenant.items[0].length !== 32)
+          return false;
+
+        // Must be height.
+        if (covenant.items[1].length !== 4)
+          return false;
+
+        break;
+      }
+      default: {
+        // Unknown covenant.
+        // Don't enforce anything other than DoS limits.
+        if (covenant.items.length > consensus.MAX_SCRIPT_STACK)
+          return false;
+
+        if (covenant.getSize() > rules.MAX_COVENANT_SIZE)
+          return false;
+
+        break;
+      }
+    }
+  }
+
+  return true;
+};
+
+/**
+ * Perform contextual verification for covenants.
+ * Called from `tx.checkInputs()`.
+ * @param {TX} tx
+ * @param {CoinView} view
+ * @param {Number} height
+ * @param {Network} network
+ * @returns {Number}
+ */
+
+rules.verifyCovenants = function verifyCovenants(tx, view, height, network) {
+  assert(tx &amp;&amp; view);
+  assert(network &amp;&amp; network.names);
+
+  if (tx.isCoinbase()) {
+    let conjured = 0;
+
+    for (let i = 1; i &lt; tx.inputs.length; i++) {
+      const {witness} = tx.inputs[i];
+      const output = tx.output(i);
+      const covenant = tx.covenant(i);
+
+      assert(output &amp;&amp; covenant);
+
+      // Airdrop Proof.
+      if (!covenant.isClaim()) {
+        assert(covenant.isNone());
+
+        if (witness.items.length !== 1)
+          return -1;
+
+        let proof;
+        try {
+          proof = AirdropProof.decode(witness.items[0]);
+        } catch (e) {
+          return -1;
+        }
+
+        assert(proof.isSane());
+
+        const value = proof.getValue();
+
+        if (output.value !== value - proof.fee)
+          return -1;
+
+        if (output.address.version !== proof.version)
+          return -1;
+
+        if (!output.address.hash.equals(proof.address))
+          return -1;
+
+        conjured += value;
+
+        if (conjured > consensus.MAX_MONEY)
+          return -1;
+
+        continue;
+      }
+
+      // DNSSEC Ownership Proof.
+      if (covenant.getU32(1) !== height)
+        return -1;
+
+      if (witness.items.length !== 1)
+        return -1;
+
+      let proof;
+      try {
+        proof = OwnershipProof.decode(witness.items[0]);
+      } catch (e) {
+        return -1;
+      }
+
+      const data = proof.getData(network);
+
+      if (!data)
+        return -1;
+
+      if (output.address.version !== data.version)
+        return -1;
+
+      if (!output.address.hash.equals(data.hash))
+        return -1;
+
+      if (!covenant.getHash(4).equals(data.commitHash))
+        return -1;
+
+      if (covenant.getU32(5) !== data.commitHeight)
+        return -1;
+
+      if (output.value !== data.value - data.fee)
+        return -1;
+
+      if (data.commitHeight === 0) // Fail early.
+        return -1;
+
+      if (height >= network.deflationHeight) {
+        if (data.commitHeight === 1) {
+          if (data.fee > 1000 * consensus.COIN)
+            return -1;
+
+          conjured += data.value;
+        } else {
+          conjured += output.value;
+        }
+      } else {
+        conjured += data.value;
+      }
+
+      if (conjured > consensus.MAX_MONEY)
+        return -1;
+    }
+
+    return conjured;
+  }
+
+  for (let i = 0; i &lt; tx.inputs.length; i++) {
+    const {prevout} = tx.inputs[i];
+    const entry = view.getEntry(prevout);
+    assert(entry);
+
+    // coin is the UTXO being consumed as an input
+    const coin = entry.output;
+    const uc = coin.covenant;
+    // output is the UTXO being created by the tx
+    const output = tx.output(i);
+    const covenant = tx.covenant(i);
+
+    switch (uc.type) {
+      case types.NONE:
+      case types.OPEN:
+      case types.REDEEM: {
+        // Can go nowhere, does not need to be linked.
+        if (!output)
+          break;
+
+        // Can only go to a NONE, OPEN, or BID.
+        switch (covenant.type) {
+          case types.NONE:
+            break;
+          case types.OPEN:
+            break;
+          case types.BID:
+            break;
+          default:
+            return -1;
+        }
+
+        break;
+      }
+      case types.BID: {
+        // Must be be linked.
+        if (!output)
+          return -1;
+
+        // Bid has to go to a reveal.
+        if (!covenant.isReveal())
+          return -1;
+
+        // Names must match.
+        if (!covenant.getHash(0).equals(uc.getHash(0)))
+          return -1;
+
+        // Heights must match.
+        if (covenant.getU32(1) !== uc.getU32(1))
+          return -1;
+
+        const nonce = covenant.getHash(2);
+        const blind = rules.blind(output.value, nonce);
+
+        // The value and nonce must match the
+        // hash they presented in their bid.
+        if (!blind.equals(uc.getHash(3)))
+          return -1;
+
+        // If they lied to us, they can
+        // never redeem their money.
+        if (coin.value &lt; output.value)
+          return -1;
+
+        break;
+      }
+      case types.CLAIM:
+      case types.REVEAL: {
+        // Must be be linked.
+        if (!output)
+          return -1;
+
+        // Reveal has to go to a REGISTER, or
+        // a REDEEM (in the case of the loser).
+        switch (covenant.type) {
+          case types.REGISTER: {
+            // Names must match.
+            if (!covenant.getHash(0).equals(uc.getHash(0)))
+              return -1;
+
+            // Heights must match.
+            if (covenant.getU32(1) !== uc.getU32(1))
+              return -1;
+
+            // Addresses must match.
+            if (!output.address.equals(coin.address))
+              return -1;
+
+            // Note: We use a vickrey auction.
+            // Output value must match the second
+            // highest bid. This will be checked
+            // elsewhere.
+
+            break;
+          }
+          case types.REDEEM: {
+            // Names must match.
+            if (!covenant.getHash(0).equals(uc.getHash(0)))
+              return -1;
+
+            // Heights must match.
+            if (covenant.getU32(1) !== uc.getU32(1))
+              return -1;
+
+            if (uc.isClaim())
+              return -1;
+
+            break;
+          }
+          default: {
+            return -1;
+          }
+        }
+
+        break;
+      }
+      case types.REGISTER:
+      case types.UPDATE:
+      case types.RENEW:
+      case types.FINALIZE: {
+        // Must be be linked.
+        if (!output)
+          return -1;
+
+        // Money is now locked up forever.
+        if (output.value !== coin.value)
+          return -1;
+
+        // Addresses must match.
+        if (!output.address.equals(coin.address))
+          return -1;
+
+        // Can only send to an UPDATE, RENEW, TRANSFER, or REVOKE.
+        switch (covenant.type) {
+          case types.UPDATE:
+          case types.RENEW:
+          case types.TRANSFER:
+          case types.REVOKE: {
+            // Names must match.
+            if (!covenant.getHash(0).equals(uc.getHash(0)))
+              return -1;
+
+            // Heights must match.
+            if (covenant.getU32(1) !== uc.getU32(1))
+              return -1;
+
+            break;
+          }
+          default: {
+            return -1;
+          }
+        }
+
+        break;
+      }
+      case types.TRANSFER: {
+        // Must be be linked.
+        if (!output)
+          return -1;
+
+        // Money is now locked up forever.
+        if (output.value !== coin.value)
+          return -1;
+
+        // Can only send to an UPDATE, RENEW, FINALIZE, or REVOKE.
+        switch (covenant.type) {
+          case types.UPDATE:
+          case types.RENEW:
+          case types.REVOKE: {
+            // Names must match.
+            if (!covenant.getHash(0).equals(uc.getHash(0)))
+              return -1;
+
+            // Heights must match.
+            if (covenant.getU32(1) !== uc.getU32(1))
+              return -1;
+
+            // Addresses must match.
+            if (!output.address.equals(coin.address))
+              return -1;
+
+            break;
+          }
+          case types.FINALIZE: {
+            // Names must match.
+            if (!covenant.getHash(0).equals(uc.getHash(0)))
+              return -1;
+
+            // Heights must match.
+            if (covenant.getU32(1) !== uc.getU32(1))
+              return -1;
+
+            // Address must match the one committed
+            // to in the original transfer covenant.
+            if (output.address.version !== uc.getU8(2))
+              return -1;
+
+            if (!output.address.hash.equals(uc.get(3)))
+              return -1;
+
+            break;
+          }
+          default: {
+            return -1;
+          }
+        }
+
+        break;
+      }
+      case types.REVOKE: {
+        // Revocations are perma-burned.
+        return -1;
+      }
+      default: {
+        // Unknown covenant.
+        // Don't enforce anything.
+        if (covenant.isName())
+          return -1;
+        break;
+      }
+    }
+  }
+
+  return 0;
+};
+
+/*
+ * Helpers
+ */
+
+function randomString(len) {
+  assert((len >>> 0) === len);
+
+  let s = '';
+
+  for (let i = 0; i &lt; len; i++) {
+    const n = Math.random() * (0x7b - 0x61) + 0x61;
+    const c = Math.floor(n);
+
+    s += String.fromCharCode(c);
+  }
+
+  return s;
+}
+
+function modBuffer(buf, num) {
+  assert(Buffer.isBuffer(buf));
+  assert((num &amp; 0xff) === num);
+  assert(num !== 0);
+
+  const p = 256 % num;
+
+  let acc = 0;
+
+  for (let i = 0; i &lt; buf.length; i++)
+    acc = (p * acc + buf[i]) % num;
+
+  return acc;
+}
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-blockchain.html">blockchain</a></li><li><a href="module-blockchain_common.html">blockchain/common</a></li><li><a href="module-blockstore.html">blockstore</a></li><li><a href="module-blockstore_common.html">blockstore/common</a></li><li><a href="module-blockstore_records.html">blockstore/records</a></li><li><a href="module-coins.html">coins</a></li><li><a href="module-covenants.html">covenants</a></li><li><a href="module-dns_common.html">dns/common</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-hd.html">hd</a></li><li><a href="module-hsd.html">hsd</a></li><li><a href="module-mempool.html">mempool</a></li><li><a href="module-mining.html">mining</a></li><li><a href="module-mining_common.html">mining/common</a></li><li><a href="module-net.html">net</a></li><li><a href="module-net_bip152.html">net/bip152</a></li><li><a href="module-net_common.html">net/common</a></li><li><a href="module-net_packets.html">net/packets</a></li><li><a href="module-node.html">node</a></li><li><a href="module-primitives.html">primitives</a></li><li><a href="module-protocol.html">protocol</a></li><li><a href="module-protocol_consensus.html">protocol/consensus</a></li><li><a href="module-protocol_errors.html">protocol/errors</a></li><li><a href="module-protocol_networks.html">protocol/networks</a></li><li><a href="module-protocol_policy.html">protocol/policy</a></li><li><a href="module-script.html">script</a></li><li><a href="module-script_common.html">script/common</a></li><li><a href="module-ui.html">ui</a></li><li><a href="module-utils.html">utils</a></li><li><a href="module-utils_util.html">utils/util</a></li><li><a href="module-wallet.html">wallet</a></li><li><a href="module-wallet_common.html">wallet/common</a></li><li><a href="module-wallet_plugin.html">wallet/plugin</a></li><li><a href="module-wallet_records.html">wallet/records</a></li><li><a href="module-workers.html">workers</a></li><li><a href="module-workers_jobs.html">workers/jobs</a></li><li><a href="module-workers_packets.html">workers/packets</a></li></ul><h3>Classes</h3><ul><li><a href="AirdropKey.html">AirdropKey</a></li><li><a href="AirdropProof.html">AirdropProof</a></li><li><a href="BidReveal.html">BidReveal</a></li><li><a href="BitField.html">BitField</a></li><li><a href="BitView.html">BitView</a></li><li><a href="BlindBid.html">BlindBid</a></li><li><a href="BlindValue.html">BlindValue</a></li><li><a href="BlockProof.html">BlockProof</a></li><li><a href="Brontide.html">Brontide</a></li><li><a href="BrontideStream.html">BrontideStream</a></li><li><a href="ChainFlags.html">ChainFlags</a></li><li><a href="ChainState.html">ChainState</a></li><li><a href="CipherState.html">CipherState</a></li><li><a href="Claim.html">Claim</a></li><li><a href="DetailsMember.html">DetailsMember</a></li><li><a href="DS.html">DS</a></li><li><a href="Field.html">Field</a></li><li><a href="GLUE4.html">GLUE4</a></li><li><a href="GLUE6.html">GLUE6</a></li><li><a href="HandshakeState.html">HandshakeState</a></li><li><a href="HashList.html">HashList</a></li><li><a href="MigrateBlockStore.html">MigrateBlockStore</a></li><li><a href="MigrateChainState.html">MigrateChainState</a></li><li><a href="MigrateChangeAddress.html">MigrateChangeAddress</a></li><li><a href="MigrateMigrations.html">MigrateMigrations</a></li><li><a href="MigrateTreeState.html">MigrateTreeState</a></li><li><a href="module.migrations.MigrationState.html">MigrationState</a></li><li><a href="module-blockchain.Chain.html">Chain</a></li><li><a href="module-blockchain.ChainDB.html">ChainDB</a></li><li><a href="module-blockchain.ChainEntry.html">ChainEntry</a></li><li><a href="module-blockchain.ChainMigrator.html">ChainMigrator</a></li><li><a href="module-blockchain.ChainMigratorOptions.html">ChainMigratorOptions</a></li><li><a href="module-blockchain.ChainOptions.html">ChainOptions</a></li><li><a href="module-blockchain.DeploymentState.html">DeploymentState</a></li><li><a href="module-blockchain.WalletMigrationResult.html">WalletMigrationResult</a></li><li><a href="module-blockchain.WalletMigrator.html">WalletMigrator</a></li><li><a href="module-blockstore.AbstractBatch.html">AbstractBatch</a></li><li><a href="module-blockstore.AbstractBlockStore.html">AbstractBlockStore</a></li><li><a href="module-blockstore.FileBatch.html">FileBatch</a></li><li><a href="module-blockstore.LevelBatch.html">LevelBatch</a></li><li><a href="module-blockstore_records-BlockRecord.html">BlockRecord</a></li><li><a href="module-blockstore_records-FileRecord.html">FileRecord</a></li><li><a href="module-blockstore_FileBlockStore.html">blockstore:FileBlockStore</a></li><li><a href="module-blockstore_LevelBlockStore.html">blockstore:LevelBlockStore</a></li><li><a href="module-coins.CoinEntry.html">CoinEntry</a></li><li><a href="module-coins.Coins.html">Coins</a></li><li><a href="module-coins.CoinView.html">CoinView</a></li><li><a href="module-coins.UndoCoins.html">UndoCoins</a></li><li><a href="module-currency.Amount.html">Amount</a></li><li><a href="module-errors-CriticalError.html">CriticalError</a></li><li><a href="module-hd.Mnemonic.html">Mnemonic</a></li><li><a href="module-hd.PrivateKey.html">PrivateKey</a></li><li><a href="module-hd.PublicKey.html">PublicKey</a></li><li><a href="module-http.HTTPOptions.html">HTTPOptions</a></li><li><a href="module-http.RPC.html">RPC</a></li><li><a href="module-http.Server.html">Server</a></li><li><a href="module-http.TransactionOptions.html">TransactionOptions</a></li><li><a href="module-mempool.AirdropEntry.html">AirdropEntry</a></li><li><a href="module-mempool.ClaimEntry.html">ClaimEntry</a></li><li><a href="module-mempool.ConfirmStats.html">ConfirmStats</a></li><li><a href="module-mempool.Mempool.html">Mempool</a></li><li><a href="module-mempool.MempoolEntry.html">MempoolEntry</a></li><li><a href="module-mempool.MempoolOptions.html">MempoolOptions</a></li><li><a href="module-mempool.PolicyEstimator.html">PolicyEstimator</a></li><li><a href="module-migrations.AbstractMigration.html">AbstractMigration</a></li><li><a href="module-migrations.MigrationResult.html">MigrationResult</a></li><li><a href="module-migrations.Migrator.html">Migrator</a></li><li><a href="module-mining.BlockAirdrop.html">BlockAirdrop</a></li><li><a href="module-mining.BlockClaim.html">BlockClaim</a></li><li><a href="module-mining.BlockEntry.html">BlockEntry</a></li><li><a href="module-mining.BlockTemplate.html">BlockTemplate</a></li><li><a href="module-mining.CPUMiner.html">CPUMiner</a></li><li><a href="module-mining.Miner.html">Miner</a></li><li><a href="module-mining.MinerOptions.html">MinerOptions</a></li><li><a href="module-net.BroadcastItem.html">BroadcastItem</a></li><li><a href="module-net.Framer.html">Framer</a></li><li><a href="module-net.HostEntry.html">HostEntry</a></li><li><a href="module-net.HostList.html">HostList</a></li><li><a href="module-net.HostListOptions.html">HostListOptions</a></li><li><a href="module-net.LocalAddress.html">LocalAddress</a></li><li><a href="module-net.NetAddress.html">NetAddress</a></li><li><a href="module-net.Parser.html">Parser</a></li><li><a href="module-net.Peer.html">Peer</a></li><li><a href="module-net.PeerList.html">PeerList</a></li><li><a href="module-net.PeerOptions.html">PeerOptions</a></li><li><a href="module-net.Pool.html">Pool</a></li><li><a href="module-net.PoolOptions.html">PoolOptions</a></li><li><a href="module-net_bip152-CompactBlock.html">CompactBlock</a></li><li><a href="module-net_bip152-TXRequest.html">TXRequest</a></li><li><a href="module-net_bip152-TXResponse.html">TXResponse</a></li><li><a href="module-net_packets-AddrPacket.html">AddrPacket</a></li><li><a href="module-net_packets-AirdropPacket.html">AirdropPacket</a></li><li><a href="module-net_packets-BlockPacket.html">BlockPacket</a></li><li><a href="module-net_packets-BlockTxnPacket.html">BlockTxnPacket</a></li><li><a href="module-net_packets-ClaimPacket.html">ClaimPacket</a></li><li><a href="module-net_packets-CmpctBlockPacket.html">CmpctBlockPacket</a></li><li><a href="module-net_packets-FeeFilterPacket.html">FeeFilterPacket</a></li><li><a href="module-net_packets-FilterAddPacket.html">FilterAddPacket</a></li><li><a href="module-net_packets-FilterClearPacket.html">FilterClearPacket</a></li><li><a href="module-net_packets-FilterLoadPacket.html">FilterLoadPacket</a></li><li><a href="module-net_packets-GetAddrPacket.html">GetAddrPacket</a></li><li><a href="module-net_packets-GetBlocksPacket.html">GetBlocksPacket</a></li><li><a href="module-net_packets-GetBlockTxnPacket.html">GetBlockTxnPacket</a></li><li><a href="module-net_packets-GetDataPacket.html">GetDataPacket</a></li><li><a href="module-net_packets-GetHeadersPacket.html">GetHeadersPacket</a></li><li><a href="module-net_packets-GetProofPacket.html">GetProofPacket</a></li><li><a href="module-net_packets-HeadersPacket.html">HeadersPacket</a></li><li><a href="module-net_packets-InvPacket.html">InvPacket</a></li><li><a href="module-net_packets-MempoolPacket.html">MempoolPacket</a></li><li><a href="module-net_packets-MerkleBlockPacket.html">MerkleBlockPacket</a></li><li><a href="module-net_packets-NotFoundPacket.html">NotFoundPacket</a></li><li><a href="module-net_packets-Packet.html">Packet</a></li><li><a href="module-net_packets-PingPacket.html">PingPacket</a></li><li><a href="module-net_packets-PongPacket.html">PongPacket</a></li><li><a href="module-net_packets-ProofPacket.html">ProofPacket</a></li><li><a href="module-net_packets-RejectPacket.html">RejectPacket</a></li><li><a href="module-net_packets-SendCmpctPacket.html">SendCmpctPacket</a></li><li><a href="module-net_packets-SendHeadersPacket.html">SendHeadersPacket</a></li><li><a href="module-net_packets-TXPacket.html">TXPacket</a></li><li><a href="module-net_packets-UnknownPacket.html">UnknownPacket</a></li><li><a href="module-net_packets-VerackPacket.html">VerackPacket</a></li><li><a href="module-net_packets-VersionPacket.html">VersionPacket</a></li><li><a href="module-node.FullNode.html">FullNode</a></li><li><a href="module-node.Node.html">Node</a></li><li><a href="module-node.NodeClient.html">NodeClient</a></li><li><a href="module-node.NullClient.html">NullClient</a></li><li><a href="module-node.SPVNode.html">SPVNode</a></li><li><a href="module-primitives.AbstractBlock.html">AbstractBlock</a></li><li><a href="module-primitives.Address.html">Address</a></li><li><a href="module-primitives.Block.html">Block</a></li><li><a href="module-primitives.Coin.html">Coin</a></li><li><a href="module-primitives.CoinSelector.html">CoinSelector</a></li><li><a href="module-primitives.Covenant.html">Covenant</a></li><li><a href="module-primitives.Headers.html">Headers</a></li><li><a href="module-primitives.Input.html">Input</a></li><li><a href="module-primitives.InvItem.html">InvItem</a></li><li><a href="module-primitives.KeyRing.html">KeyRing</a></li><li><a href="module-primitives.MemBlock.html">MemBlock</a></li><li><a href="module-primitives.MerkleBlock.html">MerkleBlock</a></li><li><a href="module-primitives.MTX.html">MTX</a></li><li><a href="module-primitives.Outpoint.html">Outpoint</a></li><li><a href="module-primitives.Output.html">Output</a></li><li><a href="module-primitives.TX.html">TX</a></li><li><a href="module-primitives.TXMeta.html">TXMeta</a></li><li><a href="module-protocol.Network.html">Network</a></li><li><a href="module-protocol.TimeData.html">TimeData</a></li><li><a href="module-protocol_errors-VerifyError.html">VerifyError</a></li><li><a href="module-script.Opcode.html">Opcode</a></li><li><a href="module-script.Script.html">Script</a></li><li><a href="module-script.ScriptError.html">ScriptError</a></li><li><a href="module-script.ScriptNum.html">ScriptNum</a></li><li><a href="module-script.SigCache.html">SigCache</a></li><li><a href="module-script.Stack.html">Stack</a></li><li><a href="module-script.Witness.html">Witness</a></li><li><a href="module-ui.URI.html">URI</a></li><li><a href="module-wallet.Account.html">Account</a></li><li><a href="module-wallet.Balance.html">Balance</a></li><li><a href="module-wallet.BlockRecord.html">BlockRecord</a></li><li><a href="module-wallet.Credit.html">Credit</a></li><li><a href="module-wallet.Details.html">Details</a></li><li><a href="module-wallet.HTTP.html">HTTP</a></li><li><a href="module-wallet.MasterKey.html">MasterKey</a></li><li><a href="module-wallet.Path.html">Path</a></li><li><a href="module-wallet.Paths.html">Paths</a></li><li><a href="module-wallet.RPC.html">RPC</a></li><li><a href="module-wallet.TXDB.html">TXDB</a></li><li><a href="module-wallet.Wallet.html">Wallet</a></li><li><a href="module-wallet.WalletCoinView.html">WalletCoinView</a></li><li><a href="module-wallet.WalletDB.html">WalletDB</a></li><li><a href="module-wallet.WalletKey.html">WalletKey</a></li><li><a href="module-wallet.WalletMigratorOptions.html">WalletMigratorOptions</a></li><li><a href="module-wallet.WalletOptions.html">WalletOptions</a></li><li><a href="module-wallet_plugin-Plugin.html">Plugin</a></li><li><a href="module-wallet_records-BlockMeta.html">BlockMeta</a></li><li><a href="module-wallet_records-ChainState.html">ChainState</a></li><li><a href="module-wallet_records-MapRecord.html">MapRecord</a></li><li><a href="module-wallet_records-TXRecord.html">TXRecord</a></li><li><a href="module-workers.Framer.html">Framer</a></li><li><a href="module-workers.Master.html">Master</a></li><li><a href="module-workers.Parent.html">Parent</a></li><li><a href="module-workers.Parser.html">Parser</a></li><li><a href="module-workers.Worker.html">Worker</a></li><li><a href="module-workers.WorkerPool.html">WorkerPool</a></li><li><a href="module-workers_packets-CheckInputPacket.html">CheckInputPacket</a></li><li><a href="module-workers_packets-CheckInputResultPacket.html">CheckInputResultPacket</a></li><li><a href="module-workers_packets-CheckPacket.html">CheckPacket</a></li><li><a href="module-workers_packets-CheckResultPacket.html">CheckResultPacket</a></li><li><a href="module-workers_packets-ECSignPacket.html">ECSignPacket</a></li><li><a href="module-workers_packets-ECSignResultPacket.html">ECSignResultPacket</a></li><li><a href="module-workers_packets-ECVerifyPacket.html">ECVerifyPacket</a></li><li><a href="module-workers_packets-ECVerifyResultPacket.html">ECVerifyResultPacket</a></li><li><a href="module-workers_packets-EnvPacket.html">EnvPacket</a></li><li><a href="module-workers_packets-ErrorPacket.html">ErrorPacket</a></li><li><a href="module-workers_packets-ErrorResultPacket.html">ErrorResultPacket</a></li><li><a href="module-workers_packets-EventPacket.html">EventPacket</a></li><li><a href="module-workers_packets-LogPacket.html">LogPacket</a></li><li><a href="module-workers_packets-MinePacket.html">MinePacket</a></li><li><a href="module-workers_packets-MineResultPacket.html">MineResultPacket</a></li><li><a href="module-workers_packets-Packet.html">Packet</a></li><li><a href="module-workers_packets-ScryptPacket.html">ScryptPacket</a></li><li><a href="module-workers_packets-ScryptResultPacket.html">ScryptResultPacket</a></li><li><a href="module-workers_packets-SignInputPacket.html">SignInputPacket</a></li><li><a href="module-workers_packets-SignInputResultPacket.html">SignInputResultPacket</a></li><li><a href="module-workers_packets-SignPacket.html">SignPacket</a></li><li><a href="module-workers_packets-SignResultPacket.html">SignResultPacket</a></li><li><a href="NameDelta.html">NameDelta</a></li><li><a href="NameState.html">NameState</a></li><li><a href="NS.html">NS</a></li><li><a href="Ownership.html">Ownership</a></li><li><a href="Proof.html">Proof</a></li><li><a href="ProofData.html">ProofData</a></li><li><a href="RecursiveServer.html">RecursiveServer</a></li><li><a href="Reserved.html">Reserved</a></li><li><a href="Resource.html">Resource</a></li><li><a href="RootCache.html">RootCache</a></li><li><a href="RootServer.html">RootServer</a></li><li><a href="Seeder.html">Seeder</a></li><li><a href="SlidingWindow.html">SlidingWindow</a></li><li><a href="StateCache.html">StateCache</a></li><li><a href="SymmetricState.html">SymmetricState</a></li><li><a href="SYNTH4.html">SYNTH4</a></li><li><a href="SYNTH6.html">SYNTH6</a></li><li><a href="TXT.html">TXT</a></li><li><a href="WalletNode.html">WalletNode</a></li></ul><h3>Global</h3><ul><li><a href="global.html#bindExit">bindExit</a></li><li><a href="global.html#checksig">checksig</a></li><li><a href="global.html#decode">decode</a></li><li><a href="global.html#encode">encode</a></li><li><a href="global.html#fromFloat">fromFloat</a></li><li><a href="global.html#groupKey">groupKey</a></li><li><a href="global.html#insert">insert</a></li><li><a href="global.html#listenExit">listenExit</a></li><li><a href="global.html#migrationLayout">migrationLayout</a></li><li><a href="global.html#oldLayout">oldLayout</a></li><li><a href="global.html#remove">remove</a></li><li><a href="global.html#search">search</a></li><li><a href="global.html#toFloat">toFloat</a></li><li><a href="global.html#validateKey">validateKey</a></li><li><a href="global.html#validateSignature">validateSignature</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 1.0.0</a> on Fri Jun 24 2022 16:08:43 GMT+0000 (Coordinated Universal Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

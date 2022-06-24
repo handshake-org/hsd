@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: primitives/abstractblock.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: primitives/abstractblock.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/*!
+ * abstractblock.js - abstract block object for hsd
+ * Copyright (c) 2017-2018, Christopher Jeffrey (MIT License).
+ * https://github.com/handshake-org/hsd
+ */
+
+'use strict';
+
+const assert = require('bsert');
+const BLAKE2b = require('bcrypto/lib/blake2b');
+const SHA3 = require('bcrypto/lib/sha3');
+const bio = require('bufio');
+const InvItem = require('./invitem');
+const consensus = require('../protocol/consensus');
+const util = require('../utils/util');
+
+/**
+ * Abstract Block
+ * The class which all block-like objects inherit from.
+ * @alias module:primitives.AbstractBlock
+ * @abstract
+ * @property {Number} version
+ * @property {Hash} prevBlock
+ * @property {Hash} merkleRoot
+ * @property {Number} time
+ * @property {Number} bits
+ * @property {Number} nonce
+ */
+
+class AbstractBlock extends bio.Struct {
+  /**
+   * Create an abstract block.
+   * @constructor
+   */
+
+  constructor() {
+    super();
+
+    this.version = 0;
+    this.prevBlock = consensus.ZERO_HASH;
+    this.merkleRoot = consensus.ZERO_HASH;
+    this.witnessRoot = consensus.ZERO_HASH;
+    this.treeRoot = consensus.ZERO_HASH;
+    this.reservedRoot = consensus.ZERO_HASH;
+    this.time = 0;
+    this.bits = 0;
+    this.nonce = 0;
+    this.extraNonce = consensus.ZERO_NONCE;
+    this.mask = consensus.ZERO_HASH;
+
+    this.mutable = false;
+
+    this._hash = null;
+    this._maskHash = null;
+  }
+
+  /**
+   * Inject properties from options object.
+   * @private
+   * @param {Object} options
+   */
+
+  parseOptions(options) {
+    assert(options, 'Block data is required.');
+    assert((options.version >>> 0) === options.version);
+    assert(Buffer.isBuffer(options.prevBlock));
+    assert(Buffer.isBuffer(options.merkleRoot));
+    assert(Buffer.isBuffer(options.witnessRoot));
+    assert(Buffer.isBuffer(options.treeRoot));
+    assert(Buffer.isBuffer(options.reservedRoot));
+    assert(util.isU64(options.time));
+    assert((options.bits >>> 0) === options.bits);
+    assert((options.nonce >>> 0) === options.nonce);
+    assert(Buffer.isBuffer(options.extraNonce)
+      &amp;&amp; options.extraNonce.length === consensus.NONCE_SIZE);
+    assert(Buffer.isBuffer(options.mask));
+
+    this.version = options.version;
+    this.prevBlock = options.prevBlock;
+    this.merkleRoot = options.merkleRoot;
+    this.witnessRoot = options.witnessRoot;
+    this.treeRoot = options.treeRoot;
+    this.reservedRoot = options.reservedRoot;
+    this.time = options.time;
+    this.bits = options.bits;
+    this.nonce = options.nonce;
+    this.extraNonce = options.extraNonce;
+    this.mask = options.mask;
+
+    if (options.mutable != null) {
+      assert(typeof options.mutable === 'boolean');
+      this.mutable = options.mutable;
+    }
+
+    return this;
+  }
+
+  /**
+   * Inject properties from json object.
+   * @private
+   * @param {Object} json
+   */
+
+  parseJSON(json) {
+    assert(json, 'Block data is required.');
+    assert((json.version >>> 0) === json.version);
+    assert((json.time >>> 0) === json.time);
+    assert((json.bits >>> 0) === json.bits);
+    assert((json.nonce >>> 0) === json.nonce);
+
+    this.version = json.version;
+    this.prevBlock = util.parseHex(json.prevBlock, 32);
+    this.merkleRoot = util.parseHex(json.merkleRoot, 32);
+    this.witnessRoot = util.parseHex(json.witnessRoot, 32);
+    this.treeRoot = util.parseHex(json.treeRoot, 32);
+    this.reservedRoot = util.parseHex(json.reservedRoot, 32);
+    this.time = json.time;
+    this.bits = json.bits;
+    this.nonce = json.nonce;
+    this.extraNonce = util.parseHex(json.extraNonce, consensus.NONCE_SIZE);
+    this.mask = util.parseHex(json.mask, 32);
+
+    return this;
+  }
+
+  /**
+   * Test whether the block is a memblock.
+   * @returns {Boolean}
+   */
+
+  isMemory() {
+    return false;
+  }
+
+  /**
+   * Clear any cached values (abstract).
+   */
+
+  _refresh() {
+    this._hash = null;
+    this._maskHash = null;
+    return this;
+  }
+
+  /**
+   * Clear any cached values.
+   */
+
+  refresh() {
+    return this._refresh();
+  }
+
+  /**
+   * Hash the block header.
+   * @returns {Hash} hash
+   */
+
+  hash() {
+    if (this.mutable)
+      return this.powHash();
+
+    if (!this._hash)
+      this._hash = this.powHash();
+
+    return this._hash;
+  }
+
+  /**
+   * Hash the block header.
+   * @returns {String}
+   */
+
+  hashHex() {
+    return this.hash().toString('hex');
+  }
+
+  /**
+   * Get header size.
+   * @returns {Number}
+   */
+
+  sizeHead() {
+    return consensus.HEADER_SIZE;
+  }
+
+  /**
+   * Serialize the block headers.
+   * @returns {Buffer}
+   */
+
+  toHead() {
+    const size = this.sizeHead();
+    return this.writeHead(bio.write(size)).render();
+  }
+
+  /**
+   * Inject properties from serialized data.
+   * @private
+   * @param {Buffer} data
+   */
+
+  fromHead(data) {
+    return this.readHead(bio.read(data));
+  }
+
+  /**
+   * Retrieve deterministically random padding.
+   * @param {Number} size
+   * @returns {Buffer}
+   */
+
+  padding(size) {
+    assert((size >>> 0) === size);
+
+    const pad = Buffer.alloc(size);
+
+    for (let i = 0; i &lt; size; i++)
+      pad[i] = this.prevBlock[i % 32] ^ this.treeRoot[i % 32];
+
+    return pad;
+  }
+
+  /**
+   * Serialize subheader for proof.
+   * @returns {Buffer}
+   */
+
+  toSubhead() {
+    const bw = bio.write(128);
+
+    // The subheader contains miner-mutable
+    // and less essential data (that is,
+    // less essential for SPV resolvers).
+    bw.writeBytes(this.extraNonce);
+    bw.writeHash(this.reservedRoot);
+    bw.writeHash(this.witnessRoot);
+    bw.writeHash(this.merkleRoot);
+    bw.writeU32(this.version);
+    bw.writeU32(this.bits);
+
+    // Exactly one blake2b block (128 bytes).
+    assert(bw.offset === BLAKE2b.blockSize);
+
+    return bw.render();
+  }
+
+  /**
+   * Compute subheader hash.
+   * @returns {Buffer}
+   */
+
+  subHash() {
+    return BLAKE2b.digest(this.toSubhead());
+  }
+
+  /**
+   * Compute xor bytes hash.
+   * @returns {Buffer}
+   */
+
+  maskHash() {
+    if (this._maskHash != null)
+      return this._maskHash;
+
+    // Hash with previous block in case a pool wants
+    // to re-use the same mask for the next block!
+    return BLAKE2b.multi(this.prevBlock, this.mask);
+  }
+
+  /**
+   * Compute commitment hash.
+   * @returns {Buffer}
+   */
+
+  commitHash() {
+    // Note for mining pools: do not send
+    // the mask itself to individual miners.
+    return BLAKE2b.multi(this.subHash(), this.maskHash());
+  }
+
+  /**
+   * Serialize preheader.
+   * @returns {Buffer}
+   */
+
+  toPrehead() {
+    const bw = bio.write(128);
+
+    // The preheader contains only the truly
+    // essential data. This optimizes for
+    // SPV resolvers, who may only need
+    // access to the tree root as well as
+    // the ability to validate the PoW.
+    //
+    // Note that we don't consider the
+    // target commitment "essential" as
+    // the pow can still be validated
+    // contextually without it.
+    //
+    // Furthermore, the preheader does not
+    // contain any miner malleable data
+    // aside from the timestamp and nonce.
+    //
+    // Any malleable data is contained
+    // within the commitment hash. Miners
+    // are penalized for updating this
+    // data, as it will cost them two
+    // rounds of hashing.
+    //
+    // We could drop the padding here and
+    // just use a 20 byte blake2 hash for
+    // the xor bytes (which seems much
+    // cleaner), but this is insecure due
+    // to the following attack:
+    // todo - explain attack.
+    //
+    // The position of the nonce and
+    // timestamp intentionally provide
+    // incentives to keep the timestamp
+    // up-to-date.
+    //
+    // The first 8 bytes of this block
+    // of data can be treated as a uint64
+    // and incremented as such. If more
+    // than a second has passed since
+    // the last timestamp update, a miner
+    // can simply let the nonce overflow
+    // into the timestamp.
+    bw.writeU32(this.nonce);
+    bw.writeU64(this.time);
+    bw.writeBytes(this.padding(20));
+    bw.writeHash(this.prevBlock);
+    bw.writeHash(this.treeRoot);
+    bw.writeHash(this.commitHash());
+
+    // Exactly one blake2b block (128 bytes).
+    assert(bw.offset === BLAKE2b.blockSize);
+
+    return bw.render();
+  }
+
+  /**
+   * Calculate share hash.
+   * @returns {Buffer}
+   */
+
+  shareHash() {
+    const data = this.toPrehead();
+
+    // 128 bytes (output as BLAKE2b-512).
+    const left = BLAKE2b.digest(data, 64);
+
+    // 128 + 8 = 136 bytes.
+    const right = SHA3.multi(data, this.padding(8));
+
+    // 64 + 32 + 32 = 128 bytes.
+    return BLAKE2b.multi(left, this.padding(32), right);
+  }
+
+  /**
+   * Calculate PoW hash.
+   * @returns {Buffer}
+   */
+
+  powHash() {
+    const hash = this.shareHash();
+
+    // XOR the PoW hash with arbitrary bytes.
+    // This can optionally be used by mining
+    // pools to mitigate block withholding
+    // attacks. Idea from Kevin Pan:
+    //
+    // https://lists.linuxfoundation.org/pipermail/bitcoin-dev/2017-October/015163.html
+    //
+    // The goal here is to allow a pool to
+    // deny individual miners the ability
+    // to recognize whether they have found
+    // a block, but still allow them to
+    // recognize a share.
+    //
+    // Example:
+    //
+    //   Network target:
+    //   00000000 00000000 10000000 ...
+    //
+    //   Share target:
+    //   00000000 10000000 00000000 ...
+    //
+    //   Mask:
+    //   00000000 01010101 10000000 ...
+    //
+    // The mask bytes are hidden from the
+    // individual miner, but known to the
+    // pool, and precommitted to in the
+    // block header (i.e. hashed).
+    //
+    // Following our example further:
+    //
+    //   Miner share:
+    //   00000000 01010101 00000000 ...
+    //
+    //   PoW hash (after XOR):
+    //   00000000 00000000 10000000 ...
+    //
+    // At this point, the miner has found
+    // a block, but this is unknown to
+    // him or her as they do not have
+    // access to the mask bytes directly.
+    for (let i = 0; i &lt; 32; i++)
+      hash[i] ^= this.mask[i];
+
+    return hash;
+  }
+
+  /**
+   * Serialize the block headers.
+   * @param {BufferWriter} bw
+   */
+
+  writeHead(bw) {
+    // Preheader.
+    bw.writeU32(this.nonce);
+    bw.writeU64(this.time);
+    bw.writeHash(this.prevBlock);
+    bw.writeHash(this.treeRoot);
+
+    // Subheader.
+    bw.writeBytes(this.extraNonce);
+    bw.writeHash(this.reservedRoot);
+    bw.writeHash(this.witnessRoot);
+    bw.writeHash(this.merkleRoot);
+    bw.writeU32(this.version);
+    bw.writeU32(this.bits);
+
+    // Mask.
+    bw.writeBytes(this.mask);
+
+    return bw;
+  }
+
+  /**
+   * Parse the block headers.
+   * @param {BufferReader} br
+   */
+
+  readHead(br) {
+    // Preheader.
+    this.nonce = br.readU32();
+    this.time = br.readU64();
+    this.prevBlock = br.readHash();
+    this.treeRoot = br.readHash();
+
+    // Subheader.
+    this.extraNonce = br.readBytes(consensus.NONCE_SIZE);
+    this.reservedRoot = br.readHash();
+    this.witnessRoot = br.readHash();
+    this.merkleRoot = br.readHash();
+    this.version = br.readU32();
+    this.bits = br.readU32();
+
+    // Mask.
+    this.mask = br.readBytes(32);
+
+    return this;
+  }
+
+  /**
+   * Encode to miner serialization.
+   * @returns {Buffer}
+   */
+
+  toMiner() {
+    const bw = bio.write(128 + 128);
+
+    // Preheader.
+    bw.writeU32(this.nonce);
+    bw.writeU64(this.time);
+    bw.writeBytes(this.padding(20));
+    bw.writeHash(this.prevBlock);
+    bw.writeHash(this.treeRoot);
+
+    // Replace commitment hash with mask hash.
+    bw.writeHash(this.maskHash());
+
+    // Subheader.
+    bw.writeBytes(this.extraNonce);
+    bw.writeHash(this.reservedRoot);
+    bw.writeHash(this.witnessRoot);
+    bw.writeHash(this.merkleRoot);
+    bw.writeU32(this.version);
+    bw.writeU32(this.bits);
+
+    return bw.render();
+  }
+
+  /**
+   * Decode from miner serialization.
+   * @param {Buffer} data
+   */
+
+  fromMiner(data) {
+    const br = bio.read(data);
+
+    // Preheader.
+    this.nonce = br.readU32();
+    this.time = br.readU64();
+
+    const padding = br.readBytes(20);
+
+    this.prevBlock = br.readHash();
+    this.treeRoot = br.readHash();
+
+    assert(padding.equals(this.padding(20)));
+
+    // Note: mask _hash_.
+    this._maskHash = br.readHash();
+
+    // Subheader.
+    this.extraNonce = br.readBytes(consensus.NONCE_SIZE);
+    this.reservedRoot = br.readHash();
+    this.witnessRoot = br.readHash();
+    this.merkleRoot = br.readHash();
+    this.version = br.readU32();
+    this.bits = br.readU32();
+
+    // Mask (unknown).
+    this.mask = Buffer.alloc(32, 0x00);
+
+    return this;
+  }
+
+  /**
+   * Verify the block.
+   * @returns {Boolean}
+   */
+
+  verify() {
+    if (!this.verifyPOW())
+      return false;
+
+    if (!this.verifyBody())
+      return false;
+
+    return true;
+  }
+
+  /**
+   * Verify proof-of-work.
+   * @returns {Boolean}
+   */
+
+  verifyPOW() {
+    return consensus.verifyPOW(this.hash(), this.bits);
+  }
+
+  /**
+   * Verify the block.
+   * @returns {Boolean}
+   */
+
+  verifyBody() {
+    throw new Error('Abstract method.');
+  }
+
+  /**
+   * Convert the block to an inv item.
+   * @returns {InvItem}
+   */
+
+  toInv() {
+    return new InvItem(InvItem.types.BLOCK, this.hash());
+  }
+
+  /**
+   * Decode from miner serialization.
+   * @param {Buffer} data
+   */
+
+  static fromMiner(data) {
+    return new this().fromMiner(data);
+  }
+}
+
+/*
+ * Expose
+ */
+
+module.exports = AbstractBlock;
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-blockchain.html">blockchain</a></li><li><a href="module-blockchain_common.html">blockchain/common</a></li><li><a href="module-blockstore.html">blockstore</a></li><li><a href="module-blockstore_common.html">blockstore/common</a></li><li><a href="module-blockstore_records.html">blockstore/records</a></li><li><a href="module-coins.html">coins</a></li><li><a href="module-covenants.html">covenants</a></li><li><a href="module-dns_common.html">dns/common</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-hd.html">hd</a></li><li><a href="module-hsd.html">hsd</a></li><li><a href="module-mempool.html">mempool</a></li><li><a href="module-mining.html">mining</a></li><li><a href="module-mining_common.html">mining/common</a></li><li><a href="module-net.html">net</a></li><li><a href="module-net_bip152.html">net/bip152</a></li><li><a href="module-net_common.html">net/common</a></li><li><a href="module-net_packets.html">net/packets</a></li><li><a href="module-node.html">node</a></li><li><a href="module-primitives.html">primitives</a></li><li><a href="module-protocol.html">protocol</a></li><li><a href="module-protocol_consensus.html">protocol/consensus</a></li><li><a href="module-protocol_errors.html">protocol/errors</a></li><li><a href="module-protocol_networks.html">protocol/networks</a></li><li><a href="module-protocol_policy.html">protocol/policy</a></li><li><a href="module-script.html">script</a></li><li><a href="module-script_common.html">script/common</a></li><li><a href="module-ui.html">ui</a></li><li><a href="module-utils.html">utils</a></li><li><a href="module-utils_util.html">utils/util</a></li><li><a href="module-wallet.html">wallet</a></li><li><a href="module-wallet_common.html">wallet/common</a></li><li><a href="module-wallet_plugin.html">wallet/plugin</a></li><li><a href="module-wallet_records.html">wallet/records</a></li><li><a href="module-workers.html">workers</a></li><li><a href="module-workers_jobs.html">workers/jobs</a></li><li><a href="module-workers_packets.html">workers/packets</a></li></ul><h3>Classes</h3><ul><li><a href="AirdropKey.html">AirdropKey</a></li><li><a href="AirdropProof.html">AirdropProof</a></li><li><a href="BidReveal.html">BidReveal</a></li><li><a href="BitField.html">BitField</a></li><li><a href="BitView.html">BitView</a></li><li><a href="BlindBid.html">BlindBid</a></li><li><a href="BlindValue.html">BlindValue</a></li><li><a href="BlockProof.html">BlockProof</a></li><li><a href="Brontide.html">Brontide</a></li><li><a href="BrontideStream.html">BrontideStream</a></li><li><a href="ChainFlags.html">ChainFlags</a></li><li><a href="ChainState.html">ChainState</a></li><li><a href="CipherState.html">CipherState</a></li><li><a href="Claim.html">Claim</a></li><li><a href="DetailsMember.html">DetailsMember</a></li><li><a href="DS.html">DS</a></li><li><a href="Field.html">Field</a></li><li><a href="GLUE4.html">GLUE4</a></li><li><a href="GLUE6.html">GLUE6</a></li><li><a href="HandshakeState.html">HandshakeState</a></li><li><a href="HashList.html">HashList</a></li><li><a href="MigrateBlockStore.html">MigrateBlockStore</a></li><li><a href="MigrateChainState.html">MigrateChainState</a></li><li><a href="MigrateChangeAddress.html">MigrateChangeAddress</a></li><li><a href="MigrateMigrations.html">MigrateMigrations</a></li><li><a href="MigrateTreeState.html">MigrateTreeState</a></li><li><a href="module.migrations.MigrationState.html">MigrationState</a></li><li><a href="module-blockchain.Chain.html">Chain</a></li><li><a href="module-blockchain.ChainDB.html">ChainDB</a></li><li><a href="module-blockchain.ChainEntry.html">ChainEntry</a></li><li><a href="module-blockchain.ChainMigrator.html">ChainMigrator</a></li><li><a href="module-blockchain.ChainMigratorOptions.html">ChainMigratorOptions</a></li><li><a href="module-blockchain.ChainOptions.html">ChainOptions</a></li><li><a href="module-blockchain.DeploymentState.html">DeploymentState</a></li><li><a href="module-blockchain.WalletMigrationResult.html">WalletMigrationResult</a></li><li><a href="module-blockchain.WalletMigrator.html">WalletMigrator</a></li><li><a href="module-blockstore.AbstractBatch.html">AbstractBatch</a></li><li><a href="module-blockstore.AbstractBlockStore.html">AbstractBlockStore</a></li><li><a href="module-blockstore.FileBatch.html">FileBatch</a></li><li><a href="module-blockstore.LevelBatch.html">LevelBatch</a></li><li><a href="module-blockstore_records-BlockRecord.html">BlockRecord</a></li><li><a href="module-blockstore_records-FileRecord.html">FileRecord</a></li><li><a href="module-blockstore_FileBlockStore.html">blockstore:FileBlockStore</a></li><li><a href="module-blockstore_LevelBlockStore.html">blockstore:LevelBlockStore</a></li><li><a href="module-coins.CoinEntry.html">CoinEntry</a></li><li><a href="module-coins.Coins.html">Coins</a></li><li><a href="module-coins.CoinView.html">CoinView</a></li><li><a href="module-coins.UndoCoins.html">UndoCoins</a></li><li><a href="module-currency.Amount.html">Amount</a></li><li><a href="module-errors-CriticalError.html">CriticalError</a></li><li><a href="module-hd.Mnemonic.html">Mnemonic</a></li><li><a href="module-hd.PrivateKey.html">PrivateKey</a></li><li><a href="module-hd.PublicKey.html">PublicKey</a></li><li><a href="module-http.HTTPOptions.html">HTTPOptions</a></li><li><a href="module-http.RPC.html">RPC</a></li><li><a href="module-http.Server.html">Server</a></li><li><a href="module-http.TransactionOptions.html">TransactionOptions</a></li><li><a href="module-mempool.AirdropEntry.html">AirdropEntry</a></li><li><a href="module-mempool.ClaimEntry.html">ClaimEntry</a></li><li><a href="module-mempool.ConfirmStats.html">ConfirmStats</a></li><li><a href="module-mempool.Mempool.html">Mempool</a></li><li><a href="module-mempool.MempoolEntry.html">MempoolEntry</a></li><li><a href="module-mempool.MempoolOptions.html">MempoolOptions</a></li><li><a href="module-mempool.PolicyEstimator.html">PolicyEstimator</a></li><li><a href="module-migrations.AbstractMigration.html">AbstractMigration</a></li><li><a href="module-migrations.MigrationResult.html">MigrationResult</a></li><li><a href="module-migrations.Migrator.html">Migrator</a></li><li><a href="module-mining.BlockAirdrop.html">BlockAirdrop</a></li><li><a href="module-mining.BlockClaim.html">BlockClaim</a></li><li><a href="module-mining.BlockEntry.html">BlockEntry</a></li><li><a href="module-mining.BlockTemplate.html">BlockTemplate</a></li><li><a href="module-mining.CPUMiner.html">CPUMiner</a></li><li><a href="module-mining.Miner.html">Miner</a></li><li><a href="module-mining.MinerOptions.html">MinerOptions</a></li><li><a href="module-net.BroadcastItem.html">BroadcastItem</a></li><li><a href="module-net.Framer.html">Framer</a></li><li><a href="module-net.HostEntry.html">HostEntry</a></li><li><a href="module-net.HostList.html">HostList</a></li><li><a href="module-net.HostListOptions.html">HostListOptions</a></li><li><a href="module-net.LocalAddress.html">LocalAddress</a></li><li><a href="module-net.NetAddress.html">NetAddress</a></li><li><a href="module-net.Parser.html">Parser</a></li><li><a href="module-net.Peer.html">Peer</a></li><li><a href="module-net.PeerList.html">PeerList</a></li><li><a href="module-net.PeerOptions.html">PeerOptions</a></li><li><a href="module-net.Pool.html">Pool</a></li><li><a href="module-net.PoolOptions.html">PoolOptions</a></li><li><a href="module-net_bip152-CompactBlock.html">CompactBlock</a></li><li><a href="module-net_bip152-TXRequest.html">TXRequest</a></li><li><a href="module-net_bip152-TXResponse.html">TXResponse</a></li><li><a href="module-net_packets-AddrPacket.html">AddrPacket</a></li><li><a href="module-net_packets-AirdropPacket.html">AirdropPacket</a></li><li><a href="module-net_packets-BlockPacket.html">BlockPacket</a></li><li><a href="module-net_packets-BlockTxnPacket.html">BlockTxnPacket</a></li><li><a href="module-net_packets-ClaimPacket.html">ClaimPacket</a></li><li><a href="module-net_packets-CmpctBlockPacket.html">CmpctBlockPacket</a></li><li><a href="module-net_packets-FeeFilterPacket.html">FeeFilterPacket</a></li><li><a href="module-net_packets-FilterAddPacket.html">FilterAddPacket</a></li><li><a href="module-net_packets-FilterClearPacket.html">FilterClearPacket</a></li><li><a href="module-net_packets-FilterLoadPacket.html">FilterLoadPacket</a></li><li><a href="module-net_packets-GetAddrPacket.html">GetAddrPacket</a></li><li><a href="module-net_packets-GetBlocksPacket.html">GetBlocksPacket</a></li><li><a href="module-net_packets-GetBlockTxnPacket.html">GetBlockTxnPacket</a></li><li><a href="module-net_packets-GetDataPacket.html">GetDataPacket</a></li><li><a href="module-net_packets-GetHeadersPacket.html">GetHeadersPacket</a></li><li><a href="module-net_packets-GetProofPacket.html">GetProofPacket</a></li><li><a href="module-net_packets-HeadersPacket.html">HeadersPacket</a></li><li><a href="module-net_packets-InvPacket.html">InvPacket</a></li><li><a href="module-net_packets-MempoolPacket.html">MempoolPacket</a></li><li><a href="module-net_packets-MerkleBlockPacket.html">MerkleBlockPacket</a></li><li><a href="module-net_packets-NotFoundPacket.html">NotFoundPacket</a></li><li><a href="module-net_packets-Packet.html">Packet</a></li><li><a href="module-net_packets-PingPacket.html">PingPacket</a></li><li><a href="module-net_packets-PongPacket.html">PongPacket</a></li><li><a href="module-net_packets-ProofPacket.html">ProofPacket</a></li><li><a href="module-net_packets-RejectPacket.html">RejectPacket</a></li><li><a href="module-net_packets-SendCmpctPacket.html">SendCmpctPacket</a></li><li><a href="module-net_packets-SendHeadersPacket.html">SendHeadersPacket</a></li><li><a href="module-net_packets-TXPacket.html">TXPacket</a></li><li><a href="module-net_packets-UnknownPacket.html">UnknownPacket</a></li><li><a href="module-net_packets-VerackPacket.html">VerackPacket</a></li><li><a href="module-net_packets-VersionPacket.html">VersionPacket</a></li><li><a href="module-node.FullNode.html">FullNode</a></li><li><a href="module-node.Node.html">Node</a></li><li><a href="module-node.NodeClient.html">NodeClient</a></li><li><a href="module-node.NullClient.html">NullClient</a></li><li><a href="module-node.SPVNode.html">SPVNode</a></li><li><a href="module-primitives.AbstractBlock.html">AbstractBlock</a></li><li><a href="module-primitives.Address.html">Address</a></li><li><a href="module-primitives.Block.html">Block</a></li><li><a href="module-primitives.Coin.html">Coin</a></li><li><a href="module-primitives.CoinSelector.html">CoinSelector</a></li><li><a href="module-primitives.Covenant.html">Covenant</a></li><li><a href="module-primitives.Headers.html">Headers</a></li><li><a href="module-primitives.Input.html">Input</a></li><li><a href="module-primitives.InvItem.html">InvItem</a></li><li><a href="module-primitives.KeyRing.html">KeyRing</a></li><li><a href="module-primitives.MemBlock.html">MemBlock</a></li><li><a href="module-primitives.MerkleBlock.html">MerkleBlock</a></li><li><a href="module-primitives.MTX.html">MTX</a></li><li><a href="module-primitives.Outpoint.html">Outpoint</a></li><li><a href="module-primitives.Output.html">Output</a></li><li><a href="module-primitives.TX.html">TX</a></li><li><a href="module-primitives.TXMeta.html">TXMeta</a></li><li><a href="module-protocol.Network.html">Network</a></li><li><a href="module-protocol.TimeData.html">TimeData</a></li><li><a href="module-protocol_errors-VerifyError.html">VerifyError</a></li><li><a href="module-script.Opcode.html">Opcode</a></li><li><a href="module-script.Script.html">Script</a></li><li><a href="module-script.ScriptError.html">ScriptError</a></li><li><a href="module-script.ScriptNum.html">ScriptNum</a></li><li><a href="module-script.SigCache.html">SigCache</a></li><li><a href="module-script.Stack.html">Stack</a></li><li><a href="module-script.Witness.html">Witness</a></li><li><a href="module-ui.URI.html">URI</a></li><li><a href="module-wallet.Account.html">Account</a></li><li><a href="module-wallet.Balance.html">Balance</a></li><li><a href="module-wallet.BlockRecord.html">BlockRecord</a></li><li><a href="module-wallet.Credit.html">Credit</a></li><li><a href="module-wallet.Details.html">Details</a></li><li><a href="module-wallet.HTTP.html">HTTP</a></li><li><a href="module-wallet.MasterKey.html">MasterKey</a></li><li><a href="module-wallet.Path.html">Path</a></li><li><a href="module-wallet.Paths.html">Paths</a></li><li><a href="module-wallet.RPC.html">RPC</a></li><li><a href="module-wallet.TXDB.html">TXDB</a></li><li><a href="module-wallet.Wallet.html">Wallet</a></li><li><a href="module-wallet.WalletCoinView.html">WalletCoinView</a></li><li><a href="module-wallet.WalletDB.html">WalletDB</a></li><li><a href="module-wallet.WalletKey.html">WalletKey</a></li><li><a href="module-wallet.WalletMigratorOptions.html">WalletMigratorOptions</a></li><li><a href="module-wallet.WalletOptions.html">WalletOptions</a></li><li><a href="module-wallet_plugin-Plugin.html">Plugin</a></li><li><a href="module-wallet_records-BlockMeta.html">BlockMeta</a></li><li><a href="module-wallet_records-ChainState.html">ChainState</a></li><li><a href="module-wallet_records-MapRecord.html">MapRecord</a></li><li><a href="module-wallet_records-TXRecord.html">TXRecord</a></li><li><a href="module-workers.Framer.html">Framer</a></li><li><a href="module-workers.Master.html">Master</a></li><li><a href="module-workers.Parent.html">Parent</a></li><li><a href="module-workers.Parser.html">Parser</a></li><li><a href="module-workers.Worker.html">Worker</a></li><li><a href="module-workers.WorkerPool.html">WorkerPool</a></li><li><a href="module-workers_packets-CheckInputPacket.html">CheckInputPacket</a></li><li><a href="module-workers_packets-CheckInputResultPacket.html">CheckInputResultPacket</a></li><li><a href="module-workers_packets-CheckPacket.html">CheckPacket</a></li><li><a href="module-workers_packets-CheckResultPacket.html">CheckResultPacket</a></li><li><a href="module-workers_packets-ECSignPacket.html">ECSignPacket</a></li><li><a href="module-workers_packets-ECSignResultPacket.html">ECSignResultPacket</a></li><li><a href="module-workers_packets-ECVerifyPacket.html">ECVerifyPacket</a></li><li><a href="module-workers_packets-ECVerifyResultPacket.html">ECVerifyResultPacket</a></li><li><a href="module-workers_packets-EnvPacket.html">EnvPacket</a></li><li><a href="module-workers_packets-ErrorPacket.html">ErrorPacket</a></li><li><a href="module-workers_packets-ErrorResultPacket.html">ErrorResultPacket</a></li><li><a href="module-workers_packets-EventPacket.html">EventPacket</a></li><li><a href="module-workers_packets-LogPacket.html">LogPacket</a></li><li><a href="module-workers_packets-MinePacket.html">MinePacket</a></li><li><a href="module-workers_packets-MineResultPacket.html">MineResultPacket</a></li><li><a href="module-workers_packets-Packet.html">Packet</a></li><li><a href="module-workers_packets-ScryptPacket.html">ScryptPacket</a></li><li><a href="module-workers_packets-ScryptResultPacket.html">ScryptResultPacket</a></li><li><a href="module-workers_packets-SignInputPacket.html">SignInputPacket</a></li><li><a href="module-workers_packets-SignInputResultPacket.html">SignInputResultPacket</a></li><li><a href="module-workers_packets-SignPacket.html">SignPacket</a></li><li><a href="module-workers_packets-SignResultPacket.html">SignResultPacket</a></li><li><a href="NameDelta.html">NameDelta</a></li><li><a href="NameState.html">NameState</a></li><li><a href="NS.html">NS</a></li><li><a href="Ownership.html">Ownership</a></li><li><a href="Proof.html">Proof</a></li><li><a href="ProofData.html">ProofData</a></li><li><a href="RecursiveServer.html">RecursiveServer</a></li><li><a href="Reserved.html">Reserved</a></li><li><a href="Resource.html">Resource</a></li><li><a href="RootCache.html">RootCache</a></li><li><a href="RootServer.html">RootServer</a></li><li><a href="Seeder.html">Seeder</a></li><li><a href="SlidingWindow.html">SlidingWindow</a></li><li><a href="StateCache.html">StateCache</a></li><li><a href="SymmetricState.html">SymmetricState</a></li><li><a href="SYNTH4.html">SYNTH4</a></li><li><a href="SYNTH6.html">SYNTH6</a></li><li><a href="TXT.html">TXT</a></li><li><a href="WalletNode.html">WalletNode</a></li></ul><h3>Global</h3><ul><li><a href="global.html#bindExit">bindExit</a></li><li><a href="global.html#checksig">checksig</a></li><li><a href="global.html#decode">decode</a></li><li><a href="global.html#encode">encode</a></li><li><a href="global.html#fromFloat">fromFloat</a></li><li><a href="global.html#groupKey">groupKey</a></li><li><a href="global.html#insert">insert</a></li><li><a href="global.html#listenExit">listenExit</a></li><li><a href="global.html#migrationLayout">migrationLayout</a></li><li><a href="global.html#oldLayout">oldLayout</a></li><li><a href="global.html#remove">remove</a></li><li><a href="global.html#search">search</a></li><li><a href="global.html#toFloat">toFloat</a></li><li><a href="global.html#validateKey">validateKey</a></li><li><a href="global.html#validateSignature">validateSignature</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 1.0.0</a> on Fri Jun 24 2022 16:08:43 GMT+0000 (Coordinated Universal Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

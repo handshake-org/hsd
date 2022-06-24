@@ -1,0 +1,866 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: net/brontide.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: net/brontide.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/*!
+ * brontide.js - peer-to-peer communication encryption.
+ * Copyright (c) 2018, Christopher Jeffrey (MIT License).
+ *
+ * Resources:
+ *   https://github.com/lightningnetwork/lightning-rfc/blob/master/08-transport.md
+ *
+ * Parts of this software are based on LND:
+ *   Copyright (C) 2015-2017 The Lightning Network Developers
+ *   https://github.com/lightningnetwork/lnd/blob/master/brontide/noise.go
+ *   https://github.com/lightningnetwork/lnd/blob/master/brontide/noise_test.go
+ *
+ * We modify the LN handshake in the following way:
+ *
+ *   Definition: "elligator" -- an invertible algebraic
+ *   function which maps a field element to a point. We use
+ *   the _generalized_ definition here. Think tissue, not
+ *   kleenex.
+ *
+ *   For better indistinguishability and censorship mitigation,
+ *   we use an Elligator Squared construction as described by
+ *   Tibouchi[1][2]. As Tibouchi notes, elligators are _more_
+ *   useful on prime order curves. Any curve with torsion
+ *   groups must necessarily be distinguishable, as public
+ *   keys reside in the primary subgroup (though, this may
+ *   not be true of the Ristretto encoding). An adversary
+ *   can simply run the forward map and check whether the
+ *   resulting point is in the primary subgroup.
+ *
+ *   We're in a unique position here, since we're already
+ *   hell bent on using secp256k1 for compat with bitcoin,
+ *   as opposed to something like ed25519. The fact that
+ *   secp256k1 has a cofactor of 1 allows us to use a truly
+ *   indistinguishable encoding.
+ *
+ *   The Elligator Squared construction is such that the
+ *   sender must provide the receiver with two preimages
+ *   (u, v) which map to a point via `f^2(u,v) -> f(u) + f(v)`
+ *   where `f(u)` is the forward map. The inverse map f^2^-1(p)
+ *   is more complex and involves a loop as well as random
+ *   group element generation.
+ *
+ *   Performance may be a concern. Encoding a point requires
+ *   16 inversions and 20 square roots on average (an average
+ *   of 4 iterations of the elligator squared loop). This
+ *   should be on the order of ~3-4 point multiplications.
+ *   In the future, the inversions can likely be optimized
+ *   and reduced if multiple iterations are attempted at
+ *   once.
+ *
+ *   The forward map is cheaper, requiring only 6 square
+ *   roots and 3 inversions. We can visualize this as decoding
+ *   _nine_ compressed public keys instead of one.
+ *
+ *   We can potentially double the performance by moving to
+ *   a curve which is 3-isogenous to secp256k1[3][4] (idea
+ *   from [5]). This allows us to use the Simplified
+ *   Shallue-Woestijne-Ulas map instead of the Shallue-van
+ *   de Woestijne map, though, the sender may have to modify
+ *   their private key before executing the actual ECDH (as
+ *   their public key would be multiplied by 3 by the receiver).
+ *
+ *   All bets are off if the user is subjected to a more
+ *   interactive attack, such as a honeypot/sybil attack,
+ *   or a MITM. An attack like that will no doubt prove
+ *   that this particular exchange of messages is that
+ *   of an end-to-end encryption handshake. However, the
+ *   construction is here to provide a mitigation against
+ *   more passive attacks, like non-interactive packet
+ *   inspection. A user in this situation has plausible
+ *   deniability with regards to using cryptography over
+ *   the wire.
+ *
+ *   We have an elligator squared implentation in both C and
+ *   javascript[6][7].
+ *
+ *   [1] https://eprint.iacr.org/2014/043.pdf
+ *   [2] https://www.di.ens.fr/~fouque/pub/latincrypt12.pdf
+ *   [3] https://gist.github.com/chjj/09c447047d5d0b63afcbbbc484d2c882
+ *   [4] https://github.com/bcoin-org/bcrypto/commit/aac4464
+ *   [5] https://github.com/cfrg/draft-irtf-cfrg-hash-to-curve/issues/158
+ *   [6] https://github.com/bcoin-org/bcrypto/blob/master/src/extra256k1/elligator.h
+ *   [7] https://github.com/bcoin-org/bcrypto/blob/master/lib/js/elliptic.js
+ */
+
+'use strict';
+
+const assert = require('bsert');
+const EventEmitter = require('events');
+const sha256 = require('bcrypto/lib/sha256');
+const aead = require('bcrypto/lib/aead');
+const hkdf = require('bcrypto/lib/hkdf');
+const secp256k1 = require('bcrypto/lib/secp256k1');
+const common = require('./common');
+
+/*
+ * Constants
+ */
+
+const ZERO_KEY = Buffer.alloc(32, 0x00);
+const ZERO_PUB = Buffer.alloc(33, 0x00);
+const EMPTY = Buffer.alloc(0);
+
+const PROTOCOL_NAME = 'Noise_XK_secp256k1_ChaChaPoly_SHA256+SVDW_Squared';
+const PROLOGUE = 'hns';
+const ROTATION_INTERVAL = 1000;
+const HEADER_SIZE = 20;
+const ACT_ONE_SIZE = 80; // 64 + 16
+const ACT_TWO_SIZE = 80; // 64 + 16
+const ACT_THREE_SIZE = 65; // 33 + 16 + 16
+const MAX_MESSAGE = common.MAX_MESSAGE + 9;
+
+const ACT_NONE = 0;
+const ACT_ONE = 1;
+const ACT_TWO = 2;
+const ACT_THREE = 3;
+const ACT_DONE = 4;
+
+/**
+ * CipherState
+ * @extends {EventEmitter}
+ */
+
+class CipherState extends EventEmitter {
+  constructor() {
+    super();
+    this.nonce = 0;
+    this.iv = Buffer.alloc(12, 0x00);
+    this.key = ZERO_KEY; // secret key
+    this.salt = ZERO_KEY;
+  }
+
+  update() {
+    this.iv.writeUInt32LE(this.nonce, 4, true);
+    return this.iv;
+  }
+
+  initKey(key) {
+    assert(Buffer.isBuffer(key));
+    this.key = key;
+    this.nonce = 0;
+    this.update();
+    return this;
+  }
+
+  initSalt(key, salt) {
+    assert(Buffer.isBuffer(salt));
+    this.salt = salt;
+    this.initKey(key);
+    return this;
+  }
+
+  rotateKey() {
+    const info = EMPTY;
+    const old = this.key;
+    const [salt, next] = expand(old, this.salt, info);
+
+    this.salt = salt;
+    this.initKey(next);
+
+    return this;
+  }
+
+  encrypt(pt, ad) {
+    const tag = aead.encrypt(this.key, this.iv, pt, ad);
+
+    this.nonce += 1;
+    this.update();
+
+    if (this.nonce === ROTATION_INTERVAL)
+      this.rotateKey();
+
+    return tag;
+  }
+
+  decrypt(ct, tag, ad) {
+    if (!aead.decrypt(this.key, this.iv, ct, tag, ad))
+      return false;
+
+    this.nonce += 1;
+    this.update();
+
+    if (this.nonce === ROTATION_INTERVAL)
+      this.rotateKey();
+
+    return true;
+  }
+}
+
+/**
+ * SymmetricState
+ * @extends {CipherState}
+ */
+
+class SymmetricState extends CipherState {
+  constructor() {
+    super();
+    this.chain = ZERO_KEY; // chaining key
+    this.temp = ZERO_KEY; // temp key
+    this.digest = ZERO_KEY; // handshake digest
+  }
+
+  initSymmetric(protocolName) {
+    assert(typeof protocolName === 'string');
+
+    const empty = ZERO_KEY;
+    const proto = Buffer.from(protocolName, 'ascii');
+
+    this.digest = sha256.digest(proto);
+    this.chain = this.digest;
+    this.initKey(empty);
+
+    return this;
+  }
+
+  mixKey(input) {
+    const info = EMPTY;
+    const secret = input;
+    const salt = this.chain;
+
+    [this.chain, this.temp] = expand(secret, salt, info);
+
+    this.initKey(this.temp);
+
+    return this;
+  }
+
+  mixDigest(data, tag) {
+    return sha256.multi(this.digest, data, tag);
+  }
+
+  mixHash(data, tag) {
+    this.digest = this.mixDigest(data, tag);
+    return this;
+  }
+
+  encryptHash(pt) {
+    const tag = this.encrypt(pt, this.digest);
+    this.mixHash(pt, tag);
+    return tag;
+  }
+
+  decryptHash(ct, tag) {
+    assert(Buffer.isBuffer(tag));
+
+    const digest = this.mixDigest(ct, tag);
+
+    if (!this.decrypt(ct, tag, this.digest))
+      return false;
+
+    this.digest = digest;
+
+    return true;
+  }
+}
+
+/**
+ * HandshakeState
+ * @extends {SymmetricState}
+ */
+
+class HandshakeState extends SymmetricState {
+  constructor() {
+    super();
+    this.initiator = false;
+    this.localStatic = ZERO_KEY;
+    this.localEphemeral = ZERO_KEY;
+    this.remoteStatic = ZERO_PUB;
+    this.remoteEphemeral = ZERO_PUB;
+    this.generateKey = () => secp256k1.privateKeyGenerate();
+  }
+
+  initState(initiator, prologue, localPub, remotePub) {
+    assert(typeof initiator === 'boolean');
+    assert(typeof prologue === 'string');
+    assert(Buffer.isBuffer(localPub));
+    assert(!remotePub || Buffer.isBuffer(remotePub));
+
+    this.initiator = initiator;
+    this.localStatic = localPub; // private
+    this.remoteStatic = remotePub || ZERO_PUB;
+
+    this.initSymmetric(PROTOCOL_NAME);
+    this.mixHash(Buffer.from(prologue, 'ascii'));
+
+    if (initiator) {
+      this.mixHash(remotePub);
+    } else {
+      const pub = getPublic(localPub);
+      this.mixHash(pub);
+    }
+
+    return this;
+  }
+}
+
+/**
+ * Brontide
+ * @extends {HandshakeState}
+ */
+
+class Brontide extends HandshakeState {
+  constructor() {
+    super();
+    this.sendCipher = new CipherState();
+    this.recvCipher = new CipherState();
+  }
+
+  init(initiator, localPub, remotePub) {
+    return this.initState(initiator, PROLOGUE, localPub, remotePub);
+  }
+
+  genActOne() {
+    // e
+    this.localEphemeral = this.generateKey();
+
+    const ephemeral = getPublic(this.localEphemeral);
+    const uniform = secp256k1.publicKeyToHash(ephemeral);
+
+    this.mixHash(ephemeral);
+
+    // es
+    const s = ecdh(this.remoteStatic, this.localEphemeral);
+
+    this.mixKey(s);
+
+    const tag = this.encryptHash(EMPTY);
+    const actOne = Buffer.allocUnsafe(ACT_ONE_SIZE);
+
+    uniform.copy(actOne, 0);
+    tag.copy(actOne, 64);
+
+    return actOne;
+  }
+
+  recvActOne(actOne) {
+    assert(Buffer.isBuffer(actOne));
+
+    if (actOne.length !== ACT_ONE_SIZE)
+      throw new Error('Act one: bad size.');
+
+    const u = actOne.slice(0, 64);
+    const p = actOne.slice(64);
+    const e = secp256k1.publicKeyFromHash(u);
+
+    // e
+    this.remoteEphemeral = e;
+    this.mixHash(this.remoteEphemeral);
+
+    // es
+    const s = ecdh(this.remoteEphemeral, this.localStatic);
+
+    this.mixKey(s);
+
+    if (!this.decryptHash(EMPTY, p))
+      throw new Error('Act one: bad tag.');
+
+    return this;
+  }
+
+  genActTwo() {
+    // e
+    this.localEphemeral = this.generateKey();
+
+    const ephemeral = getPublic(this.localEphemeral);
+    const uniform = secp256k1.publicKeyToHash(ephemeral);
+
+    this.mixHash(ephemeral);
+
+    // ee
+    const s = ecdh(this.remoteEphemeral, this.localEphemeral);
+
+    this.mixKey(s);
+
+    const tag = this.encryptHash(EMPTY);
+    const actTwo = Buffer.allocUnsafe(ACT_TWO_SIZE);
+
+    uniform.copy(actTwo, 0);
+    tag.copy(actTwo, 64);
+
+    return actTwo;
+  }
+
+  recvActTwo(actTwo) {
+    assert(Buffer.isBuffer(actTwo));
+
+    if (actTwo.length !== ACT_TWO_SIZE)
+      throw new Error('Act two: bad size.');
+
+    const u = actTwo.slice(0, 64);
+    const p = actTwo.slice(64);
+    const e = secp256k1.publicKeyFromHash(u);
+
+    // e
+    this.remoteEphemeral = e;
+    this.mixHash(this.remoteEphemeral);
+
+    // ee
+    const s = ecdh(this.remoteEphemeral, this.localEphemeral);
+
+    this.mixKey(s);
+
+    if (!this.decryptHash(EMPTY, p))
+      throw new Error('Act two: bad tag.');
+
+    return this;
+  }
+
+  genActThree() {
+    const ourPubkey = getPublic(this.localStatic);
+    const tag1 = this.encryptHash(ourPubkey);
+    const ct = ourPubkey;
+
+    const s = ecdh(this.remoteEphemeral, this.localStatic);
+
+    this.mixKey(s);
+
+    const tag2 = this.encryptHash(EMPTY);
+    const actThree = Buffer.allocUnsafe(ACT_THREE_SIZE);
+
+    ct.copy(actThree, 0);
+    tag1.copy(actThree, 33);
+    tag2.copy(actThree, 49);
+
+    this.split();
+
+    return actThree;
+  }
+
+  recvActThree(actThree) {
+    assert(Buffer.isBuffer(actThree));
+
+    if (actThree.length !== ACT_THREE_SIZE)
+      throw new Error('Act three: bad size.');
+
+    const s1 = actThree.slice(0, 33);
+    const p1 = actThree.slice(33, 49);
+
+    const s2 = actThree.slice(49, 49);
+    const p2 = actThree.slice(49, 65);
+
+    // s
+    if (!this.decryptHash(s1, p1))
+      throw new Error('Act three: bad tag.');
+
+    const remotePub = s1;
+
+    this.remoteStatic = remotePub;
+
+    // se
+    const se = ecdh(this.remoteStatic, this.localEphemeral);
+
+    this.mixKey(se);
+
+    if (!this.decryptHash(s2, p2))
+      throw new Error('Act three: bad tag.');
+
+    this.split();
+
+    return this;
+  }
+
+  split() {
+    const [h1, h2] = expand(EMPTY, this.chain, EMPTY);
+
+    if (this.initiator) {
+      const sendKey = h1;
+      this.sendCipher.initSalt(sendKey, this.chain);
+      const recvKey = h2;
+      this.recvCipher.initSalt(recvKey, this.chain);
+    } else {
+      const recvKey = h1;
+      this.recvCipher.initSalt(recvKey, this.chain);
+      const sendKey = h2;
+      this.sendCipher.initSalt(sendKey, this.chain);
+    }
+
+    return this;
+  }
+
+  write(data) {
+    assert(Buffer.isBuffer(data));
+    assert(data.length &lt;= 0xffff);
+
+    const packet = Buffer.allocUnsafe(2 + 16 + data.length + 16);
+    packet.writeUInt16BE(data.length, 0);
+    data.copy(packet, 2 + 16);
+
+    const len = packet.slice(0, 2);
+    const ta1 = packet.slice(2, 18);
+    const msg = packet.slice(18, 18 + data.length);
+    const ta2 = packet.slice(18 + data.length, 18 + data.length + 16);
+
+    const tag1 = this.sendCipher.encrypt(len);
+    tag1.copy(ta1, 0);
+
+    const tag2 = this.sendCipher.encrypt(msg);
+    tag2.copy(ta2, 0);
+
+    return packet;
+  }
+
+  read(packet) {
+    assert(Buffer.isBuffer(packet));
+
+    const len = packet.slice(0, 2);
+    const ta1 = packet.slice(2, 18);
+
+    if (!this.recvCipher.decrypt(len, ta1))
+      throw new Error('Bad tag for header.');
+
+    const size = len.readUInt16BE(0, true);
+    assert(packet.length === 18 + size + 16);
+
+    const msg = packet.slice(18, 18 + size);
+    const ta2 = packet.slice(18 + size, 18 + size + 16);
+
+    if (!this.recvCipher.decrypt(msg, ta2))
+      throw new Error('Bad tag for message.');
+
+    return msg;
+  }
+}
+
+/**
+ * BrontideStream
+ * @extends {Brontide}
+ */
+
+class BrontideStream extends Brontide {
+  constructor() {
+    super();
+    this.socket = null;
+    this.state = ACT_NONE;
+    this.pending = [];
+    this.total = 0;
+    this.waiting = 0;
+    this.hasSize = false;
+    this.buffer = [];
+    this.onData = data => this.feed(data);
+    this.onConnect = () => this.start();
+  }
+
+  accept(socket, ourKey) {
+    assert(!this.socket);
+    assert(socket);
+    this.socket = socket;
+    this.init(false, ourKey);
+    this.socket.on('data', this.onData);
+    this.start();
+    return this;
+  }
+
+  connect(socket, ourKey, theirKey) {
+    assert(!this.socket);
+    assert(socket);
+    this.socket = socket;
+    this.init(true, ourKey, theirKey);
+    this.socket.on('connect', this.onConnect);
+    this.socket.on('data', this.onData);
+    return this;
+  }
+
+  start() {
+    if (this.initiator) {
+      this.state = ACT_TWO;
+      this.waiting = ACT_TWO_SIZE;
+      try {
+        this.socket.write(this.genActOne());
+      } catch (e) {
+        setImmediate(() => {
+          this.destroy();
+          this.emit('error', e);
+        });
+        return this;
+      }
+    } else {
+      this.state = ACT_ONE;
+      this.waiting = ACT_ONE_SIZE;
+    }
+    return this;
+  }
+
+  unleash() {
+    assert(this.state === ACT_DONE);
+
+    for (const buf of this.buffer)
+      this.write(buf);
+
+    this.buffer.length = 0;
+
+    return this;
+  }
+
+  destroy() {
+    this.state = ACT_NONE;
+    this.pending.length = 0;
+    this.total = 0;
+    this.waiting = 0;
+    this.hasSize = false;
+    this.buffer.length = 0;
+    this.socket.removeListener('connect', this.onConnect);
+    this.socket.removeListener('data', this.onData);
+    return this;
+  }
+
+  write(data) {
+    assert(Buffer.isBuffer(data));
+
+    if (this.state === ACT_NONE)
+      return false;
+
+    if (this.state !== ACT_DONE) {
+      this.buffer.push(data);
+      return false;
+    }
+
+    assert(data.length &lt;= 0xffffffff);
+
+    const len = Buffer.allocUnsafe(4);
+    len.writeUInt32LE(data.length, 0);
+
+    let r = 1;
+
+    const tag1 = this.sendCipher.encrypt(len);
+
+    r &amp;= this.socket.write(len);
+    r &amp;= this.socket.write(tag1);
+
+    const tag2 = this.sendCipher.encrypt(data);
+
+    r &amp;= this.socket.write(data);
+    r &amp;= this.socket.write(tag2);
+
+    return Boolean(r);
+  }
+
+  feed(data) {
+    assert(Buffer.isBuffer(data));
+
+    if (this.state === ACT_NONE)
+      return;
+
+    this.total += data.length;
+    this.pending.push(data);
+
+    while (this.total >= this.waiting) {
+      const chunk = this.read(this.waiting);
+      if (!this.parse(chunk))
+        break;
+    }
+  }
+
+  read(size) {
+    assert((size >>> 0) === size);
+    assert(this.total >= size, 'Reading too much.');
+
+    if (size === 0)
+      return Buffer.alloc(0);
+
+    const pending = this.pending[0];
+
+    if (pending.length > size) {
+      const chunk = pending.slice(0, size);
+      this.pending[0] = pending.slice(size);
+      this.total -= chunk.length;
+      return chunk;
+    }
+
+    if (pending.length === size) {
+      const chunk = this.pending.shift();
+      this.total -= chunk.length;
+      return chunk;
+    }
+
+    const chunk = Buffer.allocUnsafe(size);
+
+    let off = 0;
+
+    while (off &lt; chunk.length) {
+      const pending = this.pending[0];
+      const len = pending.copy(chunk, off);
+      if (len === pending.length)
+        this.pending.shift();
+      else
+        this.pending[0] = pending.slice(len);
+      off += len;
+    }
+
+    assert.strictEqual(off, chunk.length);
+
+    this.total -= chunk.length;
+
+    return chunk;
+  }
+
+  parse(data) {
+    assert(Buffer.isBuffer(data));
+
+    try {
+      this._parse(data);
+      return true;
+    } catch (e) {
+      this.destroy();
+      this.emit('error', e);
+      return false;
+    }
+  }
+
+  _parse(data) {
+    if (this.initiator) {
+      switch (this.state) {
+        case ACT_TWO:
+          this.recvActTwo(data);
+          this.socket.write(this.genActThree());
+          this.state = ACT_DONE;
+          this.waiting = HEADER_SIZE;
+          this.unleash();
+          this.emit('connect');
+          return;
+        default:
+          assert(this.state === ACT_DONE);
+          break;
+      }
+    } else {
+      switch (this.state) {
+        case ACT_ONE:
+          this.recvActOne(data);
+          this.socket.write(this.genActTwo());
+          this.state = ACT_THREE;
+          this.waiting = ACT_THREE_SIZE;
+          return;
+        case ACT_THREE:
+          this.recvActThree(data);
+          this.state = ACT_DONE;
+          this.waiting = HEADER_SIZE;
+          this.unleash();
+          this.emit('connect');
+          return;
+        default:
+          assert(this.state === ACT_DONE);
+          break;
+      }
+    }
+
+    if (!this.hasSize) {
+      assert(this.waiting === HEADER_SIZE);
+      assert(data.length === HEADER_SIZE);
+
+      const len = data.slice(0, 4);
+      const tag = data.slice(4, 20);
+
+      if (!this.recvCipher.decrypt(len, tag))
+        throw new Error('Bad tag for header.');
+
+      const size = len.readUInt32LE(0, true);
+
+      if (size > MAX_MESSAGE)
+        throw new Error('Bad packet size.');
+
+      this.hasSize = true;
+      this.waiting = size + 16;
+
+      return;
+    }
+
+    const payload = data.slice(0, this.waiting - 16);
+    const tag = data.slice(this.waiting - 16, this.waiting);
+
+    this.hasSize = false;
+    this.waiting = HEADER_SIZE;
+
+    if (!this.recvCipher.decrypt(payload, tag))
+      throw new Error('Bad tag for message.');
+
+    this.emit('data', payload);
+  }
+
+  static fromInbound(socket, ourKey) {
+    return new BrontideStream().accept(socket, ourKey);
+  }
+
+  static fromOutbound(socket, ourKey, theirKey) {
+    return new BrontideStream().connect(socket, ourKey, theirKey);
+  }
+}
+
+/*
+ * Helpers
+ */
+
+function ecdh(publicKey, privateKey) {
+  const secret = secp256k1.derive(publicKey, privateKey, true);
+  return sha256.digest(secret);
+}
+
+function getPublic(priv) {
+  return secp256k1.publicKeyCreate(priv, true);
+}
+
+function expand(secret, salt, info) {
+  const prk = hkdf.extract(sha256, secret, salt);
+  const out = hkdf.expand(sha256, prk, info, 64);
+  return [out.slice(0, 32), out.slice(32, 64)];
+}
+
+/*
+ * Expose
+ */
+
+exports.CipherState = CipherState;
+exports.SymmetricState = SymmetricState;
+exports.HandshakeState = HandshakeState;
+exports.Brontide = Brontide;
+exports.BrontideStream = BrontideStream;
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-blockchain.html">blockchain</a></li><li><a href="module-blockchain_common.html">blockchain/common</a></li><li><a href="module-blockstore.html">blockstore</a></li><li><a href="module-blockstore_common.html">blockstore/common</a></li><li><a href="module-blockstore_records.html">blockstore/records</a></li><li><a href="module-coins.html">coins</a></li><li><a href="module-covenants.html">covenants</a></li><li><a href="module-dns_common.html">dns/common</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-hd.html">hd</a></li><li><a href="module-hsd.html">hsd</a></li><li><a href="module-mempool.html">mempool</a></li><li><a href="module-mining.html">mining</a></li><li><a href="module-mining_common.html">mining/common</a></li><li><a href="module-net.html">net</a></li><li><a href="module-net_bip152.html">net/bip152</a></li><li><a href="module-net_common.html">net/common</a></li><li><a href="module-net_packets.html">net/packets</a></li><li><a href="module-node.html">node</a></li><li><a href="module-primitives.html">primitives</a></li><li><a href="module-protocol.html">protocol</a></li><li><a href="module-protocol_consensus.html">protocol/consensus</a></li><li><a href="module-protocol_errors.html">protocol/errors</a></li><li><a href="module-protocol_networks.html">protocol/networks</a></li><li><a href="module-protocol_policy.html">protocol/policy</a></li><li><a href="module-script.html">script</a></li><li><a href="module-script_common.html">script/common</a></li><li><a href="module-ui.html">ui</a></li><li><a href="module-utils.html">utils</a></li><li><a href="module-utils_util.html">utils/util</a></li><li><a href="module-wallet.html">wallet</a></li><li><a href="module-wallet_common.html">wallet/common</a></li><li><a href="module-wallet_plugin.html">wallet/plugin</a></li><li><a href="module-wallet_records.html">wallet/records</a></li><li><a href="module-workers.html">workers</a></li><li><a href="module-workers_jobs.html">workers/jobs</a></li><li><a href="module-workers_packets.html">workers/packets</a></li></ul><h3>Classes</h3><ul><li><a href="AirdropKey.html">AirdropKey</a></li><li><a href="AirdropProof.html">AirdropProof</a></li><li><a href="BidReveal.html">BidReveal</a></li><li><a href="BitField.html">BitField</a></li><li><a href="BitView.html">BitView</a></li><li><a href="BlindBid.html">BlindBid</a></li><li><a href="BlindValue.html">BlindValue</a></li><li><a href="BlockProof.html">BlockProof</a></li><li><a href="Brontide.html">Brontide</a></li><li><a href="BrontideStream.html">BrontideStream</a></li><li><a href="ChainFlags.html">ChainFlags</a></li><li><a href="ChainState.html">ChainState</a></li><li><a href="CipherState.html">CipherState</a></li><li><a href="Claim.html">Claim</a></li><li><a href="DetailsMember.html">DetailsMember</a></li><li><a href="DS.html">DS</a></li><li><a href="Field.html">Field</a></li><li><a href="GLUE4.html">GLUE4</a></li><li><a href="GLUE6.html">GLUE6</a></li><li><a href="HandshakeState.html">HandshakeState</a></li><li><a href="HashList.html">HashList</a></li><li><a href="MigrateBlockStore.html">MigrateBlockStore</a></li><li><a href="MigrateChainState.html">MigrateChainState</a></li><li><a href="MigrateChangeAddress.html">MigrateChangeAddress</a></li><li><a href="MigrateMigrations.html">MigrateMigrations</a></li><li><a href="MigrateTreeState.html">MigrateTreeState</a></li><li><a href="module.migrations.MigrationState.html">MigrationState</a></li><li><a href="module-blockchain.Chain.html">Chain</a></li><li><a href="module-blockchain.ChainDB.html">ChainDB</a></li><li><a href="module-blockchain.ChainEntry.html">ChainEntry</a></li><li><a href="module-blockchain.ChainMigrator.html">ChainMigrator</a></li><li><a href="module-blockchain.ChainMigratorOptions.html">ChainMigratorOptions</a></li><li><a href="module-blockchain.ChainOptions.html">ChainOptions</a></li><li><a href="module-blockchain.DeploymentState.html">DeploymentState</a></li><li><a href="module-blockchain.WalletMigrationResult.html">WalletMigrationResult</a></li><li><a href="module-blockchain.WalletMigrator.html">WalletMigrator</a></li><li><a href="module-blockstore.AbstractBatch.html">AbstractBatch</a></li><li><a href="module-blockstore.AbstractBlockStore.html">AbstractBlockStore</a></li><li><a href="module-blockstore.FileBatch.html">FileBatch</a></li><li><a href="module-blockstore.LevelBatch.html">LevelBatch</a></li><li><a href="module-blockstore_records-BlockRecord.html">BlockRecord</a></li><li><a href="module-blockstore_records-FileRecord.html">FileRecord</a></li><li><a href="module-blockstore_FileBlockStore.html">blockstore:FileBlockStore</a></li><li><a href="module-blockstore_LevelBlockStore.html">blockstore:LevelBlockStore</a></li><li><a href="module-coins.CoinEntry.html">CoinEntry</a></li><li><a href="module-coins.Coins.html">Coins</a></li><li><a href="module-coins.CoinView.html">CoinView</a></li><li><a href="module-coins.UndoCoins.html">UndoCoins</a></li><li><a href="module-currency.Amount.html">Amount</a></li><li><a href="module-errors-CriticalError.html">CriticalError</a></li><li><a href="module-hd.Mnemonic.html">Mnemonic</a></li><li><a href="module-hd.PrivateKey.html">PrivateKey</a></li><li><a href="module-hd.PublicKey.html">PublicKey</a></li><li><a href="module-http.HTTPOptions.html">HTTPOptions</a></li><li><a href="module-http.RPC.html">RPC</a></li><li><a href="module-http.Server.html">Server</a></li><li><a href="module-http.TransactionOptions.html">TransactionOptions</a></li><li><a href="module-mempool.AirdropEntry.html">AirdropEntry</a></li><li><a href="module-mempool.ClaimEntry.html">ClaimEntry</a></li><li><a href="module-mempool.ConfirmStats.html">ConfirmStats</a></li><li><a href="module-mempool.Mempool.html">Mempool</a></li><li><a href="module-mempool.MempoolEntry.html">MempoolEntry</a></li><li><a href="module-mempool.MempoolOptions.html">MempoolOptions</a></li><li><a href="module-mempool.PolicyEstimator.html">PolicyEstimator</a></li><li><a href="module-migrations.AbstractMigration.html">AbstractMigration</a></li><li><a href="module-migrations.MigrationResult.html">MigrationResult</a></li><li><a href="module-migrations.Migrator.html">Migrator</a></li><li><a href="module-mining.BlockAirdrop.html">BlockAirdrop</a></li><li><a href="module-mining.BlockClaim.html">BlockClaim</a></li><li><a href="module-mining.BlockEntry.html">BlockEntry</a></li><li><a href="module-mining.BlockTemplate.html">BlockTemplate</a></li><li><a href="module-mining.CPUMiner.html">CPUMiner</a></li><li><a href="module-mining.Miner.html">Miner</a></li><li><a href="module-mining.MinerOptions.html">MinerOptions</a></li><li><a href="module-net.BroadcastItem.html">BroadcastItem</a></li><li><a href="module-net.Framer.html">Framer</a></li><li><a href="module-net.HostEntry.html">HostEntry</a></li><li><a href="module-net.HostList.html">HostList</a></li><li><a href="module-net.HostListOptions.html">HostListOptions</a></li><li><a href="module-net.LocalAddress.html">LocalAddress</a></li><li><a href="module-net.NetAddress.html">NetAddress</a></li><li><a href="module-net.Parser.html">Parser</a></li><li><a href="module-net.Peer.html">Peer</a></li><li><a href="module-net.PeerList.html">PeerList</a></li><li><a href="module-net.PeerOptions.html">PeerOptions</a></li><li><a href="module-net.Pool.html">Pool</a></li><li><a href="module-net.PoolOptions.html">PoolOptions</a></li><li><a href="module-net_bip152-CompactBlock.html">CompactBlock</a></li><li><a href="module-net_bip152-TXRequest.html">TXRequest</a></li><li><a href="module-net_bip152-TXResponse.html">TXResponse</a></li><li><a href="module-net_packets-AddrPacket.html">AddrPacket</a></li><li><a href="module-net_packets-AirdropPacket.html">AirdropPacket</a></li><li><a href="module-net_packets-BlockPacket.html">BlockPacket</a></li><li><a href="module-net_packets-BlockTxnPacket.html">BlockTxnPacket</a></li><li><a href="module-net_packets-ClaimPacket.html">ClaimPacket</a></li><li><a href="module-net_packets-CmpctBlockPacket.html">CmpctBlockPacket</a></li><li><a href="module-net_packets-FeeFilterPacket.html">FeeFilterPacket</a></li><li><a href="module-net_packets-FilterAddPacket.html">FilterAddPacket</a></li><li><a href="module-net_packets-FilterClearPacket.html">FilterClearPacket</a></li><li><a href="module-net_packets-FilterLoadPacket.html">FilterLoadPacket</a></li><li><a href="module-net_packets-GetAddrPacket.html">GetAddrPacket</a></li><li><a href="module-net_packets-GetBlocksPacket.html">GetBlocksPacket</a></li><li><a href="module-net_packets-GetBlockTxnPacket.html">GetBlockTxnPacket</a></li><li><a href="module-net_packets-GetDataPacket.html">GetDataPacket</a></li><li><a href="module-net_packets-GetHeadersPacket.html">GetHeadersPacket</a></li><li><a href="module-net_packets-GetProofPacket.html">GetProofPacket</a></li><li><a href="module-net_packets-HeadersPacket.html">HeadersPacket</a></li><li><a href="module-net_packets-InvPacket.html">InvPacket</a></li><li><a href="module-net_packets-MempoolPacket.html">MempoolPacket</a></li><li><a href="module-net_packets-MerkleBlockPacket.html">MerkleBlockPacket</a></li><li><a href="module-net_packets-NotFoundPacket.html">NotFoundPacket</a></li><li><a href="module-net_packets-Packet.html">Packet</a></li><li><a href="module-net_packets-PingPacket.html">PingPacket</a></li><li><a href="module-net_packets-PongPacket.html">PongPacket</a></li><li><a href="module-net_packets-ProofPacket.html">ProofPacket</a></li><li><a href="module-net_packets-RejectPacket.html">RejectPacket</a></li><li><a href="module-net_packets-SendCmpctPacket.html">SendCmpctPacket</a></li><li><a href="module-net_packets-SendHeadersPacket.html">SendHeadersPacket</a></li><li><a href="module-net_packets-TXPacket.html">TXPacket</a></li><li><a href="module-net_packets-UnknownPacket.html">UnknownPacket</a></li><li><a href="module-net_packets-VerackPacket.html">VerackPacket</a></li><li><a href="module-net_packets-VersionPacket.html">VersionPacket</a></li><li><a href="module-node.FullNode.html">FullNode</a></li><li><a href="module-node.Node.html">Node</a></li><li><a href="module-node.NodeClient.html">NodeClient</a></li><li><a href="module-node.NullClient.html">NullClient</a></li><li><a href="module-node.SPVNode.html">SPVNode</a></li><li><a href="module-primitives.AbstractBlock.html">AbstractBlock</a></li><li><a href="module-primitives.Address.html">Address</a></li><li><a href="module-primitives.Block.html">Block</a></li><li><a href="module-primitives.Coin.html">Coin</a></li><li><a href="module-primitives.CoinSelector.html">CoinSelector</a></li><li><a href="module-primitives.Covenant.html">Covenant</a></li><li><a href="module-primitives.Headers.html">Headers</a></li><li><a href="module-primitives.Input.html">Input</a></li><li><a href="module-primitives.InvItem.html">InvItem</a></li><li><a href="module-primitives.KeyRing.html">KeyRing</a></li><li><a href="module-primitives.MemBlock.html">MemBlock</a></li><li><a href="module-primitives.MerkleBlock.html">MerkleBlock</a></li><li><a href="module-primitives.MTX.html">MTX</a></li><li><a href="module-primitives.Outpoint.html">Outpoint</a></li><li><a href="module-primitives.Output.html">Output</a></li><li><a href="module-primitives.TX.html">TX</a></li><li><a href="module-primitives.TXMeta.html">TXMeta</a></li><li><a href="module-protocol.Network.html">Network</a></li><li><a href="module-protocol.TimeData.html">TimeData</a></li><li><a href="module-protocol_errors-VerifyError.html">VerifyError</a></li><li><a href="module-script.Opcode.html">Opcode</a></li><li><a href="module-script.Script.html">Script</a></li><li><a href="module-script.ScriptError.html">ScriptError</a></li><li><a href="module-script.ScriptNum.html">ScriptNum</a></li><li><a href="module-script.SigCache.html">SigCache</a></li><li><a href="module-script.Stack.html">Stack</a></li><li><a href="module-script.Witness.html">Witness</a></li><li><a href="module-ui.URI.html">URI</a></li><li><a href="module-wallet.Account.html">Account</a></li><li><a href="module-wallet.Balance.html">Balance</a></li><li><a href="module-wallet.BlockRecord.html">BlockRecord</a></li><li><a href="module-wallet.Credit.html">Credit</a></li><li><a href="module-wallet.Details.html">Details</a></li><li><a href="module-wallet.HTTP.html">HTTP</a></li><li><a href="module-wallet.MasterKey.html">MasterKey</a></li><li><a href="module-wallet.Path.html">Path</a></li><li><a href="module-wallet.Paths.html">Paths</a></li><li><a href="module-wallet.RPC.html">RPC</a></li><li><a href="module-wallet.TXDB.html">TXDB</a></li><li><a href="module-wallet.Wallet.html">Wallet</a></li><li><a href="module-wallet.WalletCoinView.html">WalletCoinView</a></li><li><a href="module-wallet.WalletDB.html">WalletDB</a></li><li><a href="module-wallet.WalletKey.html">WalletKey</a></li><li><a href="module-wallet.WalletMigratorOptions.html">WalletMigratorOptions</a></li><li><a href="module-wallet.WalletOptions.html">WalletOptions</a></li><li><a href="module-wallet_plugin-Plugin.html">Plugin</a></li><li><a href="module-wallet_records-BlockMeta.html">BlockMeta</a></li><li><a href="module-wallet_records-ChainState.html">ChainState</a></li><li><a href="module-wallet_records-MapRecord.html">MapRecord</a></li><li><a href="module-wallet_records-TXRecord.html">TXRecord</a></li><li><a href="module-workers.Framer.html">Framer</a></li><li><a href="module-workers.Master.html">Master</a></li><li><a href="module-workers.Parent.html">Parent</a></li><li><a href="module-workers.Parser.html">Parser</a></li><li><a href="module-workers.Worker.html">Worker</a></li><li><a href="module-workers.WorkerPool.html">WorkerPool</a></li><li><a href="module-workers_packets-CheckInputPacket.html">CheckInputPacket</a></li><li><a href="module-workers_packets-CheckInputResultPacket.html">CheckInputResultPacket</a></li><li><a href="module-workers_packets-CheckPacket.html">CheckPacket</a></li><li><a href="module-workers_packets-CheckResultPacket.html">CheckResultPacket</a></li><li><a href="module-workers_packets-ECSignPacket.html">ECSignPacket</a></li><li><a href="module-workers_packets-ECSignResultPacket.html">ECSignResultPacket</a></li><li><a href="module-workers_packets-ECVerifyPacket.html">ECVerifyPacket</a></li><li><a href="module-workers_packets-ECVerifyResultPacket.html">ECVerifyResultPacket</a></li><li><a href="module-workers_packets-EnvPacket.html">EnvPacket</a></li><li><a href="module-workers_packets-ErrorPacket.html">ErrorPacket</a></li><li><a href="module-workers_packets-ErrorResultPacket.html">ErrorResultPacket</a></li><li><a href="module-workers_packets-EventPacket.html">EventPacket</a></li><li><a href="module-workers_packets-LogPacket.html">LogPacket</a></li><li><a href="module-workers_packets-MinePacket.html">MinePacket</a></li><li><a href="module-workers_packets-MineResultPacket.html">MineResultPacket</a></li><li><a href="module-workers_packets-Packet.html">Packet</a></li><li><a href="module-workers_packets-ScryptPacket.html">ScryptPacket</a></li><li><a href="module-workers_packets-ScryptResultPacket.html">ScryptResultPacket</a></li><li><a href="module-workers_packets-SignInputPacket.html">SignInputPacket</a></li><li><a href="module-workers_packets-SignInputResultPacket.html">SignInputResultPacket</a></li><li><a href="module-workers_packets-SignPacket.html">SignPacket</a></li><li><a href="module-workers_packets-SignResultPacket.html">SignResultPacket</a></li><li><a href="NameDelta.html">NameDelta</a></li><li><a href="NameState.html">NameState</a></li><li><a href="NS.html">NS</a></li><li><a href="Ownership.html">Ownership</a></li><li><a href="Proof.html">Proof</a></li><li><a href="ProofData.html">ProofData</a></li><li><a href="RecursiveServer.html">RecursiveServer</a></li><li><a href="Reserved.html">Reserved</a></li><li><a href="Resource.html">Resource</a></li><li><a href="RootCache.html">RootCache</a></li><li><a href="RootServer.html">RootServer</a></li><li><a href="Seeder.html">Seeder</a></li><li><a href="SlidingWindow.html">SlidingWindow</a></li><li><a href="StateCache.html">StateCache</a></li><li><a href="SymmetricState.html">SymmetricState</a></li><li><a href="SYNTH4.html">SYNTH4</a></li><li><a href="SYNTH6.html">SYNTH6</a></li><li><a href="TXT.html">TXT</a></li><li><a href="WalletNode.html">WalletNode</a></li></ul><h3>Global</h3><ul><li><a href="global.html#bindExit">bindExit</a></li><li><a href="global.html#checksig">checksig</a></li><li><a href="global.html#decode">decode</a></li><li><a href="global.html#encode">encode</a></li><li><a href="global.html#fromFloat">fromFloat</a></li><li><a href="global.html#groupKey">groupKey</a></li><li><a href="global.html#insert">insert</a></li><li><a href="global.html#listenExit">listenExit</a></li><li><a href="global.html#migrationLayout">migrationLayout</a></li><li><a href="global.html#oldLayout">oldLayout</a></li><li><a href="global.html#remove">remove</a></li><li><a href="global.html#search">search</a></li><li><a href="global.html#toFloat">toFloat</a></li><li><a href="global.html#validateKey">validateKey</a></li><li><a href="global.html#validateSignature">validateSignature</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 1.0.0</a> on Fri Jun 24 2022 16:08:43 GMT+0000 (Coordinated Universal Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

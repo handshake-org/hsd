@@ -1,0 +1,2022 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: net/packets.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: net/packets.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/*!
+ * packets.js - packets for hsd
+ * Copyright (c) 2017-2018, Christopher Jeffrey (MIT License).
+ * https://github.com/handshake-org/hsd
+ */
+
+'use strict';
+
+/**
+ * @module net/packets
+ */
+
+const assert = require('bsert');
+const bio = require('bufio');
+const blake2b = require('bcrypto/lib/blake2b');
+const UrkelProof = require('urkel').Proof;
+const {BloomFilter} = require('bfilter');
+const common = require('./common');
+const util = require('../utils/util');
+const bip152 = require('./bip152');
+const NetAddress = require('./netaddress');
+const consensus = require('../protocol/consensus');
+const Headers = require('../primitives/headers');
+const InvItem = require('../primitives/invitem');
+const MemBlock = require('../primitives/memblock');
+const MerkleBlock = require('../primitives/merkleblock');
+const TX = require('../primitives/tx');
+const Claim = require('../primitives/claim');
+const AirdropProof = require('../primitives/airdropproof');
+const {encoding} = bio;
+const DUMMY = Buffer.alloc(0);
+
+/**
+ * Packet types.
+ * @enum {Number}
+ * @default
+ */
+
+exports.types = {
+  VERSION: 0,
+  VERACK: 1,
+  PING: 2,
+  PONG: 3,
+  GETADDR: 4,
+  ADDR: 5,
+  INV: 6,
+  GETDATA: 7,
+  NOTFOUND: 8,
+  GETBLOCKS: 9,
+  GETHEADERS: 10,
+  HEADERS: 11,
+  SENDHEADERS: 12,
+  BLOCK: 13,
+  TX: 14,
+  REJECT: 15,
+  MEMPOOL: 16,
+  FILTERLOAD: 17,
+  FILTERADD: 18,
+  FILTERCLEAR: 19,
+  MERKLEBLOCK: 20,
+  FEEFILTER: 21,
+  SENDCMPCT: 22,
+  CMPCTBLOCK: 23,
+  GETBLOCKTXN: 24,
+  BLOCKTXN: 25,
+  GETPROOF: 26,
+  PROOF: 27,
+  CLAIM: 28,
+  AIRDROP: 29,
+  UNKNOWN: 30,
+  // Internal
+  INTERNAL: 31,
+  DATA: 32
+};
+
+const types = exports.types;
+
+/**
+ * Packet types by value.
+ * @const {Object}
+ * @default
+ */
+
+exports.typesByVal = [
+  'VERSION',
+  'VERACK',
+  'PING',
+  'PONG',
+  'GETADDR',
+  'ADDR',
+  'INV',
+  'GETDATA',
+  'NOTFOUND',
+  'GETBLOCKS',
+  'GETHEADERS',
+  'HEADERS',
+  'SENDHEADERS',
+  'BLOCK',
+  'TX',
+  'REJECT',
+  'MEMPOOL',
+  'FILTERLOAD',
+  'FILTERADD',
+  'FILTERCLEAR',
+  'MERKLEBLOCK',
+  'FEEFILTER',
+  'SENDCMPCT',
+  'CMPCTBLOCK',
+  'GETBLOCKTXN',
+  'BLOCKTXN',
+  'GETPROOF',
+  'PROOF',
+  'CLAIM',
+  'AIRDROP',
+  'UNKNOWN',
+  // Internal
+  'INTERNAL',
+  'DATA'
+];
+
+/**
+ * Base Packet
+ */
+
+class Packet extends bio.Struct {
+  /**
+   * Create a base packet.
+   * @constructor
+   */
+
+  constructor() {
+    super();
+    this.type = 0;
+  }
+
+  get rawType() {
+    return this.type;
+  }
+}
+
+/**
+ * Version Packet
+ * @extends Packet
+ * @property {Number} version - Protocol version.
+ * @property {Number} services - Service bits.
+ * @property {Number} time - Timestamp of discovery.
+ * @property {NetAddress} remote - Their address.
+ * @property {Buffer} nonce
+ * @property {String} agent - User agent string.
+ * @property {Number} height - Chain height.
+ * @property {Boolean} noRelay - Whether transactions
+ * should be relayed immediately.
+ */
+
+class VersionPacket extends Packet {
+  /**
+   * Create a version packet.
+   * @constructor
+   * @param {Object?} options
+   * @param {Number} options.version - Protocol version.
+   * @param {Number} options.services - Service bits.
+   * @param {Number} options.time - Timestamp of discovery.
+   * @param {NetAddress} options.remote - Their address.
+   * @param {Buffer} options.nonce
+   * @param {String} options.agent - User agent string.
+   * @param {Number} options.height - Chain height.
+   * @param {Boolean} options.noRelay - Whether transactions
+   * should be relayed immediately.
+   */
+
+  constructor(options) {
+    super();
+
+    this.type = exports.types.VERSION;
+
+    this.version = common.PROTOCOL_VERSION;
+    this.services = common.LOCAL_SERVICES;
+    this.time = util.now();
+    this.remote = new NetAddress();
+    this.nonce = common.ZERO_NONCE;
+    this.agent = common.USER_AGENT;
+    this.height = 0;
+    this.noRelay = false;
+
+    if (options)
+      this.fromOptions(options);
+  }
+
+  /**
+   * Inject properties from options.
+   * @private
+   * @param {Object} options
+   */
+
+  fromOptions(options) {
+    if (options.version != null)
+      this.version = options.version;
+
+    if (options.services != null)
+      this.services = options.services;
+
+    if (options.time != null)
+      this.time = options.time;
+
+    if (options.remote)
+      this.remote.fromOptions(options.remote);
+
+    if (options.nonce)
+      this.nonce = options.nonce;
+
+    if (options.agent)
+      this.agent = options.agent;
+
+    if (options.height != null)
+      this.height = options.height;
+
+    if (options.noRelay != null)
+      this.noRelay = options.noRelay;
+
+    return this;
+  }
+
+  /**
+   * Get serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    let size = 0;
+    size += 20;
+    size += this.remote.getSize();
+    size += 8;
+    size += 1;
+    size += this.agent.length;
+    size += 5;
+    return size;
+  }
+
+  /**
+   * Write version packet to buffer writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    bw.writeU32(this.version);
+    bw.writeU32(this.services);
+    bw.writeU32(0);
+    bw.writeU64(this.time);
+    this.remote.write(bw);
+    bw.writeBytes(this.nonce);
+    bw.writeU8(this.agent.length);
+    bw.writeString(this.agent, 'ascii');
+    bw.writeU32(this.height);
+    bw.writeU8(this.noRelay ? 1 : 0);
+    return this;
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    this.version = br.readU32();
+    this.services = br.readU32();
+
+    // Note: hi service bits
+    // are currently unused.
+    br.readU32();
+
+    this.time = br.readU64();
+    this.remote.read(br);
+    this.nonce = br.readBytes(8);
+    this.agent = br.readString(br.readU8(), 'ascii');
+    this.height = br.readU32();
+    this.noRelay = br.readU8() === 1;
+
+    return this;
+  }
+}
+
+/**
+ * Verack Packet
+ * @extends Packet
+ */
+
+class VerackPacket extends Packet {
+  /**
+   * Create a `verack` packet.
+   * @constructor
+   */
+
+  constructor() {
+    super();
+    this.type = exports.types.VERACK;
+  }
+}
+
+/**
+ * Ping Packet
+ * @extends Packet
+ * @property {BN|null} nonce
+ */
+
+class PingPacket extends Packet {
+  /**
+   * Create a `ping` packet.
+   * @constructor
+   * @param {Buffer} nonce
+   */
+
+  constructor(nonce) {
+    super();
+
+    this.type = exports.types.PING;
+
+    this.nonce = nonce || common.ZERO_NONCE;
+  }
+
+  /**
+   * Get serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    return 8;
+  }
+
+  /**
+   * Serialize ping packet to writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    bw.writeBytes(this.nonce);
+    return this;
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    this.nonce = br.readBytes(8);
+    return this;
+  }
+}
+
+/**
+ * Pong Packet
+ * @extends Packet
+ * @property {BN} nonce
+ */
+
+class PongPacket extends Packet {
+  /**
+   * Create a `pong` packet.
+   * @constructor
+   * @param {Buffer} nonce
+   */
+
+  constructor(nonce) {
+    super();
+
+    this.type = exports.types.PONG;
+
+    this.nonce = nonce || common.ZERO_NONCE;
+  }
+
+  /**
+   * Get serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    return 8;
+  }
+
+  /**
+   * Serialize pong packet to writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    bw.writeBytes(this.nonce);
+    return this;
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    this.nonce = br.readBytes(8);
+    return this;
+  }
+}
+
+/**
+ * GetAddr Packet
+ * @extends Packet
+ */
+
+class GetAddrPacket extends Packet {
+  /**
+   * Create a `getaddr` packet.
+   * @constructor
+   */
+
+  constructor() {
+    super();
+    this.type = exports.types.GETADDR;
+  }
+}
+
+/**
+ * Addr Packet
+ * @extends Packet
+ * @property {NetAddress[]} items
+ */
+
+class AddrPacket extends Packet {
+  /**
+   * Create a `addr` packet.
+   * @constructor
+   * @param {(NetAddress[])?} items
+   */
+
+  constructor(items) {
+    super();
+
+    this.type = exports.types.ADDR;
+
+    this.items = items || [];
+  }
+
+  /**
+   * Get serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    let size = 0;
+    size += encoding.sizeVarint(this.items.length);
+    for (const addr of this.items)
+      size += addr.getSize();
+    return size;
+  }
+
+  /**
+   * Serialize addr packet to writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    bw.writeVarint(this.items.length);
+
+    for (const item of this.items)
+      item.write(bw);
+
+    return this;
+  }
+
+  /**
+   * Inject properties from serialized data.
+   * @private
+   * @param {Buffer} data
+   */
+
+  read(br) {
+    const count = br.readVarint();
+
+    for (let i = 0; i &lt; count; i++)
+      this.items.push(NetAddress.read(br));
+
+    return this;
+  }
+}
+
+/**
+ * Inv Packet
+ * @extends Packet
+ * @property {InvItem[]} items
+ */
+
+class InvPacket extends Packet {
+  /**
+   * Create a `inv` packet.
+   * @constructor
+   * @param {(InvItem[])?} items
+   */
+
+  constructor(items) {
+    super();
+
+    this.type = exports.types.INV;
+
+    this.items = items || [];
+  }
+
+  /**
+   * Get serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    let size = 0;
+    size += encoding.sizeVarint(this.items.length);
+    size += 36 * this.items.length;
+    return size;
+  }
+
+  /**
+   * Serialize inv packet to writer.
+   * @param {Buffer} bw
+   */
+
+  write(bw) {
+    assert(this.items.length &lt;= common.MAX_INV);
+
+    bw.writeVarint(this.items.length);
+
+    for (const item of this.items)
+      item.write(bw);
+
+    return this;
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    const count = br.readVarint();
+
+    assert(count &lt;= common.MAX_INV, 'Inv item count too high.');
+
+    for (let i = 0; i &lt; count; i++)
+      this.items.push(InvItem.read(br));
+
+    return this;
+  }
+}
+
+/**
+ * GetData Packet
+ * @extends InvPacket
+ */
+
+class GetDataPacket extends InvPacket {
+  /**
+   * Create a `getdata` packet.
+   * @constructor
+   * @param {(InvItem[])?} items
+   */
+
+  constructor(items) {
+    super(items);
+    this.type = exports.types.GETDATA;
+  }
+}
+
+/**
+ * NotFound Packet
+ * @extends InvPacket
+ */
+
+class NotFoundPacket extends InvPacket {
+  /**
+   * Create a `notfound` packet.
+   * @constructor
+   * @param {(InvItem[])?} items
+   */
+
+  constructor(items) {
+    super(items);
+    this.type = exports.types.NOTFOUND;
+  }
+}
+
+/**
+ * GetBlocks Packet
+ * @extends Packet
+ * @property {Hash[]} locator
+ * @property {Hash|null} stop
+ */
+
+class GetBlocksPacket extends Packet {
+  /**
+   * Create a `getblocks` packet.
+   * @constructor
+   * @param {Hash[]} locator
+   * @param {Hash?} stop
+   */
+
+  constructor(locator, stop) {
+    super();
+
+    this.type = exports.types.GETBLOCKS;
+
+    this.locator = locator || [];
+    this.stop = stop || consensus.ZERO_HASH;
+  }
+
+  /**
+   * Get serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    let size = 0;
+    size += encoding.sizeVarint(this.locator.length);
+    size += 32 * this.locator.length;
+    size += 32;
+    return size;
+  }
+
+  /**
+   * Serialize getblocks packet to writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    assert(this.locator.length &lt;= common.MAX_INV, 'Too many block hashes.');
+
+    bw.writeVarint(this.locator.length);
+
+    for (const hash of this.locator)
+      bw.writeHash(hash);
+
+    bw.writeHash(this.stop);
+
+    return this;
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    const count = br.readVarint();
+
+    assert(count &lt;= common.MAX_INV, 'Too many block hashes.');
+
+    for (let i = 0; i &lt; count; i++)
+      this.locator.push(br.readHash());
+
+    this.stop = br.readHash();
+
+    return this;
+  }
+}
+
+/**
+ * GetHeader Packets
+ * @extends GetBlocksPacket
+ */
+
+class GetHeadersPacket extends GetBlocksPacket {
+  /**
+   * Create a `getheaders` packet.
+   * @constructor
+   * @param {Hash[]} locator
+   * @param {Hash?} stop
+   */
+
+  constructor(locator, stop) {
+    super(locator, stop);
+    this.type = exports.types.GETHEADERS;
+  }
+}
+
+/**
+ * Headers Packet
+ * @extends Packet
+ * @property {Headers[]} items
+ */
+
+class HeadersPacket extends Packet {
+  /**
+   * Create a `headers` packet.
+   * @constructor
+   * @param {(Headers[])?} items
+   */
+
+  constructor(items) {
+    super();
+
+    this.type = exports.types.HEADERS;
+
+    this.items = items || [];
+  }
+
+  /**
+   * Get serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    let size = 0;
+
+    size += encoding.sizeVarint(this.items.length);
+
+    for (const item of this.items)
+      size += item.getSize();
+
+    return size;
+  }
+
+  /**
+   * Serialize headers packet to writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    assert(this.items.length &lt;= 2000, 'Too many headers.');
+
+    bw.writeVarint(this.items.length);
+
+    for (const item of this.items)
+      item.write(bw);
+
+    return this;
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    const count = br.readVarint();
+
+    assert(count &lt;= 2000, 'Too many headers.');
+
+    for (let i = 0; i &lt; count; i++)
+      this.items.push(Headers.read(br));
+
+    return this;
+  }
+}
+
+/**
+ * SendHeaders Packet
+ * @extends Packet
+ */
+
+class SendHeadersPacket extends Packet {
+  /**
+   * Create a `sendheaders` packet.
+   * @constructor
+   */
+
+  constructor() {
+    super();
+    this.type = exports.types.SENDHEADERS;
+  }
+}
+
+/**
+ * Block Packet
+ * @extends Packet
+ * @property {Block} block
+ */
+
+class BlockPacket extends Packet {
+  /**
+   * Create a `block` packet.
+   * @constructor
+   * @param {Block|null} block
+   */
+
+  constructor(block) {
+    super();
+
+    this.type = exports.types.BLOCK;
+
+    this.block = block || new MemBlock();
+  }
+
+  /**
+   * Get serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    return this.block.getSize();
+  }
+
+  /**
+   * Serialize block packet to writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    return this.block.write(bw);
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    this.block.read(br);
+    return this;
+  }
+}
+
+/**
+ * TX Packet
+ * @extends Packet
+ * @property {TX} block
+ */
+
+class TXPacket extends Packet {
+  /**
+   * Create a `tx` packet.
+   * @constructor
+   * @param {TX|null} tx
+   */
+
+  constructor(tx) {
+    super();
+
+    this.type = exports.types.TX;
+
+    this.tx = tx || new TX();
+  }
+
+  /**
+   * Get serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    return this.tx.getSize();
+  }
+
+  /**
+   * Serialize tx packet to writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    return this.tx.write(bw);
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    this.tx.read(br);
+    return this;
+  }
+}
+
+/**
+ * Reject Packet
+ * @extends Packet
+ * @property {(Number|String)?} code - Code
+ * (see {@link RejectPacket.codes}).
+ * @property {String?} msg - Message.
+ * @property {String?} reason - Reason.
+ * @property {(Hash|Buffer)?} data - Transaction or block hash.
+ */
+
+class RejectPacket extends Packet {
+  /**
+   * Create reject packet.
+   * @constructor
+   */
+
+  constructor(options) {
+    super();
+
+    this.type = exports.types.REJECT;
+
+    this.message = 0;
+    this.code = RejectPacket.codes.INVALID;
+    this.reason = '';
+    this.hash = null;
+
+    if (options)
+      this.fromOptions(options);
+  }
+
+  /**
+   * Inject properties from options object.
+   * @private
+   * @param {Object} options
+   */
+
+  fromOptions(options) {
+    let code = options.code;
+
+    if (options.message != null)
+      this.message = options.message | 0;
+
+    if (code != null) {
+      if (typeof code === 'string')
+        code = RejectPacket.codes[code.toUpperCase()];
+
+      if (code >= RejectPacket.codes.INTERNAL)
+        code = RejectPacket.codes.INVALID;
+
+      this.code = code;
+    }
+
+    if (options.reason)
+      this.reason = options.reason;
+
+    if (options.hash)
+      this.hash = options.hash;
+
+    return this;
+  }
+
+  /**
+   * Get symbolic code.
+   * @returns {String}
+   */
+
+  getCode() {
+    const code = RejectPacket.codesByVal[this.code];
+
+    if (!code)
+      return this.code.toString(10);
+
+    return code.toLowerCase();
+  }
+
+  /**
+   * Get serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    let size = 0;
+
+    size += 1;
+    size += 1;
+    size += 1;
+    size += this.reason.length;
+
+    if (this.hash)
+      size += 32;
+
+    return size;
+  }
+
+  /**
+   * Serialize reject packet to writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    bw.writeU8(this.message);
+    bw.writeU8(this.code);
+    bw.writeU8(this.reason.length);
+    bw.writeString(this.reason, 'ascii');
+
+    if (this.hash)
+      bw.writeHash(this.hash);
+
+    return this;
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    this.message = br.readU8();
+    this.code = br.readU8();
+    this.reason = br.readString(br.readU8(), 'ascii');
+
+    switch (this.message) {
+      case types.BLOCK:
+      case types.TX:
+      case types.CLAIM:
+      case types.AIRDROP:
+        this.hash = br.readHash();
+        break;
+      default:
+        this.hash = null;
+        break;
+    }
+
+    return this;
+  }
+
+  /**
+   * Inject properties from reason message and object.
+   * @private
+   * @param {Number} code
+   * @param {String} reason
+   * @param {String?} msg
+   * @param {Hash?} hash
+   */
+
+  fromReason(code, reason, msg, hash) {
+    if (typeof code === 'string')
+      code = RejectPacket.codes[code.toUpperCase()];
+
+    if (!code)
+      code = RejectPacket.codes.INVALID;
+
+    if (code >= RejectPacket.codes.INTERNAL)
+      code = RejectPacket.codes.INVALID;
+
+    this.message = 0;
+    this.code = code;
+    this.reason = reason;
+
+    if (msg != null) {
+      assert(hash);
+      this.message = msg | 0;
+      this.hash = hash;
+    }
+
+    return this;
+  }
+
+  /**
+   * Instantiate reject packet from reason message.
+   * @param {Number} code
+   * @param {String} reason
+   * @param {String?} msg
+   * @param {Hash?} hash
+   * @returns {RejectPacket}
+   */
+
+  static fromReason(code, reason, msg, hash) {
+    return new this().fromReason(code, reason, msg, hash);
+  }
+
+  /**
+   * Instantiate reject packet from verify error.
+   * @param {VerifyError} err
+   * @param {(TX|Block)?} obj
+   * @returns {RejectPacket}
+   */
+
+  static fromError(err, obj) {
+    return this.fromReason(err.code, err.reason, obj);
+  }
+
+  /**
+   * Inspect reject packet.
+   * @returns {String}
+   */
+
+  format() {
+    const msg = exports.typesByVal[this.message] || 'UNKNOWN';
+    const code = RejectPacket.codesByVal[this.code] || this.code;
+    const hash = this.hash ? this.hash : null;
+    return '&lt;Reject:'
+      + ` msg=${msg}`
+      + ` code=${code}`
+      + ` reason=${this.reason}`
+      + ` hash=${hash}`
+      + '>';
+  }
+}
+
+/**
+ * Reject codes. Note that `internal` and higher
+ * are not meant for use on the p2p network.
+ * @enum {Number}
+ * @default
+ */
+
+RejectPacket.codes = {
+  MALFORMED: 0x01,
+  INVALID: 0x10,
+  OBSOLETE: 0x11,
+  DUPLICATE: 0x12,
+  NONSTANDARD: 0x40,
+  DUST: 0x41,
+  INSUFFICIENTFEE: 0x42,
+  CHECKPOINT: 0x43,
+  // Internal codes (NOT FOR USE ON NETWORK)
+  INTERNAL: 0x100,
+  HIGHFEE: 0x101,
+  ALREADYKNOWN: 0x102,
+  CONFLICT: 0x103
+};
+
+/**
+ * Reject codes by value.
+ * @const {Object}
+ */
+
+RejectPacket.codesByVal = {
+  0x01: 'MALFORMED',
+  0x10: 'INVALID',
+  0x11: 'OBSOLETE',
+  0x12: 'DUPLICATE',
+  0x40: 'NONSTANDARD',
+  0x41: 'DUST',
+  0x42: 'INSUFFICIENTFEE',
+  0x43: 'CHECKPOINT',
+  // Internal codes (NOT FOR USE ON NETWORK)
+  0x100: 'INTERNAL',
+  0x101: 'HIGHFEE',
+  0x102: 'ALREADYKNOWN',
+  0x103: 'CONFLICT'
+};
+
+/**
+ * Mempool Packet
+ * @extends Packet
+ */
+
+class MempoolPacket extends Packet {
+  /**
+   * Create a `mempool` packet.
+   * @constructor
+   */
+
+  constructor() {
+    super();
+    this.type = exports.types.MEMPOOL;
+  }
+}
+
+/**
+ * FilterLoad Packet
+ * @extends Packet
+ */
+
+class FilterLoadPacket extends Packet {
+  /**
+   * Create a `filterload` packet.
+   * @constructor
+   * @param {BloomFilter|null} filter
+   */
+
+  constructor(filter) {
+    super();
+
+    this.type = exports.types.FILTERLOAD;
+
+    this.filter = filter || new BloomFilter();
+  }
+
+  /**
+   * Get serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    return this.filter.getSize();
+  }
+
+  /**
+   * Serialize filterload packet to writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    return this.filter.write(bw);
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    this.filter.read(br);
+    return this;
+  }
+
+  /**
+   * Ensure the filter is within the size limits.
+   * @returns {Boolean}
+   */
+
+  isWithinConstraints() {
+    return this.filter.isWithinConstraints();
+  }
+}
+
+/**
+ * FilterAdd Packet
+ * @extends Packet
+ * @property {Buffer} data
+ */
+
+class FilterAddPacket extends Packet {
+  /**
+   * Create a `filteradd` packet.
+   * @constructor
+   * @param {Buffer?} data
+   */
+
+  constructor(data) {
+    super();
+
+    this.type = exports.types.FILTERADD;
+
+    this.data = data || DUMMY;
+  }
+
+  /**
+   * Get serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    return encoding.sizeVarBytes(this.data);
+  }
+
+  /**
+   * Serialize filteradd packet to writer.
+   * @returns {BufferWriter} bw
+   */
+
+  write(bw) {
+    bw.writeVarBytes(this.data);
+    return this;
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    this.data = br.readVarBytes();
+    return this;
+  }
+}
+
+/**
+ * FilterClear Packet
+ * @extends Packet
+ */
+
+class FilterClearPacket extends Packet {
+  /**
+   * Create a `filterclear` packet.
+   * @constructor
+   */
+
+  constructor() {
+    super();
+    this.type = exports.types.FILTERCLEAR;
+  }
+}
+
+/**
+ * MerkleBlock Packet
+ * @extends Packet
+ * @property {MerkleBlock} block
+ */
+
+class MerkleBlockPacket extends Packet {
+  /**
+   * Create a `merkleblock` packet.
+   * @constructor
+   * @param {MerkleBlock?} block
+   */
+
+  constructor(block) {
+    super();
+
+    this.type = exports.types.MERKLEBLOCK;
+
+    this.block = block || new MerkleBlock();
+  }
+
+  /**
+   * Get serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    return this.block.getSize();
+  }
+
+  /**
+   * Serialize merkleblock packet to writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    return this.block.write(bw);
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    this.block.read(br);
+    return this;
+  }
+}
+
+/**
+ * FeeFilter Packet
+ * @extends Packet
+ * @property {Rate} rate
+ */
+
+class FeeFilterPacket extends Packet {
+  /**
+   * Create a `feefilter` packet.
+   * @constructor
+   * @param {Rate?} rate
+   */
+
+  constructor(rate) {
+    super();
+
+    this.type = exports.types.FEEFILTER;
+
+    this.rate = rate || 0;
+  }
+
+  /**
+   * Get serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    return 8;
+  }
+
+  /**
+   * Serialize feefilter packet to writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    bw.writeI64(this.rate);
+    return this;
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    this.rate = br.readI64();
+    return this;
+  }
+}
+
+/**
+ * SendCmpct Packet
+ * @extends Packet
+ * @property {Number} mode
+ * @property {Number} version
+ */
+
+class SendCmpctPacket extends Packet {
+  /**
+   * Create a `sendcmpct` packet.
+   * @constructor
+   * @param {Number|null} mode
+   * @param {Number|null} version
+   */
+
+  constructor(mode, version) {
+    super();
+
+    this.type = exports.types.SENDCMPCT;
+
+    this.mode = mode || 0;
+    this.version = version || 1;
+  }
+
+  /**
+   * Get serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    return 9;
+  }
+
+  /**
+   * Serialize sendcmpct packet to writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    bw.writeU8(this.mode);
+    bw.writeU64(this.version);
+    return this;
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    this.mode = br.readU8();
+    this.version = br.readU64();
+    return this;
+  }
+}
+
+/**
+ * CmpctBlock Packet
+ * @extends Packet
+ * @property {Block} block
+ */
+
+class CmpctBlockPacket extends Packet {
+  /**
+   * Create a `cmpctblock` packet.
+   * @constructor
+   * @param {Block|null} block
+   */
+
+  constructor(block) {
+    super();
+
+    this.type = exports.types.CMPCTBLOCK;
+
+    this.block = block || new bip152.CompactBlock();
+  }
+
+  /**
+   * Serialize cmpctblock packet.
+   * @returns {Buffer}
+   */
+
+  getSize() {
+    return this.block.getSize();
+  }
+
+  /**
+   * Serialize cmpctblock packet to writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    return this.block.write(bw);
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    this.block.read(br);
+    return this;
+  }
+}
+
+/**
+ * GetBlockTxn Packet
+ * @extends Packet
+ * @property {TXRequest} request
+ */
+
+class GetBlockTxnPacket extends Packet {
+  /**
+   * Create a `getblocktxn` packet.
+   * @constructor
+   * @param {TXRequest?} request
+   */
+
+  constructor(request) {
+    super();
+
+    this.type = exports.types.GETBLOCKTXN;
+
+    this.request = request || new bip152.TXRequest();
+  }
+
+  /**
+   * Get serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    return this.request.getSize();
+  }
+
+  /**
+   * Serialize getblocktxn packet to writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    return this.request.write(bw);
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    this.request.read(br);
+    return this;
+  }
+}
+
+/**
+ * BlockTxn Packet
+ * @extends Packet
+ * @property {TXResponse} response
+ */
+
+class BlockTxnPacket extends Packet {
+  /**
+   * Create a `blocktxn` packet.
+   * @constructor
+   * @param {TXResponse?} response
+   */
+
+  constructor(response) {
+    super();
+
+    this.type = exports.types.BLOCKTXN;
+
+    this.response = response || new bip152.TXResponse();
+  }
+
+  /**
+   * Get serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    return this.response.getSize();
+  }
+
+  /**
+   * Serialize blocktxn packet to writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    return this.response.write(bw);
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    this.response.read(br);
+    return this;
+  }
+}
+
+/**
+ * GetProof Packet
+ * @extends Packet
+ * @property {Buffer} root
+ * @property {Buffer} key
+ */
+
+class GetProofPacket extends Packet {
+  /**
+   * Create a `getproof` packet.
+   * @constructor
+   * @param {Buffer?} root
+   * @param {Buffer?} key
+   */
+
+  constructor(root, key) {
+    super();
+
+    this.type = exports.types.GETPROOF;
+    this.root = root || consensus.ZERO_HASH;
+    this.key = key || consensus.ZERO_HASH;
+  }
+
+  /**
+   * Get serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    return 64;
+  }
+
+  /**
+   * Serialize getproof packet to writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    bw.writeHash(this.root);
+    bw.writeBytes(this.key);
+    return this;
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    this.root = br.readHash();
+    this.key = br.readBytes(32);
+    return this;
+  }
+}
+
+/**
+ * Proof Packet
+ * @extends Packet
+ * @property {Hash} hash
+ */
+
+class ProofPacket extends Packet {
+  /**
+   * Create a `proof` packet.
+   * @constructor
+   * @param {Buffer} root
+   * @param {Buffer} key
+   * @param {UrkelProof} proof
+   */
+
+  constructor(root, key, proof) {
+    super();
+
+    this.type = exports.types.PROOF;
+    this.root = root || consensus.ZERO_HASH;
+    this.key = key || consensus.ZERO_HASH;
+    this.proof = proof || new UrkelProof();
+  }
+
+  /**
+   * Get serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    let size = 64;
+    size += this.proof.getSize(blake2b, 256);
+    return size;
+  }
+
+  /**
+   * Serialize proof packet to writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    bw.writeHash(this.root);
+    bw.writeBytes(this.key);
+    this.proof.writeBW(bw, blake2b, 256);
+    return this;
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    this.root = br.readHash();
+    this.key = br.readBytes(32);
+    this.proof = UrkelProof.readBR(br, blake2b, 256);
+    return this;
+  }
+}
+
+/**
+ * Claim Packet
+ * @extends Packet
+ */
+
+class ClaimPacket extends Packet {
+  /**
+   * Create a `proof` packet.
+   * @constructor
+   * @param {Claim?} claim
+   */
+
+  constructor(claim) {
+    super();
+
+    this.type = exports.types.CLAIM;
+    this.claim = claim || new Claim();
+  }
+
+  /**
+   * Get serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    return this.claim.getSize();
+  }
+
+  /**
+   * Serialize proof packet to writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    this.claim.write(bw);
+    return this;
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    this.claim.read(br);
+    return this;
+  }
+}
+
+/**
+ * Airdrop Packet
+ * @extends Packet
+ */
+
+class AirdropPacket extends Packet {
+  /**
+   * Create a `proof` packet.
+   * @constructor
+   * @param {AirdropProof?} proof
+   */
+
+  constructor(proof) {
+    super();
+
+    this.type = exports.types.AIRDROP;
+    this.proof = proof || new AirdropProof();
+  }
+
+  /**
+   * Get serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    return this.proof.getSize();
+  }
+
+  /**
+   * Serialize proof packet to writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    this.proof.write(bw);
+    return this;
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    this.proof.read(br);
+    return this;
+  }
+}
+
+/**
+ * Unknown Packet
+ * @extends Packet
+ * @property {String} cmd
+ * @property {Buffer} data
+ */
+
+class UnknownPacket extends Packet {
+  /**
+   * Create an unknown packet.
+   * @constructor
+   * @param {Number|null} type
+   * @param {Buffer|null} data
+   */
+
+  constructor(type, data) {
+    super();
+
+    this.type = exports.types.UNKNOWN;
+    this.packetType = type || exports.types.UNKNOWN;
+    this.data = data || DUMMY;
+  }
+
+  get rawType() {
+    return this.packetType;
+  }
+
+  /**
+   * Get serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    return this.data.length;
+  }
+
+  /**
+   * Serialize unknown packet to writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    bw.writeBytes(this.data);
+    return this;
+  }
+
+  /**
+   * Inject properties from serialized data.
+   * @private
+   * @param {BufferReader} data
+   * @param {Number} type
+   */
+
+  read(br, type) {
+    this.data = br.readBytes(br.getSize());
+    this.packetType = type;
+    return this;
+  }
+}
+
+/**
+ * Parse a payload.
+ * @param {Number} type
+ * @param {Buffer} data
+ * @returns {Packet}
+ */
+
+exports.decode = function decode(type, data) {
+  switch (type) {
+    case types.VERSION:
+      return VersionPacket.decode(data);
+    case types.VERACK:
+      return VerackPacket.decode(data);
+    case types.PING:
+      return PingPacket.decode(data);
+    case types.PONG:
+      return PongPacket.decode(data);
+    case types.GETADDR:
+      return GetAddrPacket.decode(data);
+    case types.ADDR:
+      return AddrPacket.decode(data);
+    case types.INV:
+      return InvPacket.decode(data);
+    case types.GETDATA:
+      return GetDataPacket.decode(data);
+    case types.NOTFOUND:
+      return NotFoundPacket.decode(data);
+    case types.GETBLOCKS:
+      return GetBlocksPacket.decode(data);
+    case types.GETHEADERS:
+      return GetHeadersPacket.decode(data);
+    case types.HEADERS:
+      return HeadersPacket.decode(data);
+    case types.SENDHEADERS:
+      return SendHeadersPacket.decode(data);
+    case types.BLOCK:
+      return BlockPacket.decode(data);
+    case types.TX:
+      return TXPacket.decode(data);
+    case types.REJECT:
+      return RejectPacket.decode(data);
+    case types.MEMPOOL:
+      return MempoolPacket.decode(data);
+    case types.FILTERLOAD:
+      return FilterLoadPacket.decode(data);
+    case types.FILTERADD:
+      return FilterAddPacket.decode(data);
+    case types.FILTERCLEAR:
+      return FilterClearPacket.decode(data);
+    case types.MERKLEBLOCK:
+      return MerkleBlockPacket.decode(data);
+    case types.FEEFILTER:
+      return FeeFilterPacket.decode(data);
+    case types.SENDCMPCT:
+      return SendCmpctPacket.decode(data);
+    case types.CMPCTBLOCK:
+      return CmpctBlockPacket.decode(data);
+    case types.GETBLOCKTXN:
+      return GetBlockTxnPacket.decode(data);
+    case types.BLOCKTXN:
+      return BlockTxnPacket.decode(data);
+    case types.GETPROOF:
+      return GetProofPacket.decode(data);
+    case types.PROOF:
+      return ProofPacket.decode(data);
+    case types.CLAIM:
+      return ClaimPacket.decode(data);
+    case types.AIRDROP:
+      return AirdropPacket.decode(data);
+    default:
+      return UnknownPacket.decode(data, type);
+  }
+};
+
+/*
+ * Expose
+ */
+
+exports.Packet = Packet;
+exports.VersionPacket = VersionPacket;
+exports.VerackPacket = VerackPacket;
+exports.PingPacket = PingPacket;
+exports.PongPacket = PongPacket;
+exports.GetAddrPacket = GetAddrPacket;
+exports.AddrPacket = AddrPacket;
+exports.InvPacket = InvPacket;
+exports.GetDataPacket = GetDataPacket;
+exports.NotFoundPacket = NotFoundPacket;
+exports.GetBlocksPacket = GetBlocksPacket;
+exports.GetHeadersPacket = GetHeadersPacket;
+exports.HeadersPacket = HeadersPacket;
+exports.SendHeadersPacket = SendHeadersPacket;
+exports.BlockPacket = BlockPacket;
+exports.TXPacket = TXPacket;
+exports.RejectPacket = RejectPacket;
+exports.MempoolPacket = MempoolPacket;
+exports.FilterLoadPacket = FilterLoadPacket;
+exports.FilterAddPacket = FilterAddPacket;
+exports.FilterClearPacket = FilterClearPacket;
+exports.MerkleBlockPacket = MerkleBlockPacket;
+exports.FeeFilterPacket = FeeFilterPacket;
+exports.SendCmpctPacket = SendCmpctPacket;
+exports.CmpctBlockPacket = CmpctBlockPacket;
+exports.GetBlockTxnPacket = GetBlockTxnPacket;
+exports.BlockTxnPacket = BlockTxnPacket;
+exports.GetProofPacket = GetProofPacket;
+exports.ProofPacket = ProofPacket;
+exports.ClaimPacket = ClaimPacket;
+exports.AirdropPacket = AirdropPacket;
+exports.UnknownPacket = UnknownPacket;
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-blockchain.html">blockchain</a></li><li><a href="module-blockchain_common.html">blockchain/common</a></li><li><a href="module-blockstore.html">blockstore</a></li><li><a href="module-blockstore_common.html">blockstore/common</a></li><li><a href="module-blockstore_records.html">blockstore/records</a></li><li><a href="module-coins.html">coins</a></li><li><a href="module-covenants.html">covenants</a></li><li><a href="module-dns_common.html">dns/common</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-hd.html">hd</a></li><li><a href="module-hsd.html">hsd</a></li><li><a href="module-mempool.html">mempool</a></li><li><a href="module-mining.html">mining</a></li><li><a href="module-mining_common.html">mining/common</a></li><li><a href="module-net.html">net</a></li><li><a href="module-net_bip152.html">net/bip152</a></li><li><a href="module-net_common.html">net/common</a></li><li><a href="module-net_packets.html">net/packets</a></li><li><a href="module-node.html">node</a></li><li><a href="module-primitives.html">primitives</a></li><li><a href="module-protocol.html">protocol</a></li><li><a href="module-protocol_consensus.html">protocol/consensus</a></li><li><a href="module-protocol_errors.html">protocol/errors</a></li><li><a href="module-protocol_networks.html">protocol/networks</a></li><li><a href="module-protocol_policy.html">protocol/policy</a></li><li><a href="module-script.html">script</a></li><li><a href="module-script_common.html">script/common</a></li><li><a href="module-ui.html">ui</a></li><li><a href="module-utils.html">utils</a></li><li><a href="module-utils_util.html">utils/util</a></li><li><a href="module-wallet.html">wallet</a></li><li><a href="module-wallet_common.html">wallet/common</a></li><li><a href="module-wallet_plugin.html">wallet/plugin</a></li><li><a href="module-wallet_records.html">wallet/records</a></li><li><a href="module-workers.html">workers</a></li><li><a href="module-workers_jobs.html">workers/jobs</a></li><li><a href="module-workers_packets.html">workers/packets</a></li></ul><h3>Classes</h3><ul><li><a href="AirdropKey.html">AirdropKey</a></li><li><a href="AirdropProof.html">AirdropProof</a></li><li><a href="BidReveal.html">BidReveal</a></li><li><a href="BitField.html">BitField</a></li><li><a href="BitView.html">BitView</a></li><li><a href="BlindBid.html">BlindBid</a></li><li><a href="BlindValue.html">BlindValue</a></li><li><a href="BlockProof.html">BlockProof</a></li><li><a href="Brontide.html">Brontide</a></li><li><a href="BrontideStream.html">BrontideStream</a></li><li><a href="ChainFlags.html">ChainFlags</a></li><li><a href="ChainState.html">ChainState</a></li><li><a href="CipherState.html">CipherState</a></li><li><a href="Claim.html">Claim</a></li><li><a href="DetailsMember.html">DetailsMember</a></li><li><a href="DS.html">DS</a></li><li><a href="Field.html">Field</a></li><li><a href="GLUE4.html">GLUE4</a></li><li><a href="GLUE6.html">GLUE6</a></li><li><a href="HandshakeState.html">HandshakeState</a></li><li><a href="HashList.html">HashList</a></li><li><a href="MigrateBlockStore.html">MigrateBlockStore</a></li><li><a href="MigrateChainState.html">MigrateChainState</a></li><li><a href="MigrateChangeAddress.html">MigrateChangeAddress</a></li><li><a href="MigrateMigrations.html">MigrateMigrations</a></li><li><a href="MigrateTreeState.html">MigrateTreeState</a></li><li><a href="module.migrations.MigrationState.html">MigrationState</a></li><li><a href="module-blockchain.Chain.html">Chain</a></li><li><a href="module-blockchain.ChainDB.html">ChainDB</a></li><li><a href="module-blockchain.ChainEntry.html">ChainEntry</a></li><li><a href="module-blockchain.ChainMigrator.html">ChainMigrator</a></li><li><a href="module-blockchain.ChainMigratorOptions.html">ChainMigratorOptions</a></li><li><a href="module-blockchain.ChainOptions.html">ChainOptions</a></li><li><a href="module-blockchain.DeploymentState.html">DeploymentState</a></li><li><a href="module-blockchain.WalletMigrationResult.html">WalletMigrationResult</a></li><li><a href="module-blockchain.WalletMigrator.html">WalletMigrator</a></li><li><a href="module-blockstore.AbstractBatch.html">AbstractBatch</a></li><li><a href="module-blockstore.AbstractBlockStore.html">AbstractBlockStore</a></li><li><a href="module-blockstore.FileBatch.html">FileBatch</a></li><li><a href="module-blockstore.LevelBatch.html">LevelBatch</a></li><li><a href="module-blockstore_records-BlockRecord.html">BlockRecord</a></li><li><a href="module-blockstore_records-FileRecord.html">FileRecord</a></li><li><a href="module-blockstore_FileBlockStore.html">blockstore:FileBlockStore</a></li><li><a href="module-blockstore_LevelBlockStore.html">blockstore:LevelBlockStore</a></li><li><a href="module-coins.CoinEntry.html">CoinEntry</a></li><li><a href="module-coins.Coins.html">Coins</a></li><li><a href="module-coins.CoinView.html">CoinView</a></li><li><a href="module-coins.UndoCoins.html">UndoCoins</a></li><li><a href="module-currency.Amount.html">Amount</a></li><li><a href="module-errors-CriticalError.html">CriticalError</a></li><li><a href="module-hd.Mnemonic.html">Mnemonic</a></li><li><a href="module-hd.PrivateKey.html">PrivateKey</a></li><li><a href="module-hd.PublicKey.html">PublicKey</a></li><li><a href="module-http.HTTPOptions.html">HTTPOptions</a></li><li><a href="module-http.RPC.html">RPC</a></li><li><a href="module-http.Server.html">Server</a></li><li><a href="module-http.TransactionOptions.html">TransactionOptions</a></li><li><a href="module-mempool.AirdropEntry.html">AirdropEntry</a></li><li><a href="module-mempool.ClaimEntry.html">ClaimEntry</a></li><li><a href="module-mempool.ConfirmStats.html">ConfirmStats</a></li><li><a href="module-mempool.Mempool.html">Mempool</a></li><li><a href="module-mempool.MempoolEntry.html">MempoolEntry</a></li><li><a href="module-mempool.MempoolOptions.html">MempoolOptions</a></li><li><a href="module-mempool.PolicyEstimator.html">PolicyEstimator</a></li><li><a href="module-migrations.AbstractMigration.html">AbstractMigration</a></li><li><a href="module-migrations.MigrationResult.html">MigrationResult</a></li><li><a href="module-migrations.Migrator.html">Migrator</a></li><li><a href="module-mining.BlockAirdrop.html">BlockAirdrop</a></li><li><a href="module-mining.BlockClaim.html">BlockClaim</a></li><li><a href="module-mining.BlockEntry.html">BlockEntry</a></li><li><a href="module-mining.BlockTemplate.html">BlockTemplate</a></li><li><a href="module-mining.CPUMiner.html">CPUMiner</a></li><li><a href="module-mining.Miner.html">Miner</a></li><li><a href="module-mining.MinerOptions.html">MinerOptions</a></li><li><a href="module-net.BroadcastItem.html">BroadcastItem</a></li><li><a href="module-net.Framer.html">Framer</a></li><li><a href="module-net.HostEntry.html">HostEntry</a></li><li><a href="module-net.HostList.html">HostList</a></li><li><a href="module-net.HostListOptions.html">HostListOptions</a></li><li><a href="module-net.LocalAddress.html">LocalAddress</a></li><li><a href="module-net.NetAddress.html">NetAddress</a></li><li><a href="module-net.Parser.html">Parser</a></li><li><a href="module-net.Peer.html">Peer</a></li><li><a href="module-net.PeerList.html">PeerList</a></li><li><a href="module-net.PeerOptions.html">PeerOptions</a></li><li><a href="module-net.Pool.html">Pool</a></li><li><a href="module-net.PoolOptions.html">PoolOptions</a></li><li><a href="module-net_bip152-CompactBlock.html">CompactBlock</a></li><li><a href="module-net_bip152-TXRequest.html">TXRequest</a></li><li><a href="module-net_bip152-TXResponse.html">TXResponse</a></li><li><a href="module-net_packets-AddrPacket.html">AddrPacket</a></li><li><a href="module-net_packets-AirdropPacket.html">AirdropPacket</a></li><li><a href="module-net_packets-BlockPacket.html">BlockPacket</a></li><li><a href="module-net_packets-BlockTxnPacket.html">BlockTxnPacket</a></li><li><a href="module-net_packets-ClaimPacket.html">ClaimPacket</a></li><li><a href="module-net_packets-CmpctBlockPacket.html">CmpctBlockPacket</a></li><li><a href="module-net_packets-FeeFilterPacket.html">FeeFilterPacket</a></li><li><a href="module-net_packets-FilterAddPacket.html">FilterAddPacket</a></li><li><a href="module-net_packets-FilterClearPacket.html">FilterClearPacket</a></li><li><a href="module-net_packets-FilterLoadPacket.html">FilterLoadPacket</a></li><li><a href="module-net_packets-GetAddrPacket.html">GetAddrPacket</a></li><li><a href="module-net_packets-GetBlocksPacket.html">GetBlocksPacket</a></li><li><a href="module-net_packets-GetBlockTxnPacket.html">GetBlockTxnPacket</a></li><li><a href="module-net_packets-GetDataPacket.html">GetDataPacket</a></li><li><a href="module-net_packets-GetHeadersPacket.html">GetHeadersPacket</a></li><li><a href="module-net_packets-GetProofPacket.html">GetProofPacket</a></li><li><a href="module-net_packets-HeadersPacket.html">HeadersPacket</a></li><li><a href="module-net_packets-InvPacket.html">InvPacket</a></li><li><a href="module-net_packets-MempoolPacket.html">MempoolPacket</a></li><li><a href="module-net_packets-MerkleBlockPacket.html">MerkleBlockPacket</a></li><li><a href="module-net_packets-NotFoundPacket.html">NotFoundPacket</a></li><li><a href="module-net_packets-Packet.html">Packet</a></li><li><a href="module-net_packets-PingPacket.html">PingPacket</a></li><li><a href="module-net_packets-PongPacket.html">PongPacket</a></li><li><a href="module-net_packets-ProofPacket.html">ProofPacket</a></li><li><a href="module-net_packets-RejectPacket.html">RejectPacket</a></li><li><a href="module-net_packets-SendCmpctPacket.html">SendCmpctPacket</a></li><li><a href="module-net_packets-SendHeadersPacket.html">SendHeadersPacket</a></li><li><a href="module-net_packets-TXPacket.html">TXPacket</a></li><li><a href="module-net_packets-UnknownPacket.html">UnknownPacket</a></li><li><a href="module-net_packets-VerackPacket.html">VerackPacket</a></li><li><a href="module-net_packets-VersionPacket.html">VersionPacket</a></li><li><a href="module-node.FullNode.html">FullNode</a></li><li><a href="module-node.Node.html">Node</a></li><li><a href="module-node.NodeClient.html">NodeClient</a></li><li><a href="module-node.NullClient.html">NullClient</a></li><li><a href="module-node.SPVNode.html">SPVNode</a></li><li><a href="module-primitives.AbstractBlock.html">AbstractBlock</a></li><li><a href="module-primitives.Address.html">Address</a></li><li><a href="module-primitives.Block.html">Block</a></li><li><a href="module-primitives.Coin.html">Coin</a></li><li><a href="module-primitives.CoinSelector.html">CoinSelector</a></li><li><a href="module-primitives.Covenant.html">Covenant</a></li><li><a href="module-primitives.Headers.html">Headers</a></li><li><a href="module-primitives.Input.html">Input</a></li><li><a href="module-primitives.InvItem.html">InvItem</a></li><li><a href="module-primitives.KeyRing.html">KeyRing</a></li><li><a href="module-primitives.MemBlock.html">MemBlock</a></li><li><a href="module-primitives.MerkleBlock.html">MerkleBlock</a></li><li><a href="module-primitives.MTX.html">MTX</a></li><li><a href="module-primitives.Outpoint.html">Outpoint</a></li><li><a href="module-primitives.Output.html">Output</a></li><li><a href="module-primitives.TX.html">TX</a></li><li><a href="module-primitives.TXMeta.html">TXMeta</a></li><li><a href="module-protocol.Network.html">Network</a></li><li><a href="module-protocol.TimeData.html">TimeData</a></li><li><a href="module-protocol_errors-VerifyError.html">VerifyError</a></li><li><a href="module-script.Opcode.html">Opcode</a></li><li><a href="module-script.Script.html">Script</a></li><li><a href="module-script.ScriptError.html">ScriptError</a></li><li><a href="module-script.ScriptNum.html">ScriptNum</a></li><li><a href="module-script.SigCache.html">SigCache</a></li><li><a href="module-script.Stack.html">Stack</a></li><li><a href="module-script.Witness.html">Witness</a></li><li><a href="module-ui.URI.html">URI</a></li><li><a href="module-wallet.Account.html">Account</a></li><li><a href="module-wallet.Balance.html">Balance</a></li><li><a href="module-wallet.BlockRecord.html">BlockRecord</a></li><li><a href="module-wallet.Credit.html">Credit</a></li><li><a href="module-wallet.Details.html">Details</a></li><li><a href="module-wallet.HTTP.html">HTTP</a></li><li><a href="module-wallet.MasterKey.html">MasterKey</a></li><li><a href="module-wallet.Path.html">Path</a></li><li><a href="module-wallet.Paths.html">Paths</a></li><li><a href="module-wallet.RPC.html">RPC</a></li><li><a href="module-wallet.TXDB.html">TXDB</a></li><li><a href="module-wallet.Wallet.html">Wallet</a></li><li><a href="module-wallet.WalletCoinView.html">WalletCoinView</a></li><li><a href="module-wallet.WalletDB.html">WalletDB</a></li><li><a href="module-wallet.WalletKey.html">WalletKey</a></li><li><a href="module-wallet.WalletMigratorOptions.html">WalletMigratorOptions</a></li><li><a href="module-wallet.WalletOptions.html">WalletOptions</a></li><li><a href="module-wallet_plugin-Plugin.html">Plugin</a></li><li><a href="module-wallet_records-BlockMeta.html">BlockMeta</a></li><li><a href="module-wallet_records-ChainState.html">ChainState</a></li><li><a href="module-wallet_records-MapRecord.html">MapRecord</a></li><li><a href="module-wallet_records-TXRecord.html">TXRecord</a></li><li><a href="module-workers.Framer.html">Framer</a></li><li><a href="module-workers.Master.html">Master</a></li><li><a href="module-workers.Parent.html">Parent</a></li><li><a href="module-workers.Parser.html">Parser</a></li><li><a href="module-workers.Worker.html">Worker</a></li><li><a href="module-workers.WorkerPool.html">WorkerPool</a></li><li><a href="module-workers_packets-CheckInputPacket.html">CheckInputPacket</a></li><li><a href="module-workers_packets-CheckInputResultPacket.html">CheckInputResultPacket</a></li><li><a href="module-workers_packets-CheckPacket.html">CheckPacket</a></li><li><a href="module-workers_packets-CheckResultPacket.html">CheckResultPacket</a></li><li><a href="module-workers_packets-ECSignPacket.html">ECSignPacket</a></li><li><a href="module-workers_packets-ECSignResultPacket.html">ECSignResultPacket</a></li><li><a href="module-workers_packets-ECVerifyPacket.html">ECVerifyPacket</a></li><li><a href="module-workers_packets-ECVerifyResultPacket.html">ECVerifyResultPacket</a></li><li><a href="module-workers_packets-EnvPacket.html">EnvPacket</a></li><li><a href="module-workers_packets-ErrorPacket.html">ErrorPacket</a></li><li><a href="module-workers_packets-ErrorResultPacket.html">ErrorResultPacket</a></li><li><a href="module-workers_packets-EventPacket.html">EventPacket</a></li><li><a href="module-workers_packets-LogPacket.html">LogPacket</a></li><li><a href="module-workers_packets-MinePacket.html">MinePacket</a></li><li><a href="module-workers_packets-MineResultPacket.html">MineResultPacket</a></li><li><a href="module-workers_packets-Packet.html">Packet</a></li><li><a href="module-workers_packets-ScryptPacket.html">ScryptPacket</a></li><li><a href="module-workers_packets-ScryptResultPacket.html">ScryptResultPacket</a></li><li><a href="module-workers_packets-SignInputPacket.html">SignInputPacket</a></li><li><a href="module-workers_packets-SignInputResultPacket.html">SignInputResultPacket</a></li><li><a href="module-workers_packets-SignPacket.html">SignPacket</a></li><li><a href="module-workers_packets-SignResultPacket.html">SignResultPacket</a></li><li><a href="NameDelta.html">NameDelta</a></li><li><a href="NameState.html">NameState</a></li><li><a href="NS.html">NS</a></li><li><a href="Ownership.html">Ownership</a></li><li><a href="Proof.html">Proof</a></li><li><a href="ProofData.html">ProofData</a></li><li><a href="RecursiveServer.html">RecursiveServer</a></li><li><a href="Reserved.html">Reserved</a></li><li><a href="Resource.html">Resource</a></li><li><a href="RootCache.html">RootCache</a></li><li><a href="RootServer.html">RootServer</a></li><li><a href="Seeder.html">Seeder</a></li><li><a href="SlidingWindow.html">SlidingWindow</a></li><li><a href="StateCache.html">StateCache</a></li><li><a href="SymmetricState.html">SymmetricState</a></li><li><a href="SYNTH4.html">SYNTH4</a></li><li><a href="SYNTH6.html">SYNTH6</a></li><li><a href="TXT.html">TXT</a></li><li><a href="WalletNode.html">WalletNode</a></li></ul><h3>Global</h3><ul><li><a href="global.html#bindExit">bindExit</a></li><li><a href="global.html#checksig">checksig</a></li><li><a href="global.html#decode">decode</a></li><li><a href="global.html#encode">encode</a></li><li><a href="global.html#fromFloat">fromFloat</a></li><li><a href="global.html#groupKey">groupKey</a></li><li><a href="global.html#insert">insert</a></li><li><a href="global.html#listenExit">listenExit</a></li><li><a href="global.html#migrationLayout">migrationLayout</a></li><li><a href="global.html#oldLayout">oldLayout</a></li><li><a href="global.html#remove">remove</a></li><li><a href="global.html#search">search</a></li><li><a href="global.html#toFloat">toFloat</a></li><li><a href="global.html#validateKey">validateKey</a></li><li><a href="global.html#validateSignature">validateSignature</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 1.0.0</a> on Fri Jun 24 2022 16:08:43 GMT+0000 (Coordinated Universal Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

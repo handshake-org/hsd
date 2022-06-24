@@ -1,0 +1,2515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: script/script.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: script/script.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/*!
+ * script.js - script interpreter for hsd
+ * Copyright (c) 2017-2018, Christopher Jeffrey (MIT License).
+ * https://github.com/handshake-org/hsd
+ */
+
+'use strict';
+
+const assert = require('bsert');
+const bio = require('bufio');
+const ripemd160 = require('bcrypto/lib/ripemd160');
+const sha1 = require('bcrypto/lib/sha1');
+const sha256 = require('bcrypto/lib/sha256');
+const hash160 = require('bcrypto/lib/hash160');
+const hash256 = require('bcrypto/lib/hash256');
+const blake2b = require('bcrypto/lib/blake2b');
+const sha3 = require('bcrypto/lib/sha3');
+const keccak = require('bcrypto/lib/keccak');
+const secp256k1 = require('bcrypto/lib/secp256k1');
+const consensus = require('../protocol/consensus');
+const Opcode = require('./opcode');
+const Stack = require('./stack');
+const ScriptError = require('./scripterror');
+const ScriptNum = require('./scriptnum');
+const common = require('./common');
+const opcodes = common.opcodes;
+const scriptTypes = common.types;
+const {encoding} = bio;
+
+/*
+ * Constants
+ */
+
+const EMPTY_BUFFER = Buffer.alloc(0);
+
+/**
+ * Script
+ * Represents a input or output script.
+ * @alias module:script.Script
+ * @property {Array} code - Parsed script code.
+ * @property {Buffer?} raw - Serialized script.
+ * @property {Number} length - Number of parsed opcodes.
+ */
+
+class Script extends bio.Struct {
+  /**
+   * Create a script.
+   * @constructor
+   * @param {Buffer|Array|Object} code
+   */
+
+  constructor(options) {
+    super();
+
+    this.raw = EMPTY_BUFFER;
+    this.code = [];
+
+    if (options)
+      this.fromOptions(options);
+  }
+
+  /**
+   * Get length.
+   * @returns {Number}
+   */
+
+  get length() {
+    return this.code.length;
+  }
+
+  /**
+   * Set length.
+   * @param {Number} value
+   */
+
+  set length(value) {
+    this.code.length = value;
+  }
+
+  /**
+   * Inject properties from options object.
+   * @private
+   * @param {Object} options
+   */
+
+  fromOptions(options) {
+    assert(options, 'Script data is required.');
+
+    if (Buffer.isBuffer(options))
+      return this.decode(options);
+
+    if (Array.isArray(options))
+      return this.fromArray(options);
+
+    if (options.raw) {
+      if (!options.code)
+        return this.decode(options.raw);
+      assert(Buffer.isBuffer(options.raw), 'Raw must be a Buffer.');
+      this.raw = options.raw;
+    }
+
+    if (options.code) {
+      if (!options.raw)
+        return this.fromArray(options.code);
+      assert(Array.isArray(options.code), 'Code must be an array.');
+      this.code = options.code;
+    }
+
+    return this;
+  }
+
+  /**
+   * Instantiate a value-only iterator.
+   * @returns {ScriptIterator}
+   */
+
+  values() {
+    return this.code.values();
+  }
+
+  /**
+   * Instantiate a key and value iterator.
+   * @returns {ScriptIterator}
+   */
+
+  entries() {
+    return this.code.entries();
+  }
+
+  /**
+   * Instantiate a value-only iterator.
+   * @returns {ScriptIterator}
+   */
+
+  [Symbol.iterator]() {
+    return this.code[Symbol.iterator]();
+  }
+
+  /**
+   * Convert the script to an array of
+   * Buffers (pushdatas) and Numbers
+   * (opcodes).
+   * @returns {Array}
+   */
+
+  toArray() {
+    return this.code.slice();
+  }
+
+  /**
+   * Inject properties from an array of
+   * of buffers and numbers.
+   * @private
+   * @param {Array} code
+   * @returns {Script}
+   */
+
+  fromArray(code) {
+    assert(Array.isArray(code));
+
+    this.clear();
+
+    for (const op of code)
+      this.push(op);
+
+    return this.compile();
+  }
+
+  /**
+   * Instantiate script from an array
+   * of buffers and numbers.
+   * @param {Array} code
+   * @returns {Script}
+   */
+
+  static fromArray(code) {
+    return new this().fromArray(code);
+  }
+
+  /**
+   * Convert script to stack items.
+   * @returns {Buffer[]}
+   */
+
+  toItems() {
+    const items = [];
+
+    for (const op of this.code) {
+      const data = op.toPush();
+
+      if (!data)
+        throw new Error('Non-push opcode in script.');
+
+      items.push(data);
+    }
+
+    return items;
+  }
+
+  /**
+   * Inject data from stack items.
+   * @private
+   * @param {Buffer[]} items
+   * @returns {Script}
+   */
+
+  fromItems(items) {
+    assert(Array.isArray(items));
+
+    this.clear();
+
+    for (const item of items)
+      this.pushData(item);
+
+    return this.compile();
+  }
+
+  /**
+   * Instantiate script from stack items.
+   * @param {Buffer[]} items
+   * @returns {Script}
+   */
+
+  static fromItems(items) {
+    return new this().fromItems(items);
+  }
+
+  /**
+   * Convert script to stack.
+   * @returns {Stack}
+   */
+
+  toStack() {
+    return new Stack(this.toItems());
+  }
+
+  /**
+   * Inject data from stack.
+   * @private
+   * @param {Stack} stack
+   * @returns {Script}
+   */
+
+  fromStack(stack) {
+    return this.fromItems(stack.items);
+  }
+
+  /**
+   * Instantiate script from stack.
+   * @param {Stack} stack
+   * @returns {Script}
+   */
+
+  static fromStack(stack) {
+    return new this().fromStack(stack);
+  }
+
+  /**
+   * Inject properties from script.
+   * Used for cloning.
+   * @private
+   * @param {Script} script
+   * @returns {Script}
+   */
+
+  inject(script) {
+    this.raw = script.raw;
+    this.code = script.code.slice();
+    return this;
+  }
+
+  /**
+   * Test equality against script.
+   * @param {Script} script
+   * @returns {Boolean}
+   */
+
+  equals(script) {
+    assert(Script.isScript(script));
+    return this.raw.equals(script.raw);
+  }
+
+  /**
+   * Compare against another script.
+   * @param {Script} script
+   * @returns {Number}
+   */
+
+  compare(script) {
+    assert(Script.isScript(script));
+    return this.raw.compare(script.raw);
+  }
+
+  /**
+   * Clear the script.
+   * @returns {Script}
+   */
+
+  clear() {
+    this.raw = EMPTY_BUFFER;
+    this.code.length = 0;
+    return this;
+  }
+
+  /**
+   * Inspect the script.
+   * @returns {String} Human-readable script code.
+   */
+
+  format() {
+    return `&lt;Script: ${this.toString()}>`;
+  }
+
+  /**
+   * Convert the script to a bitcoind test string.
+   * @returns {String} Human-readable script code.
+   */
+
+  toString() {
+    const out = [];
+
+    for (const op of this.code)
+      out.push(op.toFormat());
+
+    return out.join(' ');
+  }
+
+  /**
+   * Format the script as bitcoind asm.
+   * @param {Boolean?} decode - Attempt to decode hash types.
+   * @returns {String} Human-readable script.
+   */
+
+  toASM(decode) {
+    const out = [];
+
+    for (const op of this.code)
+      out.push(op.toASM(decode));
+
+    return out.join(' ');
+  }
+
+  /**
+   * Re-encode the script internally. Useful if you
+   * changed something manually in the `code` array.
+   * @returns {Script}
+   */
+
+  compile() {
+    if (this.code.length === 0)
+      return this.clear();
+
+    let size = 0;
+
+    for (const op of this.code)
+      size += op.getSize();
+
+    const bw = bio.write(size);
+
+    for (const op of this.code)
+      op.write(bw);
+
+    this.raw = bw.render();
+
+    return this;
+  }
+
+  /**
+   * Write the script to a buffer writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    bw.writeVarBytes(this.raw);
+    return bw;
+  }
+
+  /**
+   * Encode the script to a Buffer. See {@link Script#encode}.
+   * @param {String} enc - Encoding, either `'hex'` or `null`.
+   * @returns {Buffer|String} Serialized script.
+   */
+
+  encode() {
+    return this.raw;
+  }
+
+  /**
+   * Convert script to a hex string.
+   * @returns {String}
+   */
+
+  getJSON() {
+    return this.toHex();
+  }
+
+  /**
+   * Inject properties from json object.
+   * @private
+   * @param {String} json
+   */
+
+  fromJSON(json) {
+    assert(typeof json === 'string', 'Code must be a string.');
+    return this.decode(Buffer.from(json, 'hex'));
+  }
+
+  /**
+   * Get the script's "subscript" starting at a separator.
+   * @param {Number} index - The last separator to sign/verify beyond.
+   * @returns {Script} Subscript.
+   */
+
+  getSubscript(index) {
+    if (index === 0)
+      return this.clone();
+
+    const script = new Script();
+
+    for (let i = index; i &lt; this.code.length; i++) {
+      const op = this.code[i];
+
+      if (op.value === -1)
+        break;
+
+      script.code.push(op);
+    }
+
+    return script.compile();
+  }
+
+  /**
+   * Get the script's "subscript" starting at a separator.
+   * Remove all OP_CODESEPARATORs if present. This bizarre
+   * behavior is necessary for signing and verification when
+   * code separators are present.
+   * @returns {Script} Subscript.
+   */
+
+  removeSeparators() {
+    let found = false;
+
+    // Optimizing for the common case:
+    // Check for any separators first.
+    for (const op of this.code) {
+      if (op.value === -1)
+        break;
+
+      if (op.value === opcodes.OP_CODESEPARATOR) {
+        found = true;
+        break;
+      }
+    }
+
+    if (!found)
+      return this;
+
+    // Uncommon case: someone actually
+    // has a code separator. Go through
+    // and remove them all.
+    const script = new Script();
+
+    for (const op of this.code) {
+      if (op.value === -1)
+        break;
+
+      if (op.value !== opcodes.OP_CODESEPARATOR)
+        script.code.push(op);
+    }
+
+    return script.compile();
+  }
+
+  /**
+   * Execute and interpret the script.
+   * @param {Stack} stack - Script execution stack.
+   * @param {Number?} flags - Script standard flags.
+   * @param {TX?} tx - Transaction being verified.
+   * @param {Number?} index - Index of input being verified.
+   * @param {Amount?} value - Previous output value.
+   * @throws {ScriptError} Will be thrown on VERIFY failures.
+   */
+
+  execute(stack, flags, tx, index, value) {
+    if (flags == null)
+      flags = Script.flags.STANDARD_VERIFY_FLAGS;
+
+    if (this.raw.length > consensus.MAX_SCRIPT_SIZE)
+      throw new ScriptError('SCRIPT_SIZE');
+
+    const state = [];
+    const alt = [];
+
+    let lastSep = 0;
+    let opCount = 0;
+    let negate = 0;
+    let minimal = false;
+
+    if (flags &amp; Script.flags.VERIFY_MINIMALDATA)
+      minimal = true;
+
+    for (let ip = 0; ip &lt; this.code.length; ip++) {
+      const op = this.code[ip];
+
+      if (op.value === -1)
+        throw new ScriptError('BAD_OPCODE', op, ip);
+
+      if (op.data &amp;&amp; op.data.length > consensus.MAX_SCRIPT_PUSH)
+        throw new ScriptError('PUSH_SIZE', op, ip);
+
+      if (op.value > opcodes.OP_16 &amp;&amp; ++opCount > consensus.MAX_SCRIPT_OPS)
+        throw new ScriptError('OP_COUNT', op, ip);
+
+      if (op.isDisabled())
+        throw new ScriptError('DISABLED_OPCODE', op, ip);
+
+      if (negate &amp;&amp; !op.isBranch()) {
+        if (stack.length + alt.length > consensus.MAX_SCRIPT_STACK)
+          throw new ScriptError('STACK_SIZE', op, ip);
+        continue;
+      }
+
+      if (op.data) {
+        if (minimal &amp;&amp; !op.isMinimal())
+          throw new ScriptError('MINIMALDATA', op, ip);
+
+        stack.push(op.data);
+
+        if (stack.length + alt.length > consensus.MAX_SCRIPT_STACK)
+          throw new ScriptError('STACK_SIZE', op, ip);
+
+        continue;
+      }
+
+      switch (op.value) {
+        case opcodes.OP_0: {
+          stack.pushInt(0);
+          break;
+        }
+        case opcodes.OP_1NEGATE: {
+          stack.pushInt(-1);
+          break;
+        }
+        case opcodes.OP_1:
+        case opcodes.OP_2:
+        case opcodes.OP_3:
+        case opcodes.OP_4:
+        case opcodes.OP_5:
+        case opcodes.OP_6:
+        case opcodes.OP_7:
+        case opcodes.OP_8:
+        case opcodes.OP_9:
+        case opcodes.OP_10:
+        case opcodes.OP_11:
+        case opcodes.OP_12:
+        case opcodes.OP_13:
+        case opcodes.OP_14:
+        case opcodes.OP_15:
+        case opcodes.OP_16: {
+          stack.pushInt(op.value - 0x50);
+          break;
+        }
+        case opcodes.OP_NOP: {
+          break;
+        }
+        case opcodes.OP_TYPE: {
+          if (!tx)
+            throw new ScriptError('UNKNOWN_ERROR', 'No TX passed in.');
+
+          if (index >= tx.outputs.length) {
+            stack.pushInt(0);
+            break;
+          }
+
+          const {covenant} = tx.outputs[index];
+
+          stack.pushInt(covenant.type);
+
+          break;
+        }
+        case opcodes.OP_CHECKLOCKTIMEVERIFY: {
+          if (!tx)
+            throw new ScriptError('UNKNOWN_ERROR', 'No TX passed in.');
+
+          if (stack.length === 0)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          const num = stack.getNum(-1, minimal, 5);
+
+          if (num.isNeg())
+            throw new ScriptError('NEGATIVE_LOCKTIME', op, ip);
+
+          const locktime = num.toDouble();
+
+          if (!tx.verifyLocktime(index, locktime))
+            throw new ScriptError('UNSATISFIED_LOCKTIME', op, ip);
+
+          break;
+        }
+        case opcodes.OP_CHECKSEQUENCEVERIFY: {
+          if (!tx)
+            throw new ScriptError('UNKNOWN_ERROR', 'No TX passed in.');
+
+          if (stack.length === 0)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          const num = stack.getNum(-1, minimal, 5);
+
+          if (num.isNeg())
+            throw new ScriptError('NEGATIVE_LOCKTIME', op, ip);
+
+          const locktime = num.toDouble();
+
+          if (!tx.verifySequence(index, locktime))
+            throw new ScriptError('UNSATISFIED_LOCKTIME', op, ip);
+
+          break;
+        }
+        case opcodes.OP_NOP1:
+        case opcodes.OP_NOP4:
+        case opcodes.OP_NOP5:
+        case opcodes.OP_NOP6:
+        case opcodes.OP_NOP7:
+        case opcodes.OP_NOP8:
+        case opcodes.OP_NOP9:
+        case opcodes.OP_NOP10: {
+          if (flags &amp; Script.flags.VERIFY_DISCOURAGE_UPGRADABLE_NOPS)
+            throw new ScriptError('DISCOURAGE_UPGRADABLE_NOPS', op, ip);
+          break;
+        }
+        case opcodes.OP_IF:
+        case opcodes.OP_NOTIF: {
+          let val = false;
+
+          if (!negate) {
+            if (stack.length &lt; 1)
+              throw new ScriptError('UNBALANCED_CONDITIONAL', op, ip);
+
+            if (flags &amp; Script.flags.VERIFY_MINIMALIF) {
+              const item = stack.get(-1);
+
+              if (item.length > 1)
+                throw new ScriptError('MINIMALIF');
+
+              if (item.length === 1 &amp;&amp; item[0] !== 1)
+                throw new ScriptError('MINIMALIF');
+            }
+
+            val = stack.getBool(-1);
+
+            if (op.value === opcodes.OP_NOTIF)
+              val = !val;
+
+            stack.pop();
+          }
+
+          state.push(val);
+
+          if (!val)
+            negate += 1;
+
+          break;
+        }
+        case opcodes.OP_ELSE: {
+          if (state.length === 0)
+            throw new ScriptError('UNBALANCED_CONDITIONAL', op, ip);
+
+          state[state.length - 1] = !state[state.length - 1];
+
+          if (!state[state.length - 1])
+            negate += 1;
+          else
+            negate -= 1;
+
+          break;
+        }
+        case opcodes.OP_ENDIF: {
+          if (state.length === 0)
+            throw new ScriptError('UNBALANCED_CONDITIONAL', op, ip);
+
+          if (!state.pop())
+            negate -= 1;
+
+          break;
+        }
+        case opcodes.OP_VERIFY: {
+          if (stack.length === 0)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          if (!stack.getBool(-1))
+            throw new ScriptError('VERIFY', op, ip);
+
+          stack.pop();
+
+          break;
+        }
+        case opcodes.OP_RETURN: {
+          throw new ScriptError('OP_RETURN', op, ip);
+        }
+        case opcodes.OP_TOALTSTACK: {
+          if (stack.length === 0)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          alt.push(stack.pop());
+          break;
+        }
+        case opcodes.OP_FROMALTSTACK: {
+          if (alt.length === 0)
+            throw new ScriptError('INVALID_ALTSTACK_OPERATION', op, ip);
+
+          stack.push(alt.pop());
+          break;
+        }
+        case opcodes.OP_2DROP: {
+          if (stack.length &lt; 2)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          stack.pop();
+          stack.pop();
+          break;
+        }
+        case opcodes.OP_2DUP: {
+          if (stack.length &lt; 2)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          const v1 = stack.get(-2);
+          const v2 = stack.get(-1);
+
+          stack.push(v1);
+          stack.push(v2);
+          break;
+        }
+        case opcodes.OP_3DUP: {
+          if (stack.length &lt; 3)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          const v1 = stack.get(-3);
+          const v2 = stack.get(-2);
+          const v3 = stack.get(-1);
+
+          stack.push(v1);
+          stack.push(v2);
+          stack.push(v3);
+          break;
+        }
+        case opcodes.OP_2OVER: {
+          if (stack.length &lt; 4)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          const v1 = stack.get(-4);
+          const v2 = stack.get(-3);
+
+          stack.push(v1);
+          stack.push(v2);
+          break;
+        }
+        case opcodes.OP_2ROT: {
+          if (stack.length &lt; 6)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          const v1 = stack.get(-6);
+          const v2 = stack.get(-5);
+
+          stack.erase(-6, -4);
+          stack.push(v1);
+          stack.push(v2);
+          break;
+        }
+        case opcodes.OP_2SWAP: {
+          if (stack.length &lt; 4)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          stack.swap(-4, -2);
+          stack.swap(-3, -1);
+          break;
+        }
+        case opcodes.OP_IFDUP: {
+          if (stack.length === 0)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          if (stack.getBool(-1)) {
+            const val = stack.get(-1);
+            stack.push(val);
+          }
+
+          break;
+        }
+        case opcodes.OP_DEPTH: {
+          stack.pushInt(stack.length);
+          break;
+        }
+        case opcodes.OP_DROP: {
+          if (stack.length === 0)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          stack.pop();
+          break;
+        }
+        case opcodes.OP_DUP: {
+          if (stack.length === 0)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          stack.push(stack.get(-1));
+          break;
+        }
+        case opcodes.OP_NIP: {
+          if (stack.length &lt; 2)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          stack.remove(-2);
+          break;
+        }
+        case opcodes.OP_OVER: {
+          if (stack.length &lt; 2)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          stack.push(stack.get(-2));
+          break;
+        }
+        case opcodes.OP_PICK:
+        case opcodes.OP_ROLL: {
+          if (stack.length &lt; 2)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          const num = stack.getInt(-1, minimal, 4);
+          stack.pop();
+
+          if (num &lt; 0 || num >= stack.length)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          const val = stack.get(-num - 1);
+
+          if (op.value === opcodes.OP_ROLL)
+            stack.remove(-num - 1);
+
+          stack.push(val);
+          break;
+        }
+        case opcodes.OP_ROT: {
+          if (stack.length &lt; 3)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          stack.swap(-3, -2);
+          stack.swap(-2, -1);
+          break;
+        }
+        case opcodes.OP_SWAP: {
+          if (stack.length &lt; 2)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          stack.swap(-2, -1);
+          break;
+        }
+        case opcodes.OP_TUCK: {
+          if (stack.length &lt; 2)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          stack.insert(-2, stack.get(-1));
+          break;
+        }
+        case opcodes.OP_SIZE: {
+          if (stack.length &lt; 1)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          stack.pushInt(stack.get(-1).length);
+          break;
+        }
+        case opcodes.OP_EQUAL:
+        case opcodes.OP_EQUALVERIFY: {
+          if (stack.length &lt; 2)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          const v1 = stack.get(-2);
+          const v2 = stack.get(-1);
+
+          const res = v1.equals(v2);
+
+          stack.pop();
+          stack.pop();
+
+          stack.pushBool(res);
+
+          if (op.value === opcodes.OP_EQUALVERIFY) {
+            if (!res)
+              throw new ScriptError('EQUALVERIFY', op, ip);
+            stack.pop();
+          }
+
+          break;
+        }
+        case opcodes.OP_1ADD:
+        case opcodes.OP_1SUB:
+        case opcodes.OP_NEGATE:
+        case opcodes.OP_ABS:
+        case opcodes.OP_NOT:
+        case opcodes.OP_0NOTEQUAL: {
+          if (stack.length &lt; 1)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          let num = stack.getNum(-1, minimal, 4);
+          let cmp;
+
+          switch (op.value) {
+            case opcodes.OP_1ADD:
+              num.iaddn(1);
+              break;
+            case opcodes.OP_1SUB:
+              num.isubn(1);
+              break;
+            case opcodes.OP_NEGATE:
+              num.ineg();
+              break;
+            case opcodes.OP_ABS:
+              num.iabs();
+              break;
+            case opcodes.OP_NOT:
+              cmp = num.isZero();
+              num = ScriptNum.fromBool(cmp);
+              break;
+            case opcodes.OP_0NOTEQUAL:
+              cmp = !num.isZero();
+              num = ScriptNum.fromBool(cmp);
+              break;
+            default:
+              assert(false, 'Fatal script error.');
+              break;
+          }
+
+          stack.pop();
+          stack.pushNum(num);
+
+          break;
+        }
+        case opcodes.OP_ADD:
+        case opcodes.OP_SUB:
+        case opcodes.OP_BOOLAND:
+        case opcodes.OP_BOOLOR:
+        case opcodes.OP_NUMEQUAL:
+        case opcodes.OP_NUMEQUALVERIFY:
+        case opcodes.OP_NUMNOTEQUAL:
+        case opcodes.OP_LESSTHAN:
+        case opcodes.OP_GREATERTHAN:
+        case opcodes.OP_LESSTHANOREQUAL:
+        case opcodes.OP_GREATERTHANOREQUAL:
+        case opcodes.OP_MIN:
+        case opcodes.OP_MAX: {
+          if (stack.length &lt; 2)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          const n1 = stack.getNum(-2, minimal, 4);
+          const n2 = stack.getNum(-1, minimal, 4);
+
+          let num, cmp;
+
+          switch (op.value) {
+            case opcodes.OP_ADD:
+              num = n1.iadd(n2);
+              break;
+            case opcodes.OP_SUB:
+              num = n1.isub(n2);
+              break;
+            case opcodes.OP_BOOLAND:
+              cmp = n1.toBool() &amp;&amp; n2.toBool();
+              num = ScriptNum.fromBool(cmp);
+              break;
+            case opcodes.OP_BOOLOR:
+              cmp = n1.toBool() || n2.toBool();
+              num = ScriptNum.fromBool(cmp);
+              break;
+            case opcodes.OP_NUMEQUAL:
+              cmp = n1.eq(n2);
+              num = ScriptNum.fromBool(cmp);
+              break;
+            case opcodes.OP_NUMEQUALVERIFY:
+              cmp = n1.eq(n2);
+              num = ScriptNum.fromBool(cmp);
+              break;
+            case opcodes.OP_NUMNOTEQUAL:
+              cmp = !n1.eq(n2);
+              num = ScriptNum.fromBool(cmp);
+              break;
+            case opcodes.OP_LESSTHAN:
+              cmp = n1.lt(n2);
+              num = ScriptNum.fromBool(cmp);
+              break;
+            case opcodes.OP_GREATERTHAN:
+              cmp = n1.gt(n2);
+              num = ScriptNum.fromBool(cmp);
+              break;
+            case opcodes.OP_LESSTHANOREQUAL:
+              cmp = n1.lte(n2);
+              num = ScriptNum.fromBool(cmp);
+              break;
+            case opcodes.OP_GREATERTHANOREQUAL:
+              cmp = n1.gte(n2);
+              num = ScriptNum.fromBool(cmp);
+              break;
+            case opcodes.OP_MIN:
+              num = ScriptNum.min(n1, n2);
+              break;
+            case opcodes.OP_MAX:
+              num = ScriptNum.max(n1, n2);
+              break;
+            default:
+              assert(false, 'Fatal script error.');
+              break;
+          }
+
+          stack.pop();
+          stack.pop();
+          stack.pushNum(num);
+
+          if (op.value === opcodes.OP_NUMEQUALVERIFY) {
+            if (!stack.getBool(-1))
+              throw new ScriptError('NUMEQUALVERIFY', op, ip);
+            stack.pop();
+          }
+
+          break;
+        }
+        case opcodes.OP_WITHIN: {
+          if (stack.length &lt; 3)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          const n1 = stack.getNum(-3, minimal, 4);
+          const n2 = stack.getNum(-2, minimal, 4);
+          const n3 = stack.getNum(-1, minimal, 4);
+
+          const val = n2.lte(n1) &amp;&amp; n1.lt(n3);
+
+          stack.pop();
+          stack.pop();
+          stack.pop();
+
+          stack.pushBool(val);
+          break;
+        }
+        case opcodes.OP_RIPEMD160: {
+          if (stack.length === 0)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          stack.push(ripemd160.digest(stack.pop()));
+          break;
+        }
+        case opcodes.OP_SHA1: {
+          if (stack.length === 0)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          stack.push(sha1.digest(stack.pop()));
+          break;
+        }
+        case opcodes.OP_SHA256: {
+          if (stack.length === 0)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          stack.push(sha256.digest(stack.pop()));
+          break;
+        }
+        case opcodes.OP_HASH160: {
+          if (stack.length === 0)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          stack.push(hash160.digest(stack.pop()));
+          break;
+        }
+        case opcodes.OP_HASH256: {
+          if (stack.length === 0)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          stack.push(hash256.digest(stack.pop()));
+          break;
+        }
+        case opcodes.OP_BLAKE160: {
+          if (stack.length === 0)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          stack.push(blake2b.digest(stack.pop(), 20));
+          break;
+        }
+        case opcodes.OP_BLAKE256: {
+          if (stack.length === 0)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          stack.push(blake2b.digest(stack.pop()));
+          break;
+        }
+        case opcodes.OP_SHA3: {
+          if (stack.length === 0)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          stack.push(sha3.digest(stack.pop()));
+          break;
+        }
+        case opcodes.OP_KECCAK: {
+          if (stack.length === 0)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          stack.push(keccak.digest(stack.pop()));
+          break;
+        }
+        case opcodes.OP_CODESEPARATOR: {
+          lastSep = ip + 1;
+          break;
+        }
+        case opcodes.OP_CHECKSIG:
+        case opcodes.OP_CHECKSIGVERIFY: {
+          if (!tx)
+            throw new ScriptError('UNKNOWN_ERROR', 'No TX passed in.');
+
+          if (stack.length &lt; 2)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          const sig = stack.get(-2);
+          const key = stack.get(-1);
+
+          const subscript = this.getSubscript(lastSep);
+
+          validateSignature(sig, flags);
+          validateKey(key, flags);
+
+          let res = false;
+
+          if (sig.length > 0) {
+            const type = sig[sig.length - 1];
+            const hash = tx.signatureHash(
+              index,
+              subscript,
+              value,
+              type
+            );
+            res = checksig(hash, sig, key);
+          }
+
+          if (!res &amp;&amp; (flags &amp; Script.flags.VERIFY_NULLFAIL)) {
+            if (sig.length !== 0)
+              throw new ScriptError('NULLFAIL', op, ip);
+          }
+
+          stack.pop();
+          stack.pop();
+
+          stack.pushBool(res);
+
+          if (op.value === opcodes.OP_CHECKSIGVERIFY) {
+            if (!res)
+              throw new ScriptError('CHECKSIGVERIFY', op, ip);
+            stack.pop();
+          }
+
+          break;
+        }
+        case opcodes.OP_CHECKMULTISIG:
+        case opcodes.OP_CHECKMULTISIGVERIFY: {
+          if (!tx)
+            throw new ScriptError('UNKNOWN_ERROR', 'No TX passed in.');
+
+          let i = 1;
+          if (stack.length &lt; i)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          let n = stack.getInt(-i, minimal, 4);
+          let okey = n + 2;
+          let ikey, isig;
+
+          if (n &lt; 0 || n > consensus.MAX_MULTISIG_PUBKEYS)
+            throw new ScriptError('PUBKEY_COUNT', op, ip);
+
+          opCount += n;
+
+          if (opCount > consensus.MAX_SCRIPT_OPS)
+            throw new ScriptError('OP_COUNT', op, ip);
+
+          i += 1;
+          ikey = i;
+          i += n;
+
+          if (stack.length &lt; i)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          let m = stack.getInt(-i, minimal, 4);
+
+          if (m &lt; 0 || m > n)
+            throw new ScriptError('SIG_COUNT', op, ip);
+
+          i += 1;
+          isig = i;
+          i += m;
+
+          if (stack.length &lt; i)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          const subscript = this.getSubscript(lastSep);
+
+          let res = true;
+          while (res &amp;&amp; m > 0) {
+            const sig = stack.get(-isig);
+            const key = stack.get(-ikey);
+
+            validateSignature(sig, flags);
+            validateKey(key, flags);
+
+            if (sig.length > 0) {
+              const type = sig[sig.length - 1];
+              const hash = tx.signatureHash(
+                index,
+                subscript,
+                value,
+                type
+              );
+
+              if (checksig(hash, sig, key)) {
+                isig += 1;
+                m -= 1;
+              }
+            }
+
+            ikey += 1;
+            n -= 1;
+
+            if (m > n)
+              res = false;
+          }
+
+          while (i > 1) {
+            if (!res &amp;&amp; (flags &amp; Script.flags.VERIFY_NULLFAIL)) {
+              if (okey === 0 &amp;&amp; stack.get(-1).length !== 0)
+                throw new ScriptError('NULLFAIL', op, ip);
+            }
+
+            if (okey > 0)
+              okey -= 1;
+
+            stack.pop();
+
+            i -= 1;
+          }
+
+          if (stack.length &lt; 1)
+            throw new ScriptError('INVALID_STACK_OPERATION', op, ip);
+
+          if (stack.get(-1).length !== 0)
+            throw new ScriptError('SIG_NULLDUMMY', op, ip);
+
+          stack.pop();
+
+          stack.pushBool(res);
+
+          if (op.value === opcodes.OP_CHECKMULTISIGVERIFY) {
+            if (!res)
+              throw new ScriptError('CHECKMULTISIGVERIFY', op, ip);
+            stack.pop();
+          }
+
+          break;
+        }
+        default: {
+          throw new ScriptError('BAD_OPCODE', op, ip);
+        }
+      }
+
+      if (stack.length + alt.length > consensus.MAX_SCRIPT_STACK)
+        throw new ScriptError('STACK_SIZE', op, ip);
+    }
+
+    if (state.length !== 0)
+      throw new ScriptError('UNBALANCED_CONDITIONAL');
+  }
+
+  /**
+   * Find a data element in a script.
+   * @param {Buffer} data - Data element to match against.
+   * @returns {Number} Index (`-1` if not present).
+   */
+
+  indexOf(data) {
+    for (let i = 0; i &lt; this.code.length; i++) {
+      const op = this.code[i];
+
+      if (op.value === -1)
+        break;
+
+      if (!op.data)
+        continue;
+
+      if (op.data.equals(data))
+        return i;
+    }
+
+    return -1;
+  }
+
+  /**
+   * Test a script to see if it is likely
+   * to be script code (no weird opcodes).
+   * @returns {Boolean}
+   */
+
+  isCode() {
+    for (const op of this.code) {
+      if (op.value === -1)
+        return false;
+
+      if (op.isDisabled())
+        return false;
+
+      switch (op.value) {
+        case opcodes.OP_RESERVED:
+        case opcodes.OP_NOP:
+        case opcodes.OP_VER:
+        case opcodes.OP_VERIF:
+        case opcodes.OP_VERNOTIF:
+        case opcodes.OP_RESERVED1:
+        case opcodes.OP_RESERVED2:
+          return false;
+      }
+
+      if (op.value > opcodes.OP_CHECKSEQUENCEVERIFY)
+        return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Inject properties from a pay-to-pubkey script.
+   * @private
+   * @param {Buffer} key
+   */
+
+  fromPubkey(key) {
+    assert(Buffer.isBuffer(key) &amp;&amp; key.length === 33);
+
+    this.raw = Buffer.allocUnsafe(35);
+    this.raw[0] = 33;
+    key.copy(this.raw, 1);
+    this.raw[34] = opcodes.OP_CHECKSIG;
+
+    key = this.raw.slice(1, 34);
+
+    this.code.length = 0;
+    this.code.push(Opcode.fromPush(key));
+    this.code.push(Opcode.fromOp(opcodes.OP_CHECKSIG));
+
+    return this;
+  }
+
+  /**
+   * Create a pay-to-pubkey script.
+   * @param {Buffer} key
+   * @returns {Script}
+   */
+
+  static fromPubkey(key) {
+    return new this().fromPubkey(key);
+  }
+
+  /**
+   * Inject properties from a pay-to-pubkeyhash script.
+   * @private
+   * @param {Buffer} hash
+   */
+
+  fromPubkeyhash(hash) {
+    assert(Buffer.isBuffer(hash) &amp;&amp; hash.length === 20);
+
+    this.raw = Buffer.allocUnsafe(25);
+    this.raw[0] = opcodes.OP_DUP;
+    this.raw[1] = opcodes.OP_BLAKE160;
+    this.raw[2] = 0x14;
+    hash.copy(this.raw, 3);
+    this.raw[23] = opcodes.OP_EQUALVERIFY;
+    this.raw[24] = opcodes.OP_CHECKSIG;
+
+    hash = this.raw.slice(3, 23);
+
+    this.code.length = 0;
+    this.code.push(Opcode.fromOp(opcodes.OP_DUP));
+    this.code.push(Opcode.fromOp(opcodes.OP_BLAKE160));
+    this.code.push(Opcode.fromPush(hash));
+    this.code.push(Opcode.fromOp(opcodes.OP_EQUALVERIFY));
+    this.code.push(Opcode.fromOp(opcodes.OP_CHECKSIG));
+
+    return this;
+  }
+
+  /**
+   * Create a pay-to-pubkeyhash script.
+   * @param {Buffer} hash
+   * @returns {Script}
+   */
+
+  static fromPubkeyhash(hash) {
+    return new this().fromPubkeyhash(hash);
+  }
+
+  /**
+   * Inject properties from pay-to-multisig script.
+   * @private
+   * @param {Number} m
+   * @param {Number} n
+   * @param {Buffer[]} keys
+   */
+
+  fromMultisig(m, n, keys) {
+    assert((m &amp; 0xff) === m &amp;&amp; (n &amp; 0xff) === n);
+    assert(Array.isArray(keys));
+    assert(keys.length === n, '`n` keys are required for multisig.');
+    assert(m >= 1 &amp;&amp; m &lt;= n);
+    assert(n >= 1 &amp;&amp; n &lt;= 15);
+
+    this.clear();
+
+    this.pushSmall(m);
+
+    for (const key of sortKeys(keys))
+      this.pushData(key);
+
+    this.pushSmall(n);
+    this.pushOp(opcodes.OP_CHECKMULTISIG);
+
+    return this.compile();
+  }
+
+  /**
+   * Create a pay-to-multisig script.
+   * @param {Number} m
+   * @param {Number} n
+   * @param {Buffer[]} keys
+   * @returns {Script}
+   */
+
+  static fromMultisig(m, n, keys) {
+    return new this().fromMultisig(m, n, keys);
+  }
+
+  /**
+   * Get the standard script type.
+   * @returns {ScriptType}
+   */
+
+  getType() {
+    if (this.isPubkey())
+      return scriptTypes.PUBKEY;
+
+    if (this.isPubkeyhash())
+      return scriptTypes.PUBKEYHASH;
+
+    if (this.isMultisig())
+      return scriptTypes.MULTISIG;
+
+    return scriptTypes.NONSTANDARD;
+  }
+
+  /**
+   * Test whether a script is of an unknown/non-standard type.
+   * @returns {Boolean}
+   */
+
+  isUnknown() {
+    return this.getType() === scriptTypes.NONSTANDARD;
+  }
+
+  /**
+   * Test whether the script is standard by policy standards.
+   * @returns {Boolean}
+   */
+
+  isStandard() {
+    const [m, n] = this.getMultisig();
+
+    if (m !== -1) {
+      if (n &lt; 1 || n > 3)
+        return false;
+
+      if (m &lt; 1 || m > n)
+        return false;
+
+      return true;
+    }
+
+    return this.getType() !== scriptTypes.NONSTANDARD;
+  }
+
+  /**
+   * Calculate the size of the script
+   * excluding the varint size bytes.
+   * @returns {Number}
+   */
+
+  getSize() {
+    return this.raw.length;
+  }
+
+  /**
+   * Calculate the size of the script
+   * including the varint size bytes.
+   * @returns {Number}
+   */
+
+  getVarSize() {
+    return encoding.sizeVarBytes(this.raw);
+  }
+
+  /**
+   * Get the sha3 of the raw script.
+   * @returns {Hash}
+   */
+
+  sha3() {
+    return sha3.digest(this.encode());
+  }
+
+  /**
+   * Test whether the output script is pay-to-pubkey.
+   * @param {Boolean} [minimal=false] - Minimaldata only.
+   * @returns {Boolean}
+   */
+
+  isPubkey(minimal) {
+    if (minimal) {
+      return this.raw.length === 35
+        &amp;&amp; this.raw[0] === 33
+        &amp;&amp; this.raw[0] + 2 === this.raw.length
+        &amp;&amp; this.raw[this.raw.length - 1] === opcodes.OP_CHECKSIG;
+    }
+
+    if (this.code.length !== 2)
+      return false;
+
+    return this.getLength(0) === 33
+      &amp;&amp; this.getOp(1) === opcodes.OP_CHECKSIG;
+  }
+
+  /**
+   * Get P2PK key if present.
+   * @param {Boolean} [minimal=false] - Minimaldata only.
+   * @returns {Buffer|null}
+   */
+
+  getPubkey(minimal) {
+    if (!this.isPubkey(minimal))
+      return null;
+
+    if (minimal)
+      return this.raw.slice(1, 1 + this.raw[0]);
+
+    return this.getData(0);
+  }
+
+  /**
+   * Test whether the output script is pay-to-pubkeyhash.
+   * @param {Boolean} [minimal=false] - Minimaldata only.
+   * @returns {Boolean}
+   */
+
+  isPubkeyhash(minimal) {
+    if (minimal || this.raw.length === 25) {
+      return this.raw.length === 25
+        &amp;&amp; this.raw[0] === opcodes.OP_DUP
+        &amp;&amp; this.raw[1] === opcodes.OP_BLAKE160
+        &amp;&amp; this.raw[2] === 0x14
+        &amp;&amp; this.raw[23] === opcodes.OP_EQUALVERIFY
+        &amp;&amp; this.raw[24] === opcodes.OP_CHECKSIG;
+    }
+
+    if (this.code.length !== 5)
+      return false;
+
+    return this.getOp(0) === opcodes.OP_DUP
+      &amp;&amp; this.getOp(1) === opcodes.OP_BLAKE160
+      &amp;&amp; this.getLength(2) === 20
+      &amp;&amp; this.getOp(3) === opcodes.OP_EQUALVERIFY
+      &amp;&amp; this.getOp(4) === opcodes.OP_CHECKSIG;
+  }
+
+  /**
+   * Get P2PKH hash if present.
+   * @param {Boolean} [minimal=false] - Minimaldata only.
+   * @returns {Buffer|null}
+   */
+
+  getPubkeyhash(minimal) {
+    if (!this.isPubkeyhash(minimal))
+      return null;
+
+    if (minimal)
+      return this.raw.slice(3, 23);
+
+    return this.getData(2);
+  }
+
+  /**
+   * Test whether the output script is pay-to-multisig.
+   * @param {Boolean} [minimal=false] - Minimaldata only.
+   * @returns {Boolean}
+   */
+
+  isMultisig(minimal) {
+    if (this.code.length &lt; 4 || this.code.length > 19)
+      return false;
+
+    if (this.getOp(-1) !== opcodes.OP_CHECKMULTISIG)
+      return false;
+
+    const m = this.getSmall(0);
+
+    if (m &lt; 1)
+      return false;
+
+    const n = this.getSmall(-2);
+
+    if (n &lt; 1 || m > n)
+      return false;
+
+    if (this.code.length !== n + 3)
+      return false;
+
+    for (let i = 1; i &lt; n + 1; i++) {
+      const op = this.code[i];
+
+      if (op.toLength() !== 33)
+        return false;
+
+      if (minimal &amp;&amp; !op.isMinimal())
+        return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Get multisig m and n values if present.
+   * @param {Boolean} [minimal=false] - Minimaldata only.
+   * @returns {Array} [m, n]
+   */
+
+  getMultisig(minimal) {
+    if (!this.isMultisig(minimal))
+      return [-1, -1];
+
+    return [this.getSmall(0), this.getSmall(-2)];
+  }
+
+  /**
+   * Test whether the output script is unspendable.
+   * @returns {Boolean}
+   */
+
+  isUnspendable() {
+    if (this.raw.length > consensus.MAX_SCRIPT_SIZE)
+      return true;
+
+    return this.raw.length > 0 &amp;&amp; this.raw[0] === opcodes.OP_RETURN;
+  }
+
+  /**
+   * Test the script against a bloom filter.
+   * @param {Bloom} filter
+   * @returns {Boolean}
+   */
+
+  test(filter) {
+    for (const op of this.code) {
+      if (op.value === -1)
+        break;
+
+      if (!op.data || op.data.length === 0)
+        continue;
+
+      if (filter.test(op.data))
+        return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Test the script to see if it contains only push ops.
+   * Push ops are: OP_1NEGATE, OP_0-OP_16 and all PUSHDATAs.
+   * @returns {Boolean}
+   */
+
+  isPushOnly() {
+    for (const op of this.code) {
+      if (op.value === -1)
+        return false;
+
+      if (op.value > opcodes.OP_16)
+        return false;
+    }
+
+    return true;
+  }
+
+  /**
+   * Count the sigops in the script.
+   * @returns {Number} sigop count
+   */
+
+  getSigops() {
+    let total = 0;
+    let lastOp = -1;
+
+    for (const op of this.code) {
+      if (op.value === -1)
+        break;
+
+      switch (op.value) {
+        case opcodes.OP_CHECKSIG:
+        case opcodes.OP_CHECKSIGVERIFY:
+          total += 1;
+          break;
+        case opcodes.OP_CHECKMULTISIG:
+        case opcodes.OP_CHECKMULTISIGVERIFY:
+          if (lastOp >= opcodes.OP_1 &amp;&amp; lastOp &lt;= opcodes.OP_16)
+            total += lastOp - 0x50;
+          else
+            total += consensus.MAX_MULTISIG_PUBKEYS;
+          break;
+      }
+
+      lastOp = op.value;
+    }
+
+    return total;
+  }
+
+  /*
+   * Mutation
+   */
+
+  get(index) {
+    if (index &lt; 0)
+      index += this.code.length;
+
+    if (index &lt; 0 || index >= this.code.length)
+      return null;
+
+    return this.code[index];
+  }
+
+  pop() {
+    const op = this.code.pop();
+    return op || null;
+  }
+
+  shift() {
+    const op = this.code.shift();
+    return op || null;
+  }
+
+  remove(index) {
+    if (index &lt; 0)
+      index += this.code.length;
+
+    if (index &lt; 0 || index >= this.code.length)
+      return null;
+
+    const items = this.code.splice(index, 1);
+
+    if (items.length === 0)
+      return null;
+
+    return items[0];
+  }
+
+  set(index, op) {
+    if (index &lt; 0)
+      index += this.code.length;
+
+    assert(Opcode.isOpcode(op));
+    assert(index >= 0 &amp;&amp; index &lt;= this.code.length);
+
+    this.code[index] = op;
+
+    return this;
+  }
+
+  push(op) {
+    assert(Opcode.isOpcode(op));
+    this.code.push(op);
+    return this;
+  }
+
+  unshift(op) {
+    assert(Opcode.isOpcode(op));
+    this.code.unshift(op);
+    return this;
+  }
+
+  insert(index, op) {
+    if (index &lt; 0)
+      index += this.code.length;
+
+    assert(Opcode.isOpcode(op));
+    assert(index >= 0 &amp;&amp; index &lt;= this.code.length);
+
+    this.code.splice(index, 0, op);
+
+    return this;
+  }
+
+  /*
+   * Op
+   */
+
+  getOp(index) {
+    const op = this.get(index);
+    return op ? op.value : -1;
+  }
+
+  popOp() {
+    const op = this.pop();
+    return op ? op.value : -1;
+  }
+
+  shiftOp() {
+    const op = this.shift();
+    return op ? op.value : -1;
+  }
+
+  removeOp(index) {
+    const op = this.remove(index);
+    return op ? op.value : -1;
+  }
+
+  setOp(index, value) {
+    return this.set(index, Opcode.fromOp(value));
+  }
+
+  pushOp(value) {
+    return this.push(Opcode.fromOp(value));
+  }
+
+  unshiftOp(value) {
+    return this.unshift(Opcode.fromOp(value));
+  }
+
+  insertOp(index, value) {
+    return this.insert(index, Opcode.fromOp(value));
+  }
+
+  /*
+   * Data
+   */
+
+  getData(index) {
+    const op = this.get(index);
+    return op ? op.data : null;
+  }
+
+  popData() {
+    const op = this.pop();
+    return op ? op.data : null;
+  }
+
+  shiftData() {
+    const op = this.shift();
+    return op ? op.data : null;
+  }
+
+  removeData(index) {
+    const op = this.remove(index);
+    return op ? op.data : null;
+  }
+
+  setData(index, data) {
+    return this.set(index, Opcode.fromData(data));
+  }
+
+  pushData(data) {
+    return this.push(Opcode.fromData(data));
+  }
+
+  unshiftData(data) {
+    return this.unshift(Opcode.fromData(data));
+  }
+
+  insertData(index, data) {
+    return this.insert(index, Opcode.fromData(data));
+  }
+
+  /*
+   * Length
+   */
+
+  getLength(index) {
+    const op = this.get(index);
+    return op ? op.toLength() : -1;
+  }
+
+  /*
+   * Push
+   */
+
+  getPush(index) {
+    const op = this.get(index);
+    return op ? op.toPush() : null;
+  }
+
+  popPush() {
+    const op = this.pop();
+    return op ? op.toPush() : null;
+  }
+
+  shiftPush() {
+    const op = this.shift();
+    return op ? op.toPush() : null;
+  }
+
+  removePush(index) {
+    const op = this.remove(index);
+    return op ? op.toPush() : null;
+  }
+
+  setPush(index, data) {
+    return this.set(index, Opcode.fromPush(data));
+  }
+
+  pushPush(data) {
+    return this.push(Opcode.fromPush(data));
+  }
+
+  unshiftPush(data) {
+    return this.unshift(Opcode.fromPush(data));
+  }
+
+  insertPush(index, data) {
+    return this.insert(index, Opcode.fromPush(data));
+  }
+
+  /*
+   * String
+   */
+
+  getString(index, enc) {
+    const op = this.get(index);
+    return op ? op.toString(enc) : null;
+  }
+
+  popString(enc) {
+    const op = this.pop();
+    return op ? op.toString(enc) : null;
+  }
+
+  shiftString(enc) {
+    const op = this.shift();
+    return op ? op.toString(enc) : null;
+  }
+
+  removeString(index, enc) {
+    const op = this.remove(index);
+    return op ? op.toString(enc) : null;
+  }
+
+  setString(index, str, enc) {
+    return this.set(index, Opcode.fromString(str, enc));
+  }
+
+  pushString(str, enc) {
+    return this.push(Opcode.fromString(str, enc));
+  }
+
+  unshiftString(str, enc) {
+    return this.unshift(Opcode.fromString(str, enc));
+  }
+
+  insertString(index, str, enc) {
+    return this.insert(index, Opcode.fromString(str, enc));
+  }
+
+  /*
+   * Small
+   */
+
+  getSmall(index) {
+    const op = this.get(index);
+    return op ? op.toSmall() : -1;
+  }
+
+  popSmall() {
+    const op = this.pop();
+    return op ? op.toSmall() : -1;
+  }
+
+  shiftSmall() {
+    const op = this.shift();
+    return op ? op.toSmall() : -1;
+  }
+
+  removeSmall(index) {
+    const op = this.remove(index);
+    return op ? op.toSmall() : -1;
+  }
+
+  setSmall(index, num) {
+    return this.set(index, Opcode.fromSmall(num));
+  }
+
+  pushSmall(num) {
+    return this.push(Opcode.fromSmall(num));
+  }
+
+  unshiftSmall(num) {
+    return this.unshift(Opcode.fromSmall(num));
+  }
+
+  insertSmall(index, num) {
+    return this.insert(index, Opcode.fromSmall(num));
+  }
+
+  /*
+   * Num
+   */
+
+  getNum(index, minimal, limit) {
+    const op = this.get(index);
+    return op ? op.toNum(minimal, limit) : null;
+  }
+
+  popNum(minimal, limit) {
+    const op = this.pop();
+    return op ? op.toNum(minimal, limit) : null;
+  }
+
+  shiftNum(minimal, limit) {
+    const op = this.shift();
+    return op ? op.toNum(minimal, limit) : null;
+  }
+
+  removeNum(index, minimal, limit) {
+    const op = this.remove(index);
+    return op ? op.toNum(minimal, limit) : null;
+  }
+
+  setNum(index, num) {
+    return this.set(index, Opcode.fromNum(num));
+  }
+
+  pushNum(num) {
+    return this.push(Opcode.fromNum(num));
+  }
+
+  unshiftNum(num) {
+    return this.unshift(Opcode.fromNum(num));
+  }
+
+  insertNum(index, num) {
+    return this.insert(index, Opcode.fromNum(num));
+  }
+
+  /*
+   * Int
+   */
+
+  getInt(index, minimal, limit) {
+    const op = this.get(index);
+    return op ? op.toInt(minimal, limit) : -1;
+  }
+
+  popInt(minimal, limit) {
+    const op = this.pop();
+    return op ? op.toInt(minimal, limit) : -1;
+  }
+
+  shiftInt(minimal, limit) {
+    const op = this.shift();
+    return op ? op.toInt(minimal, limit) : -1;
+  }
+
+  removeInt(index, minimal, limit) {
+    const op = this.remove(index);
+    return op ? op.toInt(minimal, limit) : -1;
+  }
+
+  setInt(index, num) {
+    return this.set(index, Opcode.fromInt(num));
+  }
+
+  pushInt(num) {
+    return this.push(Opcode.fromInt(num));
+  }
+
+  unshiftInt(num) {
+    return this.unshift(Opcode.fromInt(num));
+  }
+
+  insertInt(index, num) {
+    return this.insert(index, Opcode.fromInt(num));
+  }
+
+  /*
+   * Bool
+   */
+
+  getBool(index) {
+    const op = this.get(index);
+    return op ? op.toBool() : false;
+  }
+
+  popBool() {
+    const op = this.pop();
+    return op ? op.toBool() : false;
+  }
+
+  shiftBool() {
+    const op = this.shift();
+    return op ? op.toBool() : false;
+  }
+
+  removeBool(index) {
+    const op = this.remove(index);
+    return op ? op.toBool() : false;
+  }
+
+  setBool(index, value) {
+    return this.set(index, Opcode.fromBool(value));
+  }
+
+  pushBool(value) {
+    return this.push(Opcode.fromBool(value));
+  }
+
+  unshiftBool(value) {
+    return this.unshift(Opcode.fromBool(value));
+  }
+
+  insertBool(index, value) {
+    return this.insert(index, Opcode.fromBool(value));
+  }
+
+  /*
+   * Symbol
+   */
+
+  getSym(index) {
+    const op = this.get(index);
+    return op ? op.toSymbol() : null;
+  }
+
+  popSym() {
+    const op = this.pop();
+    return op ? op.toSymbol() : null;
+  }
+
+  shiftSym() {
+    const op = this.shift();
+    return op ? op.toSymbol() : null;
+  }
+
+  removeSym(index) {
+    const op = this.remove(index);
+    return op ? op.toSymbol() : null;
+  }
+
+  setSym(index, symbol) {
+    return this.set(index, Opcode.fromSymbol(symbol));
+  }
+
+  pushSym(symbol) {
+    return this.push(Opcode.fromSymbol(symbol));
+  }
+
+  unshiftSym(symbol) {
+    return this.unshift(Opcode.fromSymbol(symbol));
+  }
+
+  insertSym(index, symbol) {
+    return this.insert(index, Opcode.fromSymbol(symbol));
+  }
+
+  /**
+   * Inject properties from bitcoind test string.
+   * @private
+   * @param {String} items - Script string.
+   * @throws Parse error.
+   */
+
+  fromString(code) {
+    assert(typeof code === 'string');
+
+    code = code.trim();
+
+    if (code.length === 0)
+      return this;
+
+    const items = code.split(/\s+/);
+    const bw = bio.write();
+
+    for (const item of items) {
+      let symbol = item;
+
+      if (symbol.charCodeAt(0) &amp; 32)
+        symbol = symbol.toUpperCase();
+
+      if (!/^OP_/.test(symbol))
+        symbol = `OP_${symbol}`;
+
+      const value = opcodes[symbol];
+
+      if (value == null) {
+        if (item[0] === '\'') {
+          assert(item[item.length - 1] === '\'', 'Invalid string.');
+          const str = item.slice(1, -1);
+          const op = Opcode.fromString(str);
+          bw.writeBytes(op.encode());
+          continue;
+        }
+
+        if (/^-?\d+$/.test(item)) {
+          const num = ScriptNum.fromString(item, 10);
+          const op = Opcode.fromNum(num);
+          bw.writeBytes(op.encode());
+          continue;
+        }
+
+        assert(item.indexOf('0x') === 0, 'Unknown opcode.');
+
+        const hex = item.substring(2);
+        const data = Buffer.from(hex, 'hex');
+
+        assert(data.length === hex.length / 2, 'Invalid hex string.');
+
+        bw.writeBytes(data);
+
+        continue;
+      }
+
+      bw.writeU8(value);
+    }
+
+    return this.decode(bw.render());
+  }
+
+  /**
+   * Verify an input and output script, and a witness if present.
+   * @param {Witness} witness
+   * @param {Address} addr
+   * @param {TX} tx
+   * @param {Number} index
+   * @param {Amount} value
+   * @param {VerifyFlags} flags
+   * @throws {ScriptError}
+   */
+
+  static verify(witness, addr, tx, index, value, flags) {
+    if (flags == null)
+      flags = Script.flags.STANDARD_VERIFY_FLAGS;
+
+    assert(addr.version &lt;= 31);
+
+    if (addr.version === 31)
+      throw new ScriptError('OP_RETURN');
+
+    if (witness.items.length > consensus.MAX_SCRIPT_STACK)
+      throw new ScriptError('STACK_SIZE');
+
+    const stack = witness.toStack();
+
+    let redeem = null;
+
+    if (addr.version === 0) {
+      if (addr.hash.length === 32) {
+        if (stack.length === 0)
+          throw new ScriptError('WITNESS_PROGRAM_WITNESS_EMPTY');
+
+        const witnessScript = stack.pop();
+
+        if (witnessScript.length > consensus.MAX_SCRIPT_SIZE)
+          throw new ScriptError('SCRIPT_SIZE');
+
+        if (!sha3.digest(witnessScript).equals(addr.hash))
+          throw new ScriptError('WITNESS_PROGRAM_MISMATCH');
+
+        redeem = Script.decode(witnessScript);
+      } else if (addr.hash.length === 20) {
+        if (stack.length !== 2)
+          throw new ScriptError('WITNESS_PROGRAM_MISMATCH');
+
+        redeem = Script.fromPubkeyhash(addr.hash);
+      } else {
+        // Failure on version=0 (bad program data length).
+        throw new ScriptError('WITNESS_PROGRAM_WRONG_LENGTH');
+      }
+    } else {
+      if (flags &amp; Script.flags.VERIFY_DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM)
+        throw new ScriptError('DISCOURAGE_UPGRADABLE_WITNESS_PROGRAM');
+      return;
+    }
+
+    // Witnesses still have push limits.
+    for (let j = 0; j &lt; stack.length; j++) {
+      if (stack.get(j).length > consensus.MAX_SCRIPT_PUSH)
+        throw new ScriptError('PUSH_SIZE');
+    }
+
+    // Verify the redeem script.
+    redeem.execute(stack, flags, tx, index, value);
+
+    // Verify the stack values.
+    if (stack.length !== 1 || !stack.getBool(-1))
+      throw new ScriptError('EVAL_FALSE');
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    return this.decode(br.readVarBytes());
+  }
+
+  /**
+   * Inject properties from serialized data.
+   * @private
+   * @param {Buffer}
+   */
+
+  decode(data) {
+    const br = bio.read(data);
+
+    this.raw = data;
+
+    while (br.left())
+      this.code.push(Opcode.read(br));
+
+    return this;
+  }
+
+  /**
+   * Test whether an object a Script.
+   * @param {Object} obj
+   * @returns {Boolean}
+   */
+
+  static isScript(obj) {
+    return obj instanceof Script;
+  }
+}
+
+/**
+ * Script opcodes.
+ * @enum {Number}
+ * @default
+ */
+
+Script.opcodes = common.opcodes;
+
+/**
+ * Opcodes by value.
+ * @const {RevMap}
+ */
+
+Script.opcodesByVal = common.opcodesByVal;
+
+/**
+ * Script and locktime flags. See {@link VerifyFlags}.
+ * @enum {Number}
+ */
+
+Script.flags = common.flags;
+
+/**
+ * Sighash Types.
+ * @enum {SighashType}
+ * @default
+ */
+
+Script.hashType = common.hashType;
+
+/**
+ * Sighash types by value.
+ * @const {RevMap}
+ */
+
+Script.hashTypeByVal = common.hashTypeByVal;
+
+/**
+ * Output script types.
+ * @enum {Number}
+ */
+
+Script.types = common.types;
+
+/**
+ * Output script types by value.
+ * @const {RevMap}
+ */
+
+Script.typesByVal = common.typesByVal;
+
+/*
+ * Helpers
+ */
+
+function sortKeys(keys) {
+  return keys.slice().sort((a, b) => {
+    return a.compare(b);
+  });
+}
+
+/**
+ * Test whether the data element is a valid key if VERIFY_STRICTENC is enabled.
+ * @param {Buffer} key
+ * @param {VerifyFlags?} flags
+ * @returns {Boolean}
+ * @throws {ScriptError}
+ */
+
+function validateKey(key, flags) {
+  assert(Buffer.isBuffer(key));
+  assert(typeof flags === 'number');
+
+  if (!common.isKeyEncoding(key))
+    throw new ScriptError('PUBKEY_ENCODING');
+
+  return true;
+}
+
+/**
+ * Test whether the data element is a valid signature based
+ * on the encoding, S value, and sighash type. Requires
+ * VERIFY_DERSIG|VERIFY_LOW_S|VERIFY_STRICTENC, VERIFY_LOW_S
+ * and VERIFY_STRING_ENC to be enabled respectively. Note that
+ * this will allow zero-length signatures.
+ * @param {Buffer} sig
+ * @param {VerifyFlags?} flags
+ * @returns {Boolean}
+ * @throws {ScriptError}
+ */
+
+function validateSignature(sig, flags) {
+  assert(Buffer.isBuffer(sig));
+  assert(typeof flags === 'number');
+
+  // Allow empty sigs
+  if (sig.length === 0)
+    return true;
+
+  if (!common.isSignatureEncoding(sig))
+    throw new ScriptError('SIG_ENCODING');
+
+  return true;
+}
+
+/**
+ * Verify a signature, taking into account sighash type.
+ * @param {Buffer} msg - Signature hash.
+ * @param {Buffer} sig
+ * @param {Buffer} key
+ * @returns {Boolean}
+ */
+
+function checksig(msg, sig, key) {
+  return secp256k1.verify(msg, sig.slice(0, -1), key);
+}
+
+/*
+ * Expose
+ */
+
+module.exports = Script;
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-blockchain.html">blockchain</a></li><li><a href="module-blockchain_common.html">blockchain/common</a></li><li><a href="module-blockstore.html">blockstore</a></li><li><a href="module-blockstore_common.html">blockstore/common</a></li><li><a href="module-blockstore_records.html">blockstore/records</a></li><li><a href="module-coins.html">coins</a></li><li><a href="module-covenants.html">covenants</a></li><li><a href="module-dns_common.html">dns/common</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-hd.html">hd</a></li><li><a href="module-hsd.html">hsd</a></li><li><a href="module-mempool.html">mempool</a></li><li><a href="module-mining.html">mining</a></li><li><a href="module-mining_common.html">mining/common</a></li><li><a href="module-net.html">net</a></li><li><a href="module-net_bip152.html">net/bip152</a></li><li><a href="module-net_common.html">net/common</a></li><li><a href="module-net_packets.html">net/packets</a></li><li><a href="module-node.html">node</a></li><li><a href="module-primitives.html">primitives</a></li><li><a href="module-protocol.html">protocol</a></li><li><a href="module-protocol_consensus.html">protocol/consensus</a></li><li><a href="module-protocol_errors.html">protocol/errors</a></li><li><a href="module-protocol_networks.html">protocol/networks</a></li><li><a href="module-protocol_policy.html">protocol/policy</a></li><li><a href="module-script.html">script</a></li><li><a href="module-script_common.html">script/common</a></li><li><a href="module-ui.html">ui</a></li><li><a href="module-utils.html">utils</a></li><li><a href="module-utils_util.html">utils/util</a></li><li><a href="module-wallet.html">wallet</a></li><li><a href="module-wallet_common.html">wallet/common</a></li><li><a href="module-wallet_plugin.html">wallet/plugin</a></li><li><a href="module-wallet_records.html">wallet/records</a></li><li><a href="module-workers.html">workers</a></li><li><a href="module-workers_jobs.html">workers/jobs</a></li><li><a href="module-workers_packets.html">workers/packets</a></li></ul><h3>Classes</h3><ul><li><a href="AirdropKey.html">AirdropKey</a></li><li><a href="AirdropProof.html">AirdropProof</a></li><li><a href="BidReveal.html">BidReveal</a></li><li><a href="BitField.html">BitField</a></li><li><a href="BitView.html">BitView</a></li><li><a href="BlindBid.html">BlindBid</a></li><li><a href="BlindValue.html">BlindValue</a></li><li><a href="BlockProof.html">BlockProof</a></li><li><a href="Brontide.html">Brontide</a></li><li><a href="BrontideStream.html">BrontideStream</a></li><li><a href="ChainFlags.html">ChainFlags</a></li><li><a href="ChainState.html">ChainState</a></li><li><a href="CipherState.html">CipherState</a></li><li><a href="Claim.html">Claim</a></li><li><a href="DetailsMember.html">DetailsMember</a></li><li><a href="DS.html">DS</a></li><li><a href="Field.html">Field</a></li><li><a href="GLUE4.html">GLUE4</a></li><li><a href="GLUE6.html">GLUE6</a></li><li><a href="HandshakeState.html">HandshakeState</a></li><li><a href="HashList.html">HashList</a></li><li><a href="MigrateBlockStore.html">MigrateBlockStore</a></li><li><a href="MigrateChainState.html">MigrateChainState</a></li><li><a href="MigrateChangeAddress.html">MigrateChangeAddress</a></li><li><a href="MigrateMigrations.html">MigrateMigrations</a></li><li><a href="MigrateTreeState.html">MigrateTreeState</a></li><li><a href="module.migrations.MigrationState.html">MigrationState</a></li><li><a href="module-blockchain.Chain.html">Chain</a></li><li><a href="module-blockchain.ChainDB.html">ChainDB</a></li><li><a href="module-blockchain.ChainEntry.html">ChainEntry</a></li><li><a href="module-blockchain.ChainMigrator.html">ChainMigrator</a></li><li><a href="module-blockchain.ChainMigratorOptions.html">ChainMigratorOptions</a></li><li><a href="module-blockchain.ChainOptions.html">ChainOptions</a></li><li><a href="module-blockchain.DeploymentState.html">DeploymentState</a></li><li><a href="module-blockchain.WalletMigrationResult.html">WalletMigrationResult</a></li><li><a href="module-blockchain.WalletMigrator.html">WalletMigrator</a></li><li><a href="module-blockstore.AbstractBatch.html">AbstractBatch</a></li><li><a href="module-blockstore.AbstractBlockStore.html">AbstractBlockStore</a></li><li><a href="module-blockstore.FileBatch.html">FileBatch</a></li><li><a href="module-blockstore.LevelBatch.html">LevelBatch</a></li><li><a href="module-blockstore_records-BlockRecord.html">BlockRecord</a></li><li><a href="module-blockstore_records-FileRecord.html">FileRecord</a></li><li><a href="module-blockstore_FileBlockStore.html">blockstore:FileBlockStore</a></li><li><a href="module-blockstore_LevelBlockStore.html">blockstore:LevelBlockStore</a></li><li><a href="module-coins.CoinEntry.html">CoinEntry</a></li><li><a href="module-coins.Coins.html">Coins</a></li><li><a href="module-coins.CoinView.html">CoinView</a></li><li><a href="module-coins.UndoCoins.html">UndoCoins</a></li><li><a href="module-currency.Amount.html">Amount</a></li><li><a href="module-errors-CriticalError.html">CriticalError</a></li><li><a href="module-hd.Mnemonic.html">Mnemonic</a></li><li><a href="module-hd.PrivateKey.html">PrivateKey</a></li><li><a href="module-hd.PublicKey.html">PublicKey</a></li><li><a href="module-http.HTTPOptions.html">HTTPOptions</a></li><li><a href="module-http.RPC.html">RPC</a></li><li><a href="module-http.Server.html">Server</a></li><li><a href="module-http.TransactionOptions.html">TransactionOptions</a></li><li><a href="module-mempool.AirdropEntry.html">AirdropEntry</a></li><li><a href="module-mempool.ClaimEntry.html">ClaimEntry</a></li><li><a href="module-mempool.ConfirmStats.html">ConfirmStats</a></li><li><a href="module-mempool.Mempool.html">Mempool</a></li><li><a href="module-mempool.MempoolEntry.html">MempoolEntry</a></li><li><a href="module-mempool.MempoolOptions.html">MempoolOptions</a></li><li><a href="module-mempool.PolicyEstimator.html">PolicyEstimator</a></li><li><a href="module-migrations.AbstractMigration.html">AbstractMigration</a></li><li><a href="module-migrations.MigrationResult.html">MigrationResult</a></li><li><a href="module-migrations.Migrator.html">Migrator</a></li><li><a href="module-mining.BlockAirdrop.html">BlockAirdrop</a></li><li><a href="module-mining.BlockClaim.html">BlockClaim</a></li><li><a href="module-mining.BlockEntry.html">BlockEntry</a></li><li><a href="module-mining.BlockTemplate.html">BlockTemplate</a></li><li><a href="module-mining.CPUMiner.html">CPUMiner</a></li><li><a href="module-mining.Miner.html">Miner</a></li><li><a href="module-mining.MinerOptions.html">MinerOptions</a></li><li><a href="module-net.BroadcastItem.html">BroadcastItem</a></li><li><a href="module-net.Framer.html">Framer</a></li><li><a href="module-net.HostEntry.html">HostEntry</a></li><li><a href="module-net.HostList.html">HostList</a></li><li><a href="module-net.HostListOptions.html">HostListOptions</a></li><li><a href="module-net.LocalAddress.html">LocalAddress</a></li><li><a href="module-net.NetAddress.html">NetAddress</a></li><li><a href="module-net.Parser.html">Parser</a></li><li><a href="module-net.Peer.html">Peer</a></li><li><a href="module-net.PeerList.html">PeerList</a></li><li><a href="module-net.PeerOptions.html">PeerOptions</a></li><li><a href="module-net.Pool.html">Pool</a></li><li><a href="module-net.PoolOptions.html">PoolOptions</a></li><li><a href="module-net_bip152-CompactBlock.html">CompactBlock</a></li><li><a href="module-net_bip152-TXRequest.html">TXRequest</a></li><li><a href="module-net_bip152-TXResponse.html">TXResponse</a></li><li><a href="module-net_packets-AddrPacket.html">AddrPacket</a></li><li><a href="module-net_packets-AirdropPacket.html">AirdropPacket</a></li><li><a href="module-net_packets-BlockPacket.html">BlockPacket</a></li><li><a href="module-net_packets-BlockTxnPacket.html">BlockTxnPacket</a></li><li><a href="module-net_packets-ClaimPacket.html">ClaimPacket</a></li><li><a href="module-net_packets-CmpctBlockPacket.html">CmpctBlockPacket</a></li><li><a href="module-net_packets-FeeFilterPacket.html">FeeFilterPacket</a></li><li><a href="module-net_packets-FilterAddPacket.html">FilterAddPacket</a></li><li><a href="module-net_packets-FilterClearPacket.html">FilterClearPacket</a></li><li><a href="module-net_packets-FilterLoadPacket.html">FilterLoadPacket</a></li><li><a href="module-net_packets-GetAddrPacket.html">GetAddrPacket</a></li><li><a href="module-net_packets-GetBlocksPacket.html">GetBlocksPacket</a></li><li><a href="module-net_packets-GetBlockTxnPacket.html">GetBlockTxnPacket</a></li><li><a href="module-net_packets-GetDataPacket.html">GetDataPacket</a></li><li><a href="module-net_packets-GetHeadersPacket.html">GetHeadersPacket</a></li><li><a href="module-net_packets-GetProofPacket.html">GetProofPacket</a></li><li><a href="module-net_packets-HeadersPacket.html">HeadersPacket</a></li><li><a href="module-net_packets-InvPacket.html">InvPacket</a></li><li><a href="module-net_packets-MempoolPacket.html">MempoolPacket</a></li><li><a href="module-net_packets-MerkleBlockPacket.html">MerkleBlockPacket</a></li><li><a href="module-net_packets-NotFoundPacket.html">NotFoundPacket</a></li><li><a href="module-net_packets-Packet.html">Packet</a></li><li><a href="module-net_packets-PingPacket.html">PingPacket</a></li><li><a href="module-net_packets-PongPacket.html">PongPacket</a></li><li><a href="module-net_packets-ProofPacket.html">ProofPacket</a></li><li><a href="module-net_packets-RejectPacket.html">RejectPacket</a></li><li><a href="module-net_packets-SendCmpctPacket.html">SendCmpctPacket</a></li><li><a href="module-net_packets-SendHeadersPacket.html">SendHeadersPacket</a></li><li><a href="module-net_packets-TXPacket.html">TXPacket</a></li><li><a href="module-net_packets-UnknownPacket.html">UnknownPacket</a></li><li><a href="module-net_packets-VerackPacket.html">VerackPacket</a></li><li><a href="module-net_packets-VersionPacket.html">VersionPacket</a></li><li><a href="module-node.FullNode.html">FullNode</a></li><li><a href="module-node.Node.html">Node</a></li><li><a href="module-node.NodeClient.html">NodeClient</a></li><li><a href="module-node.NullClient.html">NullClient</a></li><li><a href="module-node.SPVNode.html">SPVNode</a></li><li><a href="module-primitives.AbstractBlock.html">AbstractBlock</a></li><li><a href="module-primitives.Address.html">Address</a></li><li><a href="module-primitives.Block.html">Block</a></li><li><a href="module-primitives.Coin.html">Coin</a></li><li><a href="module-primitives.CoinSelector.html">CoinSelector</a></li><li><a href="module-primitives.Covenant.html">Covenant</a></li><li><a href="module-primitives.Headers.html">Headers</a></li><li><a href="module-primitives.Input.html">Input</a></li><li><a href="module-primitives.InvItem.html">InvItem</a></li><li><a href="module-primitives.KeyRing.html">KeyRing</a></li><li><a href="module-primitives.MemBlock.html">MemBlock</a></li><li><a href="module-primitives.MerkleBlock.html">MerkleBlock</a></li><li><a href="module-primitives.MTX.html">MTX</a></li><li><a href="module-primitives.Outpoint.html">Outpoint</a></li><li><a href="module-primitives.Output.html">Output</a></li><li><a href="module-primitives.TX.html">TX</a></li><li><a href="module-primitives.TXMeta.html">TXMeta</a></li><li><a href="module-protocol.Network.html">Network</a></li><li><a href="module-protocol.TimeData.html">TimeData</a></li><li><a href="module-protocol_errors-VerifyError.html">VerifyError</a></li><li><a href="module-script.Opcode.html">Opcode</a></li><li><a href="module-script.Script.html">Script</a></li><li><a href="module-script.ScriptError.html">ScriptError</a></li><li><a href="module-script.ScriptNum.html">ScriptNum</a></li><li><a href="module-script.SigCache.html">SigCache</a></li><li><a href="module-script.Stack.html">Stack</a></li><li><a href="module-script.Witness.html">Witness</a></li><li><a href="module-ui.URI.html">URI</a></li><li><a href="module-wallet.Account.html">Account</a></li><li><a href="module-wallet.Balance.html">Balance</a></li><li><a href="module-wallet.BlockRecord.html">BlockRecord</a></li><li><a href="module-wallet.Credit.html">Credit</a></li><li><a href="module-wallet.Details.html">Details</a></li><li><a href="module-wallet.HTTP.html">HTTP</a></li><li><a href="module-wallet.MasterKey.html">MasterKey</a></li><li><a href="module-wallet.Path.html">Path</a></li><li><a href="module-wallet.Paths.html">Paths</a></li><li><a href="module-wallet.RPC.html">RPC</a></li><li><a href="module-wallet.TXDB.html">TXDB</a></li><li><a href="module-wallet.Wallet.html">Wallet</a></li><li><a href="module-wallet.WalletCoinView.html">WalletCoinView</a></li><li><a href="module-wallet.WalletDB.html">WalletDB</a></li><li><a href="module-wallet.WalletKey.html">WalletKey</a></li><li><a href="module-wallet.WalletMigratorOptions.html">WalletMigratorOptions</a></li><li><a href="module-wallet.WalletOptions.html">WalletOptions</a></li><li><a href="module-wallet_plugin-Plugin.html">Plugin</a></li><li><a href="module-wallet_records-BlockMeta.html">BlockMeta</a></li><li><a href="module-wallet_records-ChainState.html">ChainState</a></li><li><a href="module-wallet_records-MapRecord.html">MapRecord</a></li><li><a href="module-wallet_records-TXRecord.html">TXRecord</a></li><li><a href="module-workers.Framer.html">Framer</a></li><li><a href="module-workers.Master.html">Master</a></li><li><a href="module-workers.Parent.html">Parent</a></li><li><a href="module-workers.Parser.html">Parser</a></li><li><a href="module-workers.Worker.html">Worker</a></li><li><a href="module-workers.WorkerPool.html">WorkerPool</a></li><li><a href="module-workers_packets-CheckInputPacket.html">CheckInputPacket</a></li><li><a href="module-workers_packets-CheckInputResultPacket.html">CheckInputResultPacket</a></li><li><a href="module-workers_packets-CheckPacket.html">CheckPacket</a></li><li><a href="module-workers_packets-CheckResultPacket.html">CheckResultPacket</a></li><li><a href="module-workers_packets-ECSignPacket.html">ECSignPacket</a></li><li><a href="module-workers_packets-ECSignResultPacket.html">ECSignResultPacket</a></li><li><a href="module-workers_packets-ECVerifyPacket.html">ECVerifyPacket</a></li><li><a href="module-workers_packets-ECVerifyResultPacket.html">ECVerifyResultPacket</a></li><li><a href="module-workers_packets-EnvPacket.html">EnvPacket</a></li><li><a href="module-workers_packets-ErrorPacket.html">ErrorPacket</a></li><li><a href="module-workers_packets-ErrorResultPacket.html">ErrorResultPacket</a></li><li><a href="module-workers_packets-EventPacket.html">EventPacket</a></li><li><a href="module-workers_packets-LogPacket.html">LogPacket</a></li><li><a href="module-workers_packets-MinePacket.html">MinePacket</a></li><li><a href="module-workers_packets-MineResultPacket.html">MineResultPacket</a></li><li><a href="module-workers_packets-Packet.html">Packet</a></li><li><a href="module-workers_packets-ScryptPacket.html">ScryptPacket</a></li><li><a href="module-workers_packets-ScryptResultPacket.html">ScryptResultPacket</a></li><li><a href="module-workers_packets-SignInputPacket.html">SignInputPacket</a></li><li><a href="module-workers_packets-SignInputResultPacket.html">SignInputResultPacket</a></li><li><a href="module-workers_packets-SignPacket.html">SignPacket</a></li><li><a href="module-workers_packets-SignResultPacket.html">SignResultPacket</a></li><li><a href="NameDelta.html">NameDelta</a></li><li><a href="NameState.html">NameState</a></li><li><a href="NS.html">NS</a></li><li><a href="Ownership.html">Ownership</a></li><li><a href="Proof.html">Proof</a></li><li><a href="ProofData.html">ProofData</a></li><li><a href="RecursiveServer.html">RecursiveServer</a></li><li><a href="Reserved.html">Reserved</a></li><li><a href="Resource.html">Resource</a></li><li><a href="RootCache.html">RootCache</a></li><li><a href="RootServer.html">RootServer</a></li><li><a href="Seeder.html">Seeder</a></li><li><a href="SlidingWindow.html">SlidingWindow</a></li><li><a href="StateCache.html">StateCache</a></li><li><a href="SymmetricState.html">SymmetricState</a></li><li><a href="SYNTH4.html">SYNTH4</a></li><li><a href="SYNTH6.html">SYNTH6</a></li><li><a href="TXT.html">TXT</a></li><li><a href="WalletNode.html">WalletNode</a></li></ul><h3>Global</h3><ul><li><a href="global.html#bindExit">bindExit</a></li><li><a href="global.html#checksig">checksig</a></li><li><a href="global.html#decode">decode</a></li><li><a href="global.html#encode">encode</a></li><li><a href="global.html#fromFloat">fromFloat</a></li><li><a href="global.html#groupKey">groupKey</a></li><li><a href="global.html#insert">insert</a></li><li><a href="global.html#listenExit">listenExit</a></li><li><a href="global.html#migrationLayout">migrationLayout</a></li><li><a href="global.html#oldLayout">oldLayout</a></li><li><a href="global.html#remove">remove</a></li><li><a href="global.html#search">search</a></li><li><a href="global.html#toFloat">toFloat</a></li><li><a href="global.html#validateKey">validateKey</a></li><li><a href="global.html#validateSignature">validateSignature</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 1.0.0</a> on Fri Jun 24 2022 16:08:43 GMT+0000 (Coordinated Universal Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

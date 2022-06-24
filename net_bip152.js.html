@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: net/bip152.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: net/bip152.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/*!
+ * bip152.js - compact block object for hsd
+ * Copyright (c) 2017-2018, Christopher Jeffrey (MIT License).
+ * https://github.com/handshake-org/hsd
+ */
+
+'use strict';
+
+/**
+ * @module net/bip152
+ */
+
+const assert = require('bsert');
+const bio = require('bufio');
+const consensus = require('../protocol/consensus');
+const blake2b = require('bcrypto/lib/blake2b');
+const {siphash} = require('bcrypto/lib/siphash');
+const AbstractBlock = require('../primitives/abstractblock');
+const TX = require('../primitives/tx');
+const Headers = require('../primitives/headers');
+const Block = require('../primitives/block');
+const common = require('./common');
+const {encoding} = bio;
+
+const {
+  MAX_BLOCK_SIZE,
+  HEADER_SIZE
+} = consensus;
+
+/**
+ * Compact Block
+ * Represents a compact block (bip152): `cmpctblock` packet.
+ * @see https://github.com/bitcoin/bips/blob/master/bip-0152.mediawiki
+ * @extends AbstractBlock
+ * @property {Buffer|null} keyNonce - Nonce for siphash key.
+ * @property {Number[]} ids - Short IDs.
+ * @property {Object[]} ptx - Prefilled transactions.
+ * @property {TX[]} available - Available transaction vector.
+ * @property {Object} idMap - Map of short ids to indexes.
+ * @property {Number} count - Transactions resolved.
+ * @property {Buffer|null} sipKey - Siphash key.
+ */
+
+class CompactBlock extends AbstractBlock {
+  /**
+   * Create a compact block.
+   * @constructor
+   * @param {Object?} options
+   */
+
+  constructor(options) {
+    super();
+
+    this.keyNonce = null;
+    this.ids = [];
+    this.ptx = [];
+
+    this.available = [];
+    this.idMap = new Map();
+    this.count = 0;
+    this.sipKey = null;
+    this.totalTX = 0;
+    this.now = 0;
+
+    if (options)
+      this.fromOptions(options);
+  }
+
+  /**
+   * Inject properties from options object.
+   * @private
+   * @param {Object} options
+   */
+
+  fromOptions(options) {
+    this.parseOptions(options);
+
+    assert(Buffer.isBuffer(options.keyNonce));
+    assert(Array.isArray(options.ids));
+    assert(Array.isArray(options.ptx));
+
+    this.keyNonce = options.keyNonce;
+    this.ids = options.ids;
+    this.ptx = options.ptx;
+
+    if (options.available)
+      this.available = options.available;
+
+    if (options.idMap)
+      this.idMap = options.idMap;
+
+    if (options.count)
+      this.count = options.count;
+
+    if (options.totalTX != null)
+      this.totalTX = options.totalTX;
+
+    this.sipKey = this.getKey();
+
+    return this;
+  }
+
+  /**
+   * Verify the block.
+   * @returns {Boolean}
+   */
+
+  verifyBody() {
+    return true;
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   */
+
+  read(br) {
+    this.readHead(br);
+
+    this.keyNonce = br.readBytes(8);
+    this.sipKey = this.getKey();
+
+    const idCount = br.readVarint();
+
+    this.totalTX += idCount;
+
+    for (let i = 0; i &lt; idCount; i++) {
+      const lo = br.readU32();
+      const hi = br.readU16();
+      this.ids.push(hi * 0x100000000 + lo);
+    }
+
+    const txCount = br.readVarint();
+
+    this.totalTX += txCount;
+
+    for (let i = 0; i &lt; txCount; i++) {
+      const index = br.readVarint();
+
+      assert(index &lt;= 0xffff);
+      assert(index &lt; this.totalTX);
+
+      const tx = TX.read(br);
+
+      this.ptx.push([index, tx]);
+    }
+
+    return this;
+  }
+
+  /**
+   * Calculate block serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    let size = 0;
+
+    size += this.sizeHead();
+    size += 8;
+    size += encoding.sizeVarint(this.ids.length);
+    size += this.ids.length * 6;
+    size += encoding.sizeVarint(this.ptx.length);
+
+    for (const [index, tx] of this.ptx) {
+      size += encoding.sizeVarint(index);
+      size += tx.getSize();
+    }
+
+    return size;
+  }
+
+  /**
+   * Serialize block to buffer writer.
+   * @private
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    this.writeHead(bw);
+
+    bw.writeBytes(this.keyNonce);
+
+    bw.writeVarint(this.ids.length);
+
+    for (const id of this.ids) {
+      const lo = id % 0x100000000;
+      const hi = (id - lo) / 0x100000000;
+      assert(hi &lt;= 0xffff);
+      bw.writeU32(lo);
+      bw.writeU16(hi);
+    }
+
+    bw.writeVarint(this.ptx.length);
+
+    for (const [index, tx] of this.ptx) {
+      bw.writeVarint(index);
+      tx.write(bw);
+    }
+
+    return bw;
+  }
+
+  /**
+   * Convert block to a TXRequest
+   * containing missing indexes.
+   * @returns {TXRequest}
+   */
+
+  toRequest() {
+    return TXRequest.fromCompact(this);
+  }
+
+  /**
+   * Attempt to fill missing transactions from mempool.
+   * @param {Mempool} mempool
+   * @returns {Boolean}
+   */
+
+  fillMempool(mempool) {
+    if (this.count === this.totalTX)
+      return true;
+
+    const set = new Set();
+
+    for (const {tx} of mempool.map.values()) {
+      const hash = tx.witnessHash();
+      const id = this.sid(hash);
+      const index = this.idMap.get(id);
+
+      if (index == null)
+        continue;
+
+      if (set.has(index)) {
+        // Siphash collision, just request it.
+        this.available[index] = null;
+        this.count -= 1;
+        continue;
+      }
+
+      this.available[index] = tx;
+      set.add(index);
+      this.count += 1;
+
+      // We actually may have a siphash collision
+      // here, but exit early anyway for perf.
+      if (this.count === this.totalTX)
+        return true;
+    }
+
+    return false;
+  }
+
+  /**
+   * Attempt to fill missing transactions from TXResponse.
+   * @param {TXResponse} res
+   * @returns {Boolean}
+   */
+
+  fillMissing(res) {
+    let offset = 0;
+
+    for (let i = 0; i &lt; this.available.length; i++) {
+      if (this.available[i])
+        continue;
+
+      if (offset >= res.txs.length)
+        return false;
+
+      this.available[i] = res.txs[offset++];
+    }
+
+    return offset === res.txs.length;
+  }
+
+  /**
+   * Calculate a transaction short ID.
+   * @param {Hash} hash
+   * @returns {Number}
+   */
+
+  sid(hash) {
+    const [hi, lo] = siphash(hash, this.sipKey);
+    return (hi &amp; 0xffff) * 0x100000000 + (lo >>> 0);
+  }
+
+  /**
+   * Test whether an index is available.
+   * @param {Number} index
+   * @returns {Boolean}
+   */
+
+  hasIndex(index) {
+    return this.available[index] != null;
+  }
+
+  /**
+   * Initialize the siphash key.
+   * @private
+   * @returns {Buffer}
+   */
+
+  getKey() {
+    const hash = blake2b.multi(this.toHead(), this.keyNonce);
+    return hash.slice(0, 16);
+  }
+
+  /**
+   * Initialize compact block and short id map.
+   * @private
+   */
+
+  init() {
+    if (this.totalTX === 0)
+      throw new Error('Empty vectors.');
+
+    if (this.totalTX > MAX_BLOCK_SIZE / 10)
+      throw new Error('Compact block too big.');
+
+    // Custom limit to avoid a hashdos.
+    // Min valid tx size: (4 + 1 + 40 + 1 + 10 + 4) = 60
+    // Min block header size: 334
+    // Max number of transactions: (1000000 - 334) / 60 = 16661
+    if (this.totalTX > (MAX_BLOCK_SIZE - (HEADER_SIZE + 1)) / 60)
+      throw new Error('Compact block too big.');
+
+    // No sparse arrays here, v8.
+    for (let i = 0; i &lt; this.totalTX; i++)
+      this.available.push(null);
+
+    let last = -1;
+    let offset = 0;
+
+    for (let i = 0; i &lt; this.ptx.length; i++) {
+      const [index, tx] = this.ptx[i];
+      last += index + 1;
+      assert(last &lt;= 0xffff);
+      assert(last &lt;= this.ids.length + i);
+      this.available[last] = tx;
+      this.count += 1;
+    }
+
+    for (let i = 0; i &lt; this.ids.length; i++) {
+      const id = this.ids[i];
+
+      while (this.available[i + offset])
+        offset += 1;
+
+      // Fails on siphash collision.
+      if (this.idMap.has(id))
+        return false;
+
+      this.idMap.set(id, i + offset);
+    }
+
+    return true;
+  }
+
+  /**
+   * Convert completely filled compact
+   * block to a regular block.
+   * @returns {Block}
+   */
+
+  toBlock() {
+    const block = new Block();
+
+    block.version = this.version;
+    block.prevBlock = this.prevBlock;
+    block.merkleRoot = this.merkleRoot;
+    block.witnessRoot = this.witnessRoot;
+    block.treeRoot = this.treeRoot;
+    block.reservedRoot = this.reservedRoot;
+    block.time = this.time;
+    block.bits = this.bits;
+    block.nonce = this.nonce;
+    block.extraNonce = this.extraNonce;
+    block.mask = this.mask;
+    block._hash = this._hash;
+
+    for (const tx of this.available) {
+      assert(tx, 'Compact block is not full.');
+      block.txs.push(tx);
+    }
+
+    return block;
+  }
+
+  /**
+   * Inject properties from block.
+   * @private
+   * @param {Block} block
+   * @param {Buffer?} nonce
+   * @returns {CompactBlock}
+   */
+
+  fromBlock(block, nonce) {
+    this.version = block.version;
+    this.prevBlock = block.prevBlock;
+    this.merkleRoot = block.merkleRoot;
+    this.witnessRoot = block.witnessRoot;
+    this.treeRoot = block.treeRoot;
+    this.reservedRoot = block.reservedRoot;
+    this.time = block.time;
+    this.bits = block.bits;
+    this.nonce = block.nonce;
+    this.extraNonce = block.extraNonce;
+    this.mask = block.mask;
+    this.totalTX = block.txs.length;
+    this._hash = block._hash;
+
+    if (!nonce)
+      nonce = common.nonce();
+
+    this.keyNonce = nonce;
+    this.sipKey = this.getKey();
+
+    for (let i = 1; i &lt; block.txs.length; i++) {
+      const tx = block.txs[i];
+      const hash = tx.witnessHash();
+      const id = this.sid(hash);
+
+      this.ids.push(id);
+    }
+
+    this.ptx.push([0, block.txs[0]]);
+
+    return this;
+  }
+
+  /**
+   * Instantiate compact block from a block.
+   * @param {Block} block
+   * @param {Buffer?} nonce
+   * @returns {CompactBlock}
+   */
+
+  static fromBlock(block, nonce) {
+    return new this().fromBlock(block, nonce);
+  }
+
+  /**
+   * Convert block to headers.
+   * @returns {Headers}
+   */
+
+  toHeaders() {
+    return Headers.fromBlock(this);
+  }
+}
+
+/**
+ * TX Request
+ * Represents a BlockTransactionsRequest (bip152): `getblocktxn` packet.
+ * @see https://github.com/bitcoin/bips/blob/master/bip-0152.mediawiki
+ * @property {Hash} hash
+ * @property {Number[]} indexes
+ */
+
+class TXRequest extends bio.Struct {
+  /**
+   * TX Request
+   * @constructor
+   * @param {Object?} options
+   */
+
+  constructor(options) {
+    super();
+
+    this.hash = consensus.ZERO_HASH;
+    this.indexes = [];
+
+    if (options)
+      this.fromOptions(options);
+  }
+
+  /**
+   * Inject properties from options.
+   * @private
+   * @param {Object} options
+   * @returns {TXRequest}
+   */
+
+  fromOptions(options) {
+    this.hash = options.hash;
+
+    if (options.indexes)
+      this.indexes = options.indexes;
+
+    return this;
+  }
+
+  /**
+   * Inject properties from compact block.
+   * @private
+   * @param {CompactBlock} block
+   * @returns {TXRequest}
+   */
+
+  fromCompact(block) {
+    this.hash = block.hash();
+
+    for (let i = 0; i &lt; block.available.length; i++) {
+      if (!block.available[i])
+        this.indexes.push(i);
+    }
+
+    return this;
+  }
+
+  /**
+   * Instantiate request from compact block.
+   * @param {CompactBlock} block
+   * @returns {TXRequest}
+   */
+
+  static fromCompact(block) {
+    return new this().fromCompact(block);
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   * @returns {TXRequest}
+   */
+
+  read(br) {
+    this.hash = br.readHash();
+
+    const count = br.readVarint();
+
+    for (let i = 0; i &lt; count; i++) {
+      const index = br.readVarint();
+      assert(index &lt;= 0xffff);
+      this.indexes.push(index);
+    }
+
+    let offset = 0;
+
+    for (let i = 0; i &lt; count; i++) {
+      let index = this.indexes[i];
+      index += offset;
+      assert(index &lt;= 0xffff);
+      this.indexes[i] = index;
+      offset = index + 1;
+    }
+
+    return this;
+  }
+
+  /**
+   * Calculate request serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    let size = 0;
+
+    size += 32;
+    size += encoding.sizeVarint(this.indexes.length);
+
+    for (let i = 0; i &lt; this.indexes.length; i++) {
+      let index = this.indexes[i];
+
+      if (i > 0)
+        index -= this.indexes[i - 1] + 1;
+
+      size += encoding.sizeVarint(index);
+    }
+
+    return size;
+  }
+
+  /**
+   * Write serialized request to buffer writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    bw.writeHash(this.hash);
+
+    bw.writeVarint(this.indexes.length);
+
+    for (let i = 0; i &lt; this.indexes.length; i++) {
+      let index = this.indexes[i];
+
+      if (i > 0)
+        index -= this.indexes[i - 1] + 1;
+
+      bw.writeVarint(index);
+    }
+
+    return bw;
+  }
+}
+
+/**
+ * TX Response
+ * Represents BlockTransactions (bip152): `blocktxn` packet.
+ * @see https://github.com/bitcoin/bips/blob/master/bip-0152.mediawiki
+ * @property {Hash} hash
+ * @property {TX[]} txs
+ */
+
+class TXResponse extends bio.Struct {
+  /**
+   * Create a tx response.
+   * @constructor
+   * @param {Object?} options
+   */
+
+  constructor(options) {
+    super();
+
+    this.hash = consensus.ZERO_HASH;
+    this.txs = [];
+
+    if (options)
+      this.fromOptions(options);
+  }
+
+  /**
+   * Inject properties from options.
+   * @private
+   * @param {Object} options
+   * @returns {TXResponse}
+   */
+
+  fromOptions(options) {
+    this.hash = options.hash;
+
+    if (options.txs)
+      this.txs = options.txs;
+
+    return this;
+  }
+
+  /**
+   * Inject properties from buffer reader.
+   * @private
+   * @param {BufferReader} br
+   * @returns {TXResponse}
+   */
+
+  read(br) {
+    this.hash = br.readHash();
+
+    const count = br.readVarint();
+
+    for (let i = 0; i &lt; count; i++)
+      this.txs.push(TX.read(br));
+
+    return this;
+  }
+
+  /**
+   * Inject properties from block.
+   * @private
+   * @param {Block} block
+   * @returns {TXResponse}
+   */
+
+  fromBlock(block, req) {
+    this.hash = req.hash;
+
+    for (const index of req.indexes) {
+      if (index >= block.txs.length)
+        break;
+
+      this.txs.push(block.txs[index]);
+    }
+
+    return this;
+  }
+
+  /**
+   * Instantiate response from block.
+   * @param {Block} block
+   * @returns {TXResponse}
+   */
+
+  static fromBlock(block, req) {
+    return new this().fromBlock(block, req);
+  }
+
+  /**
+   * Calculate request serialization size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    let size = 0;
+
+    size += 32;
+    size += encoding.sizeVarint(this.txs.length);
+
+    for (const tx of this.txs)
+      size += tx.getSize();
+
+    return size;
+  }
+
+  /**
+   * Write serialized response to buffer writer.
+   * @private
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    bw.writeHash(this.hash);
+
+    bw.writeVarint(this.txs.length);
+
+    for (const tx of this.txs)
+      tx.write(bw);
+
+    return bw;
+  }
+}
+
+/*
+ * Expose
+ */
+
+exports.CompactBlock = CompactBlock;
+exports.TXRequest = TXRequest;
+exports.TXResponse = TXResponse;
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-blockchain.html">blockchain</a></li><li><a href="module-blockchain_common.html">blockchain/common</a></li><li><a href="module-blockstore.html">blockstore</a></li><li><a href="module-blockstore_common.html">blockstore/common</a></li><li><a href="module-blockstore_records.html">blockstore/records</a></li><li><a href="module-coins.html">coins</a></li><li><a href="module-covenants.html">covenants</a></li><li><a href="module-dns_common.html">dns/common</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-hd.html">hd</a></li><li><a href="module-hsd.html">hsd</a></li><li><a href="module-mempool.html">mempool</a></li><li><a href="module-mining.html">mining</a></li><li><a href="module-mining_common.html">mining/common</a></li><li><a href="module-net.html">net</a></li><li><a href="module-net_bip152.html">net/bip152</a></li><li><a href="module-net_common.html">net/common</a></li><li><a href="module-net_packets.html">net/packets</a></li><li><a href="module-node.html">node</a></li><li><a href="module-primitives.html">primitives</a></li><li><a href="module-protocol.html">protocol</a></li><li><a href="module-protocol_consensus.html">protocol/consensus</a></li><li><a href="module-protocol_errors.html">protocol/errors</a></li><li><a href="module-protocol_networks.html">protocol/networks</a></li><li><a href="module-protocol_policy.html">protocol/policy</a></li><li><a href="module-script.html">script</a></li><li><a href="module-script_common.html">script/common</a></li><li><a href="module-ui.html">ui</a></li><li><a href="module-utils.html">utils</a></li><li><a href="module-utils_util.html">utils/util</a></li><li><a href="module-wallet.html">wallet</a></li><li><a href="module-wallet_common.html">wallet/common</a></li><li><a href="module-wallet_plugin.html">wallet/plugin</a></li><li><a href="module-wallet_records.html">wallet/records</a></li><li><a href="module-workers.html">workers</a></li><li><a href="module-workers_jobs.html">workers/jobs</a></li><li><a href="module-workers_packets.html">workers/packets</a></li></ul><h3>Classes</h3><ul><li><a href="AirdropKey.html">AirdropKey</a></li><li><a href="AirdropProof.html">AirdropProof</a></li><li><a href="BidReveal.html">BidReveal</a></li><li><a href="BitField.html">BitField</a></li><li><a href="BitView.html">BitView</a></li><li><a href="BlindBid.html">BlindBid</a></li><li><a href="BlindValue.html">BlindValue</a></li><li><a href="BlockProof.html">BlockProof</a></li><li><a href="Brontide.html">Brontide</a></li><li><a href="BrontideStream.html">BrontideStream</a></li><li><a href="ChainFlags.html">ChainFlags</a></li><li><a href="ChainState.html">ChainState</a></li><li><a href="CipherState.html">CipherState</a></li><li><a href="Claim.html">Claim</a></li><li><a href="DetailsMember.html">DetailsMember</a></li><li><a href="DS.html">DS</a></li><li><a href="Field.html">Field</a></li><li><a href="GLUE4.html">GLUE4</a></li><li><a href="GLUE6.html">GLUE6</a></li><li><a href="HandshakeState.html">HandshakeState</a></li><li><a href="HashList.html">HashList</a></li><li><a href="MigrateBlockStore.html">MigrateBlockStore</a></li><li><a href="MigrateChainState.html">MigrateChainState</a></li><li><a href="MigrateChangeAddress.html">MigrateChangeAddress</a></li><li><a href="MigrateMigrations.html">MigrateMigrations</a></li><li><a href="MigrateTreeState.html">MigrateTreeState</a></li><li><a href="module.migrations.MigrationState.html">MigrationState</a></li><li><a href="module-blockchain.Chain.html">Chain</a></li><li><a href="module-blockchain.ChainDB.html">ChainDB</a></li><li><a href="module-blockchain.ChainEntry.html">ChainEntry</a></li><li><a href="module-blockchain.ChainMigrator.html">ChainMigrator</a></li><li><a href="module-blockchain.ChainMigratorOptions.html">ChainMigratorOptions</a></li><li><a href="module-blockchain.ChainOptions.html">ChainOptions</a></li><li><a href="module-blockchain.DeploymentState.html">DeploymentState</a></li><li><a href="module-blockchain.WalletMigrationResult.html">WalletMigrationResult</a></li><li><a href="module-blockchain.WalletMigrator.html">WalletMigrator</a></li><li><a href="module-blockstore.AbstractBatch.html">AbstractBatch</a></li><li><a href="module-blockstore.AbstractBlockStore.html">AbstractBlockStore</a></li><li><a href="module-blockstore.FileBatch.html">FileBatch</a></li><li><a href="module-blockstore.LevelBatch.html">LevelBatch</a></li><li><a href="module-blockstore_records-BlockRecord.html">BlockRecord</a></li><li><a href="module-blockstore_records-FileRecord.html">FileRecord</a></li><li><a href="module-blockstore_FileBlockStore.html">blockstore:FileBlockStore</a></li><li><a href="module-blockstore_LevelBlockStore.html">blockstore:LevelBlockStore</a></li><li><a href="module-coins.CoinEntry.html">CoinEntry</a></li><li><a href="module-coins.Coins.html">Coins</a></li><li><a href="module-coins.CoinView.html">CoinView</a></li><li><a href="module-coins.UndoCoins.html">UndoCoins</a></li><li><a href="module-currency.Amount.html">Amount</a></li><li><a href="module-errors-CriticalError.html">CriticalError</a></li><li><a href="module-hd.Mnemonic.html">Mnemonic</a></li><li><a href="module-hd.PrivateKey.html">PrivateKey</a></li><li><a href="module-hd.PublicKey.html">PublicKey</a></li><li><a href="module-http.HTTPOptions.html">HTTPOptions</a></li><li><a href="module-http.RPC.html">RPC</a></li><li><a href="module-http.Server.html">Server</a></li><li><a href="module-http.TransactionOptions.html">TransactionOptions</a></li><li><a href="module-mempool.AirdropEntry.html">AirdropEntry</a></li><li><a href="module-mempool.ClaimEntry.html">ClaimEntry</a></li><li><a href="module-mempool.ConfirmStats.html">ConfirmStats</a></li><li><a href="module-mempool.Mempool.html">Mempool</a></li><li><a href="module-mempool.MempoolEntry.html">MempoolEntry</a></li><li><a href="module-mempool.MempoolOptions.html">MempoolOptions</a></li><li><a href="module-mempool.PolicyEstimator.html">PolicyEstimator</a></li><li><a href="module-migrations.AbstractMigration.html">AbstractMigration</a></li><li><a href="module-migrations.MigrationResult.html">MigrationResult</a></li><li><a href="module-migrations.Migrator.html">Migrator</a></li><li><a href="module-mining.BlockAirdrop.html">BlockAirdrop</a></li><li><a href="module-mining.BlockClaim.html">BlockClaim</a></li><li><a href="module-mining.BlockEntry.html">BlockEntry</a></li><li><a href="module-mining.BlockTemplate.html">BlockTemplate</a></li><li><a href="module-mining.CPUMiner.html">CPUMiner</a></li><li><a href="module-mining.Miner.html">Miner</a></li><li><a href="module-mining.MinerOptions.html">MinerOptions</a></li><li><a href="module-net.BroadcastItem.html">BroadcastItem</a></li><li><a href="module-net.Framer.html">Framer</a></li><li><a href="module-net.HostEntry.html">HostEntry</a></li><li><a href="module-net.HostList.html">HostList</a></li><li><a href="module-net.HostListOptions.html">HostListOptions</a></li><li><a href="module-net.LocalAddress.html">LocalAddress</a></li><li><a href="module-net.NetAddress.html">NetAddress</a></li><li><a href="module-net.Parser.html">Parser</a></li><li><a href="module-net.Peer.html">Peer</a></li><li><a href="module-net.PeerList.html">PeerList</a></li><li><a href="module-net.PeerOptions.html">PeerOptions</a></li><li><a href="module-net.Pool.html">Pool</a></li><li><a href="module-net.PoolOptions.html">PoolOptions</a></li><li><a href="module-net_bip152-CompactBlock.html">CompactBlock</a></li><li><a href="module-net_bip152-TXRequest.html">TXRequest</a></li><li><a href="module-net_bip152-TXResponse.html">TXResponse</a></li><li><a href="module-net_packets-AddrPacket.html">AddrPacket</a></li><li><a href="module-net_packets-AirdropPacket.html">AirdropPacket</a></li><li><a href="module-net_packets-BlockPacket.html">BlockPacket</a></li><li><a href="module-net_packets-BlockTxnPacket.html">BlockTxnPacket</a></li><li><a href="module-net_packets-ClaimPacket.html">ClaimPacket</a></li><li><a href="module-net_packets-CmpctBlockPacket.html">CmpctBlockPacket</a></li><li><a href="module-net_packets-FeeFilterPacket.html">FeeFilterPacket</a></li><li><a href="module-net_packets-FilterAddPacket.html">FilterAddPacket</a></li><li><a href="module-net_packets-FilterClearPacket.html">FilterClearPacket</a></li><li><a href="module-net_packets-FilterLoadPacket.html">FilterLoadPacket</a></li><li><a href="module-net_packets-GetAddrPacket.html">GetAddrPacket</a></li><li><a href="module-net_packets-GetBlocksPacket.html">GetBlocksPacket</a></li><li><a href="module-net_packets-GetBlockTxnPacket.html">GetBlockTxnPacket</a></li><li><a href="module-net_packets-GetDataPacket.html">GetDataPacket</a></li><li><a href="module-net_packets-GetHeadersPacket.html">GetHeadersPacket</a></li><li><a href="module-net_packets-GetProofPacket.html">GetProofPacket</a></li><li><a href="module-net_packets-HeadersPacket.html">HeadersPacket</a></li><li><a href="module-net_packets-InvPacket.html">InvPacket</a></li><li><a href="module-net_packets-MempoolPacket.html">MempoolPacket</a></li><li><a href="module-net_packets-MerkleBlockPacket.html">MerkleBlockPacket</a></li><li><a href="module-net_packets-NotFoundPacket.html">NotFoundPacket</a></li><li><a href="module-net_packets-Packet.html">Packet</a></li><li><a href="module-net_packets-PingPacket.html">PingPacket</a></li><li><a href="module-net_packets-PongPacket.html">PongPacket</a></li><li><a href="module-net_packets-ProofPacket.html">ProofPacket</a></li><li><a href="module-net_packets-RejectPacket.html">RejectPacket</a></li><li><a href="module-net_packets-SendCmpctPacket.html">SendCmpctPacket</a></li><li><a href="module-net_packets-SendHeadersPacket.html">SendHeadersPacket</a></li><li><a href="module-net_packets-TXPacket.html">TXPacket</a></li><li><a href="module-net_packets-UnknownPacket.html">UnknownPacket</a></li><li><a href="module-net_packets-VerackPacket.html">VerackPacket</a></li><li><a href="module-net_packets-VersionPacket.html">VersionPacket</a></li><li><a href="module-node.FullNode.html">FullNode</a></li><li><a href="module-node.Node.html">Node</a></li><li><a href="module-node.NodeClient.html">NodeClient</a></li><li><a href="module-node.NullClient.html">NullClient</a></li><li><a href="module-node.SPVNode.html">SPVNode</a></li><li><a href="module-primitives.AbstractBlock.html">AbstractBlock</a></li><li><a href="module-primitives.Address.html">Address</a></li><li><a href="module-primitives.Block.html">Block</a></li><li><a href="module-primitives.Coin.html">Coin</a></li><li><a href="module-primitives.CoinSelector.html">CoinSelector</a></li><li><a href="module-primitives.Covenant.html">Covenant</a></li><li><a href="module-primitives.Headers.html">Headers</a></li><li><a href="module-primitives.Input.html">Input</a></li><li><a href="module-primitives.InvItem.html">InvItem</a></li><li><a href="module-primitives.KeyRing.html">KeyRing</a></li><li><a href="module-primitives.MemBlock.html">MemBlock</a></li><li><a href="module-primitives.MerkleBlock.html">MerkleBlock</a></li><li><a href="module-primitives.MTX.html">MTX</a></li><li><a href="module-primitives.Outpoint.html">Outpoint</a></li><li><a href="module-primitives.Output.html">Output</a></li><li><a href="module-primitives.TX.html">TX</a></li><li><a href="module-primitives.TXMeta.html">TXMeta</a></li><li><a href="module-protocol.Network.html">Network</a></li><li><a href="module-protocol.TimeData.html">TimeData</a></li><li><a href="module-protocol_errors-VerifyError.html">VerifyError</a></li><li><a href="module-script.Opcode.html">Opcode</a></li><li><a href="module-script.Script.html">Script</a></li><li><a href="module-script.ScriptError.html">ScriptError</a></li><li><a href="module-script.ScriptNum.html">ScriptNum</a></li><li><a href="module-script.SigCache.html">SigCache</a></li><li><a href="module-script.Stack.html">Stack</a></li><li><a href="module-script.Witness.html">Witness</a></li><li><a href="module-ui.URI.html">URI</a></li><li><a href="module-wallet.Account.html">Account</a></li><li><a href="module-wallet.Balance.html">Balance</a></li><li><a href="module-wallet.BlockRecord.html">BlockRecord</a></li><li><a href="module-wallet.Credit.html">Credit</a></li><li><a href="module-wallet.Details.html">Details</a></li><li><a href="module-wallet.HTTP.html">HTTP</a></li><li><a href="module-wallet.MasterKey.html">MasterKey</a></li><li><a href="module-wallet.Path.html">Path</a></li><li><a href="module-wallet.Paths.html">Paths</a></li><li><a href="module-wallet.RPC.html">RPC</a></li><li><a href="module-wallet.TXDB.html">TXDB</a></li><li><a href="module-wallet.Wallet.html">Wallet</a></li><li><a href="module-wallet.WalletCoinView.html">WalletCoinView</a></li><li><a href="module-wallet.WalletDB.html">WalletDB</a></li><li><a href="module-wallet.WalletKey.html">WalletKey</a></li><li><a href="module-wallet.WalletMigratorOptions.html">WalletMigratorOptions</a></li><li><a href="module-wallet.WalletOptions.html">WalletOptions</a></li><li><a href="module-wallet_plugin-Plugin.html">Plugin</a></li><li><a href="module-wallet_records-BlockMeta.html">BlockMeta</a></li><li><a href="module-wallet_records-ChainState.html">ChainState</a></li><li><a href="module-wallet_records-MapRecord.html">MapRecord</a></li><li><a href="module-wallet_records-TXRecord.html">TXRecord</a></li><li><a href="module-workers.Framer.html">Framer</a></li><li><a href="module-workers.Master.html">Master</a></li><li><a href="module-workers.Parent.html">Parent</a></li><li><a href="module-workers.Parser.html">Parser</a></li><li><a href="module-workers.Worker.html">Worker</a></li><li><a href="module-workers.WorkerPool.html">WorkerPool</a></li><li><a href="module-workers_packets-CheckInputPacket.html">CheckInputPacket</a></li><li><a href="module-workers_packets-CheckInputResultPacket.html">CheckInputResultPacket</a></li><li><a href="module-workers_packets-CheckPacket.html">CheckPacket</a></li><li><a href="module-workers_packets-CheckResultPacket.html">CheckResultPacket</a></li><li><a href="module-workers_packets-ECSignPacket.html">ECSignPacket</a></li><li><a href="module-workers_packets-ECSignResultPacket.html">ECSignResultPacket</a></li><li><a href="module-workers_packets-ECVerifyPacket.html">ECVerifyPacket</a></li><li><a href="module-workers_packets-ECVerifyResultPacket.html">ECVerifyResultPacket</a></li><li><a href="module-workers_packets-EnvPacket.html">EnvPacket</a></li><li><a href="module-workers_packets-ErrorPacket.html">ErrorPacket</a></li><li><a href="module-workers_packets-ErrorResultPacket.html">ErrorResultPacket</a></li><li><a href="module-workers_packets-EventPacket.html">EventPacket</a></li><li><a href="module-workers_packets-LogPacket.html">LogPacket</a></li><li><a href="module-workers_packets-MinePacket.html">MinePacket</a></li><li><a href="module-workers_packets-MineResultPacket.html">MineResultPacket</a></li><li><a href="module-workers_packets-Packet.html">Packet</a></li><li><a href="module-workers_packets-ScryptPacket.html">ScryptPacket</a></li><li><a href="module-workers_packets-ScryptResultPacket.html">ScryptResultPacket</a></li><li><a href="module-workers_packets-SignInputPacket.html">SignInputPacket</a></li><li><a href="module-workers_packets-SignInputResultPacket.html">SignInputResultPacket</a></li><li><a href="module-workers_packets-SignPacket.html">SignPacket</a></li><li><a href="module-workers_packets-SignResultPacket.html">SignResultPacket</a></li><li><a href="NameDelta.html">NameDelta</a></li><li><a href="NameState.html">NameState</a></li><li><a href="NS.html">NS</a></li><li><a href="Ownership.html">Ownership</a></li><li><a href="Proof.html">Proof</a></li><li><a href="ProofData.html">ProofData</a></li><li><a href="RecursiveServer.html">RecursiveServer</a></li><li><a href="Reserved.html">Reserved</a></li><li><a href="Resource.html">Resource</a></li><li><a href="RootCache.html">RootCache</a></li><li><a href="RootServer.html">RootServer</a></li><li><a href="Seeder.html">Seeder</a></li><li><a href="SlidingWindow.html">SlidingWindow</a></li><li><a href="StateCache.html">StateCache</a></li><li><a href="SymmetricState.html">SymmetricState</a></li><li><a href="SYNTH4.html">SYNTH4</a></li><li><a href="SYNTH6.html">SYNTH6</a></li><li><a href="TXT.html">TXT</a></li><li><a href="WalletNode.html">WalletNode</a></li></ul><h3>Global</h3><ul><li><a href="global.html#bindExit">bindExit</a></li><li><a href="global.html#checksig">checksig</a></li><li><a href="global.html#decode">decode</a></li><li><a href="global.html#encode">encode</a></li><li><a href="global.html#fromFloat">fromFloat</a></li><li><a href="global.html#groupKey">groupKey</a></li><li><a href="global.html#insert">insert</a></li><li><a href="global.html#listenExit">listenExit</a></li><li><a href="global.html#migrationLayout">migrationLayout</a></li><li><a href="global.html#oldLayout">oldLayout</a></li><li><a href="global.html#remove">remove</a></li><li><a href="global.html#search">search</a></li><li><a href="global.html#toFloat">toFloat</a></li><li><a href="global.html#validateKey">validateKey</a></li><li><a href="global.html#validateSignature">validateSignature</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 1.0.0</a> on Fri Jun 24 2022 16:08:43 GMT+0000 (Coordinated Universal Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

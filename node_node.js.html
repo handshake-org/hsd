@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: node/node.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: node/node.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/*!
+ * node.js - node object for hsd
+ * Copyright (c) 2017-2018, Christopher Jeffrey (MIT License).
+ * https://github.com/handshake-org/hsd
+ */
+
+'use strict';
+
+const assert = require('bsert');
+const EventEmitter = require('events');
+const fs = require('bfile');
+const Logger = require('blgr');
+const Config = require('bcfg');
+const secp256k1 = require('bcrypto/lib/secp256k1');
+const Network = require('../protocol/network');
+const WorkerPool = require('../workers/workerpool');
+const ownership = require('../covenants/ownership');
+
+/**
+ * Node
+ * Base class from which every other
+ * Node-like object inherits.
+ * @alias module:node.Node
+ * @extends EventEmitter
+ * @abstract
+ */
+
+class Node extends EventEmitter {
+  /**
+   * Create a node.
+   * @constructor
+   * @param {Object} options
+   */
+
+  constructor(module, config, file, options) {
+    super();
+
+    this.config = new Config(module, {
+      suffix: 'network',
+      fallback: 'main',
+      alias: { 'n': 'network' }
+    });
+
+    this.config.inject(options);
+    this.config.load(options);
+
+    if (options.config)
+      this.config.open(config);
+
+    this.network = Network.get(this.config.getSuffix());
+    this.memory = this.config.bool('memory', true);
+    this.identityKey = this.loadKey();
+    this.startTime = -1;
+    this.bound = [];
+    this.plugins = Object.create(null);
+    this.stack = [];
+
+    this.logger = null;
+    this.workers = null;
+
+    this.spv = false;
+    this.blocks = null;
+    this.chain = null;
+    this.fees = null;
+    this.mempool = null;
+    this.pool = null;
+    this.miner = null;
+    this.http = null;
+
+    this._init(file);
+  }
+
+  /**
+   * Initialize node.
+   * @private
+   * @param {Object} options
+   */
+
+  _init(file) {
+    const config = this.config;
+
+    let logger = new Logger();
+
+    if (config.has('logger'))
+      logger = config.obj('logger');
+
+    logger.set({
+      filename: !this.memory &amp;&amp; config.bool('log-file')
+        ? config.location(file)
+        : null,
+      level: config.str('log-level'),
+      console: config.bool('log-console'),
+      shrink: config.bool('log-shrink'),
+      maxFileSize: config.mb('log-max-file-size'),
+      maxFiles: config.uint('log-max-files')
+    });
+
+    this.logger = logger.context('node');
+
+    if (config.bool('ignore-forged')) {
+      if (this.network.type !== 'regtest')
+        throw new Error('Forged claims are regtest-only.');
+      ownership.ignore = true;
+    }
+
+    this.workers = new WorkerPool({
+      enabled: config.bool('workers'),
+      size: config.uint('workers-size'),
+      timeout: config.uint('workers-timeout'),
+      file: config.str('worker-file')
+    });
+
+    this.on('error', () => {});
+
+    this.workers.on('spawn', (child) => {
+      this.logger.info('Spawning worker process: %d.', child.id);
+    });
+
+    this.workers.on('exit', (code, child) => {
+      this.logger.warning('Worker %d exited: %s.', child.id, code);
+    });
+
+    this.workers.on('log', (text, child) => {
+      this.logger.debug('Worker %d says:', child.id);
+      this.logger.debug(text);
+    });
+
+    this.workers.on('error', (err, child) => {
+      if (child) {
+        this.logger.error('Worker %d error: %s', child.id, err.message);
+        return;
+      }
+      this.emit('error', err);
+    });
+  }
+
+  /**
+   * Ensure prefix directory.
+   * @returns {Promise}
+   */
+
+  async ensure() {
+    if (fs.unsupported)
+      return undefined;
+
+    if (this.memory)
+      return undefined;
+
+    if (this.blocks)
+      await this.blocks.ensure();
+
+    return fs.mkdirp(this.config.prefix);
+  }
+
+  /**
+   * Create a file path using `prefix`.
+   * @param {String} file
+   * @returns {String}
+   */
+
+  location(name) {
+    return this.config.location(name);
+  }
+
+  /**
+   * Generate identity key.
+   * @private
+   * @returns {Buffer}
+   */
+
+  genKey() {
+    if (this.network.identityKey)
+      return this.network.identityKey;
+    return secp256k1.privateKeyGenerate();
+  }
+
+  /**
+   * Load identity key.
+   * @private
+   * @returns {Buffer}
+   */
+
+  loadKey() {
+    if (this.memory || fs.unsupported)
+      return this.genKey();
+
+    const filename = this.location('key');
+
+    let key = this.config.buf('identity-key');
+    let fresh = false;
+
+    if (!key) {
+      try {
+        const data = fs.readFileSync(filename, 'utf8');
+        key = Buffer.from(data.trim(), 'hex');
+      } catch (e) {
+        if (e.code !== 'ENOENT')
+          throw e;
+        key = this.genKey();
+        fresh = true;
+      }
+    } else {
+      fresh = true;
+    }
+
+    if (key.length !== 32 || !secp256k1.privateKeyVerify(key))
+      throw new Error('Invalid identity key.');
+
+    if (fresh) {
+      // XXX Shouldn't be doing this.
+      fs.mkdirpSync(this.config.prefix);
+      fs.writeFileSync(filename, key.toString('hex') + '\n');
+    }
+
+    return key;
+  }
+
+  /**
+   * Open node. Bind all events.
+   * @private
+   */
+
+  async handlePreopen() {
+    await this.logger.open();
+    await this.workers.open();
+
+    this._bind(this.network.time, 'offset', (offset) => {
+      this.logger.info(
+        'Time offset: %d (%d minutes).',
+        offset, offset / 60 | 0);
+    });
+
+    this._bind(this.network.time, 'sample', (sample, total) => {
+      this.logger.debug(
+        'Added time data: samples=%d, offset=%d (%d minutes).',
+        total, sample, sample / 60 | 0);
+    });
+
+    this._bind(this.network.time, 'mismatch', () => {
+      this.logger.warning('Adjusted time mismatch!');
+      this.logger.warning('Please make sure your system clock is correct!');
+    });
+  }
+
+  /**
+   * Open node.
+   * @private
+   */
+
+  async handleOpen() {
+    this.startTime = Date.now();
+
+    if (!this.workers.enabled) {
+      this.logger.warning('Warning: worker pool is disabled.');
+      this.logger.warning('Verification will be slow.');
+    }
+  }
+
+  /**
+   * Open node. Bind all events.
+   * @private
+   */
+
+  async handlePreclose() {
+    ;
+  }
+
+  /**
+   * Close node. Unbind all events.
+   * @private
+   */
+
+  async handleClose() {
+    for (const [obj, event, listener] of this.bound)
+      obj.removeListener(event, listener);
+
+    this.bound.length = 0;
+    this.startTime = -1;
+
+    await this.workers.close();
+    await this.logger.close();
+  }
+
+  /**
+   * Bind to an event on `obj`, save listener for removal.
+   * @private
+   * @param {EventEmitter} obj
+   * @param {String} event
+   * @param {Function} listener
+   */
+
+  _bind(obj, event, listener) {
+    this.bound.push([obj, event, listener]);
+    obj.on(event, listener);
+  }
+
+  /**
+   * Emit and log an error.
+   * @private
+   * @param {Error} err
+   */
+
+  error(err) {
+    this.logger.error(err);
+    this.emit('error', err);
+  }
+
+  /**
+   * Emit and log an abort error.
+   * @private
+   * @param {Error} err
+   */
+
+  abort(err) {
+    this.logger.error(err);
+    this.emit('abort', err);
+  }
+
+  /**
+   * Get node uptime in seconds.
+   * @returns {Number}
+   */
+
+  uptime() {
+    if (this.startTime === -1)
+      return 0;
+
+    return Math.floor((Date.now() - this.startTime) / 1000);
+  }
+
+  /**
+   * Attach a plugin.
+   * @param {Object} plugin
+   * @returns {Object} Plugin instance.
+   */
+
+  use(plugin) {
+    assert(plugin, 'Plugin must be an object.');
+    assert(typeof plugin.init === 'function', '`init` must be a function.');
+
+    assert(!this.loaded, 'Cannot add plugin after node is loaded.');
+
+    const instance = plugin.init(this);
+
+    assert(!instance.open || typeof instance.open === 'function',
+      '`open` must be a function.');
+    assert(!instance.close || typeof instance.close === 'function',
+      '`close` must be a function.');
+
+    if (plugin.id) {
+      assert(typeof plugin.id === 'string', '`id` must be a string.');
+
+      // Reserved names
+      switch (plugin.id) {
+        case 'chain':
+        case 'fees':
+        case 'mempool':
+        case 'miner':
+        case 'pool':
+        case 'rpc':
+        case 'http':
+        case 'ns':
+        case 'rs':
+          assert(false, `${plugin.id} is already added.`);
+          break;
+      }
+
+      assert(!this.plugins[plugin.id], `${plugin.id} is already added.`);
+
+      this.plugins[plugin.id] = instance;
+    }
+
+    this.stack.push(instance);
+
+    if (typeof instance.on === 'function') {
+      instance.on('error', err => this.error(err));
+      instance.on('abort', msg => this.abort(msg));
+    }
+
+    return instance;
+  }
+
+  /**
+   * Test whether a plugin is available.
+   * @param {String} name
+   * @returns {Boolean}
+   */
+
+  has(name) {
+    return this.plugins[name] != null;
+  }
+
+  /**
+   * Get a plugin.
+   * @param {String} name
+   * @returns {Object|null}
+   */
+
+  get(name) {
+    assert(typeof name === 'string', 'Plugin name must be a string.');
+
+    // Reserved names.
+    switch (name) {
+      case 'chain':
+        assert(this.chain, 'chain is not loaded.');
+        return this.chain;
+      case 'fees':
+        assert(this.fees, 'fees is not loaded.');
+        return this.fees;
+      case 'mempool':
+        assert(this.mempool, 'mempool is not loaded.');
+        return this.mempool;
+      case 'miner':
+        assert(this.miner, 'miner is not loaded.');
+        return this.miner;
+      case 'pool':
+        assert(this.pool, 'pool is not loaded.');
+        return this.pool;
+      case 'rpc':
+        assert(this.rpc, 'rpc is not loaded.');
+        return this.rpc;
+      case 'http':
+        assert(this.http, 'http is not loaded.');
+        return this.http;
+      case 'rs':
+        assert(this.rs, 'rs is not loaded.');
+        return this.rs;
+      case 'ns':
+        assert(this.ns, 'ns is not loaded.');
+        return this.ns;
+    }
+
+    return this.plugins[name] || null;
+  }
+
+  /**
+   * Require a plugin.
+   * @param {String} name
+   * @returns {Object}
+   * @throws {Error} on onloaded plugin
+   */
+
+  require(name) {
+    const plugin = this.get(name);
+    assert(plugin, `${name} is not loaded.`);
+    return plugin;
+  }
+
+  /**
+   * Load plugins.
+   * @private
+   */
+
+  loadPlugins() {
+    const plugins = this.config.array('plugins', []);
+    const loader = this.config.func('loader');
+
+    for (let plugin of plugins) {
+      if (typeof plugin === 'string') {
+        assert(loader, 'Must pass a loader function.');
+        plugin = loader(plugin);
+      }
+      this.use(plugin);
+    }
+  }
+
+  /**
+   * Open plugins.
+   * @private
+   */
+
+  async openPlugins() {
+    for (const plugin of this.stack) {
+      if (plugin.open)
+        await plugin.open();
+    }
+  }
+
+  /**
+   * Close plugins.
+   * @private
+   */
+
+  async closePlugins() {
+    for (const plugin of this.stack) {
+      if (plugin.close)
+        await plugin.close();
+    }
+  }
+}
+
+/*
+ * Expose
+ */
+
+module.exports = Node;
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-blockchain.html">blockchain</a></li><li><a href="module-blockchain_common.html">blockchain/common</a></li><li><a href="module-blockstore.html">blockstore</a></li><li><a href="module-blockstore_common.html">blockstore/common</a></li><li><a href="module-blockstore_records.html">blockstore/records</a></li><li><a href="module-coins.html">coins</a></li><li><a href="module-covenants.html">covenants</a></li><li><a href="module-dns_common.html">dns/common</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-hd.html">hd</a></li><li><a href="module-hsd.html">hsd</a></li><li><a href="module-mempool.html">mempool</a></li><li><a href="module-mining.html">mining</a></li><li><a href="module-mining_common.html">mining/common</a></li><li><a href="module-net.html">net</a></li><li><a href="module-net_bip152.html">net/bip152</a></li><li><a href="module-net_common.html">net/common</a></li><li><a href="module-net_packets.html">net/packets</a></li><li><a href="module-node.html">node</a></li><li><a href="module-primitives.html">primitives</a></li><li><a href="module-protocol.html">protocol</a></li><li><a href="module-protocol_consensus.html">protocol/consensus</a></li><li><a href="module-protocol_errors.html">protocol/errors</a></li><li><a href="module-protocol_networks.html">protocol/networks</a></li><li><a href="module-protocol_policy.html">protocol/policy</a></li><li><a href="module-script.html">script</a></li><li><a href="module-script_common.html">script/common</a></li><li><a href="module-ui.html">ui</a></li><li><a href="module-utils.html">utils</a></li><li><a href="module-utils_util.html">utils/util</a></li><li><a href="module-wallet.html">wallet</a></li><li><a href="module-wallet_common.html">wallet/common</a></li><li><a href="module-wallet_plugin.html">wallet/plugin</a></li><li><a href="module-wallet_records.html">wallet/records</a></li><li><a href="module-workers.html">workers</a></li><li><a href="module-workers_jobs.html">workers/jobs</a></li><li><a href="module-workers_packets.html">workers/packets</a></li></ul><h3>Classes</h3><ul><li><a href="AirdropKey.html">AirdropKey</a></li><li><a href="AirdropProof.html">AirdropProof</a></li><li><a href="BidReveal.html">BidReveal</a></li><li><a href="BitField.html">BitField</a></li><li><a href="BitView.html">BitView</a></li><li><a href="BlindBid.html">BlindBid</a></li><li><a href="BlindValue.html">BlindValue</a></li><li><a href="BlockProof.html">BlockProof</a></li><li><a href="Brontide.html">Brontide</a></li><li><a href="BrontideStream.html">BrontideStream</a></li><li><a href="ChainFlags.html">ChainFlags</a></li><li><a href="ChainState.html">ChainState</a></li><li><a href="CipherState.html">CipherState</a></li><li><a href="Claim.html">Claim</a></li><li><a href="DetailsMember.html">DetailsMember</a></li><li><a href="DS.html">DS</a></li><li><a href="Field.html">Field</a></li><li><a href="GLUE4.html">GLUE4</a></li><li><a href="GLUE6.html">GLUE6</a></li><li><a href="HandshakeState.html">HandshakeState</a></li><li><a href="HashList.html">HashList</a></li><li><a href="MigrateBlockStore.html">MigrateBlockStore</a></li><li><a href="MigrateChainState.html">MigrateChainState</a></li><li><a href="MigrateChangeAddress.html">MigrateChangeAddress</a></li><li><a href="MigrateMigrations.html">MigrateMigrations</a></li><li><a href="MigrateTreeState.html">MigrateTreeState</a></li><li><a href="module.migrations.MigrationState.html">MigrationState</a></li><li><a href="module-blockchain.Chain.html">Chain</a></li><li><a href="module-blockchain.ChainDB.html">ChainDB</a></li><li><a href="module-blockchain.ChainEntry.html">ChainEntry</a></li><li><a href="module-blockchain.ChainMigrator.html">ChainMigrator</a></li><li><a href="module-blockchain.ChainMigratorOptions.html">ChainMigratorOptions</a></li><li><a href="module-blockchain.ChainOptions.html">ChainOptions</a></li><li><a href="module-blockchain.DeploymentState.html">DeploymentState</a></li><li><a href="module-blockchain.WalletMigrationResult.html">WalletMigrationResult</a></li><li><a href="module-blockchain.WalletMigrator.html">WalletMigrator</a></li><li><a href="module-blockstore.AbstractBatch.html">AbstractBatch</a></li><li><a href="module-blockstore.AbstractBlockStore.html">AbstractBlockStore</a></li><li><a href="module-blockstore.FileBatch.html">FileBatch</a></li><li><a href="module-blockstore.LevelBatch.html">LevelBatch</a></li><li><a href="module-blockstore_records-BlockRecord.html">BlockRecord</a></li><li><a href="module-blockstore_records-FileRecord.html">FileRecord</a></li><li><a href="module-blockstore_FileBlockStore.html">blockstore:FileBlockStore</a></li><li><a href="module-blockstore_LevelBlockStore.html">blockstore:LevelBlockStore</a></li><li><a href="module-coins.CoinEntry.html">CoinEntry</a></li><li><a href="module-coins.Coins.html">Coins</a></li><li><a href="module-coins.CoinView.html">CoinView</a></li><li><a href="module-coins.UndoCoins.html">UndoCoins</a></li><li><a href="module-currency.Amount.html">Amount</a></li><li><a href="module-errors-CriticalError.html">CriticalError</a></li><li><a href="module-hd.Mnemonic.html">Mnemonic</a></li><li><a href="module-hd.PrivateKey.html">PrivateKey</a></li><li><a href="module-hd.PublicKey.html">PublicKey</a></li><li><a href="module-http.HTTPOptions.html">HTTPOptions</a></li><li><a href="module-http.RPC.html">RPC</a></li><li><a href="module-http.Server.html">Server</a></li><li><a href="module-http.TransactionOptions.html">TransactionOptions</a></li><li><a href="module-mempool.AirdropEntry.html">AirdropEntry</a></li><li><a href="module-mempool.ClaimEntry.html">ClaimEntry</a></li><li><a href="module-mempool.ConfirmStats.html">ConfirmStats</a></li><li><a href="module-mempool.Mempool.html">Mempool</a></li><li><a href="module-mempool.MempoolEntry.html">MempoolEntry</a></li><li><a href="module-mempool.MempoolOptions.html">MempoolOptions</a></li><li><a href="module-mempool.PolicyEstimator.html">PolicyEstimator</a></li><li><a href="module-migrations.AbstractMigration.html">AbstractMigration</a></li><li><a href="module-migrations.MigrationResult.html">MigrationResult</a></li><li><a href="module-migrations.Migrator.html">Migrator</a></li><li><a href="module-mining.BlockAirdrop.html">BlockAirdrop</a></li><li><a href="module-mining.BlockClaim.html">BlockClaim</a></li><li><a href="module-mining.BlockEntry.html">BlockEntry</a></li><li><a href="module-mining.BlockTemplate.html">BlockTemplate</a></li><li><a href="module-mining.CPUMiner.html">CPUMiner</a></li><li><a href="module-mining.Miner.html">Miner</a></li><li><a href="module-mining.MinerOptions.html">MinerOptions</a></li><li><a href="module-net.BroadcastItem.html">BroadcastItem</a></li><li><a href="module-net.Framer.html">Framer</a></li><li><a href="module-net.HostEntry.html">HostEntry</a></li><li><a href="module-net.HostList.html">HostList</a></li><li><a href="module-net.HostListOptions.html">HostListOptions</a></li><li><a href="module-net.LocalAddress.html">LocalAddress</a></li><li><a href="module-net.NetAddress.html">NetAddress</a></li><li><a href="module-net.Parser.html">Parser</a></li><li><a href="module-net.Peer.html">Peer</a></li><li><a href="module-net.PeerList.html">PeerList</a></li><li><a href="module-net.PeerOptions.html">PeerOptions</a></li><li><a href="module-net.Pool.html">Pool</a></li><li><a href="module-net.PoolOptions.html">PoolOptions</a></li><li><a href="module-net_bip152-CompactBlock.html">CompactBlock</a></li><li><a href="module-net_bip152-TXRequest.html">TXRequest</a></li><li><a href="module-net_bip152-TXResponse.html">TXResponse</a></li><li><a href="module-net_packets-AddrPacket.html">AddrPacket</a></li><li><a href="module-net_packets-AirdropPacket.html">AirdropPacket</a></li><li><a href="module-net_packets-BlockPacket.html">BlockPacket</a></li><li><a href="module-net_packets-BlockTxnPacket.html">BlockTxnPacket</a></li><li><a href="module-net_packets-ClaimPacket.html">ClaimPacket</a></li><li><a href="module-net_packets-CmpctBlockPacket.html">CmpctBlockPacket</a></li><li><a href="module-net_packets-FeeFilterPacket.html">FeeFilterPacket</a></li><li><a href="module-net_packets-FilterAddPacket.html">FilterAddPacket</a></li><li><a href="module-net_packets-FilterClearPacket.html">FilterClearPacket</a></li><li><a href="module-net_packets-FilterLoadPacket.html">FilterLoadPacket</a></li><li><a href="module-net_packets-GetAddrPacket.html">GetAddrPacket</a></li><li><a href="module-net_packets-GetBlocksPacket.html">GetBlocksPacket</a></li><li><a href="module-net_packets-GetBlockTxnPacket.html">GetBlockTxnPacket</a></li><li><a href="module-net_packets-GetDataPacket.html">GetDataPacket</a></li><li><a href="module-net_packets-GetHeadersPacket.html">GetHeadersPacket</a></li><li><a href="module-net_packets-GetProofPacket.html">GetProofPacket</a></li><li><a href="module-net_packets-HeadersPacket.html">HeadersPacket</a></li><li><a href="module-net_packets-InvPacket.html">InvPacket</a></li><li><a href="module-net_packets-MempoolPacket.html">MempoolPacket</a></li><li><a href="module-net_packets-MerkleBlockPacket.html">MerkleBlockPacket</a></li><li><a href="module-net_packets-NotFoundPacket.html">NotFoundPacket</a></li><li><a href="module-net_packets-Packet.html">Packet</a></li><li><a href="module-net_packets-PingPacket.html">PingPacket</a></li><li><a href="module-net_packets-PongPacket.html">PongPacket</a></li><li><a href="module-net_packets-ProofPacket.html">ProofPacket</a></li><li><a href="module-net_packets-RejectPacket.html">RejectPacket</a></li><li><a href="module-net_packets-SendCmpctPacket.html">SendCmpctPacket</a></li><li><a href="module-net_packets-SendHeadersPacket.html">SendHeadersPacket</a></li><li><a href="module-net_packets-TXPacket.html">TXPacket</a></li><li><a href="module-net_packets-UnknownPacket.html">UnknownPacket</a></li><li><a href="module-net_packets-VerackPacket.html">VerackPacket</a></li><li><a href="module-net_packets-VersionPacket.html">VersionPacket</a></li><li><a href="module-node.FullNode.html">FullNode</a></li><li><a href="module-node.Node.html">Node</a></li><li><a href="module-node.NodeClient.html">NodeClient</a></li><li><a href="module-node.NullClient.html">NullClient</a></li><li><a href="module-node.SPVNode.html">SPVNode</a></li><li><a href="module-primitives.AbstractBlock.html">AbstractBlock</a></li><li><a href="module-primitives.Address.html">Address</a></li><li><a href="module-primitives.Block.html">Block</a></li><li><a href="module-primitives.Coin.html">Coin</a></li><li><a href="module-primitives.CoinSelector.html">CoinSelector</a></li><li><a href="module-primitives.Covenant.html">Covenant</a></li><li><a href="module-primitives.Headers.html">Headers</a></li><li><a href="module-primitives.Input.html">Input</a></li><li><a href="module-primitives.InvItem.html">InvItem</a></li><li><a href="module-primitives.KeyRing.html">KeyRing</a></li><li><a href="module-primitives.MemBlock.html">MemBlock</a></li><li><a href="module-primitives.MerkleBlock.html">MerkleBlock</a></li><li><a href="module-primitives.MTX.html">MTX</a></li><li><a href="module-primitives.Outpoint.html">Outpoint</a></li><li><a href="module-primitives.Output.html">Output</a></li><li><a href="module-primitives.TX.html">TX</a></li><li><a href="module-primitives.TXMeta.html">TXMeta</a></li><li><a href="module-protocol.Network.html">Network</a></li><li><a href="module-protocol.TimeData.html">TimeData</a></li><li><a href="module-protocol_errors-VerifyError.html">VerifyError</a></li><li><a href="module-script.Opcode.html">Opcode</a></li><li><a href="module-script.Script.html">Script</a></li><li><a href="module-script.ScriptError.html">ScriptError</a></li><li><a href="module-script.ScriptNum.html">ScriptNum</a></li><li><a href="module-script.SigCache.html">SigCache</a></li><li><a href="module-script.Stack.html">Stack</a></li><li><a href="module-script.Witness.html">Witness</a></li><li><a href="module-ui.URI.html">URI</a></li><li><a href="module-wallet.Account.html">Account</a></li><li><a href="module-wallet.Balance.html">Balance</a></li><li><a href="module-wallet.BlockRecord.html">BlockRecord</a></li><li><a href="module-wallet.Credit.html">Credit</a></li><li><a href="module-wallet.Details.html">Details</a></li><li><a href="module-wallet.HTTP.html">HTTP</a></li><li><a href="module-wallet.MasterKey.html">MasterKey</a></li><li><a href="module-wallet.Path.html">Path</a></li><li><a href="module-wallet.Paths.html">Paths</a></li><li><a href="module-wallet.RPC.html">RPC</a></li><li><a href="module-wallet.TXDB.html">TXDB</a></li><li><a href="module-wallet.Wallet.html">Wallet</a></li><li><a href="module-wallet.WalletCoinView.html">WalletCoinView</a></li><li><a href="module-wallet.WalletDB.html">WalletDB</a></li><li><a href="module-wallet.WalletKey.html">WalletKey</a></li><li><a href="module-wallet.WalletMigratorOptions.html">WalletMigratorOptions</a></li><li><a href="module-wallet.WalletOptions.html">WalletOptions</a></li><li><a href="module-wallet_plugin-Plugin.html">Plugin</a></li><li><a href="module-wallet_records-BlockMeta.html">BlockMeta</a></li><li><a href="module-wallet_records-ChainState.html">ChainState</a></li><li><a href="module-wallet_records-MapRecord.html">MapRecord</a></li><li><a href="module-wallet_records-TXRecord.html">TXRecord</a></li><li><a href="module-workers.Framer.html">Framer</a></li><li><a href="module-workers.Master.html">Master</a></li><li><a href="module-workers.Parent.html">Parent</a></li><li><a href="module-workers.Parser.html">Parser</a></li><li><a href="module-workers.Worker.html">Worker</a></li><li><a href="module-workers.WorkerPool.html">WorkerPool</a></li><li><a href="module-workers_packets-CheckInputPacket.html">CheckInputPacket</a></li><li><a href="module-workers_packets-CheckInputResultPacket.html">CheckInputResultPacket</a></li><li><a href="module-workers_packets-CheckPacket.html">CheckPacket</a></li><li><a href="module-workers_packets-CheckResultPacket.html">CheckResultPacket</a></li><li><a href="module-workers_packets-ECSignPacket.html">ECSignPacket</a></li><li><a href="module-workers_packets-ECSignResultPacket.html">ECSignResultPacket</a></li><li><a href="module-workers_packets-ECVerifyPacket.html">ECVerifyPacket</a></li><li><a href="module-workers_packets-ECVerifyResultPacket.html">ECVerifyResultPacket</a></li><li><a href="module-workers_packets-EnvPacket.html">EnvPacket</a></li><li><a href="module-workers_packets-ErrorPacket.html">ErrorPacket</a></li><li><a href="module-workers_packets-ErrorResultPacket.html">ErrorResultPacket</a></li><li><a href="module-workers_packets-EventPacket.html">EventPacket</a></li><li><a href="module-workers_packets-LogPacket.html">LogPacket</a></li><li><a href="module-workers_packets-MinePacket.html">MinePacket</a></li><li><a href="module-workers_packets-MineResultPacket.html">MineResultPacket</a></li><li><a href="module-workers_packets-Packet.html">Packet</a></li><li><a href="module-workers_packets-ScryptPacket.html">ScryptPacket</a></li><li><a href="module-workers_packets-ScryptResultPacket.html">ScryptResultPacket</a></li><li><a href="module-workers_packets-SignInputPacket.html">SignInputPacket</a></li><li><a href="module-workers_packets-SignInputResultPacket.html">SignInputResultPacket</a></li><li><a href="module-workers_packets-SignPacket.html">SignPacket</a></li><li><a href="module-workers_packets-SignResultPacket.html">SignResultPacket</a></li><li><a href="NameDelta.html">NameDelta</a></li><li><a href="NameState.html">NameState</a></li><li><a href="NS.html">NS</a></li><li><a href="Ownership.html">Ownership</a></li><li><a href="Proof.html">Proof</a></li><li><a href="ProofData.html">ProofData</a></li><li><a href="RecursiveServer.html">RecursiveServer</a></li><li><a href="Reserved.html">Reserved</a></li><li><a href="Resource.html">Resource</a></li><li><a href="RootCache.html">RootCache</a></li><li><a href="RootServer.html">RootServer</a></li><li><a href="Seeder.html">Seeder</a></li><li><a href="SlidingWindow.html">SlidingWindow</a></li><li><a href="StateCache.html">StateCache</a></li><li><a href="SymmetricState.html">SymmetricState</a></li><li><a href="SYNTH4.html">SYNTH4</a></li><li><a href="SYNTH6.html">SYNTH6</a></li><li><a href="TXT.html">TXT</a></li><li><a href="WalletNode.html">WalletNode</a></li></ul><h3>Global</h3><ul><li><a href="global.html#bindExit">bindExit</a></li><li><a href="global.html#checksig">checksig</a></li><li><a href="global.html#decode">decode</a></li><li><a href="global.html#encode">encode</a></li><li><a href="global.html#fromFloat">fromFloat</a></li><li><a href="global.html#groupKey">groupKey</a></li><li><a href="global.html#insert">insert</a></li><li><a href="global.html#listenExit">listenExit</a></li><li><a href="global.html#migrationLayout">migrationLayout</a></li><li><a href="global.html#oldLayout">oldLayout</a></li><li><a href="global.html#remove">remove</a></li><li><a href="global.html#search">search</a></li><li><a href="global.html#toFloat">toFloat</a></li><li><a href="global.html#validateKey">validateKey</a></li><li><a href="global.html#validateSignature">validateSignature</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 1.0.0</a> on Fri Jun 24 2022 16:08:43 GMT+0000 (Coordinated Universal Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

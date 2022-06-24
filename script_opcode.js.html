@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: script/opcode.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: script/opcode.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/*!
+ * opcode.js - opcode object for hsd
+ * Copyright (c) 2017-2018, Christopher Jeffrey (MIT License).
+ * https://github.com/handshake-org/hsd
+ */
+
+'use strict';
+
+const assert = require('bsert');
+const bio = require('bufio');
+const ScriptNum = require('./scriptnum');
+const common = require('./common');
+const opcodes = common.opcodes;
+
+const opCache = [];
+
+let PARSE_ERROR = null;
+
+/**
+ * Opcode
+ * A simple struct which contains
+ * an opcode and pushdata buffer.
+ * @alias module:script.Opcode
+ * @property {Number} value
+ * @property {Buffer|null} data
+ */
+
+class Opcode {
+  /**
+   * Create an opcode.
+   * Note: this should not be called directly.
+   * @constructor
+   * @param {Number} value - Opcode.
+   * @param {Buffer?} data - Pushdata buffer.
+   */
+
+  constructor(value, data) {
+    this.value = value || 0;
+    this.data = data || null;
+  }
+
+  /**
+   * Test whether a pushdata abides by minimaldata.
+   * @returns {Boolean}
+   */
+
+  isMinimal() {
+    if (!this.data)
+      return true;
+
+    if (this.data.length === 1) {
+      if (this.data[0] === 0x81)
+        return false;
+
+      if (this.data[0] >= 1 &amp;&amp; this.data[0] &lt;= 16)
+        return false;
+    }
+
+    if (this.data.length &lt;= 0x4b)
+      return this.value === this.data.length;
+
+    if (this.data.length &lt;= 0xff)
+      return this.value === opcodes.OP_PUSHDATA1;
+
+    if (this.data.length &lt;= 0xffff)
+      return this.value === opcodes.OP_PUSHDATA2;
+
+    assert(this.value === opcodes.OP_PUSHDATA4);
+
+    return true;
+  }
+
+  /**
+   * Test whether opcode is a disabled opcode.
+   * @returns {Boolean}
+   */
+
+  isDisabled() {
+    switch (this.value) {
+      case opcodes.OP_CAT:
+      case opcodes.OP_SUBSTR:
+      case opcodes.OP_LEFT:
+      case opcodes.OP_RIGHT:
+      case opcodes.OP_INVERT:
+      case opcodes.OP_AND:
+      case opcodes.OP_OR:
+      case opcodes.OP_XOR:
+      case opcodes.OP_2MUL:
+      case opcodes.OP_2DIV:
+      case opcodes.OP_MUL:
+      case opcodes.OP_DIV:
+      case opcodes.OP_MOD:
+      case opcodes.OP_LSHIFT:
+      case opcodes.OP_RSHIFT:
+        return true;
+    }
+    return false;
+  }
+
+  /**
+   * Test whether opcode is a branch (if/else/endif).
+   * @returns {Boolean}
+   */
+
+  isBranch() {
+    return this.value >= opcodes.OP_IF &amp;&amp; this.value &lt;= opcodes.OP_ENDIF;
+  }
+
+  /**
+   * Test opcode equality.
+   * @param {Opcode} op
+   * @returns {Boolean}
+   */
+
+  equals(op) {
+    assert(Opcode.isOpcode(op));
+
+    if (this.value !== op.value)
+      return false;
+
+    if (!this.data) {
+      assert(!op.data);
+      return true;
+    }
+
+    assert(op.data);
+
+    return this.data.equals(op.data);
+  }
+
+  /**
+   * Convert Opcode to opcode value.
+   * @returns {Number}
+   */
+
+  toOp() {
+    return this.value;
+  }
+
+  /**
+   * Covert opcode to data push.
+   * @returns {Buffer|null}
+   */
+
+  toData() {
+    return this.data;
+  }
+
+  /**
+   * Covert opcode to data length.
+   * @returns {Number}
+   */
+
+  toLength() {
+    return this.data ? this.data.length : -1;
+  }
+
+  /**
+   * Covert and _cast_ opcode to data push.
+   * @returns {Buffer|null}
+   */
+
+  toPush() {
+    if (this.value === opcodes.OP_0)
+      return common.small[0 + 1];
+
+    if (this.value === opcodes.OP_1NEGATE)
+      return common.small[-1 + 1];
+
+    if (this.value >= opcodes.OP_1 &amp;&amp; this.value &lt;= opcodes.OP_16)
+      return common.small[this.value - 0x50 + 1];
+
+    return this.toData();
+  }
+
+  /**
+   * Get string for opcode.
+   * @param {String?} enc
+   * @returns {Buffer|null}
+   */
+
+  toString(enc) {
+    const data = this.toPush();
+
+    if (!data)
+      return null;
+
+    return data.toString(enc || 'utf8');
+  }
+
+  /**
+   * Convert opcode to small integer.
+   * @returns {Number}
+   */
+
+  toSmall() {
+    if (this.value === opcodes.OP_0)
+      return 0;
+
+    if (this.value >= opcodes.OP_1 &amp;&amp; this.value &lt;= opcodes.OP_16)
+      return this.value - 0x50;
+
+    return -1;
+  }
+
+  /**
+   * Convert opcode to script number.
+   * @param {Boolean?} minimal
+   * @param {Number?} limit
+   * @returns {ScriptNum|null}
+   */
+
+  toNum(minimal, limit) {
+    if (this.value === opcodes.OP_0)
+      return ScriptNum.fromInt(0);
+
+    if (this.value === opcodes.OP_1NEGATE)
+      return ScriptNum.fromInt(-1);
+
+    if (this.value >= opcodes.OP_1 &amp;&amp; this.value &lt;= opcodes.OP_16)
+      return ScriptNum.fromInt(this.value - 0x50);
+
+    if (!this.data)
+      return null;
+
+    return ScriptNum.decode(this.data, minimal, limit);
+  }
+
+  /**
+   * Convert opcode to integer.
+   * @param {Boolean?} minimal
+   * @param {Number?} limit
+   * @returns {Number}
+   */
+
+  toInt(minimal, limit) {
+    const num = this.toNum(minimal, limit);
+
+    if (!num)
+      return -1;
+
+    return num.getInt();
+  }
+
+  /**
+   * Convert opcode to boolean.
+   * @returns {Boolean}
+   */
+
+  toBool() {
+    const smi = this.toSmall();
+
+    if (smi === -1)
+      return false;
+
+    return smi === 1;
+  }
+
+  /**
+   * Convert opcode to its symbolic representation.
+   * @returns {String}
+   */
+
+  toSymbol() {
+    if (this.value === -1)
+      return 'OP_INVALIDOPCODE';
+
+    const symbol = common.opcodesByVal[this.value];
+
+    if (!symbol)
+      return `0x${hex8(this.value)}`;
+
+    return symbol;
+  }
+
+  /**
+   * Calculate opcode size.
+   * @returns {Number}
+   */
+
+  getSize() {
+    if (!this.data)
+      return 1;
+
+    switch (this.value) {
+      case opcodes.OP_PUSHDATA1:
+        return 2 + this.data.length;
+      case opcodes.OP_PUSHDATA2:
+        return 3 + this.data.length;
+      case opcodes.OP_PUSHDATA4:
+        return 5 + this.data.length;
+      default:
+        return 1 + this.data.length;
+    }
+  }
+
+  /**
+   * Encode the opcode to a buffer writer.
+   * @param {BufferWriter} bw
+   */
+
+  write(bw) {
+    if (this.value === -1)
+      throw new Error('Cannot reserialize a parse error.');
+
+    if (!this.data) {
+      bw.writeU8(this.value);
+      return bw;
+    }
+
+    switch (this.value) {
+      case opcodes.OP_PUSHDATA1:
+        bw.writeU8(this.value);
+        bw.writeU8(this.data.length);
+        bw.writeBytes(this.data);
+        break;
+      case opcodes.OP_PUSHDATA2:
+        bw.writeU8(this.value);
+        bw.writeU16(this.data.length);
+        bw.writeBytes(this.data);
+        break;
+      case opcodes.OP_PUSHDATA4:
+        bw.writeU8(this.value);
+        bw.writeU32(this.data.length);
+        bw.writeBytes(this.data);
+        break;
+      default:
+        assert(this.value === this.data.length);
+        bw.writeU8(this.value);
+        bw.writeBytes(this.data);
+        break;
+    }
+
+    return bw;
+  }
+
+  /**
+   * Encode the opcode.
+   * @returns {Buffer}
+   */
+
+  encode() {
+    const size = this.getSize();
+    return this.write(bio.write(size)).render();
+  }
+
+  /**
+   * Convert the opcode to a bitcoind test string.
+   * @returns {String} Human-readable script code.
+   */
+
+  toFormat() {
+    if (this.value === -1)
+      return '0x01';
+
+    if (this.data) {
+      // Numbers
+      if (this.data.length &lt;= 4) {
+        const num = this.toNum();
+        if (this.equals(Opcode.fromNum(num)))
+          return num.toString(10);
+      }
+
+      const symbol = common.opcodesByVal[this.value];
+      const data = this.data.toString('hex');
+
+      // Direct push
+      if (!symbol) {
+        const size = hex8(this.value);
+        return `0x${size} 0x${data}`;
+      }
+
+      // Pushdatas
+      let size = this.data.length.toString(16);
+
+      while (size.length % 2 !== 0)
+        size = '0' + size;
+
+      return `${symbol} 0x${size} 0x${data}`;
+    }
+
+    // Opcodes
+    const symbol = common.opcodesByVal[this.value];
+    if (symbol)
+      return symbol;
+
+    // Unknown opcodes
+    const value = hex8(this.value);
+
+    return `0x${value}`;
+  }
+
+  /**
+   * Format the opcode as bitcoind asm.
+   * @param {Boolean?} decode - Attempt to decode hash types.
+   * @returns {String} Human-readable script.
+   */
+
+  toASM(decode) {
+    if (this.value === -1)
+      return '[error]';
+
+    if (this.data)
+      return common.toASM(this.data, decode);
+
+    return common.opcodesByVal[this.value] || 'OP_UNKNOWN';
+  }
+
+  /**
+   * Instantiate an opcode from a number opcode.
+   * @param {Number} op
+   * @returns {Opcode}
+   */
+
+  static fromOp(op) {
+    assert(typeof op === 'number');
+
+    const cached = opCache[op];
+
+    assert(cached, 'Bad opcode.');
+
+    return cached;
+  }
+
+  /**
+   * Instantiate a pushdata opcode from
+   * a buffer (will encode minimaldata).
+   * @param {Buffer} data
+   * @returns {Opcode}
+   */
+
+  static fromData(data) {
+    assert(Buffer.isBuffer(data));
+
+    if (data.length === 1) {
+      if (data[0] === 0x81)
+        return this.fromOp(opcodes.OP_1NEGATE);
+
+      if (data[0] >= 1 &amp;&amp; data[0] &lt;= 16)
+        return this.fromOp(data[0] + 0x50);
+    }
+
+    return this.fromPush(data);
+  }
+
+  /**
+   * Instantiate a pushdata opcode from a
+   * buffer (this differs from fromData in
+   * that it will _always_ be a pushdata op).
+   * @param {Buffer} data
+   * @returns {Opcode}
+   */
+
+  static fromPush(data) {
+    assert(Buffer.isBuffer(data));
+
+    if (data.length === 0)
+      return this.fromOp(opcodes.OP_0);
+
+    if (data.length &lt;= 0x4b)
+      return new this(data.length, data);
+
+    if (data.length &lt;= 0xff)
+      return new this(opcodes.OP_PUSHDATA1, data);
+
+    if (data.length &lt;= 0xffff)
+      return new this(opcodes.OP_PUSHDATA2, data);
+
+    if (data.length &lt;= 0xffffffff)
+      return new this(opcodes.OP_PUSHDATA4, data);
+
+    throw new Error('Pushdata size too large.');
+  }
+
+  /**
+   * Instantiate a pushdata opcode from a string.
+   * @param {String} str
+   * @param {String} [enc=utf8]
+   * @returns {Opcode}
+   */
+
+  static fromString(str, enc) {
+    assert(typeof str === 'string');
+    const data = Buffer.from(str, enc || 'utf8');
+    return this.fromData(data);
+  }
+
+  /**
+   * Instantiate an opcode from a small number.
+   * @param {Number} num
+   * @returns {Opcode}
+   */
+
+  static fromSmall(num) {
+    assert((num &amp; 0xff) === num &amp;&amp; num >= 0 &amp;&amp; num &lt;= 16);
+    return this.fromOp(num === 0 ? 0 : num + 0x50);
+  }
+
+  /**
+   * Instantiate an opcode from a ScriptNum.
+   * @param {ScriptNumber} num
+   * @returns {Opcode}
+   */
+
+  static fromNum(num) {
+    assert(ScriptNum.isScriptNum(num));
+    return this.fromData(num.encode());
+  }
+
+  /**
+   * Instantiate an opcode from a Number.
+   * @param {Number} num
+   * @returns {Opcode}
+   */
+
+  static fromInt(num) {
+    assert(Number.isSafeInteger(num));
+
+    if (num === 0)
+      return this.fromOp(opcodes.OP_0);
+
+    if (num === -1)
+      return this.fromOp(opcodes.OP_1NEGATE);
+
+    if (num >= 1 &amp;&amp; num &lt;= 16)
+      return this.fromOp(num + 0x50);
+
+    return this.fromNum(ScriptNum.fromNumber(num));
+  }
+
+  /**
+   * Instantiate an opcode from a Number.
+   * @param {Boolean} value
+   * @returns {Opcode}
+   */
+
+  static fromBool(value) {
+    assert(typeof value === 'boolean');
+    return this.fromSmall(value ? 1 : 0);
+  }
+
+  /**
+   * Instantiate a pushdata opcode from symbolic name.
+   * @example
+   *   Opcode.fromSymbol('checksequenceverify')
+   * @param {String} name
+   * @returns {Opcode}
+   */
+
+  static fromSymbol(name) {
+    assert(typeof name === 'string');
+    assert(name.length > 0);
+
+    if (name.charCodeAt(0) &amp; 32)
+      name = name.toUpperCase();
+
+    if (!/^OP_/.test(name))
+      name = `OP_${name}`;
+
+    const op = common.opcodes[name];
+
+    if (op != null)
+      return this.fromOp(op);
+
+    assert(/^OP_0X/.test(name), 'Unknown opcode.');
+    assert(name.length === 7, 'Unknown opcode.');
+
+    const value = parseInt(name.substring(5), 16);
+
+    assert((value &amp; 0xff) === value, 'Unknown opcode.');
+
+    return this.fromOp(value);
+  }
+
+  /**
+   * Instantiate opcode from buffer reader.
+   * @param {BufferReader} br
+   * @returns {Opcode}
+   */
+
+  static read(br) {
+    const value = br.readU8();
+    const op = opCache[value];
+
+    if (op)
+      return op;
+
+    switch (value) {
+      case opcodes.OP_PUSHDATA1: {
+        if (br.left() &lt; 1)
+          return PARSE_ERROR;
+
+        const size = br.readU8();
+
+        if (br.left() &lt; size) {
+          br.seek(br.left());
+          return PARSE_ERROR;
+        }
+
+        const data = br.readBytes(size);
+
+        return new this(value, data);
+      }
+      case opcodes.OP_PUSHDATA2: {
+        if (br.left() &lt; 2) {
+          br.seek(br.left());
+          return PARSE_ERROR;
+        }
+
+        const size = br.readU16();
+
+        if (br.left() &lt; size) {
+          br.seek(br.left());
+          return PARSE_ERROR;
+        }
+
+        const data = br.readBytes(size);
+
+        return new this(value, data);
+      }
+      case opcodes.OP_PUSHDATA4: {
+        if (br.left() &lt; 4) {
+          br.seek(br.left());
+          return PARSE_ERROR;
+        }
+
+        const size = br.readU32();
+
+        if (br.left() &lt; size) {
+          br.seek(br.left());
+          return PARSE_ERROR;
+        }
+
+        const data = br.readBytes(size);
+
+        return new this(value, data);
+      }
+      default: {
+        if (br.left() &lt; value) {
+          br.seek(br.left());
+          return PARSE_ERROR;
+        }
+
+        const data = br.readBytes(value);
+
+        return new this(value, data);
+      }
+    }
+  }
+
+  /**
+   * Instantiate opcode from serialized data.
+   * @param {Buffer} data
+   * @returns {Opcode}
+   */
+
+  static decode(data) {
+    return this.read(bio.read(data));
+  }
+
+  /**
+   * Test whether an object an Opcode.
+   * @param {Object} obj
+   * @returns {Boolean}
+   */
+
+  static isOpcode(obj) {
+    return obj instanceof Opcode;
+  }
+}
+
+/*
+ * Helpers
+ */
+
+function hex8(num) {
+  if (num &lt;= 0x0f)
+    return '0' + num.toString(16);
+  return num.toString(16);
+}
+
+/*
+ * Fill Cache
+ */
+
+PARSE_ERROR = Object.freeze(new Opcode(-1));
+
+for (let value = 0x00; value &lt;= 0xff; value++) {
+  if (value >= 0x01 &amp;&amp; value &lt;= 0x4e) {
+    opCache.push(null);
+    continue;
+  }
+  const op = new Opcode(value);
+  opCache.push(Object.freeze(op));
+}
+
+/*
+ * Expose
+ */
+
+module.exports = Opcode;
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-blockchain.html">blockchain</a></li><li><a href="module-blockchain_common.html">blockchain/common</a></li><li><a href="module-blockstore.html">blockstore</a></li><li><a href="module-blockstore_common.html">blockstore/common</a></li><li><a href="module-blockstore_records.html">blockstore/records</a></li><li><a href="module-coins.html">coins</a></li><li><a href="module-covenants.html">covenants</a></li><li><a href="module-dns_common.html">dns/common</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-hd.html">hd</a></li><li><a href="module-hsd.html">hsd</a></li><li><a href="module-mempool.html">mempool</a></li><li><a href="module-mining.html">mining</a></li><li><a href="module-mining_common.html">mining/common</a></li><li><a href="module-net.html">net</a></li><li><a href="module-net_bip152.html">net/bip152</a></li><li><a href="module-net_common.html">net/common</a></li><li><a href="module-net_packets.html">net/packets</a></li><li><a href="module-node.html">node</a></li><li><a href="module-primitives.html">primitives</a></li><li><a href="module-protocol.html">protocol</a></li><li><a href="module-protocol_consensus.html">protocol/consensus</a></li><li><a href="module-protocol_errors.html">protocol/errors</a></li><li><a href="module-protocol_networks.html">protocol/networks</a></li><li><a href="module-protocol_policy.html">protocol/policy</a></li><li><a href="module-script.html">script</a></li><li><a href="module-script_common.html">script/common</a></li><li><a href="module-ui.html">ui</a></li><li><a href="module-utils.html">utils</a></li><li><a href="module-utils_util.html">utils/util</a></li><li><a href="module-wallet.html">wallet</a></li><li><a href="module-wallet_common.html">wallet/common</a></li><li><a href="module-wallet_plugin.html">wallet/plugin</a></li><li><a href="module-wallet_records.html">wallet/records</a></li><li><a href="module-workers.html">workers</a></li><li><a href="module-workers_jobs.html">workers/jobs</a></li><li><a href="module-workers_packets.html">workers/packets</a></li></ul><h3>Classes</h3><ul><li><a href="AirdropKey.html">AirdropKey</a></li><li><a href="AirdropProof.html">AirdropProof</a></li><li><a href="BidReveal.html">BidReveal</a></li><li><a href="BitField.html">BitField</a></li><li><a href="BitView.html">BitView</a></li><li><a href="BlindBid.html">BlindBid</a></li><li><a href="BlindValue.html">BlindValue</a></li><li><a href="BlockProof.html">BlockProof</a></li><li><a href="Brontide.html">Brontide</a></li><li><a href="BrontideStream.html">BrontideStream</a></li><li><a href="ChainFlags.html">ChainFlags</a></li><li><a href="ChainState.html">ChainState</a></li><li><a href="CipherState.html">CipherState</a></li><li><a href="Claim.html">Claim</a></li><li><a href="DetailsMember.html">DetailsMember</a></li><li><a href="DS.html">DS</a></li><li><a href="Field.html">Field</a></li><li><a href="GLUE4.html">GLUE4</a></li><li><a href="GLUE6.html">GLUE6</a></li><li><a href="HandshakeState.html">HandshakeState</a></li><li><a href="HashList.html">HashList</a></li><li><a href="MigrateBlockStore.html">MigrateBlockStore</a></li><li><a href="MigrateChainState.html">MigrateChainState</a></li><li><a href="MigrateChangeAddress.html">MigrateChangeAddress</a></li><li><a href="MigrateMigrations.html">MigrateMigrations</a></li><li><a href="MigrateTreeState.html">MigrateTreeState</a></li><li><a href="module.migrations.MigrationState.html">MigrationState</a></li><li><a href="module-blockchain.Chain.html">Chain</a></li><li><a href="module-blockchain.ChainDB.html">ChainDB</a></li><li><a href="module-blockchain.ChainEntry.html">ChainEntry</a></li><li><a href="module-blockchain.ChainMigrator.html">ChainMigrator</a></li><li><a href="module-blockchain.ChainMigratorOptions.html">ChainMigratorOptions</a></li><li><a href="module-blockchain.ChainOptions.html">ChainOptions</a></li><li><a href="module-blockchain.DeploymentState.html">DeploymentState</a></li><li><a href="module-blockchain.WalletMigrationResult.html">WalletMigrationResult</a></li><li><a href="module-blockchain.WalletMigrator.html">WalletMigrator</a></li><li><a href="module-blockstore.AbstractBatch.html">AbstractBatch</a></li><li><a href="module-blockstore.AbstractBlockStore.html">AbstractBlockStore</a></li><li><a href="module-blockstore.FileBatch.html">FileBatch</a></li><li><a href="module-blockstore.LevelBatch.html">LevelBatch</a></li><li><a href="module-blockstore_records-BlockRecord.html">BlockRecord</a></li><li><a href="module-blockstore_records-FileRecord.html">FileRecord</a></li><li><a href="module-blockstore_FileBlockStore.html">blockstore:FileBlockStore</a></li><li><a href="module-blockstore_LevelBlockStore.html">blockstore:LevelBlockStore</a></li><li><a href="module-coins.CoinEntry.html">CoinEntry</a></li><li><a href="module-coins.Coins.html">Coins</a></li><li><a href="module-coins.CoinView.html">CoinView</a></li><li><a href="module-coins.UndoCoins.html">UndoCoins</a></li><li><a href="module-currency.Amount.html">Amount</a></li><li><a href="module-errors-CriticalError.html">CriticalError</a></li><li><a href="module-hd.Mnemonic.html">Mnemonic</a></li><li><a href="module-hd.PrivateKey.html">PrivateKey</a></li><li><a href="module-hd.PublicKey.html">PublicKey</a></li><li><a href="module-http.HTTPOptions.html">HTTPOptions</a></li><li><a href="module-http.RPC.html">RPC</a></li><li><a href="module-http.Server.html">Server</a></li><li><a href="module-http.TransactionOptions.html">TransactionOptions</a></li><li><a href="module-mempool.AirdropEntry.html">AirdropEntry</a></li><li><a href="module-mempool.ClaimEntry.html">ClaimEntry</a></li><li><a href="module-mempool.ConfirmStats.html">ConfirmStats</a></li><li><a href="module-mempool.Mempool.html">Mempool</a></li><li><a href="module-mempool.MempoolEntry.html">MempoolEntry</a></li><li><a href="module-mempool.MempoolOptions.html">MempoolOptions</a></li><li><a href="module-mempool.PolicyEstimator.html">PolicyEstimator</a></li><li><a href="module-migrations.AbstractMigration.html">AbstractMigration</a></li><li><a href="module-migrations.MigrationResult.html">MigrationResult</a></li><li><a href="module-migrations.Migrator.html">Migrator</a></li><li><a href="module-mining.BlockAirdrop.html">BlockAirdrop</a></li><li><a href="module-mining.BlockClaim.html">BlockClaim</a></li><li><a href="module-mining.BlockEntry.html">BlockEntry</a></li><li><a href="module-mining.BlockTemplate.html">BlockTemplate</a></li><li><a href="module-mining.CPUMiner.html">CPUMiner</a></li><li><a href="module-mining.Miner.html">Miner</a></li><li><a href="module-mining.MinerOptions.html">MinerOptions</a></li><li><a href="module-net.BroadcastItem.html">BroadcastItem</a></li><li><a href="module-net.Framer.html">Framer</a></li><li><a href="module-net.HostEntry.html">HostEntry</a></li><li><a href="module-net.HostList.html">HostList</a></li><li><a href="module-net.HostListOptions.html">HostListOptions</a></li><li><a href="module-net.LocalAddress.html">LocalAddress</a></li><li><a href="module-net.NetAddress.html">NetAddress</a></li><li><a href="module-net.Parser.html">Parser</a></li><li><a href="module-net.Peer.html">Peer</a></li><li><a href="module-net.PeerList.html">PeerList</a></li><li><a href="module-net.PeerOptions.html">PeerOptions</a></li><li><a href="module-net.Pool.html">Pool</a></li><li><a href="module-net.PoolOptions.html">PoolOptions</a></li><li><a href="module-net_bip152-CompactBlock.html">CompactBlock</a></li><li><a href="module-net_bip152-TXRequest.html">TXRequest</a></li><li><a href="module-net_bip152-TXResponse.html">TXResponse</a></li><li><a href="module-net_packets-AddrPacket.html">AddrPacket</a></li><li><a href="module-net_packets-AirdropPacket.html">AirdropPacket</a></li><li><a href="module-net_packets-BlockPacket.html">BlockPacket</a></li><li><a href="module-net_packets-BlockTxnPacket.html">BlockTxnPacket</a></li><li><a href="module-net_packets-ClaimPacket.html">ClaimPacket</a></li><li><a href="module-net_packets-CmpctBlockPacket.html">CmpctBlockPacket</a></li><li><a href="module-net_packets-FeeFilterPacket.html">FeeFilterPacket</a></li><li><a href="module-net_packets-FilterAddPacket.html">FilterAddPacket</a></li><li><a href="module-net_packets-FilterClearPacket.html">FilterClearPacket</a></li><li><a href="module-net_packets-FilterLoadPacket.html">FilterLoadPacket</a></li><li><a href="module-net_packets-GetAddrPacket.html">GetAddrPacket</a></li><li><a href="module-net_packets-GetBlocksPacket.html">GetBlocksPacket</a></li><li><a href="module-net_packets-GetBlockTxnPacket.html">GetBlockTxnPacket</a></li><li><a href="module-net_packets-GetDataPacket.html">GetDataPacket</a></li><li><a href="module-net_packets-GetHeadersPacket.html">GetHeadersPacket</a></li><li><a href="module-net_packets-GetProofPacket.html">GetProofPacket</a></li><li><a href="module-net_packets-HeadersPacket.html">HeadersPacket</a></li><li><a href="module-net_packets-InvPacket.html">InvPacket</a></li><li><a href="module-net_packets-MempoolPacket.html">MempoolPacket</a></li><li><a href="module-net_packets-MerkleBlockPacket.html">MerkleBlockPacket</a></li><li><a href="module-net_packets-NotFoundPacket.html">NotFoundPacket</a></li><li><a href="module-net_packets-Packet.html">Packet</a></li><li><a href="module-net_packets-PingPacket.html">PingPacket</a></li><li><a href="module-net_packets-PongPacket.html">PongPacket</a></li><li><a href="module-net_packets-ProofPacket.html">ProofPacket</a></li><li><a href="module-net_packets-RejectPacket.html">RejectPacket</a></li><li><a href="module-net_packets-SendCmpctPacket.html">SendCmpctPacket</a></li><li><a href="module-net_packets-SendHeadersPacket.html">SendHeadersPacket</a></li><li><a href="module-net_packets-TXPacket.html">TXPacket</a></li><li><a href="module-net_packets-UnknownPacket.html">UnknownPacket</a></li><li><a href="module-net_packets-VerackPacket.html">VerackPacket</a></li><li><a href="module-net_packets-VersionPacket.html">VersionPacket</a></li><li><a href="module-node.FullNode.html">FullNode</a></li><li><a href="module-node.Node.html">Node</a></li><li><a href="module-node.NodeClient.html">NodeClient</a></li><li><a href="module-node.NullClient.html">NullClient</a></li><li><a href="module-node.SPVNode.html">SPVNode</a></li><li><a href="module-primitives.AbstractBlock.html">AbstractBlock</a></li><li><a href="module-primitives.Address.html">Address</a></li><li><a href="module-primitives.Block.html">Block</a></li><li><a href="module-primitives.Coin.html">Coin</a></li><li><a href="module-primitives.CoinSelector.html">CoinSelector</a></li><li><a href="module-primitives.Covenant.html">Covenant</a></li><li><a href="module-primitives.Headers.html">Headers</a></li><li><a href="module-primitives.Input.html">Input</a></li><li><a href="module-primitives.InvItem.html">InvItem</a></li><li><a href="module-primitives.KeyRing.html">KeyRing</a></li><li><a href="module-primitives.MemBlock.html">MemBlock</a></li><li><a href="module-primitives.MerkleBlock.html">MerkleBlock</a></li><li><a href="module-primitives.MTX.html">MTX</a></li><li><a href="module-primitives.Outpoint.html">Outpoint</a></li><li><a href="module-primitives.Output.html">Output</a></li><li><a href="module-primitives.TX.html">TX</a></li><li><a href="module-primitives.TXMeta.html">TXMeta</a></li><li><a href="module-protocol.Network.html">Network</a></li><li><a href="module-protocol.TimeData.html">TimeData</a></li><li><a href="module-protocol_errors-VerifyError.html">VerifyError</a></li><li><a href="module-script.Opcode.html">Opcode</a></li><li><a href="module-script.Script.html">Script</a></li><li><a href="module-script.ScriptError.html">ScriptError</a></li><li><a href="module-script.ScriptNum.html">ScriptNum</a></li><li><a href="module-script.SigCache.html">SigCache</a></li><li><a href="module-script.Stack.html">Stack</a></li><li><a href="module-script.Witness.html">Witness</a></li><li><a href="module-ui.URI.html">URI</a></li><li><a href="module-wallet.Account.html">Account</a></li><li><a href="module-wallet.Balance.html">Balance</a></li><li><a href="module-wallet.BlockRecord.html">BlockRecord</a></li><li><a href="module-wallet.Credit.html">Credit</a></li><li><a href="module-wallet.Details.html">Details</a></li><li><a href="module-wallet.HTTP.html">HTTP</a></li><li><a href="module-wallet.MasterKey.html">MasterKey</a></li><li><a href="module-wallet.Path.html">Path</a></li><li><a href="module-wallet.Paths.html">Paths</a></li><li><a href="module-wallet.RPC.html">RPC</a></li><li><a href="module-wallet.TXDB.html">TXDB</a></li><li><a href="module-wallet.Wallet.html">Wallet</a></li><li><a href="module-wallet.WalletCoinView.html">WalletCoinView</a></li><li><a href="module-wallet.WalletDB.html">WalletDB</a></li><li><a href="module-wallet.WalletKey.html">WalletKey</a></li><li><a href="module-wallet.WalletMigratorOptions.html">WalletMigratorOptions</a></li><li><a href="module-wallet.WalletOptions.html">WalletOptions</a></li><li><a href="module-wallet_plugin-Plugin.html">Plugin</a></li><li><a href="module-wallet_records-BlockMeta.html">BlockMeta</a></li><li><a href="module-wallet_records-ChainState.html">ChainState</a></li><li><a href="module-wallet_records-MapRecord.html">MapRecord</a></li><li><a href="module-wallet_records-TXRecord.html">TXRecord</a></li><li><a href="module-workers.Framer.html">Framer</a></li><li><a href="module-workers.Master.html">Master</a></li><li><a href="module-workers.Parent.html">Parent</a></li><li><a href="module-workers.Parser.html">Parser</a></li><li><a href="module-workers.Worker.html">Worker</a></li><li><a href="module-workers.WorkerPool.html">WorkerPool</a></li><li><a href="module-workers_packets-CheckInputPacket.html">CheckInputPacket</a></li><li><a href="module-workers_packets-CheckInputResultPacket.html">CheckInputResultPacket</a></li><li><a href="module-workers_packets-CheckPacket.html">CheckPacket</a></li><li><a href="module-workers_packets-CheckResultPacket.html">CheckResultPacket</a></li><li><a href="module-workers_packets-ECSignPacket.html">ECSignPacket</a></li><li><a href="module-workers_packets-ECSignResultPacket.html">ECSignResultPacket</a></li><li><a href="module-workers_packets-ECVerifyPacket.html">ECVerifyPacket</a></li><li><a href="module-workers_packets-ECVerifyResultPacket.html">ECVerifyResultPacket</a></li><li><a href="module-workers_packets-EnvPacket.html">EnvPacket</a></li><li><a href="module-workers_packets-ErrorPacket.html">ErrorPacket</a></li><li><a href="module-workers_packets-ErrorResultPacket.html">ErrorResultPacket</a></li><li><a href="module-workers_packets-EventPacket.html">EventPacket</a></li><li><a href="module-workers_packets-LogPacket.html">LogPacket</a></li><li><a href="module-workers_packets-MinePacket.html">MinePacket</a></li><li><a href="module-workers_packets-MineResultPacket.html">MineResultPacket</a></li><li><a href="module-workers_packets-Packet.html">Packet</a></li><li><a href="module-workers_packets-ScryptPacket.html">ScryptPacket</a></li><li><a href="module-workers_packets-ScryptResultPacket.html">ScryptResultPacket</a></li><li><a href="module-workers_packets-SignInputPacket.html">SignInputPacket</a></li><li><a href="module-workers_packets-SignInputResultPacket.html">SignInputResultPacket</a></li><li><a href="module-workers_packets-SignPacket.html">SignPacket</a></li><li><a href="module-workers_packets-SignResultPacket.html">SignResultPacket</a></li><li><a href="NameDelta.html">NameDelta</a></li><li><a href="NameState.html">NameState</a></li><li><a href="NS.html">NS</a></li><li><a href="Ownership.html">Ownership</a></li><li><a href="Proof.html">Proof</a></li><li><a href="ProofData.html">ProofData</a></li><li><a href="RecursiveServer.html">RecursiveServer</a></li><li><a href="Reserved.html">Reserved</a></li><li><a href="Resource.html">Resource</a></li><li><a href="RootCache.html">RootCache</a></li><li><a href="RootServer.html">RootServer</a></li><li><a href="Seeder.html">Seeder</a></li><li><a href="SlidingWindow.html">SlidingWindow</a></li><li><a href="StateCache.html">StateCache</a></li><li><a href="SymmetricState.html">SymmetricState</a></li><li><a href="SYNTH4.html">SYNTH4</a></li><li><a href="SYNTH6.html">SYNTH6</a></li><li><a href="TXT.html">TXT</a></li><li><a href="WalletNode.html">WalletNode</a></li></ul><h3>Global</h3><ul><li><a href="global.html#bindExit">bindExit</a></li><li><a href="global.html#checksig">checksig</a></li><li><a href="global.html#decode">decode</a></li><li><a href="global.html#encode">encode</a></li><li><a href="global.html#fromFloat">fromFloat</a></li><li><a href="global.html#groupKey">groupKey</a></li><li><a href="global.html#insert">insert</a></li><li><a href="global.html#listenExit">listenExit</a></li><li><a href="global.html#migrationLayout">migrationLayout</a></li><li><a href="global.html#oldLayout">oldLayout</a></li><li><a href="global.html#remove">remove</a></li><li><a href="global.html#search">search</a></li><li><a href="global.html#toFloat">toFloat</a></li><li><a href="global.html#validateKey">validateKey</a></li><li><a href="global.html#validateSignature">validateSignature</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 1.0.0</a> on Fri Jun 24 2022 16:08:43 GMT+0000 (Coordinated Universal Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
