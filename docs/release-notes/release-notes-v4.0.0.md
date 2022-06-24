@@ -1,4 +1,4 @@
-v4.x Release notes
+v4.0.0 Release notes
 ==================
 
 <!-- toc -->
