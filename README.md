@@ -92,6 +92,28 @@ In order to notify peers that you are accepting inbound, you _must_ pass
 $ hsd --listen --public-host [my-public-ip-address] --max-inbound 50
 ```
 
+### Upgrade
+
+Go to the installation directory and update the repo.
+
+```
+$ cd ${INSTALL_DIR}/hsd
+$ git pull
+```
+Select a branch and upgrade. 
+
+```
+$ git checkout <branch>
+$ npm install
+```
+
+After installation of the new version, activate it by restarting the HSD.
+
+Note that when upgrading from version 3.x to 4.x, it is required 
+to pass `--chain-migrate=3` at restart.
+When upgrading from v2.x `--wallet-migrate=1` should also be passed.
+
+
 ### Mining
 
 To mine with a CPU, HSD should be used in combination with [hs-client].
