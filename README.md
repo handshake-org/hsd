@@ -92,7 +92,7 @@ In order to notify peers that you are accepting inbound, you _must_ pass
 $ hsd --listen --public-host [my-public-ip-address] --max-inbound 50
 ```
 
-### Upgrade
+### Upgrading
 
 Go to the installation directory and update the repo.
 
