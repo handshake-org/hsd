@@ -69,7 +69,7 @@ process.on('SIGINT', async () => {
 
 node.on('abort', async (err) => {
   const timeout = setTimeout(() => {
-    console.error('Shutdown is taking a long time. Exitting.');
+    console.error('Shutdown is taking a long time. Exiting.');
     process.exit(3);
   }, 5000);
 
