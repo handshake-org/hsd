@@ -11,6 +11,7 @@ const NameState = require('../lib/covenants/namestate');
 const {Resource} = require('../lib/dns/resource');
 const {types: packetTypes} = require('../lib/net/packets');
 const {types: urkelTypes} = require('urkel').Proof;
+const {forValue} = require('./util/common');
 
 const network = Network.get('regtest');
 const {
@@ -95,14 +96,8 @@ describe('SPV', function() {
 
     it('should generate blocks', async () => {
       addr = await wallet.receiveAddress(0);
-      const waiter = new Promise((res, rej) => {
-        spv.on('connect', (entry) => {
-          if (entry.height === 10)
-            res();
-        });
-      });
       await mineBlocks(10);
-      await waiter;
+      await forValue(spv.chain, 'height', 10);
       assert.strictEqual(full.chain.height, spv.chain.height);
     });
 
@@ -209,16 +204,24 @@ describe('SPV', function() {
       const proofType = await waiter1;
       assert.strictEqual(proofType, urkelTypes.TYPE_EXISTS);
 
-      // Restore
-      const waiter2 = new Promise((res, rej) => {
-        spv.on('connect', (entry) => {
-          if (entry.height === full.chain.height)
-            res();
-        });
-      });
       await spv.chain.removeInvalid(entry.hash);
-      await waiter2;
+      await forValue(spv.chain, 'height', full.chain.height);
       assert.strictEqual(full.chain.height, spv.chain.height);
+    });
+
+    it('should resync multiple times', async () => {
+      const resetHeight = 1;
+      const fullNodeHeight = full.chain.height;
+
+      // Rescan once
+      await spv.chain.reset(resetHeight);
+      await forValue(spv.chain, 'height', fullNodeHeight);
+      assert(spv.chain.height === fullNodeHeight);
+
+      // Rescan again
+      await spv.chain.reset(resetHeight);
+      await forValue(spv.chain, 'height', fullNodeHeight);
+      assert(spv.chain.height === fullNodeHeight);
     });
 
     it('should request name data with unknown tree root', async () => {
