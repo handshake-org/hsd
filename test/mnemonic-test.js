@@ -61,4 +61,25 @@ describe('Mnemonic', function() {
     assert.strictEqual(m2.language, m1.language);
     assert.bufferEqual(m2.toSeed(), m1.toSeed());
   });
+
+  it('should standardize phrase', () => {
+    for (const language of Object.keys(tests)) {
+      const test = tests[language];
+
+      // modified phrase contains new lines before every space
+      const phrase = test[0][1];
+      const phraseWithNl = phrase.replace(/(\s|\u3000)/g, '\n$&');
+
+      // ensure new lines are added
+      assert(!phrase.includes('\n'));
+      assert(phraseWithNl.includes('\n'));
+
+      const m1 = Mnemonic.fromPhrase(phrase);
+      const m2 = Mnemonic.fromPhrase(phraseWithNl);
+
+      // Both mnemonics should have same phrase without new lines
+      assert(m1.getPhrase() === m2.getPhrase());
+      assert(!m1.getPhrase().includes('\n'));
+    }
+  });
 });
