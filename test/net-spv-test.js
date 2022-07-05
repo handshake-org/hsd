@@ -101,7 +101,7 @@ describe('SPV', function() {
       assert.strictEqual(full.chain.height, spv.chain.height);
     });
 
-    it('should get proof of nonexistence', async () => {
+    it('should get proof of nonexistence from empty tree', async () => {
       const waiter = new Promise((res, rej) => {
         spv.pool.once('packet', (packet) => {
           if (packet.type === packetTypes.PROOF)
@@ -109,7 +109,7 @@ describe('SPV', function() {
         });
       });
 
-      const ns = await spv.pool.resolve(nameHash);
+      const ns = await spv.pool.resolve(Buffer.alloc(32, 0xab));
       assert.strictEqual(ns, null);
       const proofType = await waiter;
       assert.strictEqual(proofType, urkelTypes.TYPE_DEADEND);
@@ -133,6 +133,20 @@ describe('SPV', function() {
         )
       );
       await mineBlocks(treeInterval + SAFE_ROOT);
+    });
+
+    it('should get proof of nonexistence from filled tree', async () => {
+      const waiter = new Promise((res, rej) => {
+        spv.pool.once('packet', (packet) => {
+          if (packet.type === packetTypes.PROOF)
+            res(packet.proof.type);
+        });
+      });
+
+      const ns = await spv.pool.resolve(Buffer.alloc(32, 0xab));
+      assert.strictEqual(ns, null);
+      const proofType = await waiter;
+      assert.strictEqual(proofType, urkelTypes.TYPE_COLLISION);
     });
 
     it('should get proof of existence with data', async () => {
