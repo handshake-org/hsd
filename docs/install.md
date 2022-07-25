@@ -109,7 +109,7 @@ $ docker run --name hsd -p 12037:12037 hsd:$VERSION-$COMMIT \
 
 To test connectivity, curl the info endpoint:
 ```bash
-$ curl http://x:foo@localhost:14037/
+$ curl http://x:foo@localhost:12037/
 ```
 
 > Note: by default, none of the container's ports are exposed. Depending
