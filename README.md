@@ -3,7 +3,7 @@
 [![Build Status][ci-status-img]][ci-status-url]
 [![Coverage Status][coverage-status-img]][coverage-status-url]
 
-__HSD__ is an implementation of the [Handshake][handshake] Protocol.
+**HSD** is an implementation of the [Handshake][handshake] Protocol.
 
 ## Documentation
 
@@ -61,7 +61,7 @@ installed on your system _before_ installing `hsd`.
 By default HSD will listen on an authoritative and recursive nameserver (ports
 `5349` and `5350` respectively). To configure this:
 
-``` bash
+```bash
 # Have the authoritative server listen on port 5300.
 $ hsd --ns-port 5300
 
@@ -71,7 +71,7 @@ $ hsd --rs-host 0.0.0.0 --rs-port 53 # Warning: public!
 
 Your localhost should now be diggable:
 
-``` bash
+```bash
 $ dig @127.0.0.1 www.ietf.org +dnssec
 $ dig @127.0.0.1 -p 5300 org +dnssec
 ```
@@ -96,7 +96,7 @@ $ hsd --listen --public-host [my-public-ip-address] --max-inbound 50
 
 To mine with a CPU, HSD should be used in combination with [hs-client].
 
-``` bash
+```bash
 # To boot and listen publicly on the HTTP server...
 # Optionally pass in a custom coinbase address.
 $ hsd --http-host '::' --api-key 'hunter2' \
@@ -106,7 +106,7 @@ $ hsd --http-host '::' --api-key 'hunter2' \
 Once HSD is running, we can use [hs-client] to activate the miner
 using the `setgenerate` RPC.
 
-``` bash
+```bash
 $ hsd-rpc --http-host 'my-ip-address' \
   --api-key 'hunter2' setgenerate true 1
 ```
@@ -120,7 +120,7 @@ developers. See [hs-airdrop][airdrop] for instructions on how to redeem coins.
 
 First we should look at the current status of a name we want.
 
-``` bash
+```bash
 $ hsd-rpc getnameinfo handshake
 ```
 
@@ -129,7 +129,7 @@ necessary to start the bidding process. After an open transaction is mined,
 there is a short delay before bidding begins. This delay is necessary to ensure
 the auction's state is inserted into the [urkel] tree.
 
-``` bash
+```bash
 # Attempt to open bidding for `handshake`.
 $ hsw-rpc sendopen handshake
 ```
@@ -138,7 +138,7 @@ Using `getnameinfo` we can check to see when bidding will begin. Once the
 auction enters the bidding state, we can send a bid, with a lockup-value to
 conceal our true bid.
 
-``` bash
+```bash
 # Send a bid of 5 coins, with a lockup value of 10 coins.
 # These units are in HNS (1 HNS = 1,000,000 dollarydoos).
 $ hsw-rpc sendbid handshake 5 10
@@ -147,7 +147,7 @@ $ hsw-rpc sendbid handshake 5 10
 After the appropriate amount of time has passed, (1 day in the case of
 testnet), we should reveal our bid.
 
-``` bash
+```bash
 # Reveal our bid for `handshake`.
 $ hsw-rpc sendreveal handshake
 ```
@@ -155,7 +155,7 @@ $ hsw-rpc sendreveal handshake
 We can continue monitoring the status, now with the wallet's version of
 getnameinfo:
 
-``` bash
+```bash
 $ hsw-rpc getnameinfo handshake
 # To see other bids and reveals
 $ hsw-rpc getauctioninfo handshake
@@ -166,7 +166,7 @@ If we end up losing, we can redeem our money from the covenant with
 
 If we won, we can now register and update the name using `sendupdate`.
 
-``` bash
+```bash
 $ hsw-rpc sendupdate handshake \
   '{"records":[{"type":"GLUE4","ns":"ns1.example.com.","address":"127.0.0.1"}]}'
 ```
@@ -175,7 +175,7 @@ Note that the `ns` field's `domain@ip` format symbolizes glue.
 
 Expiration on testnet is around 30 days, so be sure to send a renewal soon!
 
-``` bash
+```bash
 $ hsw-rpc sendrenewal handshake
 ```
 
@@ -212,7 +212,7 @@ accomplishing this:
 First, we need to create a TXT record which we will sign in our zone (say we
 own example.com for instance):
 
-``` bash
+```bash
 $ hsw-rpc createclaim example
 {
   "name": "example",
@@ -230,7 +230,7 @@ address we want the name to be associated with, along with a fee that we're
 willing to pay the miner to mine our claim. This TXT record must be added to
 our name's zone file and signed:
 
-``` zone
+```zone
 ...
 example.com. 1800 IN TXT "hns-testnet:aakbvmygsp7rrhmsauhwlnwx6srd5m2v4m3p3eidadl5yn2f"
 example.com. 1800 IN RRSIG TXT 5 2 1800 20190615140933 20180615131108 ...
@@ -253,7 +253,7 @@ TXT record ([example here][proof]).
 Once our proof is published on the DNS layer, we can use `sendclaim` to crawl
 the relevant zones and create the proof.
 
-``` bash
+```bash
 $ hsw-rpc sendclaim example
 ```
 
@@ -265,7 +265,7 @@ Once the transaction is mined, you must wait about 30 days (4,320 blocks) before
 Once the claim has reached maturity, you are able to bypass the auction process
 by calling `sendupdate` on your claimed name.
 
-``` bash
+```bash
 $ hsw-rpc sendupdate example \
   '{"ttl":3600,"canonical":"icanhazip.com."}'
 ```
@@ -280,7 +280,7 @@ BIND's private key format and naming convention.
 We use [bns] for this task, which includes a command-line tool for creating
 ownership proofs.
 
-``` bash
+```bash
 $ npm install bns
 $ bns-prove -b -K /path/to/keys example.com. \
   'hns-testnet:aakbvmygsp7rrhmsauhwlnwx6srd5m2v4m3p3eidadl5yn2f'
@@ -288,7 +288,7 @@ $ bns-prove -b -K /path/to/keys example.com. \
 
 The above will output a base64 string which can then be passed to the RPC:
 
-``` bash
+```bash
 $ hsd-rpc sendrawclaim 'base64-string'
 ```
 
@@ -340,4 +340,4 @@ See LICENSE for more info.
 [coverage-status-img]: https://coveralls.io/repos/github/handshake-org/hsd/badge.svg?branch=master
 [coverage-status-url]: https://coveralls.io/github/handshake-org/hsd?branch=master
 [ci-status-img]: https://github.com/handshake-org/hsd/workflows/Build/badge.svg
-[ci-status-url]: https://github.com/handshake-org/hsd/tree/master
+[ci-status-url]: https://github.com/handshake-org/hsd/actions/workflows/build.yml
