@@ -98,11 +98,14 @@ $ docker build -t hsd:$VERSION-$COMMIT .
 
 ### Running a container
 
-To start a container named `hsd` on a `regtest` network with an exposed
+To start a container named `hsd` on `main` network with an exposed
 node API server, run:
 
 ```bash
-$ docker run --name hsd -p 12037:12037 hsd:$VERSION-$COMMIT \
+$ docker run --name hsd \
+    --publish 12037:12037 \
+    --volume $HOME/.hsd:/root/.hsd \
+    hsd:$VERSION-$COMMIT \
     --http-host 0.0.0.0 \
     --api-key=foo
 ```
