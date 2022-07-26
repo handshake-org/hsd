@@ -1,6 +1,6 @@
 {
   "name": "hsd",
-  "version": "4.0.1",
+  "version": "4.0.2",
   "description": "Cryptocurrency bike-shed",
   "license": "MIT",
   "repository": "git://github.com/handshake-org/hsd.git",
