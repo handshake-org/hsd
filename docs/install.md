@@ -96,6 +96,13 @@ $ COMMIT=$(git rev-parse --short HEAD)
 $ docker build -t hsd:$VERSION-$COMMIT .
 ```
 
+### GitHub Hosted images
+
+Baked images are available [here](https://github.com/handshake-org/hsd/pkgs/container/hsd).
+```
+docker pull ghcr.io/handshake-org/hsd:latest
+```
+
 ### Running a container
 
 To start a container named `hsd` on `main` network with an exposed
