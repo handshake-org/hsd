@@ -243,6 +243,16 @@ describe('Wallet Auction', function() {
       }
     }
 
+    function uniqueAddrs(tx) {
+      // All unique addresses
+      for (let i = 0; i < tx.outputs.length; i++) {
+        const addr = tx.outputs[i].address.toString();
+        for (let j = i + 1; j < tx.outputs.length; j++)
+          assert.notStrictEqual(tx.outputs[j].address.toString(), addr);
+      }
+      return true;
+    }
+
     before(async () => {
       // Create wallet
       wallet = await wdb.create();
@@ -267,6 +277,8 @@ describe('Wallet Auction', function() {
           hardFee
         }
       );
+
+      assert(uniqueAddrs(mtx));
 
       assert.strictEqual(mtx.outputs.length, 4);
       let opens = 0;
@@ -345,18 +357,20 @@ describe('Wallet Auction', function() {
 
     describe('Complete auction and diverse-action batches', function() {
       it('3 OPENs', async () => {
-        await wallet.sendBatch(
+        const tx = await wallet.sendBatch(
           [
             ['OPEN', name1],
             ['OPEN', name2],
             ['OPEN', name3]
           ]
         );
+
+        assert(uniqueAddrs(tx));
         await mineBlocks(treeInterval + 1);
       });
 
       it('4 BIDs', async () => {
-        await wallet.sendBatch(
+        const tx = await wallet.sendBatch(
           [
             ['BID', name1, 10000, 20000],
             ['BID', name1, 10001, 20000], // self-snipe!
@@ -364,16 +378,21 @@ describe('Wallet Auction', function() {
             ['BID', name3, 50000, 60000]
           ]
         );
+
+        assert(uniqueAddrs(tx));
         await mineBlocks(biddingPeriod);
       });
 
       it('2 REVEALs then 1 REVEAL', async () => {
-        await wallet.sendBatch(
+        const tx = await wallet.sendBatch(
           [
             ['REVEAL', name1],
             ['REVEAL', name2]
           ]
         );
+
+        assert(uniqueAddrs(tx));
+
         // No "could not resolve preferred inputs" error
         // because names are being revealed individually.
         await wallet.sendBatch(
@@ -396,6 +415,8 @@ describe('Wallet Auction', function() {
           ]
         );
 
+        assert(uniqueAddrs(batch1));
+
         // Unlinked covenant (OPEN) was listed first but
         // should be sorted last with the change output (NONE).
         assert(!batch1.outputs[4].covenant.isLinked());
@@ -409,7 +430,7 @@ describe('Wallet Auction', function() {
           version: 31,
           hash: Buffer.from([1, 2, 3])
         });
-        await wallet.sendBatch(
+        const tx = await wallet.sendBatch(
           [
             ['TRANSFER', name1, nullAddr],
             ['TRANSFER', name2, nullAddr],
@@ -417,6 +438,8 @@ describe('Wallet Auction', function() {
             ['BID', name4, 70000, 80000]
           ]
         );
+
+        assert(uniqueAddrs(tx));
 
         // True for regtest but not mainnet,
         // should allow both REVEAL and FINALIZE
@@ -426,7 +449,7 @@ describe('Wallet Auction', function() {
       });
 
       it('1 FINALIZE, 1 CANCEL, 1 REVOKE and 1 REVEAL', async () => {
-        await wallet.sendBatch(
+        const tx = await wallet.sendBatch(
           [
             ['FINALIZE', name1],
             ['CANCEL', name2],
@@ -434,6 +457,8 @@ describe('Wallet Auction', function() {
             ['REVEAL', name4]
           ]
         );
+
+        assert(uniqueAddrs(tx));
 
         // Should allow for both REGISTER and re-open revoked name
         assert(auctionMaturity > revealPeriod);
@@ -448,6 +473,8 @@ describe('Wallet Auction', function() {
             ['UPDATE', name4, res4]
           ]
         );
+
+        assert(uniqueAddrs(batch2));
 
         // Linked covenant (UPDATE) was listed last but should be sorted first.
         assert.strictEqual(batch2.outputs[0].covenant.type, rules.types.REGISTER);
@@ -481,6 +508,26 @@ describe('Wallet Auction', function() {
         assert(ns2.isClosed(chain.height, network));
         assert(ns3.isOpening(chain.height, network));
         assert(ns4.isClosed(chain.height, network));
+      });
+
+      it('should not have receive address gaps', async () => {
+        const acct = await wallet.getAccount(0);
+        const {receiveDepth} = acct;
+        const addrIndexes = Array(receiveDepth - 1).fill(0);
+
+        const txs = await wallet.getHistory();
+        const wtxs = await wallet.toDetails(txs);
+        for (const wtx of wtxs) {
+          for (const output of wtx.outputs)
+            if (   output.path
+                && output.path.account === 0
+                && output.path.branch === 0  // receive
+            ) {
+              addrIndexes[output.path.index]++;
+            }
+        }
+        // Ensure every receive address was used at least once
+        assert(addrIndexes.indexOf(0) === -1);
       });
     });
   });
