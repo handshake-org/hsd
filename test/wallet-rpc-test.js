@@ -799,6 +799,55 @@ describe('Wallet RPC Methods', function() {
       await nclient.execute('generatetoaddress', [100, addr]);
     });
 
+    it('should not send invalid batch: OPEN arguments', async () => {
+      await assert.rejects(
+        wclient.execute(
+          'sendbatch',
+          [
+            [['OPEN', 'abc123'], ['OPEN', 'def456'], ['OPEN']]
+          ]
+        ),
+        {message: 'OPEN action requires 1 argument: name'}
+      );
+    });
+
+    it('should not send invalid batch: BID arguments', async () => {
+      await assert.rejects(
+        wclient.execute(
+          'sendbatch',
+          [
+            [['OPEN', 'abc123'], ['OPEN', 'def456'], ['BID', 'ghi789', 1000]]
+          ]
+        ),
+        {message: 'BID action requires 3 arguments: name, bid, value'}
+      );
+    });
+
+    it('should not send invalid batch: BID values', async () => {
+      // Bid value is higher than lockup
+      await assert.rejects(
+        wclient.execute(
+          'sendbatch',
+          [
+            [['OPEN', 'abc123'], ['OPEN', 'def456'], ['BID', 'ghi789', 2, 1]]
+          ]
+        ),
+        {message: 'Invalid bid.'}
+      );
+    });
+
+    it('should not send invalid batch: REVEAL arguments', async () => {
+      await assert.rejects(
+        wclient.execute(
+          'sendbatch',
+          [
+            [['OPEN', 'abc123'], ['OPEN', 'def456'], ['REVEAL', 'invalid.name']]
+          ]
+        ),
+        {message: 'Invalid name: invalid.name.'}
+      );
+    });
+
     it('should send multiple OPENs', async () => {
       const tx = await wclient.execute(
         'sendbatch',

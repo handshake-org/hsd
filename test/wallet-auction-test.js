@@ -316,6 +316,19 @@ describe('Wallet Auction', function() {
        );
     });
 
+    it('should fail if one action is invalid: REVEAL before bid', async () => {
+      await assert.rejects(
+        wallet.sendBatch(
+          [
+            ['OPEN', name1],
+            ['OPEN', name1],
+            ['OPEN', name3]
+          ]
+        ),
+         {message: 'Duplicate name with exclusive action.'}
+       );
+    });
+
     it('should fail if one action is invalid: BID early', async () => {
       await assert.rejects(
         wallet.sendBatch(
@@ -342,26 +355,66 @@ describe('Wallet Auction', function() {
       );
     });
 
-    it('should fail if one action is invalid: REVEAL before bid', async () => {
+    it('should fail if one action is invalid: REVEAL all before bid', async () => {
       await assert.rejects(
         wallet.sendBatch(
           [
-            ['REVEAL', name1],
-            ['OPEN', name2],
-            ['OPEN', name3]
+            ['REVEAL']
           ]
         ),
-        {message: `Auction not found: ${name1}.`}
+        {message: 'No bids to reveal.'}
       );
     });
 
+    it('should fail if one action is invalid: REDEEM all before bid', async () => {
+      await assert.rejects(
+        wallet.sendBatch(
+          [
+            ['REDEEM']
+          ]
+        ),
+        {message: 'No reveals to redeem.'}
+      );
+    });
+
+    it('should fail if one action is invalid: NONE below dust', async () => {
+      const addr = Address.fromProgram(0, Buffer.alloc(20, 0x01)).toString('regtest');
+      await assert.rejects(
+        wallet.sendBatch(
+          [
+            ['OPEN', name1],
+            ['OPEN', name1],
+            ['OPEN', name3],
+            ['NONE', addr, 1]
+          ]
+        ),
+         {message: 'Output is dust.'}
+       );
+    });
+
+    it('should fail if one action is invalid: unknown action', async () => {
+      await assert.rejects(
+        wallet.sendBatch(
+          [
+            ['OPEN', name1],
+            ['OPEN', name1],
+            ['OPEN', name3],
+            ['open', name4]
+          ]
+        ),
+         {message: 'Unknown action type: open'}
+       );
+    });
+
     describe('Complete auction and diverse-action batches', function() {
-      it('3 OPENs', async () => {
+      const addr = Address.fromProgram(0, Buffer.alloc(20, 0x01)).toString('regtest');
+      it('3 OPENs and 1 NONE', async () => {
         const tx = await wallet.sendBatch(
           [
             ['OPEN', name1],
             ['OPEN', name2],
-            ['OPEN', name3]
+            ['OPEN', name3],
+            ['NONE', addr, 10000]
           ]
         );
 
@@ -383,6 +436,23 @@ describe('Wallet Auction', function() {
         await mineBlocks(biddingPeriod);
       });
 
+      it('REVEAL all', async () => {
+        // Don't send this one
+        const revealAll = await wallet.createBatch(
+          [
+            ['REVEAL']
+          ]
+        );
+
+        assert.strictEqual(revealAll.outputs.length, 5);
+        let reveals = 0;
+        for (const output of revealAll.outputs) {
+          if (output.covenant.type === rules.types.REVEAL)
+            reveals++;
+        }
+        assert.strictEqual(reveals, 4);
+      });
+
       it('2 REVEALs then 1 REVEAL', async () => {
         const tx = await wallet.sendBatch(
           [
@@ -401,6 +471,23 @@ describe('Wallet Auction', function() {
           ]
         );
         await mineBlocks(revealPeriod);
+      });
+
+      it('REDEEM all', async () => {
+        // Don't send this one
+        const redeemAll = await wallet.createBatch(
+          [
+            ['REDEEM']
+          ]
+        );
+
+        assert.strictEqual(redeemAll.outputs.length, 2);
+        let redeems = 0;
+        for (const output of redeemAll.outputs) {
+          if (output.covenant.type === rules.types.REDEEM)
+            redeems++;
+        }
+        assert.strictEqual(redeems, 1);
       });
 
       it('3 REGISTERs, 1 REDEEM and 1 OPEN', async () => {
@@ -479,6 +566,28 @@ describe('Wallet Auction', function() {
         // Linked covenant (UPDATE) was listed last but should be sorted first.
         assert.strictEqual(batch2.outputs[0].covenant.type, rules.types.REGISTER);
         await mineBlocks(treeInterval);
+      });
+
+      it('10 NONE with options', async () => {
+        const oldBal = await wallet.getBalance();
+
+        const actions = [];
+        for (let i = 0; i < 10; i++) {
+          const addr = Address.fromProgram(0, Buffer.alloc(20, i + 1));
+          actions.push(['NONE', addr, 10000]);
+        }
+
+        const batch = await wallet.sendBatch(actions, {hardFee: 10});
+
+        assert.strictEqual(batch.outputs.length, 11);
+
+        // Mine to some other wallet so reward doesn't affect our balance
+        receive = new Address();
+        await mineBlocks(1);
+
+        const newBal = await wallet.getBalance();
+
+        assert.strictEqual(oldBal.confirmed - newBal.confirmed, 100010);
       });
 
       it('should verify expected name properties', async () => {
