@@ -8,6 +8,12 @@
   - `decoderesource` like `decodescript` accepts hex string as input and returns
   JSON formatted DNS records resource.
 
+### Wallet changes
+
+- New RPC methods:
+  - `createbatch` and `sendbatch` create batch transactions with any number
+  of outputs with any combination of covenants.
+
 ## v4.0.0
 
 **When upgrading to this version of hsd you must pass
