@@ -4,6 +4,12 @@
 
 ### Node changes
 
+- RPCs `getnameinfo` `getnameresource` `verifymessagewithname` and `getnamebyhash`
+now accept an additional boolean parameter `safe` which will resolve the name from the Urkel
+tree at the last "safe height" (committed tree root with > 12 confirmations). SPV
+nodes can use this option and retrieve Urkel proofs from the p2p network to respond
+to these calls.
+
 - New RPC methods:
   - `decoderesource` like `decodescript` accepts hex string as input and returns
   JSON formatted DNS records resource.
@@ -13,7 +19,6 @@
 - New RPC methods:
   - `createbatch` and `sendbatch` create batch transactions with any number
   of outputs with any combination of covenants.
-
 ## v4.0.0
 
 **When upgrading to this version of hsd you must pass

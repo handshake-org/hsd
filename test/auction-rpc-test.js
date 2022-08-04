@@ -5,8 +5,17 @@ const bio = require('bufio');
 const plugin = require('../lib/wallet/plugin');
 const rules = require('../lib/covenants/rules');
 const common = require('./util/common');
-const {ChainEntry, FullNode, KeyRing, MTX, Network, Path} = require('..');
+const {
+  ChainEntry,
+  FullNode,
+  SPVNode,
+  KeyRing,
+  MTX,
+  Network,
+  Path
+} = require('..');
 const {NodeClient, WalletClient} = require('hs-client');
+const {forValue} = require('./util/common');
 
 class TestUtil {
   constructor(options) {
@@ -31,7 +40,9 @@ class TestUtil {
     this.node = new FullNode({
       memory: true,
       workers: true,
-      network: this.network.type
+      network: this.network.type,
+      listen: true,
+      bip37: true
     });
 
     this.node.use(plugin);
@@ -153,6 +164,8 @@ describe('Auction RPCs', function() {
     lockup: 10
   };
   const COIN = 1e6;
+  let signAddr, signSig;
+  const signMsg = 'The Defendants are engaged in a campaign of chaos.';
 
   const mineBlocks = async (num, wallet, account = 'default') => {
     const address = (await wallet.createAddress(account)).address;
@@ -404,9 +417,9 @@ describe('Auction RPCs', function() {
 
   it('should create FINALIZE with signing paths', async () => {
     // Submit TRANSFER.
-    const address = (await loser.createAddress('default')).address;
+    signAddr = (await loser.createAddress('default')).address;
     await util.wrpc('selectwallet', [winner.id]);
-    assert(await util.wrpc('sendtransfer', [name, address]));
+    assert(await util.wrpc('sendtransfer', [name, signAddr]));
 
     // Mine past TRANSFER lockup period.
     await mineBlocks(util.network.names.transferLockup, winner);
@@ -417,11 +430,134 @@ describe('Auction RPCs', function() {
     await processJSON(json, submit);
   });
 
+  it('should verify signed message', async () => {
+    // Sign and save
+    await util.wrpc('selectwallet', [loser.id]);
+    signSig = await util.wrpc('signmessagewithname', [name, signMsg]);
+
+    // Verify at current height
+    assert(await util.nrpc('verifymessagewithname', [name, signSig, signMsg]));
+
+    // Unable to verify at safe height, historical UTXO is spent
+    await assert.rejects(
+      util.nrpc('verifymessagewithname', [name, signSig, signMsg, true]),
+      {message: /Cannot find the owner's address/}
+    );
+
+    // Mine 20 blocks (safe height is still 12 confirmations even on regtest)
+    await mineBlocks(20, winner);
+
+    // Verify at current height
+    assert(await util.nrpc('verifymessagewithname', [name, signSig, signMsg]));
+
+    // Verify at safe height
+    assert(await util.nrpc('verifymessagewithname', [name, signSig, signMsg, true]));
+  });
+
   it('should create REVOKE with signing paths', async () => {
     // Create, assert, submit and mine REVOKE.
     await util.wrpc('selectwallet', [loser.id]);
     const submit = true;
     const json = await util.wrpc('createrevoke', [name]);
     await processJSON(json, submit, loser, true);
+  });
+
+  it('should not verify signed message after REVOKE', async () => {
+    await assert.rejects(
+      util.nrpc('verifymessagewithname', [name, signSig, signMsg]),
+      {message: /Invalid name state/}
+    );
+  });
+
+  it('should not verify signed message at safe height after REVOKE', async () => {
+    // This safe height is before the REVOKE was confirmed, back when
+    // the name state was still valid. However, the UTXO that owned the name
+    // in that state has been spent and no longer exists.
+    await assert.rejects(
+      util.nrpc('verifymessagewithname', [name, signSig, signMsg, true]),
+      {message: /Cannot find the owner's address/}
+    );
+  });
+
+  describe('SPV', function () {
+    const spvNode = new SPVNode({
+      memory: true,
+      network: 'regtest',
+      port: 10000,
+      brontidePort: 20000,
+      httpPort: 30000,
+      only: '127.0.0.1',
+      noDns: true
+    });
+
+    const spvClient = new NodeClient({
+      port: 30000
+    });
+
+    before(async () => {
+      await util.node.connect();
+      await spvNode.open();
+      await spvNode.connect();
+      await spvNode.startSync();
+
+      await forValue(spvNode.chain, 'height', util.node.chain.height);
+
+      await spvClient.open();
+    });
+
+    after(async () => {
+      await spvClient.close();
+      await spvNode.close();
+    });
+
+    it('should not get current namestate', async () => {
+      const {info} = await spvClient.execute('getnameinfo', [name]);
+      assert.strictEqual(info, null);
+    });
+
+    it('should get historcial namestate at safe height', async () => {
+      const {info} = await spvClient.execute('getnameinfo', [name, true]);
+      assert.strictEqual(info.name, name);
+      assert.strictEqual(info.state, 'CLOSED');
+      assert.strictEqual(info.value, loserBid.bid * COIN);
+      assert.strictEqual(info.highest, winnerBid.bid * COIN);
+    });
+
+    it('should not get current resource', async () => {
+      const json = await spvClient.execute('getnameresource', [name]);
+      assert.strictEqual(json, null);
+    });
+
+    it('should get historcial resource at safe height', async () => {
+      const json = await spvClient.execute('getnameresource', [name, true]);
+      assert.deepStrictEqual(
+        json,
+        {
+          records: [
+            {
+              type: 'NS',
+              ns: 'example.com.'
+            }
+          ]
+        }
+      );
+    });
+
+    it('should not verifymessagewithname', async () => {
+      // No local Urkel tree, namestate is always null
+      await assert.rejects(
+        spvClient.execute('verifymessagewithname', [name, signSig, signMsg]),
+        {message: /Cannot find the name owner/}
+      );
+    });
+
+    it('should not verifymessagewithname at safe height', async () => {
+      // This time we do have a valid namestate to work with, but
+      // SPV nodes still don't have a UTXO set to get addresses from
+      await assert.rejects(
+        spvClient.execute('verifymessagewithname', [name, signSig, signMsg, true]),
+        {message: /Cannot find the owner's address/}
+      );
+    });
   });
 });
