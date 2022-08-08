@@ -10,6 +10,8 @@ const WalletDB = require('../lib/wallet/walletdb');
 const Network = require('../lib/protocol/network');
 const rules = require('../lib/covenants/rules');
 const Address = require('../lib/primitives/address');
+const Output = require('../lib/primitives/output');
+const Covenant = require('../lib/primitives/covenant');
 const {Resource} = require('../lib/dns/resource');
 
 const network = Network.get('regtest');
@@ -664,6 +666,139 @@ describe('Wallet Auction', function() {
         }
         // Ensure every receive address was used at least once
         assert(addrIndexes.indexOf(0) === -1);
+      });
+    });
+
+    describe('Policy Weight Limits', function () {
+      let name;
+
+      it('should OPEN', async () => {
+        name = rules.grindName(4, chain.height, network);
+        await wallet.sendBatch([['OPEN', name]]);
+        await mineBlocks(treeInterval + 1);
+      });
+
+      it('should not batch too many BIDs', async () => {
+        const batch = [];
+        for (let i = 201; i > 0; i--)
+          batch.push(['BID', name, i * 1000, i * 1000]);
+
+        await assert.rejects(
+          wallet.sendBatch(batch),
+          {message: 'Batch output addresses would exceed lookahead.'}
+        );
+      });
+
+      it('should batch BIDs', async () => {
+        let batch = [];
+        for (let i = 200; i > 0; i--)
+          batch.push(['BID', name, i * 1000, i * 1000]);
+        await wallet.sendBatch(batch);
+        batch = [];
+        for (let i = 200; i > 0; i--)
+          batch.push(['BID', name, i * 1001, i * 1001]);
+        await wallet.sendBatch(batch);
+        batch = [];
+        for (let i = 200; i > 0; i--)
+          batch.push(['BID', name, i * 1002, i * 1002]);
+        await wallet.sendBatch(batch);
+        batch = [];
+        for (let i = 150; i > 0; i--)
+          batch.push(['BID', name, i * 1003, i * 1003]);
+        await wallet.sendBatch(batch);
+
+        await mineBlocks(biddingPeriod);
+      });
+
+      it('should have too many REVEALs for legacy sendRevealAll', async () => {
+        await assert.rejects(
+          wallet.sendRevealAll(),
+          {message: 'TX exceeds policy weight.'}
+        );
+      });
+
+      it('should create batch just under weight limit', async () => {
+        // Start with the batch we would normally make
+        const mtx = await wallet.createBatch([['REVEAL']]);
+
+        // Find a spendable coin
+        const coins = await wallet.getCoins();
+        let coin;
+        for (coin of coins)
+          if (coin.value > 10000)
+            break;
+
+        // Add the coin as new input
+        mtx.addCoin(coin).getSize();
+
+        // Add a phony REVEAL output
+        mtx.addOutput(new Output({
+          value: coin.value,
+          address: Address.fromProgram(0, Buffer.alloc(20, 0x01)),
+          covenant: new Covenant({
+            type: 4,  // REVEAL
+            items: [
+              Buffer.alloc(32), // namehash
+              Buffer.alloc(4),  // height
+              Buffer.alloc(32)  // nonce
+            ]
+          })
+        }));
+
+        // Finish
+        await wallet.sign(mtx);
+
+        // Yes, adding one more REVEAL to this batch breaks the limit
+        await assert.rejects(
+          wallet.sendMTX(mtx),
+          {message: 'TX exceeds policy weight.'}
+        );
+      });
+
+      it('should REVEAL all in several batches', async () => {
+        let reveals = 0;
+        const mtx1 = await wallet.createBatch([['REVEAL']]);
+        assert(mtx1.changeIndex >= 0);
+        reveals += mtx1.outputs.length - 1;
+        await wdb.addTX(mtx1.toTX());
+
+        const mtx2 = await wallet.createBatch([['REVEAL']]);
+        assert(mtx2.changeIndex >= 0);
+        reveals += mtx2.outputs.length - 1;
+        await wdb.addTX(mtx2.toTX());
+
+        assert.strictEqual(reveals, 750);
+
+        await wallet.sendMTX(mtx1);
+        await wallet.sendMTX(mtx2);
+        await mineBlocks(revealPeriod);
+      });
+
+      it('should have too many REDEEMs for legacy sendRedeemAll', async () => {
+        await assert.rejects(
+          wallet.sendRedeemAll(),
+          {message: 'TX exceeds policy weight.'}
+        );
+      });
+
+      it('should REDEEM all in several batches', async () => {
+        let reveals = 0;
+        const mtx1 = await wallet.createBatch([['REDEEM']]);
+        assert(mtx1.changeIndex >= 0);
+        reveals += mtx1.outputs.length - 1;
+        await wdb.addTX(mtx1.toTX());
+
+        const mtx2 = await wallet.createBatch([['REDEEM']]);
+        assert(mtx2.changeIndex >= 0);
+        reveals += mtx2.outputs.length - 1;
+        await wdb.addTX(mtx2.toTX());
+
+        // One of the REVEALs was a winner!
+        assert.strictEqual(reveals, 749);
+
+        await wallet.sendMTX(mtx1);
+        await wallet.sendMTX(mtx2);
+        await mineBlocks(1);
       });
     });
   });
