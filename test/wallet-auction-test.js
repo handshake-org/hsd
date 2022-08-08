@@ -290,6 +290,13 @@ describe('Wallet Auction', function() {
       assert.strictEqual(mtx.getFee(mtx.view), hardFee);
     });
 
+    it('should fail if no actions are provided', async () => {
+      await assert.rejects(
+        wallet.sendBatch([]),
+        {message: 'Batches require at least one action.'}
+      );
+    });
+
     it('should fail if one action is invalid: OPEN reserved', async () => {
       await assert.rejects(
         wallet.sendBatch(
