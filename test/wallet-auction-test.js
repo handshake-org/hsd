@@ -619,6 +619,26 @@ describe('Wallet Auction', function() {
         assert(ns4.isClosed(chain.height, network));
       });
 
+      it('2 RENEW', async () => {
+        await wallet.sendBatch(
+          [
+            ['RENEW', name2],
+            ['RENEW', name4]
+          ]
+        );
+
+        await mineBlocks(1);
+        const ns1 = await chain.db.getNameStateByName(name1);
+        const ns2 = await chain.db.getNameStateByName(name2);
+        const ns3 = await chain.db.getNameStateByName(name3);
+        const ns4 = await chain.db.getNameStateByName(name4);
+        assert.strictEqual(ns2.renewal, chain.height);
+        assert.strictEqual(ns4.renewal, chain.height);
+        // sanity check
+        assert.notStrictEqual(ns1.renewal, chain.height);
+        assert.notStrictEqual(ns3.renewal, chain.height);
+      });
+
       it('should not have receive address gaps', async () => {
         const acct = await wallet.getAccount(0);
         const {receiveDepth} = acct;
