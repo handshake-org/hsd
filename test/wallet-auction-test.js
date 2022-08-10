@@ -671,6 +671,7 @@ describe('Wallet Auction', function() {
     });
 
     describe('Policy Weight Limits', function () {
+      this.timeout(30000);
       let name;
 
       it('should OPEN', async () => {
