@@ -372,7 +372,7 @@ describe('Wallet Auction', function() {
             ['REVEAL']
           ]
         ),
-        {message: 'No bids to reveal.'}
+        {message: 'Nothing to do.'}
       );
     });
 
@@ -383,7 +383,7 @@ describe('Wallet Auction', function() {
             ['REDEEM']
           ]
         ),
-        {message: 'No reveals to redeem.'}
+        {message: 'Nothing to do.'}
       );
     });
 
@@ -867,10 +867,10 @@ describe('Wallet Auction', function() {
         let reveals = 0;
         for (;;) {
           try {
-            const tx = await wallet.sendBatch([['REVEAL']]);
+            const tx = await wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW']]);
             reveals += tx.outputs.length - 1; // Don't count change output
           } catch (e) {
-            assert.strictEqual(e.message, 'No bids to reveal.');
+            assert.strictEqual(e.message, 'Nothing to do.');
             break;
           }
         }
@@ -884,10 +884,10 @@ describe('Wallet Auction', function() {
         let redeems = 0;
         for (;;) {
           try {
-            const tx = await wallet.sendBatch([['REDEEM']]);
+            const tx = await wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW']]);
             redeems += tx.outputs.length - 1; // Don't count change output
           } catch (e) {
-            assert.strictEqual(e.message, 'No reveals to redeem.');
+            assert.strictEqual(e.message, 'Nothing to do.');
             break;
           }
         }
@@ -940,7 +940,7 @@ describe('Wallet Auction', function() {
 
         await assert.rejects(
           wallet.sendBatch([['RENEW']]),
-          {message: 'No expiring names to renew.'}
+          {message: 'Nothing to do.'}
         );
       });
 
@@ -960,7 +960,7 @@ describe('Wallet Auction', function() {
 
         let renewals = 0;
         for (;;) {
-          const tx = await wallet.sendBatch([['RENEW']]);
+          const tx = await wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW']]);
           await mineBlocks(1);
 
           if (!renewals) {
