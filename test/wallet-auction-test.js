@@ -4,6 +4,7 @@ const assert = require('bsert');
 const BlockStore = require('../lib/blockstore/level');
 const Chain = require('../lib/blockchain/chain');
 const {states} = require('../lib/covenants/namestate');
+const consensus = require('../lib/protocol/consensus');
 const WorkerPool = require('../lib/workers/workerpool');
 const Miner = require('../lib/mining/miner');
 const WalletDB = require('../lib/wallet/walletdb');
@@ -799,6 +800,179 @@ describe('Wallet Auction', function() {
         await wallet.sendMTX(mtx1);
         await wallet.sendMTX(mtx2);
         await mineBlocks(1);
+      });
+    });
+
+    describe('Consensus Limits', function () {
+      this.timeout(30000);
+
+      const names = [];
+      let startHeight;
+
+      const oldRenewalWindow = network.names.renewalWindow;
+      before(() => {
+        network.names.renewalWindow = 160;
+
+        for (let i = 0; i < 800; i++)
+          names.push(`name_${i}`);
+      });
+
+      after(() => {
+        network.names.renewalWindow = oldRenewalWindow;
+      });
+
+      it('should not batch too many OPENs', async () => {
+        const batch = [];
+        for (let i = 0; i < consensus.MAX_BLOCK_OPENS + 1; i++)
+          batch.push(['OPEN', names[i]]);
+
+        await assert.rejects(
+          wallet.createBatch(batch),
+          {message: 'Too many OPENs.'} // Might exceed wallet lookahead also
+        );
+      });
+
+      it('should send batches of OPENs in sequential blocks', async () => {
+        let count = 0;
+        for (let i = 1; i <= 8; i++) {
+          const batch = [];
+          for (let j = 1; j <= 100; j++) {
+            batch.push(['OPEN', names[count++]]);
+          }
+          await wallet.sendBatch(batch);
+          await mineBlocks(1);
+        }
+      });
+
+      it('should send batches of BIDs in sequential blocks', async () => {
+        // Send winning and losing bid for each name
+        let count = 0;
+        for (let i = 1; i <= 8; i++) {
+          const batch = [];
+          for (let j = 1; j <= 100; j++) {
+            batch.push(
+              ['BID', names[count], 10000, 10000],
+              ['BID', names[count++], 10000, 10000]
+            );
+          }
+          await wallet.sendBatch(batch);
+          await mineBlocks(1);
+        }
+      });
+
+      it('should send all the batches of REVEALs it needs to', async () => {
+        await mineBlocks(2); // Advance all names to reveal phase
+
+        let reveals = 0;
+        for (;;) {
+          try {
+            const tx = await wallet.sendBatch([['REVEAL']]);
+            reveals += tx.outputs.length - 1; // Don't count change output
+          } catch (e) {
+            assert.strictEqual(e.message, 'No bids to reveal.');
+            break;
+          }
+        }
+
+        assert.strictEqual(reveals, 800 * 2);
+      });
+
+      it('should send all the batches of REDEEMs it needs to', async () => {
+        await mineBlocks(10); // Finish reveal phase for all names
+
+        let redeems = 0;
+        for (;;) {
+          try {
+            const tx = await wallet.sendBatch([['REDEEM']]);
+            redeems += tx.outputs.length - 1; // Don't count change output
+          } catch (e) {
+            assert.strictEqual(e.message, 'No reveals to redeem.');
+            break;
+          }
+        }
+
+        assert.strictEqual(redeems, 800); // Half the bids lost, one per name
+      });
+
+      it('should send batches of REGISTERs', async () => {
+        let count = 0;
+        for (let i = 1; i <= 8; i++) {
+          const batch = [];
+          for (let j = 1; j <= 100; j++) {
+            batch.push(['UPDATE', names[count++], new Resource()]);
+          }
+          await wallet.sendBatch(batch);
+          await mineBlocks(1);
+
+          if (!startHeight)
+            startHeight = chain.height;
+        }
+
+        // Confirm
+        for (const name of names) {
+          const ns = await wallet.getNameStateByName(name);
+          assert(ns.registered);
+        }
+        // First name was registered first, should be renewed first
+        const ns0 = await wallet.getNameStateByName('name_0');
+        const ns799 = await wallet.getNameStateByName('name_799');
+        assert(ns0.renewal < ns799.renewal);
+      });
+
+      it('should not batch too many UPDATEs', async () => {
+        const batch = [];
+        for (let i = 0; i < consensus.MAX_BLOCK_UPDATES + 1; i++)
+          batch.push(['UPDATE', names[i], new Resource()]);
+
+        await assert.rejects(
+          wallet.createBatch(batch),
+          {message: 'Too many UPDATEs.'} // Might exceed wallet lookahead also
+        );
+      });
+
+      it('should not RENEW any names too early', async () => {
+        await mineBlocks(
+          ((network.names.renewalWindow / 8) * 7)
+          - (chain.height - startHeight)
+          - 1
+        );
+
+        await assert.rejects(
+          wallet.sendBatch([['RENEW']]),
+          {message: 'No expiring names to renew.'}
+        );
+      });
+
+      it('should not batch too many RENEWs', async () => {
+        const batch = [];
+        for (let i = 0; i < consensus.MAX_BLOCK_UPDATES + 1; i++)
+          batch.push(['RENEW', names[i]]);
+
+        await assert.rejects(
+          wallet.createBatch(batch),
+          {message: 'Too many RENEWs.'} // Might exceed wallet lookahead also
+        );
+      });
+
+      it('should send all the batches of RENEWs it needs to', async () => {
+        await mineBlocks(8); // All names expiring, none expired yet
+
+        let renewals = 0;
+        for (;;) {
+          const tx = await wallet.sendBatch([['RENEW']]);
+          await mineBlocks(1);
+
+          if (!renewals) {
+            // First name is "most urgent" should've been renewed first
+            const ns0 = await wallet.getNameStateByName(names[0]);
+            assert.strictEqual(ns0.renewal, chain.height);
+          }
+
+          renewals += tx.outputs.length - 1; // Don't count change output
+          if (renewals === 800)
+            break;
+        }
+        assert.strictEqual(renewals, 800);
       });
     });
   });
