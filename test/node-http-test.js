@@ -49,7 +49,7 @@ describe('Node HTTP', function() {
       assert.strictEqual(pub.brontidePort, null);
     });
 
-    it('should have public address: regtest, listen', async () => {
+    it('should not have public address: regtest, listen', async () => {
       const network = Network.get('regtest');
 
       const node = new FullNode({
@@ -73,9 +73,9 @@ describe('Node HTTP', function() {
       const {public: pub} = pool;
 
       assert.strictEqual(pub.listen, true);
-      assert.notStrictEqual(pub.host, null); // will be "discovered" using DNS
-      assert.strictEqual(pub.port, network.port);
-      assert.strictEqual(pub.brontidePort, network.brontidePort);
+      assert.strictEqual(pub.host, null); // we don't discover from external
+      assert.strictEqual(pub.port, null);
+      assert.strictEqual(pub.brontidePort, null);
     });
 
     it('should not have public address: main', async () => {
