@@ -2,7 +2,9 @@
 
 ## unreleased
 
-### Node changes
+### Node API changes
+
+- HTTP API endpoint `/` (`hsd-cli getinfo`) now includes "public" networking settings.
 
 - RPCs `getnameinfo` `getnameresource` `verifymessagewithname` and `getnamebyhash`
 now accept an additional boolean parameter `safe` which will resolve the name from the Urkel
@@ -14,11 +16,12 @@ to these calls.
   - `decoderesource` like `decodescript` accepts hex string as input and returns
   JSON formatted DNS records resource.
 
-### Wallet changes
+### Wallet API changes
 
 - New RPC methods:
   - `createbatch` and `sendbatch` create batch transactions with any number
   of outputs with any combination of covenants.
+
 ## v4.0.0
 
 **When upgrading to this version of hsd you must pass

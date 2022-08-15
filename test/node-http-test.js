@@ -19,73 +19,239 @@ const mnemonics = require('./data/mnemonic-english.json');
 // Commonly used test mnemonic
 const phrase = mnemonics[0][1];
 
-const network = Network.get('regtest');
-const {types} = rules;
-
-const node = new FullNode({
-  network: 'regtest',
-  apiKey: 'foo',
-  walletAuth: true,
-  memory: true,
-  indexTx: true,
-  indexAddress: true,
-  rejectAbsurdFees: false
-});
-
-const nclient = new NodeClient({
-  port: network.rpcPort,
-  apiKey: 'foo'
-});
-
-let cbAddress, privkey, pubkey;
-let socketData, mempoolData;
-
-const {treeInterval} = network.names;
-
 describe('Node HTTP', function() {
-  this.timeout(15000);
+  describe('Networking info', function() {
+    it('should not have public address: regtest', async () => {
+      const network = Network.get('regtest');
 
-  before(async () => {
-    await node.open();
-    await nclient.open();
-    await nclient.call('watch chain');
+      const node = new FullNode({
+        network: network.type
+      });
 
-    const mnemonic = Mnemonic.fromPhrase(phrase);
-    const priv = HDPrivateKey.fromMnemonic(mnemonic);
-    const type = network.keyPrefix.coinType;
-    const key = priv.derive(44, true).derive(type, true).derive(0, true);
-    const xkey = key.derive(0).derive(0);
+      const nclient = new NodeClient({
+        port: network.rpcPort
+      });
 
-    pubkey = xkey.publicKey;
-    privkey = xkey.privateKey;
+      await node.open();
+      await node.connect();
+      const {pool} = await nclient.getInfo();
+      await node.close();
 
-    cbAddress = Address.fromPubkey(pubkey).toString(network.type);
+      assert.strictEqual(pool.host, '0.0.0.0');
+      assert.strictEqual(pool.port, network.port);
+      assert.strictEqual(pool.brontidePort, network.brontidePort);
 
-    nclient.bind('tree commit', (root, entry, block) => {
-      assert.ok(root);
-      assert.ok(block);
-      assert.ok(entry);
+      const {public: pub} = pool;
 
-      socketData.push({root, entry, block});
+      assert.strictEqual(pub.listen, false);
+      assert.strictEqual(pub.host, null);
+      assert.strictEqual(pub.port, null);
+      assert.strictEqual(pub.brontidePort, null);
     });
 
-    node.mempool.on('tx', (tx) => {
-      mempoolData[tx.txid()] = true;
+    it('should not have public address: regtest, listen', async () => {
+      const network = Network.get('regtest');
+
+      const node = new FullNode({
+        network: network.type,
+        listen: true
+      });
+
+      const nclient = new NodeClient({
+        port: network.rpcPort
+      });
+
+      await node.open();
+      await node.connect();
+      const {pool} = await nclient.getInfo();
+      await node.close();
+
+      assert.strictEqual(pool.host, '0.0.0.0');
+      assert.strictEqual(pool.port, network.port);
+      assert.strictEqual(pool.brontidePort, network.brontidePort);
+
+      const {public: pub} = pool;
+
+      assert.strictEqual(pub.listen, true);
+      assert.strictEqual(pub.host, null); // we don't discover from external
+      assert.strictEqual(pub.port, null);
+      assert.strictEqual(pub.brontidePort, null);
     });
-  });
 
-  beforeEach(() => {
-    socketData = [];
-    mempoolData = {};
-  });
+    it('should not have public address: main', async () => {
+      const network = Network.get('main');
 
-  after(async () => {
-    await nclient.close();
-    await node.close();
+      const node = new FullNode({
+        network: network.type
+      });
+
+      const nclient = new NodeClient({
+        port: network.rpcPort
+      });
+
+      await node.open();
+      await node.connect();
+      const {pool} = await nclient.getInfo();
+      await node.close();
+
+      assert.strictEqual(pool.host, '0.0.0.0');
+      assert.strictEqual(pool.port, network.port);
+      assert.strictEqual(pool.brontidePort, network.brontidePort);
+
+      const {public: pub} = pool;
+
+      assert.strictEqual(pub.listen, false);
+      assert.strictEqual(pub.host, null);
+      assert.strictEqual(pub.port, null);
+      assert.strictEqual(pub.brontidePort, null);
+    });
+
+    it('should not have public address: main, listen', async () => {
+      const network = Network.get('main');
+
+      const node = new FullNode({
+        network: network.type,
+        listen: true
+      });
+
+      const nclient = new NodeClient({
+        port: network.rpcPort
+      });
+
+      await node.open();
+      await node.connect();
+      const {pool} = await nclient.getInfo();
+      await node.close();
+
+      assert.strictEqual(pool.host, '0.0.0.0');
+      assert.strictEqual(pool.port, network.port);
+      assert.strictEqual(pool.brontidePort, network.brontidePort);
+
+      const {public: pub} = pool;
+
+      assert.strictEqual(pub.listen, true);
+      assert.strictEqual(pub.host, null);
+      assert.strictEqual(pub.port, null);
+      assert.strictEqual(pub.brontidePort, null);
+    });
+
+    it('should have public address: main, listen, publicHost', async () => {
+      const network = Network.get('main');
+      const publicHost = '100.200.11.22';
+      const publicPort = 11111;
+      const publicBrontidePort = 22222;
+
+      const node = new FullNode({
+        network: network.type,
+        listen: true,
+        publicHost,
+        publicPort,
+        publicBrontidePort
+      });
+
+      const nclient = new NodeClient({
+        port: network.rpcPort
+      });
+
+      await node.open();
+      await node.connect();
+      const {pool} = await nclient.getInfo();
+      await node.close();
+
+      assert.strictEqual(pool.host, '0.0.0.0');
+      assert.strictEqual(pool.port, network.port);
+      assert.strictEqual(pool.brontidePort, network.brontidePort);
+
+      const {public: pub} = pool;
+
+      assert.strictEqual(pub.listen, true);
+      assert.strictEqual(pub.host, publicHost);
+      assert.strictEqual(pub.port, publicPort);
+      assert.strictEqual(pub.brontidePort, publicBrontidePort);
+    });
   });
 
   describe('Websockets', function () {
+    this.timeout(15000);
+
     describe('tree commit', () => {
+      const network = Network.get('regtest');
+      const {types} = rules;
+
+      const node = new FullNode({
+        network: 'regtest',
+        apiKey: 'foo',
+        walletAuth: true,
+        memory: true,
+        indexTx: true,
+        indexAddress: true,
+        rejectAbsurdFees: false
+      });
+
+      const nclient = new NodeClient({
+        port: network.rpcPort,
+        apiKey: 'foo'
+      });
+
+      const {treeInterval} = network.names;
+
+      let privkey, pubkey;
+      let socketData, mempoolData;
+      let cbAddress;
+
+      // take into account race conditions
+      async function mineBlocks(count, address) {
+        for (let i = 0; i < count; i++) {
+          const obj = { complete: false };
+          node.once('block', () => {
+            obj.complete = true;
+          });
+          await nclient.execute('generatetoaddress', [1, address]);
+          await common.forValue(obj, 'complete', true);
+        }
+      }
+
+      before(async () => {
+        await node.open();
+        await nclient.open();
+        await nclient.call('watch chain');
+
+        const mnemonic = Mnemonic.fromPhrase(phrase);
+        const priv = HDPrivateKey.fromMnemonic(mnemonic);
+        const type = network.keyPrefix.coinType;
+        const key = priv.derive(44, true).derive(type, true).derive(0, true);
+        const xkey = key.derive(0).derive(0);
+
+        socketData = [];
+        mempoolData = {};
+        pubkey = xkey.publicKey;
+        privkey = xkey.privateKey;
+
+        cbAddress = Address.fromPubkey(pubkey).toString(network.type);
+
+        nclient.bind('tree commit', (root, entry, block) => {
+          assert.ok(root);
+          assert.ok(block);
+          assert.ok(entry);
+
+          socketData.push({root, entry, block});
+        });
+
+        node.mempool.on('tx', (tx) => {
+          mempoolData[tx.txid()] = true;
+        });
+      });
+
+      after(async () => {
+        await nclient.close();
+        await node.close();
+      });
+
+      beforeEach(() => {
+        socketData = [];
+        mempoolData = {};
+      });
+
       it('should mine 1 tree interval', async () => {
         await mineBlocks(treeInterval, cbAddress);
         assert.equal(socketData.length, 1);
@@ -153,14 +319,3 @@ describe('Node HTTP', function() {
   });
 });
 
-// take into account race conditions
-async function mineBlocks(count, address) {
-  for (let i = 0; i < count; i++) {
-    const obj = { complete: false };
-    node.once('block', () => {
-      obj.complete = true;
-    });
-    await nclient.execute('generatetoaddress', [1, address]);
-    await common.forValue(obj, 'complete', true);
-  }
-}
