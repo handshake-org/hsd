@@ -799,6 +799,28 @@ describe('Wallet RPC Methods', function() {
       await nclient.execute('generatetoaddress', [100, addr]);
     });
 
+    it('should have paths when creating batch', async () => {
+      const json = await wclient.execute(
+        'createbatch',
+        [
+          [['NONE', addr, 1]]
+        ]
+      );
+
+      assert(json.inputs[0].path);
+    });
+
+    it('should not have paths when sending batch', async () => {
+      const json = await wclient.execute(
+        'sendbatch',
+        [
+          [['NONE', addr, 1]]
+        ]
+      );
+
+      assert(!json.inputs[0].path);
+    });
+
     it('should not send invalid batch: OPEN arguments', async () => {
       await assert.rejects(
         wclient.execute(
