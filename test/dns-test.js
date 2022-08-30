@@ -122,8 +122,10 @@ describe('DNS Servers', function() {
         const resource = Resource.fromJSON({
           records: [{type: 'TXT', txt: [string]}]
         });
+        const maxTipAge = network.block.maxTipAge;
 
         before(async () => {
+          network.block.maxTipAge = 12 * 60 * 60;
           await miner.open();
           await miner.connect();
           await node.open();
@@ -132,19 +134,51 @@ describe('DNS Servers', function() {
 
           await forValue(miner.pool.peers.list, 'size', 1);
           await forValue(node.pool.peers.list, 'size', 1);
+
+          name = await miner.rpc.grindName([4]);
+
+          miner.miner.addresses.length = 0;
+          miner.miner.addAddress(wallet.getReceive());
         });
 
         after(async () => {
           await node.close();
           await miner.close();
+          network.block.maxTipAge = maxTipAge;
+        });
+
+        it('should refuse to resolve before chain sync', async () => {
+          await assert.rejects(
+            rootResolver.resolveTxt(name),
+            {message: `queryTxt EREFUSED ${name}`}
+          );
+        });
+
+        it('should not refuse to resolve after chain sync', async () => {
+          await mineBlocks(2);
+          await assert.rejects(
+            rootResolver.resolveTxt(name),
+            {message: `queryTxt ENOTFOUND ${name}`}
+          );
+        });
+
+        it('should refuse to resolve invalid name', async () => {
+          await assert.rejects(
+            rootResolver.resolveTxt('com\\\\000'),
+            {message: 'queryTxt EREFUSED com\\\\000'}
+          );
+        });
+
+        it('should not refuse to resolve valid name', async () => {
+          await assert.rejects(
+            rootResolver.resolveTxt('com\\000'),
+            {message: 'queryTxt ENOTFOUND com\\000'}
+          );
         });
 
         it('should fund wallet and win name', async () => {
-          miner.miner.addresses.length = 0;
-          miner.miner.addAddress(wallet.getReceive());
           await mineBlocks(20);
 
-          name = await miner.rpc.grindName([4]);
           await miner.mempool.addTX((await wallet.sendOpen(name)).toTX());
           await mineBlocks(treeInterval + 1);
           await miner.mempool.addTX((await wallet.sendBid(name, 10000, 10000)).toTX());
