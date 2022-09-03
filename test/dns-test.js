@@ -1,6 +1,8 @@
 'use strict';
 
 const assert = require('bsert');
+const {hashName} = require('../lib/covenants/rules');
+const NameState = require('../lib/covenants/namestate');
 const Network = require('../lib/protocol/network');
 const FullNode = require('../lib/node/fullnode');
 const SPVNode = require('../lib/node/spvnode');
@@ -19,7 +21,8 @@ recursiveResolver.setServers([`127.0.0.1:${network.rsPort}`]);
 const {
   treeInterval,
   biddingPeriod,
-  revealPeriod
+  revealPeriod,
+  safeRoot
 } = network.names;
 
 describe('DNS Servers', function() {
@@ -111,13 +114,15 @@ describe('DNS Servers', function() {
 
         async function mineBlocks(n) {
           for (; n > 0; n--) {
+            // force ten minute block intervals
+            node.network.time.offset += 60 * 10;
             const block = await miner.miner.mineBlock();
             await miner.chain.add(block);
           }
           await forValue(node.chain, 'height', miner.chain.height);
         }
 
-        let name;
+        let name, nameHash, serial;
         const string = 'Campaign of chaos';
         const resource = Resource.fromJSON({
           records: [{type: 'TXT', txt: [string]}]
@@ -136,6 +141,7 @@ describe('DNS Servers', function() {
           await forValue(node.pool.peers.list, 'size', 1);
 
           name = await miner.rpc.grindName([4]);
+          nameHash = hashName(name);
 
           miner.miner.addresses.length = 0;
           miner.miner.addAddress(wallet.getReceive());
@@ -148,17 +154,71 @@ describe('DNS Servers', function() {
         });
 
         it('should refuse to resolve before chain sync', async () => {
+          assert.strictEqual(node.chain.getProgress(), 0);
           await assert.rejects(
             rootResolver.resolveTxt(name),
             {message: `queryTxt EREFUSED ${name}`}
           );
         });
 
-        it('should not refuse to resolve after chain sync', async () => {
+        it('should resolve root SOA before chain sync', async () => {
+          const res = await rootResolver.resolveSoa('.');
+          // null UNIX timestamp because there is no safe root yet
+          assert.strictEqual(res.serial, 1970010100);
+        });
+
+        it('should still refuse to resolve after chain sync', async () => {
+          // On mainnet, a synced chain would have a safe root,
+          // but on regtest we are "synced" after the first block,
+          // which is not enough confirmations yet to resolve.
           await mineBlocks(2);
+          assert.strictEqual(node.chain.getProgress(), 1);
+          await assert.rejects(
+            rootResolver.resolveTxt(name),
+            {message: `queryTxt EREFUSED ${name}`}
+          );
+        });
+
+        it('should not refuse to resolve after safe height', async () => {
+          await mineBlocks(node.chain.height % treeInterval);
           await assert.rejects(
             rootResolver.resolveTxt(name),
             {message: `queryTxt ENOTFOUND ${name}`}
+          );
+        });
+
+        it('should resolve root SOA after safe height', async () => {
+          node.ns.resetCache();
+          const res = await rootResolver.resolveSoa('.');
+          // Block #1 timestamp because the latest tree commitment
+          // hasn't been confirmed enough times yet, so we drop back
+          // to the previous tree root commitment, which is genesis (#0),
+          // but new roots don't appear in headers until the next block.
+          const {time} = await miner.chain.getEntryByHeight(1);
+          const date = new Date(time * 1000);
+          const y = date.getUTCFullYear() * 1e6;
+          const m = (date.getUTCMonth() + 1) * 1e4;
+          const d = date.getUTCDate() * 1e2;
+          const h = date.getUTCHours();
+          const expected = y + m + d + h;
+          assert.strictEqual(res.serial, expected);
+          serial = res.serial;
+        });
+
+        it('should update SOA serial when tree interval is safe', async () => {
+          const startHeight = node.chain.height;
+          let newSerial = serial;
+          while (newSerial === serial) {
+            await mineBlocks(1);
+            node.ns.resetCache();
+            const res = await rootResolver.resolveSoa('.');
+            newSerial = res.serial;
+          }
+          const endHeight = node.chain.height;
+          assert(endHeight > startHeight);
+          assert.strictEqual(
+            endHeight % treeInterval,
+            safeRoot
           );
         });
 
@@ -177,7 +237,7 @@ describe('DNS Servers', function() {
         });
 
         it('should fund wallet and win name', async () => {
-          await mineBlocks(20);
+          await mineBlocks(19);
 
           await miner.mempool.addTX((await wallet.sendOpen(name)).toTX());
           await mineBlocks(treeInterval + 1);
@@ -201,7 +261,7 @@ describe('DNS Servers', function() {
           );
           await mineBlocks(1);
 
-          // Sanity check
+          // Sanity check: name is registered
           const ns = await miner.chain.db.getNameStateByName(name);
           assert(ns);
           assert.bufferEqual(ns.data, resource.encode());
@@ -241,6 +301,11 @@ describe('DNS Servers', function() {
             rootResolver.resolveTxt(name),
             {message: `queryTxt ENOTFOUND ${name}`}
           );
+
+          // Sanity check: name is in tree
+          const raw = await miner.chain.db.lookup(commitRoot, nameHash);
+          const {data} = NameState.decode(raw);
+          assert.bufferEqual(data, resource.encode());
         });
 
         it('should resolve at safe height', async () => {
