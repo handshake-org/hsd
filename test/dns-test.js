@@ -103,6 +103,10 @@ describe('DNS Servers', function() {
           wallet.addBlock(entry, block.txs);
         });
 
+        miner.chain.on('disconnect', (entry, block) => {
+          wallet.removeBlock(entry, block.txs);
+        });
+
         const node = new Node({
           memory: true,
           network: network.type,
@@ -112,12 +116,17 @@ describe('DNS Servers', function() {
           httpPort: network.rpcPort + 100
         });
 
-        async function mineBlocks(n) {
+        async function mineBlocks(n, tip) {
           for (; n > 0; n--) {
-            // force ten minute block intervals
-            node.network.time.offset += 60 * 10;
-            const block = await miner.miner.mineBlock();
-            await miner.chain.add(block);
+            // Force twenty minute block intervals
+            // Why not ten? Because this ensures that even on regtest
+            // with its short tree interval, the "hours" digits in
+            // the SOA timestamp will increase every new safe root.
+            miner.network.time.offset += 60 * 20;
+            const block = await miner.miner.mineBlock(tip);
+            const entry = await miner.chain.add(block);
+            if (tip)
+              tip = entry;
           }
           await forValue(node.chain, 'height', miner.chain.height);
         }
@@ -319,6 +328,82 @@ describe('DNS Servers', function() {
           node.ns.resetCache();
           const res = await rootResolver.resolveTxt(name);
           assert.strictEqual(res[0][0], string);
+        });
+
+        describe('Chain reorg', function () {
+          it('should update SOA serial at safe height', async () => {
+            let lastSerial = node.ns.serial();
+            let lastRoot = node.chain.safeEntry.treeRoot;
+            for (let i = 0; i < 100; i++) {
+              // Update the Urkel tree in every block
+              await miner.mempool.addTX((await wallet.sendUpdate(
+                  name,
+                  Resource.fromJSON({
+                    records: [{type: 'TXT', txt: [string]}]
+                  })
+                )).toTX());
+              await mineBlocks(1);
+
+              const newSerial = node.ns.serial();
+              const newRoot = node.chain.safeEntry.treeRoot;
+
+              if (node.chain.height % treeInterval === safeRoot) {
+                assert.notEqual(newSerial, lastSerial);
+                assert.notBufferEqual(newRoot, lastRoot);
+                lastSerial = newSerial;
+                lastRoot = newRoot;
+              } else {
+                assert.strictEqual(newSerial, lastSerial);
+                assert.bufferEqual(newRoot, lastRoot);
+              }
+            }
+          });
+
+          it('should survive a shallow reorg', async () => {
+            const lastSerial = node.ns.serial();
+
+            // Fork point is within safe root limit
+            const height = miner.chain.height - (safeRoot - 1);
+            const fork = await miner.chain.getEntryByHeight(height);
+
+            // Reorg
+            const waiter = new Promise((resolve) => {
+              node.chain.once('reorganize', (tip, comp, fork) => {
+                resolve(tip, comp, fork);
+              });
+            });
+            // Guarantee all-new timestamps
+            miner.network.time.offset += 6000;
+
+            await mineBlocks(safeRoot, fork);
+            await waiter;
+
+            const newSerial = node.ns.serial();
+            assert.strictEqual(lastSerial, newSerial);
+          });
+
+          it('should not survive a deep reorg', async () => {
+            const lastSerial = node.ns.serial();
+
+            // Fork point exceeds safe root limit
+            const height = miner.chain.height - safeRoot;
+            const fork = await miner.chain.getEntryByHeight(height);
+
+            // Reorg
+            const waiter = new Promise((resolve) => {
+              node.chain.once('reorganize', (tip, comp, fork) => {
+                resolve(tip, comp, fork);
+              });
+            });
+            // Guarantee all-new timestamps
+            miner.network.time.offset += 6000;
+
+            await mineBlocks(safeRoot + 1, fork);
+            await waiter;
+
+            const newSerial = node.ns.serial();
+            assert.notStrictEqual(lastSerial, newSerial);
+          });
         });
       });
     });
