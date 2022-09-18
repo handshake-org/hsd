@@ -205,11 +205,12 @@ describe('Interactive name swap', function() {
 
     // Bob should verify all the data in the MTX to ensure everything is valid,
     // but this is the minimum.
-    const input0 = mtx.input(0).clone(); // copy input with Alice's signature
-    const coinEntry = await node.chain.db.readCoin(input0.prevout);
+    const coinEntry = await node.chain.db.readCoin(mtx.input(0).prevout);
     assert(coinEntry); // ensures that coin exists and is still unspent
 
-    const coin = coinEntry.toCoin(input0.prevout);
+    const coin = coinEntry.toCoin(mtx.input(0).prevout);
+    mtx.view.addCoin(coin);
+
     assert(coin.covenant.type === types.TRANSFER);
     const addr = new Address({
       version: coin.covenant.items[2].readInt8(),
@@ -223,12 +224,8 @@ describe('Interactive name swap', function() {
     const changeAddress = await bob.changeAddress();
     const rate = await wdb.estimateFee();
     const coins = await bob.getSmartCoins();
-    // Add the external coin to the coin selector so we don't fail assertions
-    coins.push(coin);
+
     await mtx.fund(coins, {changeAddress, rate});
-    // The funding mechanism starts by wiping out existing inputs
-    // which for us includes Alice's signature. Replace it from our backup.
-    mtx.inputs[0].inject(input0);
 
     // Rearrange outputs.
     // Since we added a change output, the SINGELREVERSE is now broken:
