@@ -4,12 +4,15 @@ const assert = require('bsert');
 const BlockStore = require('../lib/blockstore/level');
 const Chain = require('../lib/blockchain/chain');
 const {states} = require('../lib/covenants/namestate');
+const consensus = require('../lib/protocol/consensus');
 const WorkerPool = require('../lib/workers/workerpool');
 const Miner = require('../lib/mining/miner');
 const WalletDB = require('../lib/wallet/walletdb');
 const Network = require('../lib/protocol/network');
 const rules = require('../lib/covenants/rules');
 const Address = require('../lib/primitives/address');
+const Output = require('../lib/primitives/output');
+const Covenant = require('../lib/primitives/covenant');
 const {Resource} = require('../lib/dns/resource');
 
 const network = Network.get('regtest');
@@ -290,6 +293,13 @@ describe('Wallet Auction', function() {
       assert.strictEqual(mtx.getFee(mtx.view), hardFee);
     });
 
+    it('should fail if no actions are provided', async () => {
+      await assert.rejects(
+        wallet.sendBatch([]),
+        {message: 'Batches require at least one action.'}
+      );
+    });
+
     it('should fail if one action is invalid: OPEN reserved', async () => {
       await assert.rejects(
         wallet.sendBatch(
@@ -362,7 +372,7 @@ describe('Wallet Auction', function() {
             ['REVEAL']
           ]
         ),
-        {message: 'No bids to reveal.'}
+        {message: 'Nothing to do.'}
       );
     });
 
@@ -373,7 +383,7 @@ describe('Wallet Auction', function() {
             ['REDEEM']
           ]
         ),
-        {message: 'No reveals to redeem.'}
+        {message: 'Nothing to do.'}
       );
     });
 
@@ -619,6 +629,26 @@ describe('Wallet Auction', function() {
         assert(ns4.isClosed(chain.height, network));
       });
 
+      it('2 RENEW', async () => {
+        await wallet.sendBatch(
+          [
+            ['RENEW', name2],
+            ['RENEW', name4]
+          ]
+        );
+
+        await mineBlocks(1);
+        const ns1 = await chain.db.getNameStateByName(name1);
+        const ns2 = await chain.db.getNameStateByName(name2);
+        const ns3 = await chain.db.getNameStateByName(name3);
+        const ns4 = await chain.db.getNameStateByName(name4);
+        assert.strictEqual(ns2.renewal, chain.height);
+        assert.strictEqual(ns4.renewal, chain.height);
+        // sanity check
+        assert.notStrictEqual(ns1.renewal, chain.height);
+        assert.notStrictEqual(ns3.renewal, chain.height);
+      });
+
       it('should not have receive address gaps', async () => {
         const acct = await wallet.getAccount(0);
         const {receiveDepth} = acct;
@@ -637,6 +667,385 @@ describe('Wallet Auction', function() {
         }
         // Ensure every receive address was used at least once
         assert(addrIndexes.indexOf(0) === -1);
+      });
+    });
+
+    describe('Policy Weight Limits', function () {
+      this.timeout(30000);
+      let name;
+
+      it('should reset wallet', async () => {
+        const newWallet = await wdb.create();
+        const address = await newWallet.receiveAddress();
+        const bal = await wallet.getBalance();
+        const value = Math.floor(bal.confirmed / 5);
+        await wallet.send({
+          outputs: [
+            {address, value},
+            {address, value},
+            {address, value},
+            {address, value}
+          ]
+        });
+        await mineBlocks(1);
+        wallet = newWallet;
+      });
+
+      it('should OPEN', async () => {
+        name = rules.grindName(4, chain.height, network);
+        await wallet.sendBatch([['OPEN', name]]);
+        await mineBlocks(treeInterval + 1);
+      });
+
+      it('should not batch too many BIDs', async () => {
+        const batch = [];
+        for (let i = 201; i > 0; i--)
+          batch.push(['BID', name, i * 1000, i * 1000]);
+
+        await assert.rejects(
+          wallet.sendBatch(batch),
+          {message: 'Batch output addresses would exceed lookahead.'}
+        );
+      });
+
+      it('should batch BIDs', async () => {
+        let batch = [];
+        for (let i = 200; i > 0; i--)
+          batch.push(['BID', name, i * 1000, i * 1000]);
+        await wallet.sendBatch(batch);
+        batch = [];
+        for (let i = 200; i > 0; i--)
+          batch.push(['BID', name, i * 1001, i * 1001]);
+        await wallet.sendBatch(batch);
+        batch = [];
+        for (let i = 200; i > 0; i--)
+          batch.push(['BID', name, i * 1002, i * 1002]);
+        await wallet.sendBatch(batch);
+        batch = [];
+        for (let i = 150; i > 0; i--)
+          batch.push(['BID', name, i * 1003, i * 1003]);
+        await wallet.sendBatch(batch);
+
+        await mineBlocks(biddingPeriod);
+      });
+
+      it('should have too many REVEALs for legacy sendRevealAll', async () => {
+        await assert.rejects(
+          wallet.sendRevealAll(),
+          {message: 'TX exceeds policy weight.'}
+        );
+      });
+
+      it('should create batch just under weight limit', async () => {
+        // Start with the batch we would normally make
+        const mtx = await wallet.createBatch([['REVEAL']]);
+
+        // Find a spendable coin
+        const coins = await wallet.getCoins();
+        let coin;
+        for (coin of coins)
+          if (coin.value > 10000)
+            break;
+
+        // Add the coin as new input
+        mtx.addCoin(coin).getSize();
+
+        // Add a phony REVEAL output
+        mtx.addOutput(new Output({
+          value: coin.value,
+          address: Address.fromProgram(0, Buffer.alloc(20, 0x01)),
+          covenant: new Covenant({
+            type: 4,  // REVEAL
+            items: [
+              Buffer.alloc(32), // namehash
+              Buffer.alloc(4),  // height
+              Buffer.alloc(32)  // nonce
+            ]
+          })
+        }));
+
+        // Finish
+        await wallet.sign(mtx);
+
+        // Yes, adding one more REVEAL to this batch breaks the limit
+        await assert.rejects(
+          wallet.sendMTX(mtx),
+          {message: 'TX exceeds policy weight.'}
+        );
+      });
+
+      it('should REVEAL all in several batches', async () => {
+        let reveals = 0;
+        const mtx1 = await wallet.createBatch([['REVEAL']]);
+        assert(mtx1.changeIndex >= 0);
+        reveals += mtx1.outputs.length - 1;
+        await wdb.addTX(mtx1.toTX());
+
+        const mtx2 = await wallet.createBatch([['REVEAL']]);
+        assert(mtx2.changeIndex >= 0);
+        reveals += mtx2.outputs.length - 1;
+        await wdb.addTX(mtx2.toTX());
+
+        assert.strictEqual(reveals, 750);
+
+        await wallet.sendMTX(mtx1);
+        await wallet.sendMTX(mtx2);
+        await mineBlocks(revealPeriod);
+      });
+
+      it('should have too many REDEEMs for legacy sendRedeemAll', async () => {
+        await assert.rejects(
+          wallet.sendRedeemAll(),
+          {message: 'TX exceeds policy weight.'}
+        );
+      });
+
+      it('should REDEEM all in several batches', async () => {
+        let reveals = 0;
+        const mtx1 = await wallet.createBatch([['REDEEM']]);
+        assert(mtx1.changeIndex >= 0);
+        reveals += mtx1.outputs.length - 1;
+        await wdb.addTX(mtx1.toTX());
+
+        const mtx2 = await wallet.createBatch([['REDEEM']]);
+        assert(mtx2.changeIndex >= 0);
+        reveals += mtx2.outputs.length - 1;
+        await wdb.addTX(mtx2.toTX());
+
+        // One of the REVEALs was a winner!
+        assert.strictEqual(reveals, 749);
+
+        await wallet.sendMTX(mtx1);
+        await wallet.sendMTX(mtx2);
+        await mineBlocks(1);
+      });
+    });
+
+    describe('Consensus Limits', function () {
+      this.timeout(30000);
+
+      const names = [];
+      let startHeight;
+
+      const oldRenewalWindow = network.names.renewalWindow;
+      before(() => {
+        network.names.renewalWindow = 160;
+
+        for (let i = 0; i < 800; i++)
+          names.push(`name_${i}`);
+      });
+
+      after(() => {
+        network.names.renewalWindow = oldRenewalWindow;
+      });
+
+      it('should not batch too many OPENs', async () => {
+        const batch = [];
+        for (let i = 0; i < consensus.MAX_BLOCK_OPENS + 1; i++)
+          batch.push(['OPEN', names[i]]);
+
+        await assert.rejects(
+          wallet.createBatch(batch),
+          {message: 'Too many OPENs.'} // Might exceed wallet lookahead also
+        );
+      });
+
+      it('should send batches of OPENs in sequential blocks', async () => {
+        let count = 0;
+        for (let i = 1; i <= 8; i++) {
+          const batch = [];
+          for (let j = 1; j <= 100; j++) {
+            batch.push(['OPEN', names[count++]]);
+          }
+          await wallet.sendBatch(batch);
+          await mineBlocks(1);
+        }
+      });
+
+      it('should send batches of BIDs in sequential blocks', async () => {
+        // Send winning and losing bid for each name
+        let count = 0;
+        for (let i = 1; i <= 8; i++) {
+          const batch = [];
+          for (let j = 1; j <= 100; j++) {
+            batch.push(
+              ['BID', names[count], 10000, 10000],
+              ['BID', names[count++], 10000, 10000]
+            );
+          }
+          await wallet.sendBatch(batch);
+          await mineBlocks(1);
+        }
+      });
+
+      it('should send all the batches of REVEALs it needs to', async () => {
+        await mineBlocks(2); // Advance all names to reveal phase
+
+        let reveals = 0;
+        for (;;) {
+          try {
+            const tx = await wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW'], ['FINALIZE']]);
+            reveals += tx.outputs.length - 1; // Don't count change output
+          } catch (e) {
+            assert.strictEqual(e.message, 'Nothing to do.');
+            break;
+          }
+        }
+
+        assert.strictEqual(reveals, 800 * 2);
+      });
+
+      it('should send all the batches of REDEEMs it needs to', async () => {
+        await mineBlocks(10); // Finish reveal phase for all names
+
+        let redeems = 0;
+        for (;;) {
+          try {
+            const tx = await wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW'], ['FINALIZE']]);
+            redeems += tx.outputs.length - 1; // Don't count change output
+          } catch (e) {
+            assert.strictEqual(e.message, 'Nothing to do.');
+            break;
+          }
+        }
+
+        assert.strictEqual(redeems, 800); // Half the bids lost, one per name
+      });
+
+      it('should send batches of REGISTERs', async () => {
+        let count = 0;
+        for (let i = 1; i <= 8; i++) {
+          const batch = [];
+          for (let j = 1; j <= 100; j++) {
+            batch.push(['UPDATE', names[count++], new Resource()]);
+          }
+          await wallet.sendBatch(batch);
+          await mineBlocks(1);
+
+          if (!startHeight)
+            startHeight = chain.height;
+        }
+
+        // Confirm
+        for (const name of names) {
+          const ns = await wallet.getNameStateByName(name);
+          assert(ns.registered);
+        }
+        // First name was registered first, should be renewed first
+        const ns0 = await wallet.getNameStateByName('name_0');
+        const ns799 = await wallet.getNameStateByName('name_799');
+        assert(ns0.renewal < ns799.renewal);
+      });
+
+      it('should not batch too many UPDATEs', async () => {
+        const batch = [];
+        for (let i = 0; i < consensus.MAX_BLOCK_UPDATES + 1; i++)
+          batch.push(['UPDATE', names[i], new Resource()]);
+
+        await assert.rejects(
+          wallet.createBatch(batch),
+          {message: 'Too many UPDATEs.'} // Might exceed wallet lookahead also
+        );
+      });
+
+      it('should not RENEW any names too early', async () => {
+        await mineBlocks(
+          ((network.names.renewalWindow / 8) * 7)
+          - (chain.height - startHeight)
+          - 1
+        );
+
+        await assert.rejects(
+          wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW'], ['FINALIZE']]),
+          {message: 'Nothing to do.'}
+        );
+      });
+
+      it('should not batch too many RENEWs', async () => {
+        const batch = [];
+        for (let i = 0; i < consensus.MAX_BLOCK_RENEWALS + 1; i++)
+          batch.push(['RENEW', names[i]]);
+
+        await assert.rejects(
+          wallet.createBatch(batch),
+          {message: 'Too many RENEWs.'} // Might exceed wallet lookahead also
+        );
+      });
+
+      it('should send all the batches of RENEWs it needs to', async () => {
+        await mineBlocks(8); // All names expiring, none expired yet
+
+        let renewals = 0;
+        for (;;) {
+          const tx = await wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW'], ['FINALIZE']]);
+          await mineBlocks(1);
+
+          if (!renewals) {
+            // First name is "most urgent" should've been renewed first
+            const ns0 = await wallet.getNameStateByName(names[0]);
+            assert.strictEqual(ns0.renewal, chain.height);
+          }
+
+          renewals += tx.outputs.length - 1; // Don't count change output
+          if (renewals === 800)
+            break;
+        }
+        assert.strictEqual(renewals, 800);
+      });
+
+      it('should not batch too many TRANSFERs', async () => {
+        const batch = [];
+        for (const name of names)
+          batch.push(['TRANSFER', name, new Address()]);
+
+        await assert.rejects(
+          wallet.createBatch(batch),
+          {message: 'Too many UPDATEs.'} // Might exceed wallet lookahead also
+        );
+      });
+
+      it('should send batches of TRANSFERs', async () => {
+        const addr = Address.fromProgram(0, Buffer.alloc(20, 0xd0));
+        let count = 0;
+        for (let i = 1; i <= 8; i++) {
+          const batch = [];
+          for (let j = 1; j <= 100; j++) {
+            batch.push(['TRANSFER', names[count++], addr]);
+          }
+          await wallet.sendBatch(batch);
+          await mineBlocks(1);
+        }
+      });
+
+      it('should not FINALIZE any names too early', async () => {
+        await mineBlocks(network.names.lockupPeriod - 9);
+
+        await assert.rejects(
+          wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW'], ['FINALIZE']]),
+          {message: 'Nothing to do.'}
+        );
+      });
+
+      it('should send all the batches of FINALIZEs it needs to', async () => {
+        await mineBlocks(8); // All names ready for finalize
+
+        let finalizes = 0;
+        for (;;) {
+          const tx = await wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW'], ['FINALIZE']]);
+          await mineBlocks(1);
+
+          finalizes += tx.outputs.length - 1; // Don't count change output
+          if (finalizes === 800)
+            break;
+        }
+        assert.strictEqual(finalizes, 800);
+      });
+
+      it('should have nothing to do', async () => {
+        await assert.rejects(
+          wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW'], ['FINALIZE']]),
+          {message: 'Nothing to do.'}
+        );
       });
     });
   });
