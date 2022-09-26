@@ -12,6 +12,7 @@ const {
   Network,
   wallet: { Wallet }
 } = require('../lib/hsd');
+const Account = require('../lib/wallet/account');
 
 const mnemonics = require('./data/mnemonic-english.json');
 const network = Network.get('main');
@@ -288,6 +289,60 @@ describe('Wallet Unit Tests', () => {
         assert.throws(() => Wallet.fromOptions(wdb, overflow));
         const underflow = { tokenDepth: -1 };
         assert.throws(() => Wallet.fromOptions(wdb, underflow));
+      }
+    });
+
+    it('should handle options.lookahead (account)', async () => {
+      const wid = 0;
+      const id = 'primary';
+      const key = HDPrivateKey.generate();
+      const accountKey = key.toPublic();
+      const accountIndex = 0;
+      const invalid = [
+        -1000,
+        -1,
+        2 ** 32,
+        2 ** 33
+      ];
+
+      const valid = [
+        0,
+        1,
+        1000
+      ];
+
+      for (const lookahead of invalid) {
+        assert.throws(() => {
+          Account.fromOptions({}, {
+            id,
+            wid,
+            accountKey,
+            accountIndex,
+            lookahead
+          });
+        });
+
+        await assert.rejects(wdb.create({ lookahead }));
+      }
+
+      for (const lookahead of valid) {
+        const wallet = await wdb.create({ lookahead });
+        const account = await wallet.getAccount(0);
+        assert.strictEqual(account.lookahead, lookahead);
+      }
+
+      // Wallet create will take a lot of time generating all lookaheads.
+      valid.push(2 ** 32 - 1);
+
+      for (const lookahead of valid) {
+        const account = Account.fromOptions({}, {
+          id,
+          wid,
+          accountKey,
+          accountIndex,
+          lookahead
+        });
+        assert.strictEqual(account.lookahead, lookahead);
       }
     });
   });
