@@ -2,6 +2,9 @@
 
 ## v5.0.0
 
+**When upgrading to this version of hsd, you must pass `--wallet-migrate=2` when
+you run it for the first time.**
+
 ### Node API changes
 
 - HTTP API endpoint `/` (`hsd-cli getinfo`) now includes "public" networking settings.
@@ -16,7 +19,10 @@ to these calls.
   - `decoderesource` like `decodescript` accepts hex string as input and returns
   JSON formatted DNS records resource.
 
-### Wallet API changes
+### Wallet changes
+
+- HTTP Changes:
+  - Wallet and account create methods now accept `lookahead` values more than `200`.
 
 - New RPC methods:
   - `createbatch` and `sendbatch` create batch transactions with any number
