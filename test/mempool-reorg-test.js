@@ -37,6 +37,21 @@ describe('Mempool Covenant Reorg', function () {
     });
   }
 
+  async function getConfirmedResource() {
+    const res = await node.rpc.getNameResource([name]);
+    return res.records[0].txt[0];
+  }
+
+  function getMempoolResource() {
+    if (!node.mempool.map.size)
+      return null;
+
+    assert.strictEqual(node.mempool.map.size, 1);
+    const {tx} = node.mempool.map.toValues()[0];
+    const res = Resource.decode(tx.outputs[0].covenant.items[2]);
+    return res.records[0].txt[0];
+  }
+
   it('should fund wallet and win name', async () => {
     await node.rpc.generate([10]);
     name = await node.rpc.grindName([3]);
@@ -50,33 +65,26 @@ describe('Mempool Covenant Reorg', function () {
     await wallet.sendUpdate(name, makeResource());
     await node.rpc.generate([1]);
 
-    const check = await node.rpc.getNameResource([name]);
-    assert.deepStrictEqual(
-      check,
-      {records: [{type: 'TXT', txt: ['0']}]}
-    );
+    assert.strictEqual(await getConfirmedResource(), '0');
   });
 
   it('should generate UPDATE chain', async () => {
     for (let i = 0; i < 10; i++) {
-      await wallet.sendUpdate(name, makeResource());
+      await wallet.sendUpdate(
+        name,
+        makeResource(),
+        {selection: 'age'} // avoid spending coinbase early
+      );
       await node.rpc.generate([1]);
     }
-
-    const check = await node.rpc.getNameResource([name]);
-    assert.deepStrictEqual(
-      check,
-      {records: [{type: 'TXT', txt: ['10']}]}
-    );
   });
 
   it('should shallow reorg chain', async () => {
     // Initial state
-    const res1 = await node.rpc.getNameResource([name]);
-    assert.strictEqual(res1.records[0].txt[0], '10');
+    assert.strictEqual(await getConfirmedResource(), '10');
 
     // Mempool is empty
-    assert.strictEqual(node.mempool.map.size, 0);
+    assert.strictEqual(getMempoolResource(), null);
 
     // Do not reorg beyond tree interval
     assert(node.chain.height % treeInterval === 3);
@@ -97,31 +105,38 @@ describe('Mempool Covenant Reorg', function () {
     await waiter;
 
     // State after reorg
-    const res2 = await node.rpc.getNameResource([name]);
-    assert.strictEqual(res2.records[0].txt[0], '7');
+    assert.strictEqual(await getConfirmedResource(), '7');
 
     // Mempool is NOT empty, "next" tx is waiting
-    assert.strictEqual(node.mempool.map.size, 1);
-    const tx = Array.from(node.mempool.map.values())[0].tx;
-    const res3 = Resource.decode(tx.outputs[0].covenant.items[2]);
-    assert.strictEqual(res3.records[0].txt[0], '8');
+    assert.strictEqual(getMempoolResource(), '8');
 
     // This next block would be invalid in our own chain
     // if mempool was corrupted with the wrong tx from the reorg.
     await node.rpc.generate([1]);
 
     // State after new block
-    const res4 = await node.rpc.getNameResource([name]);
-    assert.strictEqual(res4.records[0].txt[0], '8');
+    assert.strictEqual(await getConfirmedResource(), '8');
+
+    // Mempool is again NOT empty, "next NEXT" tx is waiting
+    assert.strictEqual(getMempoolResource(), '9');
+
+    // One more
+    await node.rpc.generate([1]);
+    assert.strictEqual(await getConfirmedResource(), '9');
+    assert.strictEqual(getMempoolResource(), '10');
+
+    // Finally
+    await node.rpc.generate([1]);
+    assert.strictEqual(await getConfirmedResource(), '10');
+    assert.strictEqual(getMempoolResource(), null);
   });
 
   it('should deep reorg chain', async () => {
     // Initial state
-    const res1 = await node.rpc.getNameResource([name]);
-    assert.strictEqual(res1.records[0].txt[0], '8');
+    assert.strictEqual(await getConfirmedResource(), '10');
 
     // Mempool is empty
-    assert.strictEqual(node.mempool.map.size, 0);
+    assert.strictEqual(getMempoolResource(), null);
 
     // Reorganize beyond tree interval
     const waiter = new Promise((resolve) => {
@@ -130,7 +145,7 @@ describe('Mempool Covenant Reorg', function () {
       });
     });
 
-    const depth = 5;
+    const depth = 12;
     let entry = await node.chain.getEntryByHeight(node.chain.height - depth);
     // Intentionally forking from historical tree interval requires dirty hack
     const {treeRoot} = await node.chain.getEntryByHeight(node.chain.height - depth + 1);
@@ -142,21 +157,12 @@ describe('Mempool Covenant Reorg', function () {
     await waiter;
 
     // State after reorg
-    const res2 = await node.rpc.getNameResource([name]);
-    assert.strictEqual(res2.records[0].txt[0], '7');
+    assert.strictEqual(await getConfirmedResource(), '2');
+    assert.strictEqual(getMempoolResource(), '3');
 
-    // Mempool is NOT empty, "next" tx is waiting
-    assert.strictEqual(node.mempool.map.size, 1);
-    const tx = Array.from(node.mempool.map.values())[0].tx;
-    const res3 = Resource.decode(tx.outputs[0].covenant.items[2]);
-    assert.strictEqual(res3.records[0].txt[0], '8');
-
-    // This next block would be invalid in our own chain
-    // if mempool was corrupted with the wrong tx from the reorg.
-    await node.rpc.generate([1]);
-
-    // State after new block
-    const res4 = await node.rpc.getNameResource([name]);
-    assert.strictEqual(res4.records[0].txt[0], '8');
+    // Confirm entire update chain one by one
+    await node.rpc.generate([8]);
+    assert.strictEqual(await getConfirmedResource(), '10');
+    assert.strictEqual(getMempoolResource(), null);
   });
 });
