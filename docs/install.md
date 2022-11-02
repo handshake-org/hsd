@@ -33,7 +33,7 @@ keys. You can get keys following [Security](../SECURITY.md) document.
 ```
 git clone --depth 1 --branch latest https://github.com/handshake-org/hsd.git
 cd hsd
-npm install --production
+npm install --omit-dev
 # run full node in foreground with default configuration
 ./bin/hsd
 ```
