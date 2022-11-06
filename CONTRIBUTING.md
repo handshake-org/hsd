@@ -20,7 +20,7 @@ npm run build-docs  # also defined in package.json
 ## Testing
 
 [bmocha](https://www.npmjs.com/package/bmocha) will be installed as a
-"developer dependency" if installed without the `--production` flag. The
+"developer dependency" if installed without the `--omit=dev` flag. The
 complete built-in testing suite can be run with the command:
 
 ```
