@@ -8,7 +8,7 @@ const main = Network.get('main');
 
 const notAHost = 'not-a-domain.not-a-domain';
 
-describe('Lookup', function() {
+describe.skip('Lookup', function() {
   this.timeout(10000);
   it('should lookup seed', async () => {
     for (const host of main.seeds) {

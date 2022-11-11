@@ -6,7 +6,7 @@ COPY package.json /opt/hsd
 # Install build dependencies and compile.
 FROM base AS build
 RUN apk add --no-cache g++ gcc make python3
-RUN npm install --production
+RUN npm install --omit=dev
 
 FROM base
 ENV PATH="${PATH}:/opt/hsd/bin:/opt/hsd/node_modules/.bin"
