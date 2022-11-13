@@ -102,5 +102,59 @@ describe('Wallet Coin Selection', function () {
       assert(rate < network.maxFeeRate);
       assert(fee > network.minRelay);
     });
+
+    it('should fail to pay absurd fee rate for small tx', async () => {
+      const address = await wallet.receiveAddress();
+      await assert.rejects(
+        wallet.send({
+          outputs: [{
+            address,
+            value: 5e6
+          }],
+          rate: 10001 * network.minRelay
+        }),
+        {message: 'Fee exceeds absurd limit.'}
+      );
+    });
+
+    it('should pay fee just under the absurd limit', async () => {
+      const address = await wallet.receiveAddress();
+      const tx = await wallet.send({
+        outputs: [{
+          address,
+          value: 5e6
+        }],
+        rate: 10000 * network.minRelay
+      });
+      const view = await wallet.getWalletCoinView(tx);
+      assert.strictEqual(tx.getRate(view), 10000 * network.minRelay);
+    });
+
+    it('should fail to pay too-low fee rate for small tx', async () => {
+      const address = await wallet.receiveAddress();
+      await assert.rejects(
+        wallet.send({
+          outputs: [{
+            address,
+            value: 5e6
+          }],
+          rate: network.minRelay - 1
+        }),
+        {message: 'Fee is below minimum relay limit.'}
+      );
+    });
+
+    it('should pay fee at the minimum relay limit', async () => {
+      const address = await wallet.receiveAddress();
+      const tx = await wallet.send({
+        outputs: [{
+          address,
+          value: 5e6
+        }],
+        rate: network.minRelay
+      });
+      const view = await wallet.getWalletCoinView(tx);
+      assert.strictEqual(tx.getRate(view), network.minRelay);
+    });
   });
 });
