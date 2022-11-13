@@ -1,0 +1,106 @@
+'use strict';
+
+const assert = require('bsert');
+const {
+  MTX,
+  Network,
+  WalletDB
+} = require('..');
+
+// Use main instead of regtest because (deprecated)
+// CoinSelector.MAX_FEE was network agnostic
+const network = Network.get('main');
+
+async function fundWallet(wallet, amounts) {
+  assert(Array.isArray(amounts));
+
+  const mtx = new MTX();
+  const addr = await wallet.receiveAddress();
+  for (const amt of amounts) {
+    mtx.addOutput(addr, amt);
+  }
+
+  const height = wallet.wdb.height + 1;
+  const hash = Buffer.alloc(32);
+  hash.writeUInt16BE(height);
+  const dummyBlock = {
+    hash,
+    height,
+    time: Date.now()
+  };
+  await wallet.wdb.addBlock(dummyBlock, [mtx.toTX()]);
+}
+
+describe('Wallet Coin Selection', function () {
+  describe('Fees', function () {
+    const wdb = new WalletDB({network});
+    let wallet;
+
+    before(async () => {
+      await wdb.open();
+      wdb.height = network.txStart + 1;
+      wdb.state.height = wdb.height;
+      wallet = wdb.primary;
+    });
+
+    after(async () => {
+      await wdb.close();
+    });
+
+    it('should fund wallet', async () => {
+      await fundWallet(wallet, [100e6, 10e6, 1e6, 100000, 10000]);
+      const bal = await wallet.getBalance();
+      assert.strictEqual(bal.confirmed, 111110000);
+    });
+
+    it('should pay default fee rate for small tx', async () => {
+      const address = await wallet.receiveAddress();
+      const mtx = new MTX();
+      mtx.addOutput(address, 5e6);
+      await wallet.fund(mtx);
+      await wallet.sign(mtx);
+
+      assert.strictEqual(mtx.inputs.length, 1);
+      assert.strictEqual(mtx.outputs.length, 2);
+
+      const rate = mtx.getRate();
+      const fee = mtx.getFee();
+
+      assert.strictEqual(rate, network.feeRate);
+      assert(rate < network.maxFeeRate);
+      assert(fee > network.minRelay);
+    });
+
+    it('should pay default fee rate for maximum policy weight TX', async () => {
+      const address = await wallet.receiveAddress();
+      const mtx = new MTX();
+      for (let i = 0; i < 3120; i++) {
+        mtx.addOutput(address, 500);
+      }
+      // Add nulldata output to add precise amount of extra weight
+      mtx.addOutput(
+        {
+          version: 31,
+          hash: Buffer.alloc(38)
+        },
+        0
+      );
+      await wallet.fund(mtx);
+      await wallet.sign(mtx);
+
+      // This is as close as we can get to
+      // policy.MAX_TX_WEIGHT (400000) using standard wallet
+      assert.strictEqual(mtx.getWeight(), 399997);
+      assert.strictEqual(mtx.inputs.length, 1);
+
+      const rate = mtx.getRate();
+      const fee = mtx.getFee();
+
+      assert.strictEqual(fee, 10e6); // 10 HNS
+
+      assert.strictEqual(rate, network.feeRate);
+      assert(rate < network.maxFeeRate);
+      assert(fee > network.minRelay);
+    });
+  });
+});
