@@ -539,14 +539,14 @@ describe('Net HostList', function() {
     });
 
     // w/o src it will only take into account the score.
-    it('should get local w/o src', () => {
+    it('should only get local w/o src if MANUAL', () => {
       const services = 1000;
       const port = regtest.port;
 
       const addrs = [];
 
       // w/o key
-      for (let i = HostList.scores.NONE; i < HostList.scores.MAX - 1; i++) {
+      for (let i = HostList.scores.NONE; i < HostList.scores.MAX; i++) {
         const address = new NetAddress({
           host: getRandomIPv4(),
           port: port,
@@ -563,16 +563,16 @@ describe('Net HostList', function() {
         key: Buffer.alloc(33, 1)
       }), HostList.scores.MAX]);
 
-      const max = addrs[HostList.scores.MAX - 2];
+      const manual = addrs[HostList.scores.MANUAL];
 
       const hosts = getHostsFromLocals(addrs);
       const local = hosts.getLocal();
 
-      assert.strictEqual(local, max[0]);
+      assert.strictEqual(local, manual[0]);
     });
 
     it('should get local (score)', () => {
-      // NOTE: main network ignores everything other than MANUAL type.
+      // NOTE: We ignore everything other than MANUAL type.
       //  - scores.IF - addresses from the network interfaces.
       //  - scores.BIND - Listening IP. (publicHost/publicPort is MANUAL)
       //  - scores.DNS - Domain that needs to be resolved.
@@ -595,12 +595,11 @@ describe('Net HostList', function() {
       });
 
       // testnet/regtest
-      for (let type = scores.NONE; type < scores.MAX; type++) {
-        const addrs = naddrsByScore.slice(scores.NONE, type + 1);
-        const hosts = getHostsFromLocals(addrs, { network: regtest });
+      {
+        const hosts = getHostsFromLocals(naddrsByScore, { network: regtest });
         const src = getRandomNetAddr();
         const best = hosts.getLocal(src);
-        assert.strictEqual(best, naddrsByScore[type][0]);
+        assert.strictEqual(best, naddrsByScore[scores.MANUAL][0]);
       }
 
       // mainnet
@@ -612,7 +611,7 @@ describe('Net HostList', function() {
       }
 
       {
-        // everything below MANUAL is skipped on main network.
+        // everything below MANUAL is skipped.
         const addrs = naddrsByScore.slice(scores.NONE, scores.UPNP);
         const hosts = getHostsFromLocals(addrs, { network: mainnet });
         const src = getRandomNetAddr(mainnet);
@@ -716,8 +715,8 @@ describe('Net HostList', function() {
       const {scores} = HostList;
 
       const rawDests = [
-        [getRandomIPv4(), scores.IF],
-        [getRandomIPv4(), scores.BIND]
+        [getRandomIPv4(), scores.UPNP],
+        [getRandomIPv4(), scores.MANUAL]
       ];
 
       const dests = rawDests.map(([h, s]) => {
@@ -734,14 +733,14 @@ describe('Net HostList', function() {
       }
 
       {
-        // we should get BIND, because BIND > IF
+        // we should get MANUAL only
         const addr = getRandomNetAddr();
         const local = hosts.getLocal(addr);
         assert.strictEqual(local, dests[1][0]);
       }
 
       {
-        // with markLocal IF should get the same score (type remains).
+        // with markLocal UPNP should get the same score (type remains).
         hosts.markLocal(dests[0][0]);
         const addr = getRandomNetAddr();
         const local = hosts.getLocal(addr);
