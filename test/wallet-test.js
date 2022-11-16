@@ -2270,7 +2270,7 @@ describe('Wallet', function() {
       uTXCount++;
 
       // Check
-        const senderBal3 = await wallet.getBalance();
+      const senderBal3 = await wallet.getBalance();
       assert.strictEqual(senderBal3.tx, 7);
       // One less wallet coin because name UTXO belongs to recip now
       assert.strictEqual(senderBal3.coin, 3);
@@ -3217,7 +3217,7 @@ describe('Wallet', function() {
       assert.strictEqual(bal.ulocked, value);
       assert.strictEqual(bal.clocked, value + secondHighest);
 
-      // Confirm REGISTER
+      // Confirm REDEEM
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
