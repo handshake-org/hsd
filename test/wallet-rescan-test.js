@@ -573,8 +573,9 @@ describe('Wallet rescan with namestate transitions', function() {
     });
 
     const {wdb} = node.require('walletdb');
-    let wallet1, wallet2;
+    let wallet1, wallet2, wallet3;
     let addr1;
+    let heightBeforeReveal;
 
     const name = rules.grindName(4, 4, network);
 
@@ -657,6 +658,8 @@ describe('Wallet rescan with namestate transitions', function() {
     it('should reveal from each wallet', async () => {
       await node.rpc.generateToAddress([biddingPeriod, addr1]);
 
+      heightBeforeReveal = node.chain.height;
+
       // Wallet 1 only knows blind for one of the bids
       const tx1 = await wallet1.sendReveal(name);
       assert.strictEqual(tx1.outputs.length, 2);
@@ -698,6 +701,28 @@ describe('Wallet rescan with namestate transitions', function() {
         assert(reveal.own);
         assert(reveal.value);
       }
+    });
+
+    it('should restore wallet 1 from seed into wallet 3', async () => {
+      const {mnemonic} = wallet1.master;
+      wallet3 = await wdb.create({mnemonic});
+    });
+
+    it('should just rescan reveal phase', async () => {
+      await wdb.rescan(heightBeforeReveal);
+
+      let bal1 = await wallet1.getBalance();
+      let bal3 = await wallet3.getBalance();
+
+      assert.notDeepStrictEqual(bal1, bal3);
+
+      // Complete rescan cleans everything up
+      await wdb.rescan(0);
+
+      bal1 = await wallet1.getBalance();
+      bal3 = await wallet3.getBalance();
+
+      assert.deepStrictEqual(bal1, bal3);
     });
   });
 });
