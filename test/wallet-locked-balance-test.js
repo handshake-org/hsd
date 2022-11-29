@@ -1051,12 +1051,12 @@ describe('Wallet Lock Balance', function() {
 
     // NOTE: If the transaction did not contain anything related to the wallet,
     // it would be totally missed on revert until rescan.
-    it.only('should handle missed bid (on confirm)', async () => {
+    it('should handle missed bid (on confirm)', async () => {
       const name = grindName(GRIND_NAME_LEN, chain.tip.height, network);
       const wallet = alicew;
       const accountName = defaultAcc;
       const opts = { account: accountName, hardFee };
-      let account = await wallet.getAccount(accountName);
+      const account = await wallet.getAccount(accountName);
 
       const blindAmount = 1e6;
       const bidAmount = blindAmount / 4;
