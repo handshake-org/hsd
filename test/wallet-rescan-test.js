@@ -564,4 +564,165 @@ describe('Wallet rescan with namestate transitions', function() {
       assert.strictEqual(ns.revoked, node.chain.height);
     });
   });
+
+  describe('Restore from seed', function() {
+    const node = new FullNode({
+      network: network.type,
+      memory: true,
+      plugins: [require('../lib/wallet/plugin')]
+    });
+
+    const {wdb} = node.require('walletdb');
+    let wallet1, wallet2, wallet3;
+    let addr1;
+    let heightBeforeReveal;
+
+    const name = rules.grindName(4, 4, network);
+
+    before(async () => {
+      await node.open();
+    });
+
+    after(async () => {
+      await node.close();
+    });
+
+    it('should create and fund wallet 1', async () => {
+      wallet1 = await wdb.create();
+      addr1 = (await wallet1.receiveAddress()).toString(network);
+      await node.rpc.generateToAddress([10, addr1]);
+    });
+
+    it('should open and bid from wallet 1', async () => {
+      await wallet1.sendOpen(name, false);
+      await node.rpc.generateToAddress([treeInterval + 1, addr1]);
+      await wallet1.sendBid(name, 1e6, 1e6);
+      await node.rpc.generateToAddress([1, addr1]);
+    });
+
+    it('should restore wallet 1 from seed into wallet 2', async () => {
+      const {mnemonic} = wallet1.master;
+      wallet2 = await wdb.create({mnemonic});
+
+      assert.strictEqual(
+        wallet1.master.key.xprivkey,
+        wallet2.master.key.xprivkey
+      );
+
+      // Sanity check
+      const bal1 = await wallet1.getBalance();
+      assert(bal1.unconfirmed > 0);
+      assert(bal1.tx > 0);
+      assert((await wallet1.getBids()).length);
+
+      // Wallet 2 has no history
+      const bal2 = await wallet2.getBalance();
+      assert.strictEqual(bal2.unconfirmed, 0);
+      assert.strictEqual(bal2.tx, 0);
+      assert(!(await wallet2.getBids()).length);
+    });
+
+    it('should rescan wallet 2', async () => {
+      await wdb.rescan(0);
+      const bal2 = await wallet2.getBalance();
+      assert(bal2.unconfirmed > 0);
+      assert(bal2.tx > 0);
+      assert((await wallet2.getBids()).length);
+    });
+
+    it('should bid from wallet 2', async () => {
+      await wallet2.sendBid(name, 2e6, 2e6);
+      await node.rpc.generateToAddress([1, addr1]);
+    });
+
+    it('should not have all blinds in either wallet', async () => {
+      const bids1 = await wallet1.getBids();
+      assert.strictEqual(bids1.length, 2);
+      for (const bid of bids1) {
+        if (bid.lockup === 1e6)
+          assert(bid.value === 1e6);
+        else
+          assert(bid.value === -1); // unknown
+      }
+
+      const bids2 = await wallet2.getBids();
+      assert.strictEqual(bids2.length, 2);
+      for (const bid of bids2) {
+        if (bid.lockup === 2e6)
+          assert(bid.value === 2e6);
+        else
+          assert(bid.value === -1); // unknown
+      }
+    });
+
+    it('should reveal from each wallet', async () => {
+      await node.rpc.generateToAddress([biddingPeriod, addr1]);
+
+      heightBeforeReveal = node.chain.height;
+
+      // Wallet 1 only knows blind for one of the bids
+      const tx1 = await wallet1.sendReveal(name);
+      assert.strictEqual(tx1.outputs.length, 2);
+      assert.strictEqual(tx1.outputs[0].value, 1e6);
+      assert.strictEqual(tx1.outputs[0].covenant.type, rules.types.REVEAL);
+      assert.strictEqual(tx1.outputs[1].covenant.type, rules.types.NONE);
+
+      // Confirm
+      await node.rpc.generateToAddress([1, addr1]);
+
+      // Wallet 1 knows there's another bid but can't reveal it.
+      assert.strictEqual(
+        (await wallet1.getBids()).length,
+        2
+      );
+      await assert.rejects(
+        wallet1.sendReveal(name),
+        {message: `No bids to reveal for name: ${name}.`}
+      );
+
+      // Wallet 2 can reveal the second bid
+      const tx2 = await wallet2.sendReveal(name);
+      assert.strictEqual(tx2.outputs.length, 2);
+      assert.strictEqual(tx2.outputs[0].value, 2e6);
+      assert.strictEqual(tx2.outputs[0].covenant.type, rules.types.REVEAL);
+
+      // Confirm
+      await node.rpc.generateToAddress([1, addr1]);
+    });
+
+    it('should have all reveals in both wallets', async () => {
+      const reveals1 = await wallet1.getReveals();
+      const reveals2 = await wallet2.getReveals();
+
+      assert.strictEqual(reveals1.length, 2);
+      assert.strictEqual(reveals2.length, 2);
+
+      for (const reveal of reveals1.concat(reveals2)) {
+        assert(reveal.own);
+        assert(reveal.value);
+      }
+    });
+
+    it('should restore wallet 1 from seed into wallet 3', async () => {
+      const {mnemonic} = wallet1.master;
+      wallet3 = await wdb.create({mnemonic});
+    });
+
+    it('should just rescan reveal phase', async () => {
+      await wdb.rescan(heightBeforeReveal);
+
+      let bal1 = await wallet1.getBalance();
+      let bal3 = await wallet3.getBalance();
+
+      assert.notDeepStrictEqual(bal1, bal3);
+
+      // Complete rescan cleans everything up
+      await wdb.rescan(0);
+
+      bal1 = await wallet1.getBalance();
+      bal3 = await wallet3.getBalance();
+
+      assert.deepStrictEqual(bal1, bal3);
+    });
+  });
 });
