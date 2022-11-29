@@ -4,7 +4,8 @@ const assert = require('bsert');
 const {
   MTX,
   Network,
-  WalletDB
+  WalletDB,
+  policy
 } = require('..');
 
 // Use main instead of regtest because (deprecated)
@@ -111,7 +112,7 @@ describe('Wallet Coin Selection', function () {
             address,
             value: 5e6
           }],
-          rate: 10001 * network.minRelay
+          rate: (policy.ABSURD_FEE_FACTOR + 1) * network.minRelay
         }),
         {message: 'Fee exceeds absurd limit.'}
       );
@@ -127,7 +128,10 @@ describe('Wallet Coin Selection', function () {
         rate: 10000 * network.minRelay
       });
       const view = await wallet.getWalletCoinView(tx);
-      assert.strictEqual(tx.getRate(view), 10000 * network.minRelay);
+      assert.strictEqual(
+        tx.getRate(view),
+        policy.ABSURD_FEE_FACTOR * network.minRelay
+      );
     });
 
     it('should fail to pay too-low fee rate for small tx', async () => {

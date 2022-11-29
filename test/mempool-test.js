@@ -22,6 +22,7 @@ const Witness = require('../lib/script/witness');
 const CoinView = require('../lib/coins/coinview');
 const util = require('../lib/utils/util');
 const consensus = require('../lib/protocol/consensus');
+const policy = require('../lib/protocol/policy');
 const MemWallet = require('./util/memwallet');
 const ALL = Script.hashType.ALL;
 const common = require('../lib/blockchain/common');
@@ -483,7 +484,7 @@ describe('Mempool', function() {
 
     const vsize = mtx.getVirtualSize();
     const minFee = (vsize / 1000) * network.minRelay;
-    const absurdFee = minFee * 10000;
+    const absurdFee = minFee * policy.ABSURD_FEE_FACTOR;
 
     // Revise with exactly absurd fee
     mtx.outputs[0].value = funds - absurdFee - 1;
