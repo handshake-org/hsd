@@ -34,8 +34,16 @@ describe('Wallet Lock Balance', function() {
   let bobID, bobw;
   let carolID, carolw;
 
-  const INIT_BLOCKS = 10;
+  const INIT_BLOCKS = treeInterval;
   const INIT_FUND = 10e6;
+  const INIT_BALANCE = {
+    tx: 1,
+    coin: 1,
+    confirmed: INIT_FUND,
+    unconfirmed: INIT_FUND,
+    ulocked: 0,
+    clocked: 0
+  };
 
   const prepare = () => {
     node = new FullNode({
@@ -170,14 +178,7 @@ describe('Wallet Lock Balance', function() {
       const blindAmount = 1e6;
 
       const expectedBalances = [];
-      expectedBalances.push({
-        tx: 1,
-        coin: 1,
-        unconfirmed: INIT_FUND,
-        confirmed: INIT_FUND,
-        clocked: 0,
-        ulocked: 0
-      });
+      expectedBalances.push(INIT_BALANCE);
 
       // starting balance should be just coinbases.
       assertBalance(await wallet.getBalance(account), expectedBalances[0]);
@@ -254,14 +255,7 @@ describe('Wallet Lock Balance', function() {
 
       const expectedBalances = [];
       // initial balances.
-      expectedBalances.push({
-        tx: 1,
-        coin: 1,
-        unconfirmed: INIT_FUND,
-        confirmed: INIT_FUND,
-        clocked: 0,
-        ulocked: 0
-      });
+      expectedBalances.push(INIT_BALANCE);
 
       assertBalance(await wallet.getBalance(account), expectedBalances[0]);
 
@@ -408,14 +402,7 @@ describe('Wallet Lock Balance', function() {
         ulocked: blindAmount
       });
 
-      expectedAltBalances.push({
-        tx: 1,
-        coin: 1,
-        confirmed: INIT_FUND,
-        unconfirmed: INIT_FUND,
-        clocked: 0,
-        ulocked: 0
-      });
+      expectedAltBalances.push(INIT_BALANCE);
 
       assertBalance(await wallet.getBalance(account), expectedDefaultBalances[0]);
       assertBalance(await wallet.getBalance(altAccount), expectedAltBalances[0]);
@@ -505,14 +492,7 @@ describe('Wallet Lock Balance', function() {
       await mineBlocks(biddingPeriod);
 
       const expectedBalances = [];
-      expectedBalances.push({
-        tx: 1,
-        coin: 1,
-        confirmed: INIT_FUND,
-        unconfirmed: INIT_FUND,
-        clocked: 0,
-        ulocked: 0
-      });
+      expectedBalances.push(INIT_BALANCE);
 
       assertBalance(await wallet.getBalance(account), expectedBalances[0]);
 
@@ -905,14 +885,7 @@ describe('Wallet Lock Balance', function() {
       const expectedReceiverBalances = [];
 
       expectedSenderBalances.push({ ...initRegBalance });
-      expectedReceiverBalances.push({
-        tx: 1,
-        coin: 1,
-        confirmed: INIT_FUND,
-        unconfirmed: INIT_FUND,
-        ulocked: 0,
-        clocked: 0
-      });
+      expectedReceiverBalances.push(INIT_BALANCE);
 
       assertBalance(await wallet.getBalance(account), expectedSenderBalances[0]);
       assertBalance(await wallet2.getBalance(account2), expectedReceiverBalances[0]);
@@ -1060,6 +1033,91 @@ describe('Wallet Lock Balance', function() {
 
       await wallet.zap(account, 0);
       assertBalance(await wallet.getBalance(account), expectedBalances[0]);
+    });
+  });
+
+  /*
+   * From here we test cases when addresses are discovered later.
+   * It could happen when account gap is lower than an actual gap.
+   * Or if someone owning XPUB just sends txs to addresses after gap.
+   *
+   * Note that, in some cases NONE -> BID, BID -> REVEAL it could be
+   * someone sending from the outside of the wallet and not the gap issue. (Above)
+   */
+
+  describe('NONE -> BID (Gapped)', function() {
+    before(beforeAll);
+    after(afterAll);
+
+    // NOTE: If the transaction did not contain anything related to the wallet,
+    // it would be totally missed on revert until rescan.
+    it.only('should handle missed bid (on confirm)', async () => {
+      const name = grindName(GRIND_NAME_LEN, chain.tip.height, network);
+      const wallet = alicew;
+      const accountName = defaultAcc;
+      const opts = { account: accountName, hardFee };
+      let account = await wallet.getAccount(accountName);
+
+      const blindAmount = 1e6;
+      const bidAmount = blindAmount / 4;
+
+      const expectedBalances = [];
+      expectedBalances.push(INIT_BALANCE);
+
+      assertBalance(await wallet.getBalance(accountName), expectedBalances[0]);
+      await primary.sendOpen(name, false);
+      await mineBlocks(openingPeriod);
+
+      const batchActions = [
+        ['BID', name, bidAmount, blindAmount],
+        ['BID', name, bidAmount, blindAmount]
+      ];
+
+      const bidMTX = await wallet.createBatch(batchActions, opts);
+      assert.strictEqual(bidMTX.outputs[0].covenant.type, types.BID);
+      assert.strictEqual(bidMTX.outputs[1].covenant.type, types.BID);
+      const nextIndex = account.receiveDepth + account.lookahead + 1;
+      const nextAddr = account.deriveReceive(nextIndex).getAddress();
+      bidMTX.outputs[1].address = nextAddr;
+
+      for (const input of bidMTX.inputs)
+        input.witness.length = 0;
+
+      await wallet.sign(bidMTX);
+      wdb.send(bidMTX.toTX());
+      await forWTX(wallet.id, bidMTX.hash());
+
+      expectedBalances.push(applyDelta(expectedBalances[0], {
+        tx: 1,
+        // BID + CHANGE
+        coin: 1,
+        // unknown bid will actually spend coin from our balance.
+        unconfirmed: -hardFee - blindAmount,
+        ulocked: blindAmount
+      }));
+
+      await wallet.createReceive();
+      assertBalance(await wallet.getBalance(accountName), expectedBalances[1]);
+
+      // derive two addresses.
+      await account.receiveAddress();
+      await account.receiveAddress();
+      await mineBlocks(1);
+
+      expectedBalances.push(applyDelta(expectedBalances[1], {
+        // we discovered coin
+        coin: 1,
+        // because we discovered blind, we no longer spend those coins.
+        confirmed: -hardFee,
+        // add newly discovered coins to unconfirmed as well.
+        unconfirmed: blindAmount,
+        // we discovered another bid is ours, so we have both locked.
+        clocked: blindAmount * 2,
+        // add newly discovered bid to ulocked.
+        ulocked: blindAmount
+      }));
+
+      assertBalance(await wallet.getBalance(accountName), expectedBalances[2]);
     });
   });
 });
