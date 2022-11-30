@@ -19,31 +19,35 @@ const {
 
 const openingPeriod = treeInterval + 2;
 
+const WALLET_N = 10;
 const GRIND_NAME_LEN = 10;
 const hardFee = 1e4;
 
-describe('Wallet Lock Balance', function() {
+// TODO: Add insert w/ block only tests(no unconfirmed step).
+// TODO: Add claim test.
+// TODO: (Re)Move and merge wallet-test lock balance checks.
+describe('Wallet Balance', function() {
   let node, chain, wdb;
   // wallets
   let primary;
 
-  const defaultAcc = 'default';
-  const altAccount1 = 'alt1';
+  const DEFAULT_ACCOUNT = 'default';
+  const ALT_ACCOUNT = 'alt';
 
-  let aliceID, alicew;
-  let bobID, bobw;
-  let carolID, carolw;
+  let allWallets = [];
 
   const INIT_BLOCKS = treeInterval;
   const INIT_FUND = 10e6;
   const INIT_BALANCE = {
     tx: 1,
     coin: 1,
-    confirmed: INIT_FUND,
     unconfirmed: INIT_FUND,
+    confirmed: INIT_FUND,
     ulocked: 0,
     clocked: 0
   };
+  const BLIND_AMOUNT = 1e6;
+  const BID_AMOUNT = BLIND_AMOUNT / 4;
 
   const prepare = () => {
     node = new FullNode({
@@ -85,27 +89,24 @@ describe('Wallet Lock Balance', function() {
   const setupWallets = async () => {
     primary = await wdb.get('primary');
 
-    aliceID = 'alice';
-    alicew = await wdb.create({ id: aliceID });
-    await alicew.createAccount({ name: altAccount1 });
+    allWallets = [];
+    for (let i = 0; i < WALLET_N; i++) {
+      const name = 'wallet' + i;
+      const wallet = await wdb.create({ id: name });
+      await wallet.createAccount({ name: ALT_ACCOUNT });
 
-    bobID = 'bob';
-    bobw = await wdb.create({ id: bobID });
-    await bobw.createAccount({ name: altAccount1 });
-
-    carolID = 'carol';
-    carolw = await wdb.create({ id: carolID });
-    await carolw.createAccount({ name: altAccount1 });
+      allWallets.push(wallet);
+    }
   };
 
   const fundWallets = async () => {
     await mineBlocks(INIT_BLOCKS);
     const addrs = [];
 
-    addrs.push(await getAddrStr(alicew, defaultAcc));
-    addrs.push(await getAddrStr(alicew, altAccount1));
-    addrs.push(await getAddrStr(bobw, defaultAcc));
-    addrs.push(await getAddrStr(bobw, altAccount1));
+    for (let i = 0; i < WALLET_N; i++) {
+      addrs.push(await getAddrStr(allWallets[i], DEFAULT_ACCOUNT));
+      addrs.push(await getAddrStr(allWallets[i], ALT_ACCOUNT));
+    }
 
     await primary.send({
       outputs: addrs.map((addr) => {
@@ -131,10 +132,31 @@ describe('Wallet Lock Balance', function() {
     node = null;
   };
 
-  const assertBalance = (balance, obj) => {
-    for (const [key, val] of Object.entries(obj)) {
-      assert.strictEqual(balance[key], val, `Incorrect ${key} balance.`);
-    }
+  // Helpers
+  const getBalanceObj = async (wallet, account) => {
+    const balance = await wallet.getBalance(account);
+    const {
+      tx,
+      coin,
+      unconfirmed,
+      confirmed,
+      lockedUnconfirmed,
+      lockedConfirmed
+    } = balance.getJSON(true);
+
+    return {
+      tx,
+      coin,
+      unconfirmed,
+      confirmed,
+      clocked: lockedConfirmed,
+      ulocked: lockedUnconfirmed
+    };
+  };
+
+  const assertBalance = async (wallet, account, expected) => {
+    const balance = await getBalanceObj(wallet, account);
+    assert.deepStrictEqual(balance, expected);
   };
 
   const applyDelta = (balance, delta) => {
@@ -170,48 +192,44 @@ describe('Wallet Lock Balance', function() {
 
     it('should handle own bid', async () => {
       const name = grindName(GRIND_NAME_LEN, chain.tip.height, network);
-      const wallet = alicew;
-      const account = defaultAcc;
-      const opts = { account, hardFee};
+      const wallet = allWallets[0];
+      const account = DEFAULT_ACCOUNT;
+      const opts = { account, hardFee };
 
-      const bidAmount = 1e6 / 4;
-      const blindAmount = 1e6;
-
-      const expectedBalances = [];
-      expectedBalances.push(INIT_BALANCE);
-
+      const initialBalance = INIT_BALANCE;
+      //
       // starting balance should be just coinbases.
-      assertBalance(await wallet.getBalance(account), expectedBalances[0]);
+      await assertBalance(wallet, account, initialBalance);
 
       // +1 tx, +1 coin (TODO: Update when we remove opens from UTXO set)
       await wallet.sendOpen(name, false, opts);
 
-      expectedBalances.push(applyDelta(expectedBalances[0], {
+      const afterOpenBalance = applyDelta(initialBalance, {
         // we got new tx (open)
         tx: 1,
         // new coin OPEN (TODO: remove OPENs)
         coin: 1,
         // Only cost us fee.
         unconfirmed: -hardFee
-      }));
+      });
 
-      assertBalance(await wallet.getBalance(account), expectedBalances[1]);
+      await assertBalance(wallet, account, afterOpenBalance);
 
       await mineBlocks(openingPeriod);
 
       // We just confirmed fee spent in open.
-      expectedBalances.push(applyDelta(expectedBalances[1], {
+      const afterOpenConfirmedBalance = applyDelta(afterOpenBalance, {
         // fee got confirmed
         confirmed: -hardFee
-      }));
+      });
 
-      assertBalance(await wallet.getBalance(account), expectedBalances[2]);
+      await assertBalance(wallet, account, afterOpenConfirmedBalance);
 
       // bidding period.
-      await wallet.sendBid(name, bidAmount, blindAmount, opts);
+      await wallet.sendBid(name, BID_AMOUNT, BLIND_AMOUNT, opts);
 
       // bid should have locked BLIND unconfirmed
-      expectedBalances.push(applyDelta(expectedBalances[2], {
+      const afterBidSendBalance = applyDelta(afterOpenConfirmedBalance, {
         // new bid tx.
         tx: 1,
         // new bid coin (does not consume OPEN coin)
@@ -219,51 +237,50 @@ describe('Wallet Lock Balance', function() {
         // another fee
         unconfirmed: -hardFee,
         // locks blind Amount
-        ulocked: blindAmount
-      }));
+        ulocked: BLIND_AMOUNT
+      });
 
-      assertBalance(await wallet.getBalance(account), expectedBalances[3]);
+      await assertBalance(wallet, account, afterBidSendBalance);
 
       // confirm
       await mineBlocks(1);
 
       // Now it's confirmed.
-      expectedBalances.push(applyDelta(expectedBalances[3], {
+      const afterBidConfirmedBalance = applyDelta(afterBidSendBalance, {
         confirmed: -hardFee,
-        clocked: blindAmount
-      }));
+        clocked: BLIND_AMOUNT
+      });
 
-      assertBalance(await wallet.getBalance(account), expectedBalances[4]);
+      await assertBalance(wallet, account, afterBidConfirmedBalance);
 
       // We go back to unconfirmed state.
       await wdb.revert(node.chain.height - 1);
-      assertBalance(await wallet.getBalance(account), expectedBalances[3]);
+      await assertBalance(wallet, account, afterBidSendBalance);
 
       // Now we also remove unconfirmed txs.
       await wallet.zap(account, 0);
-      assertBalance(await wallet.getBalance(account), expectedBalances[2]);
+      await assertBalance(wallet, account, afterOpenConfirmedBalance);
     });
 
     it('should handle foreign out bid', async () => {
       const name = grindName(GRIND_NAME_LEN, chain.tip.height, network);
-      const wid = bobID;
-      const wallet = bobw;
-      const account = defaultAcc;
-
-      const bidAmount = 1e6 / 4;
-      const blindAmount = 1e6;
-
-      const expectedBalances = [];
-      // initial balances.
-      expectedBalances.push(INIT_BALANCE);
-
-      assertBalance(await wallet.getBalance(account), expectedBalances[0]);
+      const wallet = allWallets[1];
+      const wid = wallet.id;
+      const account = DEFAULT_ACCOUNT;
 
       await primary.sendOpen(name, true);
       await mineBlocks(openingPeriod);
 
+      let initialBalance = null;
+      let afterBidBalance = null;
+      let afterBidConfirmedBalance = null;
+
+      initialBalance = INIT_BALANCE;
+
+      await assertBalance(wallet, account, initialBalance);
+
       const altRecv1 = await wallet.receiveAddress(account);
-      const bidMTX = await primary.createBid(name, bidAmount, blindAmount);
+      const bidMTX = await primary.createBid(name, BID_AMOUNT, BLIND_AMOUNT);
       assert.strictEqual(bidMTX.outputs.length, 2);
       assert.strictEqual(bidMTX.outputs[0].covenant.type, types.BID);
       bidMTX.outputs[0].address = altRecv1;
@@ -276,34 +293,34 @@ describe('Wallet Lock Balance', function() {
       await wdb.send(bidMTX.toTX());
       await waitForBidTX;
 
-      expectedBalances.push(applyDelta(expectedBalances[0], {
+      afterBidBalance = applyDelta(initialBalance, {
         // we got new bid tx.
         tx: 1,
         // we got bid utxo
         coin: 1,
         // bid blind value is part of our balance
-        unconfirmed: blindAmount,
+        unconfirmed: BLIND_AMOUNT,
         // it's also locked
-        ulocked: blindAmount
-      }));
+        ulocked: BLIND_AMOUNT
+      });
 
-      assertBalance(await wallet.getBalance(account), expectedBalances[1]);
+      await assertBalance(wallet, account, afterBidBalance);
 
       await mineBlocks(1);
 
       // it got confirmed
-      expectedBalances.push(applyDelta(expectedBalances[1], {
-        confirmed: blindAmount,
-        clocked: blindAmount
-      }));
+      afterBidConfirmedBalance = applyDelta(afterBidBalance, {
+        confirmed: BLIND_AMOUNT,
+        clocked: BLIND_AMOUNT
+      });
 
-      assertBalance(await wallet.getBalance(account), expectedBalances[2]);
+      await assertBalance(wallet, account, afterBidConfirmedBalance);
 
       await wdb.revert(node.chain.tip.height - 1);
-      assertBalance(await wallet.getBalance(account), expectedBalances[1]);
+      await assertBalance(wallet, account, afterBidBalance);
 
       await wallet.zap(account, 0);
-      assertBalance(await wallet.getBalance(account), expectedBalances[0]);
+      await assertBalance(wallet, account, initialBalance);
     });
   });
 
@@ -313,36 +330,34 @@ describe('Wallet Lock Balance', function() {
 
     it('should handle normal BID -> REVEAL', async () => {
       const name = grindName(GRIND_NAME_LEN, chain.tip.height, network);
-      const wallet = alicew;
-      const account = defaultAcc;
+      const wallet = allWallets[0];
+      const account = DEFAULT_ACCOUNT;
       const opts = { account, hardFee };
-
-      const bidAmount = 1e6 / 4;
-      const blindAmount = 1e6;
 
       await primary.sendOpen(name, true);
       await mineBlocks(openingPeriod);
-      await wallet.sendBid(name, bidAmount, blindAmount, opts);
+      await wallet.sendBid(name, BID_AMOUNT, BLIND_AMOUNT, opts);
       await mineBlocks(biddingPeriod);
 
-      const expectedBalances = [];
+      let initialBalance = null;
+      let afterRevealBalance = null;
+      let afterRevealConfirmedBalance = null;
 
       // initial balance, bid and initial fund txs/coins
-      expectedBalances.push({
+      initialBalance = {
         tx: 2,
         coin: 2,
         confirmed: INIT_FUND - hardFee,
         unconfirmed: INIT_FUND - hardFee,
-        clocked: blindAmount,
-        ulocked: blindAmount
-      });
+        clocked: BLIND_AMOUNT,
+        ulocked: BLIND_AMOUNT
+      };
 
-      assertBalance(await wallet.getBalance(account), expectedBalances[0]);
+      await assertBalance(wallet, account, initialBalance);
 
       await wallet.sendReveal(name, opts);
 
-      // after reveal
-      expectedBalances.push(applyDelta(expectedBalances[0], {
+      afterRevealBalance = applyDelta(initialBalance, {
         // we got reveal tx
         tx: 1,
         // we consume bid, produce -> freed coin + reveal out
@@ -350,34 +365,34 @@ describe('Wallet Lock Balance', function() {
         // just the fee.
         unconfirmed: -hardFee,
         // now only bidAmount is locked, we unlock everything else.
-        ulocked: -blindAmount + bidAmount
-      }));
+        ulocked: -BLIND_AMOUNT + BID_AMOUNT
+      });
 
-      assertBalance(await wallet.getBalance(account), expectedBalances[1]);
+      await assertBalance(wallet, account, afterRevealBalance);
       await mineBlocks(1);
 
       // add all unconfirmed to the confirmed.
-      expectedBalances.push(applyDelta(expectedBalances[1], {
+      afterRevealConfirmedBalance = applyDelta(afterRevealBalance, {
         confirmed: -hardFee,
-        clocked: -blindAmount + bidAmount
-      }));
+        clocked: -BLIND_AMOUNT + BID_AMOUNT
+      });
 
-      assertBalance(await wallet.getBalance(account), expectedBalances[2]);
+      await assertBalance(wallet, account, afterRevealConfirmedBalance);
 
       // revert last block
       await wdb.revert(chain.tip.height - 1);
-      assertBalance(await wallet.getBalance(account), expectedBalances[1]);
+      await assertBalance(wallet, account, afterRevealBalance);
 
       // erase tx.
       await wallet.zap(account, 0);
-      assertBalance(await wallet.getBalance(account), expectedBalances[0]);
+      await assertBalance(wallet, account, initialBalance);
     });
 
     it('should handle cross acct BID -> REVEAL', async () => {
       const name = grindName(GRIND_NAME_LEN, chain.tip.height, network);
-      const wallet = bobw;
-      const account = defaultAcc;
-      const altAccount = altAccount1;
+      const wallet = allWallets[1];
+      const account = DEFAULT_ACCOUNT;
+      const altAccount = ALT_ACCOUNT;
       const opts = { account, hardFee };
 
       const bidAmount = 2e6 / 4;
@@ -389,23 +404,28 @@ describe('Wallet Lock Balance', function() {
       await wallet.sendBid(name, bidAmount, blindAmount, opts);
       await mineBlocks(biddingPeriod);
 
-      const expectedDefaultBalances = [];
-      const expectedAltBalances = [];
+      let initialBalanceDefault = null;
+      let afterRevealBalanceDefault = null;
+      let afterRevealConfirmedBalanceDefault = null;
+
+      let initialBalanceAlt = null;
+      let afterRevealBalanceAlt = null;
+      let afterRevealConfirmedBalanceAlt = null;
 
       // initial balances.
-      expectedDefaultBalances.push({
+      initialBalanceDefault = {
         tx: 2,
         coin: 2,
         confirmed: INIT_FUND - hardFee,
         unconfirmed: INIT_FUND - hardFee,
         clocked: blindAmount,
         ulocked: blindAmount
-      });
+      };
 
-      expectedAltBalances.push(INIT_BALANCE);
+      initialBalanceAlt = INIT_BALANCE;
 
-      assertBalance(await wallet.getBalance(account), expectedDefaultBalances[0]);
-      assertBalance(await wallet.getBalance(altAccount), expectedAltBalances[0]);
+      await assertBalance(wallet, account, initialBalanceDefault);
+      await assertBalance(wallet, altAccount, initialBalanceAlt);
 
       const altAddr = await wallet.receiveAddress(altAccount);
       const revealMTX = await wallet.createReveal(name, opts);
@@ -419,12 +439,11 @@ describe('Wallet Lock Balance', function() {
 
       await wallet.sign(revealMTX);
       const tx = revealMTX.toTX();
-      const txAdded = forWTX(bobID, tx.hash());
-      await wdb.send(tx);
-      await txAdded;
+      wdb.send(tx);
+      await forWTX(wallet.id, tx.hash());
 
       // default sent bid to alt acct.
-      expectedDefaultBalances.push(applyDelta(expectedDefaultBalances[0], {
+      afterRevealBalanceDefault = applyDelta(initialBalanceDefault, {
         // reveal tx.
         tx: 1,
         // coin does not change:
@@ -436,9 +455,9 @@ describe('Wallet Lock Balance', function() {
         unconfirmed: -hardFee - bidAmount,
         // we don't have any locked value left
         ulocked: -blindAmount // 0.
-      }));
+      });
 
-      expectedAltBalances.push(applyDelta(expectedAltBalances[0], {
+      afterRevealBalanceAlt = applyDelta(initialBalanceAlt, {
         // we received reveal tx.
         tx: 1,
         // we received REVEAL coin
@@ -447,54 +466,53 @@ describe('Wallet Lock Balance', function() {
         unconfirmed: bidAmount,
         // these coins are locked until redeem/register
         ulocked: bidAmount
-      }));
+      });
 
-      assertBalance(await wallet.getBalance(account), expectedDefaultBalances[1]);
-      assertBalance(await wallet.getBalance(altAccount), expectedAltBalances[1]);
+      await assertBalance(wallet, account, afterRevealBalanceDefault);
+      await assertBalance(wallet, altAccount, afterRevealBalanceAlt);
       await mineBlocks(1);
 
       // confirmed.
-      expectedDefaultBalances.push(applyDelta(expectedDefaultBalances[1], {
+      afterRevealConfirmedBalanceDefault = applyDelta(afterRevealBalanceDefault, {
         confirmed: -hardFee - bidAmount,
         clocked: -blindAmount
-      }));
+      });
 
-      expectedAltBalances.push(applyDelta(expectedAltBalances[1], {
+      afterRevealConfirmedBalanceAlt = applyDelta(afterRevealBalanceAlt, {
         confirmed: bidAmount,
         clocked: bidAmount
-      }));
+      });
 
-      assertBalance(await wallet.getBalance(account), expectedDefaultBalances[2]);
-      assertBalance(await wallet.getBalance(altAccount), expectedAltBalances[2]);
+      await assertBalance(wallet, account, afterRevealConfirmedBalanceDefault);
+      await assertBalance(wallet, altAccount, afterRevealConfirmedBalanceAlt);
 
       await wdb.revert(chain.tip.height - 1);
-      assertBalance(await wallet.getBalance(account), expectedDefaultBalances[1]);
-      assertBalance(await wallet.getBalance(altAccount), expectedAltBalances[1]);
+      await assertBalance(wallet, account, afterRevealBalanceDefault);
+      await assertBalance(wallet, altAccount, afterRevealBalanceAlt);
 
       await wallet.zap(account, 0);
       await wallet.zap(altAccount, 0);
-      assertBalance(await wallet.getBalance(account), expectedDefaultBalances[0]);
-      assertBalance(await wallet.getBalance(altAccount), expectedAltBalances[0]);
+      await assertBalance(wallet, account, initialBalanceDefault);
+      await assertBalance(wallet, altAccount, initialBalanceAlt);
     });
 
     it('should handle external BID -> REVEAL', async () => {
       const name = grindName(GRIND_NAME_LEN, chain.tip.height, network);
-      const wallet = alicew;
-      const account = altAccount1;
+      const wallet = allWallets[2];
+      const account = DEFAULT_ACCOUNT;
       const opts = { hardFee };
-
-      const bidAmount = 3e6 / 4;
-      const blindAmount = 3e6;
 
       await primary.sendOpen(name, true);
       await mineBlocks(openingPeriod);
-      await primary.sendBid(name, bidAmount, blindAmount, opts);
+      await primary.sendBid(name, BID_AMOUNT, BLIND_AMOUNT, opts);
       await mineBlocks(biddingPeriod);
 
-      const expectedBalances = [];
-      expectedBalances.push(INIT_BALANCE);
+      let initialBalance = null;
+      let afterRevealBalance = null;
+      let afterRevealConfirmedBalance = null;
 
-      assertBalance(await wallet.getBalance(account), expectedBalances[0]);
+      initialBalance = INIT_BALANCE;
+      await assertBalance(wallet, account, initialBalance);
 
       const addr = await wallet.receiveAddress(account);
       const revealMTX = await primary.createReveal(name, opts);
@@ -508,38 +526,38 @@ describe('Wallet Lock Balance', function() {
 
       await primary.sign(revealMTX);
       const tx = revealMTX.toTX();
-      const txAdded = forWTX(aliceID, tx.hash());
+      const txAdded = forWTX(wallet.id, tx.hash());
       await wdb.send(tx);
       await txAdded;
 
-      expectedBalances.push(applyDelta(expectedBalances[0], {
+      afterRevealBalance = applyDelta(initialBalance, {
         // we got new reveal tx
         tx: 1,
         // we got reveal coin
         coin: 1,
         // we got bidAmount to our balance.
-        unconfirmed: bidAmount,
+        unconfirmed: BID_AMOUNT,
         // and it's locked
-        ulocked: bidAmount
-      }));
+        ulocked: BID_AMOUNT
+      });
 
-      assertBalance(await wallet.getBalance(account), expectedBalances[1]);
+      await assertBalance(wallet, account, afterRevealBalance);
 
       await mineBlocks(1);
 
       // confirmed.
-      expectedBalances.push(applyDelta(expectedBalances[1], {
-        confirmed: bidAmount,
-        clocked: bidAmount
-      }));
+      afterRevealConfirmedBalance = applyDelta(afterRevealBalance, {
+        confirmed: BID_AMOUNT,
+        clocked: BID_AMOUNT
+      });
 
-      assertBalance(await wallet.getBalance(account), expectedBalances[2]);
+      await assertBalance(wallet, account, afterRevealConfirmedBalance);
 
       await wdb.revert(chain.tip.height - 1);
-      assertBalance(await wallet.getBalance(account), expectedBalances[1]);
+      await assertBalance(wallet, account, afterRevealBalance);
 
       await wallet.zap(account, 0);
-      assertBalance(await wallet.getBalance(account), expectedBalances[0]);
+      await assertBalance(wallet, account, initialBalance);
     });
   });
 
@@ -550,11 +568,11 @@ describe('Wallet Lock Balance', function() {
     it('should handle normal REVEAL -> REDEEM/REGISTER', async () => {
       const name = grindName(GRIND_NAME_LEN, chain.tip.height, network);
 
-      const winner = alicew;
-      const winnerAcct = defaultAcc;
-      const winnerOpts = { account: defaultAcc, hardFee };
-      const loser = bobw;
-      const loserAcct = defaultAcc;
+      const winner = allWallets[0];
+      const winnerAcct = DEFAULT_ACCOUNT;
+      const winnerOpts = { account: DEFAULT_ACCOUNT, hardFee };
+      const loser = allWallets[1];
+      const loserAcct = DEFAULT_ACCOUNT;
       const loserOpts = { account: loserAcct, hardFee };
 
       const winnerBidAmount = 2e6 / 4;
@@ -571,32 +589,37 @@ describe('Wallet Lock Balance', function() {
       await winner.sendReveal(name, winnerOpts);
       await mineBlocks(revealPeriod);
 
-      const expectedLoserBalances = [];
-      const expectedWinnerBalances = [];
+      let initialLoserBalance = null;
+      let afterRedeemLoserBalance = null;
+      let afterRedeemLoserConfirmedBalance = null;
 
-      expectedLoserBalances.push({
+      let initialWinnerBalance = null;
+      let afterRegisterWinnerBalance = null;
+      let afterRegisterWinnerConfirmedBalance = null;
+
+      initialLoserBalance = {
         tx: 3,
         coin: 3,
         confirmed: INIT_FUND - (hardFee * 2),
         unconfirmed: INIT_FUND - (hardFee * 2),
         clocked: loserBidAmount,
         ulocked: loserBidAmount
-      });
+      };
 
-      expectedWinnerBalances.push({
-        ...expectedLoserBalances[0],
+      initialWinnerBalance = {
+        ...initialLoserBalance,
         clocked: winnerBidAmount,
         ulocked: winnerBidAmount
-      });
+      };
 
-      assertBalance(await winner.getBalance(winnerAcct), expectedWinnerBalances[0]);
-      assertBalance(await loser.getBalance(loserAcct), expectedLoserBalances[0]);
+      await assertBalance(winner, winnerAcct, initialWinnerBalance);
+      await assertBalance(loser, loserAcct, initialLoserBalance);
 
       const resource = Resource.fromJSON({ records: [] });
       await winner.sendUpdate(name, resource, winnerOpts);
       await loser.sendRedeem(name, loserOpts);
 
-      expectedLoserBalances.push(applyDelta(expectedLoserBalances[0], {
+      afterRedeemLoserBalance = applyDelta(initialLoserBalance, {
         // redeem tx.
         tx: 1,
         // fund fees + reveal -> redeem + change
@@ -605,9 +628,9 @@ describe('Wallet Lock Balance', function() {
         unconfirmed: -hardFee,
         // unlock bid
         ulocked: -loserBidAmount // 0
-      }));
+      });
 
-      expectedWinnerBalances.push(applyDelta(expectedWinnerBalances[0], {
+      afterRegisterWinnerBalance = applyDelta(initialWinnerBalance, {
         // register tx.
         tx: 1,
         // consume REVEAL -> REGISTER (losing bid was lower) + leftover
@@ -616,44 +639,44 @@ describe('Wallet Lock Balance', function() {
         unconfirmed: -hardFee,
         // only lock second highest bid
         ulocked: -winnerBidAmount + loserBidAmount
-      }));
+      });
 
-      assertBalance(await loser.getBalance(loserAcct), expectedLoserBalances[1]);
-      assertBalance(await winner.getBalance(winnerAcct), expectedWinnerBalances[1]);
+      await assertBalance(loser, loserAcct, afterRedeemLoserBalance);
+      await assertBalance(winner, winnerAcct, afterRegisterWinnerBalance);
       await mineBlocks(1);
 
       // confirm above
-      expectedLoserBalances.push(applyDelta(expectedLoserBalances[1], {
+      afterRedeemLoserConfirmedBalance = applyDelta(afterRedeemLoserBalance, {
         confirmed: -hardFee,
         clocked: -loserBidAmount
-      }));
+      });
 
-      expectedWinnerBalances.push(applyDelta(expectedWinnerBalances[1], {
+      afterRegisterWinnerConfirmedBalance = applyDelta(afterRegisterWinnerBalance, {
         confirmed: -hardFee,
         clocked: -winnerBidAmount + loserBidAmount
-      }));
+      });
 
-      assertBalance(await loser.getBalance(loserAcct), expectedLoserBalances[2]);
-      assertBalance(await winner.getBalance(winnerAcct), expectedWinnerBalances[2]);
+      await assertBalance(loser, loserAcct, afterRedeemLoserConfirmedBalance);
+      await assertBalance(winner, winnerAcct, afterRegisterWinnerConfirmedBalance);
 
       await wdb.revert(chain.tip.height - 1);
-      assertBalance(await loser.getBalance(loserAcct), expectedLoserBalances[1]);
-      assertBalance(await winner.getBalance(winnerAcct), expectedWinnerBalances[1]);
+      await assertBalance(loser, loserAcct, afterRedeemLoserBalance);
+      await assertBalance(winner, winnerAcct, afterRegisterWinnerBalance);
 
       await loser.zap(loserAcct, 0);
       await winner.zap(winnerAcct, 0);
-      assertBalance(await loser.getBalance(loserAcct), expectedLoserBalances[0]);
-      assertBalance(await winner.getBalance(winnerAcct), expectedWinnerBalances[0]);
+      await assertBalance(loser, loserAcct, initialLoserBalance);
+      await assertBalance(winner, winnerAcct, initialWinnerBalance);
     });
 
     it('should handle normal REVEAL -> REDEEM/REGISTER (same amount)', async () => {
       const name = grindName(GRIND_NAME_LEN, chain.tip.height, network);
 
-      const winner = alicew;
-      const winnerAcct = altAccount1;
+      const winner = allWallets[0];
+      const winnerAcct = ALT_ACCOUNT;
       const winnerOpts = { account: winnerAcct, hardFee };
-      const loser = bobw;
-      const loserAcct = altAccount1;
+      const loser = allWallets[1];
+      const loserAcct = ALT_ACCOUNT;
       const loserOpts = { account: loserAcct, hardFee };
 
       const winnerBidAmount = 1e6 / 4;
@@ -671,32 +694,37 @@ describe('Wallet Lock Balance', function() {
       await loser.sendReveal(name, loserOpts);
       await mineBlocks(revealPeriod);
 
-      const expectedLoserBalances = [];
-      const expectedWinnerBalances = [];
+      let initialLoserBalance = null;
+      let afterRedeemLoserBalance = null;
+      let afterRedeemLoserConfirmedBalance = null;
 
-      expectedLoserBalances.push({
+      let initialWinnerBalance = null;
+      let afterRegisterWinnerBalance = null;
+      let afterRegisterWinnerConfirmedBalance = null;
+
+      initialLoserBalance = {
         tx: 3,
         coin: 3,
         confirmed: INIT_FUND - (hardFee * 2),
         unconfirmed: INIT_FUND - (hardFee * 2),
         clocked: loserBidAmount,
         ulocked: loserBidAmount
-      });
+      };
 
-      expectedWinnerBalances.push({
-        ...expectedLoserBalances[0],
+      initialWinnerBalance = {
+        ...initialLoserBalance,
         clocked: winnerBidAmount,
         ulocked: winnerBidAmount
-      });
+      };
 
-      assertBalance(await winner.getBalance(winnerAcct), expectedWinnerBalances[0]);
-      assertBalance(await loser.getBalance(loserAcct), expectedLoserBalances[0]);
+      await assertBalance(loser, loserAcct, initialLoserBalance);
+      await assertBalance(winner, winnerAcct, initialWinnerBalance);
 
       const resource = Resource.fromJSON({ records: [] });
       await winner.sendUpdate(name, resource, winnerOpts);
       await loser.sendRedeem(name, loserOpts);
 
-      expectedLoserBalances.push(applyDelta(expectedLoserBalances[0], {
+      afterRedeemLoserBalance = applyDelta(initialLoserBalance, {
         // redeem tx.
         tx: 1,
         // fund fees + reveal -> redeem + change
@@ -705,9 +733,9 @@ describe('Wallet Lock Balance', function() {
         unconfirmed: -hardFee,
         // unlock bid
         ulocked: -loserBidAmount // 0
-      }));
+      });
 
-      expectedWinnerBalances.push(applyDelta(expectedWinnerBalances[0], {
+      afterRegisterWinnerBalance = applyDelta(initialWinnerBalance, {
         // register tx.
         tx: 1,
         // consume REVEAL + fundFee -> REGISTER + change.
@@ -717,34 +745,34 @@ describe('Wallet Lock Balance', function() {
         unconfirmed: -hardFee,
         // only lock second highest bid
         ulocked: -winnerBidAmount + loserBidAmount
-      }));
+      });
 
-      assertBalance(await loser.getBalance(loserAcct), expectedLoserBalances[1]);
-      assertBalance(await winner.getBalance(winnerAcct), expectedWinnerBalances[1]);
+      await assertBalance(loser, loserAcct, afterRedeemLoserBalance);
+      await assertBalance(winner, winnerAcct, afterRegisterWinnerBalance);
       await mineBlocks(1);
 
       // confirm above
-      expectedLoserBalances.push(applyDelta(expectedLoserBalances[1], {
+      afterRedeemLoserConfirmedBalance = applyDelta(afterRedeemLoserBalance, {
         confirmed: -hardFee,
         clocked: -loserBidAmount
-      }));
+      });
 
-      expectedWinnerBalances.push(applyDelta(expectedWinnerBalances[1], {
+      afterRegisterWinnerConfirmedBalance = applyDelta(afterRegisterWinnerBalance, {
         confirmed: -hardFee,
         clocked: -winnerBidAmount + loserBidAmount
-      }));
+      });
 
-      assertBalance(await loser.getBalance(loserAcct), expectedLoserBalances[2]);
-      assertBalance(await winner.getBalance(winnerAcct), expectedWinnerBalances[2]);
+      await assertBalance(loser, loserAcct, afterRedeemLoserConfirmedBalance);
+      await assertBalance(winner, winnerAcct, afterRegisterWinnerConfirmedBalance);
 
       await wdb.revert(chain.tip.height - 1);
-      assertBalance(await loser.getBalance(loserAcct), expectedLoserBalances[1]);
-      assertBalance(await winner.getBalance(winnerAcct), expectedWinnerBalances[1]);
+      await assertBalance(loser, loserAcct, afterRedeemLoserBalance);
+      await assertBalance(winner, winnerAcct, afterRegisterWinnerBalance);
 
       await loser.zap(loserAcct, 0);
       await winner.zap(winnerAcct, 0);
-      assertBalance(await loser.getBalance(loserAcct), expectedLoserBalances[0]);
-      assertBalance(await winner.getBalance(winnerAcct), expectedWinnerBalances[0]);
+      await assertBalance(loser, loserAcct, initialLoserBalance);
+      await assertBalance(winner, winnerAcct, initialWinnerBalance);
     });
   });
 
@@ -758,9 +786,12 @@ describe('Wallet Lock Balance', function() {
       const opts = { account: acct, hardFee };
 
       await getRegisteredName(name, wallet, price, opts);
-      const expectedBalances = [];
 
-      expectedBalances.push({
+      let initialBalance = null;
+      let afterActionBalance = null;
+      let afterActionConfirmedBalance = null;
+
+      initialBalance = {
         tx: 4,
         // REGISTER + change
         coin: 2,
@@ -768,9 +799,9 @@ describe('Wallet Lock Balance', function() {
         unconfirmed: INIT_FUND - (hardFee * 3),
         ulocked: price,
         clocked: price
-      });
+      };
 
-      assertBalance(await wallet.getBalance(acct), expectedBalances[0]);
+      await assertBalance(wallet, acct, initialBalance);
 
       switch (type) {
         case 'update': {
@@ -787,33 +818,33 @@ describe('Wallet Lock Balance', function() {
           assert(false, 'unknown test');
       }
 
-      expectedBalances.push(applyDelta(expectedBalances[0], {
+      afterActionBalance = applyDelta(initialBalance, {
         tx: 1,
         unconfirmed: -hardFee
-      }));
+      });
 
-      assertBalance(await wallet.getBalance(acct), expectedBalances[1]);
+      await assertBalance(wallet, acct, afterActionBalance);
       await mineBlocks(1);
 
-      expectedBalances.push(applyDelta(expectedBalances[1], {
+      afterActionConfirmedBalance = applyDelta(afterActionBalance, {
         confirmed: -hardFee
-      }));
+      });
 
-      assertBalance(await wallet.getBalance(acct), expectedBalances[2]);
+      await assertBalance(wallet, acct, afterActionConfirmedBalance);
 
       await wdb.revert(chain.tip.height - 1);
-      assertBalance(await wallet.getBalance(acct), expectedBalances[1]);
+      await assertBalance(wallet, acct, afterActionBalance);
 
       await wallet.zap(acct, 0);
-      assertBalance(await wallet.getBalance(acct), expectedBalances[0]);
+      await assertBalance(wallet, acct, initialBalance);
     };
 
     it('should -> UPDATE', async () => {
-      await fromRegisterCheck(alicew, defaultAcc, 'update');
+      await fromRegisterCheck(allWallets[0], DEFAULT_ACCOUNT, 'update');
     });
 
     it('should -> RENEW', async () => {
-      await fromRegisterCheck(alicew, altAccount1, 'renew');
+      await fromRegisterCheck(allWallets[1], DEFAULT_ACCOUNT, 'renew');
     });
   });
 
@@ -833,219 +864,240 @@ describe('Wallet Lock Balance', function() {
 
     it('should -> REVOKE', async () => {
       const name = grindName(GRIND_NAME_LEN, chain.tip.height, network);
-      const wallet = alicew;
-      const account = defaultAcc;
+      const wallet = allWallets[0];
+      const account = DEFAULT_ACCOUNT;
       const opts = { account, hardFee };
 
       await getRegisteredName(name, wallet, PRICE, opts);
 
-      const expectedBalances = [];
+      let initialBalance = null;
+      let afterRevokeBalance = null;
+      let afterRevokeConfirmedBalance = null;
 
-      expectedBalances.push({ ...initRegBalance });
+      initialBalance = initRegBalance;
 
-      assertBalance(await wallet.getBalance(account), expectedBalances[0]);
+      await assertBalance(wallet, account, initialBalance);
 
       await wallet.sendRevoke(name, opts);
 
       // Revoke does not unlock coins nor remove balance, only consumes fee.
-      expectedBalances.push(applyDelta(expectedBalances[0], {
+      afterRevokeBalance = applyDelta(initialBalance, {
         tx: 1,
         unconfirmed: -hardFee
-      }));
+      });
 
-      assertBalance(await wallet.getBalance(account), expectedBalances[1]);
+      await assertBalance(wallet, account, afterRevokeBalance);
 
       await mineBlocks(1);
 
-      expectedBalances.push(applyDelta(expectedBalances[1], {
+      afterRevokeConfirmedBalance = applyDelta(afterRevokeBalance, {
         confirmed: -hardFee
-      }));
+      });
 
-      assertBalance(await wallet.getBalance(account), expectedBalances[2]);
+      await assertBalance(wallet, account, afterRevokeConfirmedBalance);
 
       await wdb.revert(chain.tip.height - 1);
-      assertBalance(await wallet.getBalance(account), expectedBalances[1]);
+      await assertBalance(wallet, account, afterRevokeBalance);
 
       await wallet.zap(account, 0);
-      assertBalance(await wallet.getBalance(account), expectedBalances[0]);
+      await assertBalance(wallet, account, initialBalance);
     });
 
     it('should TRANSFER -> FINALIZE', async () => {
       const name = grindName(GRIND_NAME_LEN, chain.tip.height, network);
-      const wallet = alicew;
-      const wallet2 = bobw;
-      const account = altAccount1;
-      const account2 = defaultAcc;
-      const opts = { account, hardFee };
-      const w2addr = await wallet2.receiveAddress(account2);
+      const wallet1 = allWallets[1];
+      const wallet2 = allWallets[2];
+      const accountw1 = DEFAULT_ACCOUNT;
+      const accountw2 = DEFAULT_ACCOUNT;
+      const opts = { account: accountw1, hardFee };
+      const w2addr = await wallet2.receiveAddress(accountw2);
 
-      await getRegisteredName(name, wallet, PRICE, opts);
+      await getRegisteredName(name, wallet1, PRICE, opts);
 
-      const expectedSenderBalances = [];
-      const expectedReceiverBalances = [];
+      // sender
+      let initBalanceSender = null;
+      let afterTransferBalanceSender = null;
+      let afterTransferConfirmedBalanceSender = null;
+      let afterFinalizeBalanceSender = null;
+      let afterFinalizeConfirmedBalanceSender = null;
 
-      expectedSenderBalances.push({ ...initRegBalance });
-      expectedReceiverBalances.push(INIT_BALANCE);
+      // receiver
+      let initBalanceRecv = null;
+      let afterTransferBalanceRecv = null;
+      let afterTransferConfirmedBalanceRecv = null;
+      let afterFinalizeBalanceRecv = null;
+      let afterFinalizeConfirmedBalanceRecv = null;
 
-      assertBalance(await wallet.getBalance(account), expectedSenderBalances[0]);
-      assertBalance(await wallet2.getBalance(account2), expectedReceiverBalances[0]);
+      initBalanceSender = initRegBalance;
+      initBalanceRecv = INIT_BALANCE;
 
-      await wallet.sendTransfer(name, w2addr, opts);
+      await assertBalance(wallet1, accountw1, initBalanceSender);
+      await assertBalance(wallet2, accountw2, initBalanceRecv);
 
-      expectedSenderBalances.push(applyDelta(expectedSenderBalances[0], {
+      await wallet1.sendTransfer(name, w2addr, opts);
+
+      afterTransferBalanceSender = applyDelta(initBalanceSender, {
         tx: 1,
         unconfirmed: -hardFee
-      }));
+      });
 
       // Transfer is still within wallet state transition.
       // Finalize is when the UTXO leaves the wallet.
-      expectedReceiverBalances.push(applyDelta(expectedReceiverBalances[0], {}));
+      afterTransferBalanceRecv = applyDelta(initBalanceRecv, {});
 
-      assertBalance(await wallet.getBalance(account), expectedSenderBalances[1]);
-      assertBalance(await wallet2.getBalance(account2), expectedReceiverBalances[1]);
+      await assertBalance(wallet1, accountw1, afterTransferBalanceSender);
+      await assertBalance(wallet2, accountw2, afterTransferBalanceRecv);
 
       // confirm
       await mineBlocks(1);
-      expectedSenderBalances.push(applyDelta(expectedSenderBalances[1], {
+      afterTransferConfirmedBalanceSender = applyDelta(afterTransferBalanceSender, {
         confirmed: -hardFee
-      }));
-      expectedReceiverBalances.push(applyDelta(expectedReceiverBalances[1], {}));
+      });
 
-      assertBalance(await wallet.getBalance(account), expectedSenderBalances[2]);
-      assertBalance(await wallet2.getBalance(account2), expectedReceiverBalances[2]);
+      afterTransferConfirmedBalanceRecv = applyDelta(afterTransferBalanceRecv, {});
+
+      await assertBalance(wallet1, accountw1, afterTransferConfirmedBalanceSender);
+      await assertBalance(wallet2, accountw2, afterTransferConfirmedBalanceRecv);
 
       // proceed to finalize
       await mineBlocks(transferLockup);
-      await wallet.sendFinalize(name, opts);
+      await wallet1.sendFinalize(name, opts);
 
-      expectedSenderBalances.push(applyDelta(expectedSenderBalances[2], {
+      afterFinalizeBalanceSender = applyDelta(afterTransferConfirmedBalanceSender, {
         tx: 1,
         coin: -1,
         unconfirmed: -hardFee - PRICE,
         ulocked: -PRICE
-      }));
+      });
 
-      expectedReceiverBalances.push(applyDelta(expectedReceiverBalances[2], {
+      afterFinalizeBalanceRecv = applyDelta(afterTransferConfirmedBalanceRecv, {
         tx: 1,
         coin: 1,
         unconfirmed: PRICE,
         ulocked: PRICE
-      }));
+      });
 
-      assertBalance(await wallet.getBalance(account), expectedSenderBalances[3]);
-      assertBalance(await wallet2.getBalance(account2), expectedReceiverBalances[3]);
+      await assertBalance(wallet1, accountw1, afterFinalizeBalanceSender);
+      await assertBalance(wallet2, accountw2, afterFinalizeBalanceRecv);
 
       // confirm finalize.
       await mineBlocks(1);
 
-      expectedSenderBalances.push(applyDelta(expectedSenderBalances[3], {
+      afterFinalizeConfirmedBalanceSender = applyDelta(afterFinalizeBalanceSender, {
         confirmed: -hardFee - PRICE,
         clocked: -PRICE
-      }));
+      });
 
-      expectedReceiverBalances.push(applyDelta(expectedReceiverBalances[3], {
+      afterFinalizeConfirmedBalanceRecv = applyDelta(afterFinalizeBalanceRecv, {
         confirmed: PRICE,
         clocked: PRICE
-      }));
+      });
 
-      assertBalance(await wallet.getBalance(account), expectedSenderBalances[4]);
-      assertBalance(await wallet2.getBalance(account2), expectedReceiverBalances[4]);
+      await assertBalance(wallet1, accountw1, afterFinalizeConfirmedBalanceSender);
+      await assertBalance(wallet2, accountw2, afterFinalizeConfirmedBalanceRecv);
 
       // Now let's revert.
       await wdb.revert(chain.tip.height - 1);
-      assertBalance(await wallet.getBalance(account), expectedSenderBalances[3]);
-      assertBalance(await wallet2.getBalance(account2), expectedReceiverBalances[3]);
+      await assertBalance(wallet1, accountw1, afterFinalizeBalanceSender);
+      await assertBalance(wallet2, accountw2, afterFinalizeBalanceRecv);
 
-      await wallet.zap(account, 0);
-      await wallet2.zap(account2, 0);
-      assertBalance(await wallet.getBalance(account), expectedSenderBalances[2]);
-      assertBalance(await wallet2.getBalance(account2), expectedReceiverBalances[2]);
+      await wallet1.zap(accountw1, 0);
+      await wallet2.zap(accountw2, 0);
+      await assertBalance(wallet1, accountw1, afterTransferConfirmedBalanceSender);
+      await assertBalance(wallet2, accountw2, afterTransferConfirmedBalanceRecv);
 
       // revert transfer
       await wdb.revert(chain.tip.height - 1 - transferLockup - 1);
-      assertBalance(await wallet.getBalance(account), expectedSenderBalances[1]);
-      assertBalance(await wallet2.getBalance(account2), expectedReceiverBalances[1]);
+      await assertBalance(wallet1, accountw1, afterTransferBalanceSender);
+      await assertBalance(wallet2, accountw2, afterTransferBalanceRecv);
 
-      await wallet.zap(account, 0);
-      await wallet2.zap(account2, 0);
-      assertBalance(await wallet.getBalance(account), expectedSenderBalances[0]);
-      assertBalance(await wallet2.getBalance(account2), expectedReceiverBalances[0]);
+      await wallet1.zap(accountw1, 0);
+      await wallet2.zap(accountw2, 0);
+      await assertBalance(wallet1, accountw1, initBalanceSender);
+      await assertBalance(wallet2, accountw2, initBalanceRecv);
     });
 
     it('should TRANSFER -> REVOKE', async () => {
       const name = grindName(GRIND_NAME_LEN, chain.tip.height, network);
-      const wallet = bobw;
-      const account = altAccount1;
+      const wallet = allWallets[3];
+      const account = DEFAULT_ACCOUNT;
       const opts = { account, hardFee };
-      const w2addr = await carolw.receiveAddress(defaultAcc);
+      const w2addr = await allWallets[4].receiveAddress(DEFAULT_ACCOUNT);
 
       await getRegisteredName(name, wallet, PRICE, opts);
 
-      const expectedBalances = [];
-      expectedBalances.push({ ...initRegBalance });
+      let initialBalance = null;
+      let afterTransferBalance = null;
+      let afterTransferConfirmedBalance = null;
+      let afterRevokeBalance = null;
+      let afterRevokeConfirmedBalance = null;
 
-      assertBalance(await wallet.getBalance(account), expectedBalances[0]);
+      initialBalance = initRegBalance;
+
+      await assertBalance(wallet, account, initialBalance);
 
       await wallet.sendTransfer(name, w2addr, opts);
 
-      expectedBalances.push(applyDelta(expectedBalances[0], {
+      afterTransferBalance = applyDelta(initialBalance, {
         tx: 1,
         unconfirmed: -hardFee
-      }));
+      });
 
-      assertBalance(await wallet.getBalance(account), expectedBalances[1]);
+      await assertBalance(wallet, account, afterTransferBalance);
 
+      // confirm;
       await mineBlocks(1);
 
-      expectedBalances.push(applyDelta(expectedBalances[1], {
+      afterTransferConfirmedBalance = applyDelta(afterTransferBalance, {
         confirmed: -hardFee
-      }));
+      });
 
-      assertBalance(await wallet.getBalance(account), expectedBalances[2]);
+      await assertBalance(wallet, account, afterTransferConfirmedBalance);
 
       await wallet.sendRevoke(name, opts);
 
       // Revoke does not unlock coins nor remove balance, only consumes fee.
-      expectedBalances.push(applyDelta(expectedBalances[2], {
+      afterRevokeBalance = applyDelta(afterTransferConfirmedBalance, {
         tx: 1,
         unconfirmed: -hardFee
-      }));
+      });
 
-      assertBalance(await wallet.getBalance(account), expectedBalances[3]);
+      await assertBalance(wallet, account, afterRevokeBalance);
 
       await mineBlocks(1);
 
-      expectedBalances.push(applyDelta(expectedBalances[3], {
+      afterRevokeConfirmedBalance = applyDelta(afterRevokeBalance, {
         confirmed: -hardFee
-      }));
+      });
 
-      assertBalance(await wallet.getBalance(account), expectedBalances[4]);
+      await assertBalance(wallet, account, afterRevokeConfirmedBalance);
 
       // revert
       await wdb.revert(chain.tip.height - 1);
-      assertBalance(await wallet.getBalance(account), expectedBalances[3]);
+      await assertBalance(wallet, account, afterRevokeBalance);
 
       await wallet.zap(account, 0);
-      assertBalance(await wallet.getBalance(account), expectedBalances[2]);
+      await assertBalance(wallet, account, afterTransferConfirmedBalance);
 
       await wdb.revert(chain.tip.height - 2);
-      assertBalance(await wallet.getBalance(account), expectedBalances[1]);
+      await assertBalance(wallet, account, afterTransferBalance);
 
       await wallet.zap(account, 0);
-      assertBalance(await wallet.getBalance(account), expectedBalances[0]);
+      await assertBalance(wallet, account, initialBalance);
     });
   });
 
   /*
    * From here we test cases when addresses are discovered later.
    * It could happen when account gap is lower than an actual gap.
-   * Or if someone owning XPUB just sends txs to addresses after gap.
+   * It could also happen when two wallets are using same account on
+   * different depths.
    *
    * Note that, in some cases NONE -> BID, BID -> REVEAL it could be
    * someone sending from the outside of the wallet and not the gap issue. (Above)
    */
 
-  describe('NONE -> BID (Gapped)', function() {
+  describe('NONE -> BID (missed)', function() {
     before(beforeAll);
     after(afterAll);
 
@@ -1053,24 +1105,24 @@ describe('Wallet Lock Balance', function() {
     // it would be totally missed on revert until rescan.
     it('should handle missed bid (on confirm)', async () => {
       const name = grindName(GRIND_NAME_LEN, chain.tip.height, network);
-      const wallet = alicew;
-      const accountName = defaultAcc;
+      const wallet = allWallets[0];
+      const accountName = DEFAULT_ACCOUNT;
       const opts = { account: accountName, hardFee };
       const account = await wallet.getAccount(accountName);
 
-      const blindAmount = 1e6;
-      const bidAmount = blindAmount / 4;
+      let initialBalance = null;
+      let afterBidBalance = null;
+      let afterBidConfirmedBalance = null;
 
-      const expectedBalances = [];
-      expectedBalances.push(INIT_BALANCE);
+      initialBalance = INIT_BALANCE;
 
-      assertBalance(await wallet.getBalance(accountName), expectedBalances[0]);
+      await assertBalance(wallet, accountName, initialBalance);
       await primary.sendOpen(name, false);
       await mineBlocks(openingPeriod);
 
       const batchActions = [
-        ['BID', name, bidAmount, blindAmount],
-        ['BID', name, bidAmount, blindAmount]
+        ['BID', name, BID_AMOUNT, BLIND_AMOUNT],
+        ['BID', name, BID_AMOUNT, BLIND_AMOUNT]
       ];
 
       const bidMTX = await wallet.createBatch(batchActions, opts);
@@ -1087,37 +1139,194 @@ describe('Wallet Lock Balance', function() {
       wdb.send(bidMTX.toTX());
       await forWTX(wallet.id, bidMTX.hash());
 
-      expectedBalances.push(applyDelta(expectedBalances[0], {
+      afterBidBalance = applyDelta(initialBalance, {
         tx: 1,
         // BID + CHANGE
         coin: 1,
         // unknown bid will actually spend coin from our balance.
-        unconfirmed: -hardFee - blindAmount,
-        ulocked: blindAmount
-      }));
+        unconfirmed: -hardFee - BLIND_AMOUNT,
+        ulocked: BLIND_AMOUNT
+      });
 
       await wallet.createReceive();
-      assertBalance(await wallet.getBalance(accountName), expectedBalances[1]);
+      await assertBalance(wallet, accountName, afterBidBalance);
 
       // derive two addresses.
       await account.receiveAddress();
       await account.receiveAddress();
       await mineBlocks(1);
 
-      expectedBalances.push(applyDelta(expectedBalances[1], {
+      afterBidConfirmedBalance = applyDelta(afterBidBalance, {
         // we discovered coin
         coin: 1,
         // because we discovered blind, we no longer spend those coins.
         confirmed: -hardFee,
         // add newly discovered coins to unconfirmed as well.
-        unconfirmed: blindAmount,
+        unconfirmed: BLIND_AMOUNT,
         // we discovered another bid is ours, so we have both locked.
-        clocked: blindAmount * 2,
+        clocked: BLIND_AMOUNT * 2,
         // add newly discovered bid to ulocked.
-        ulocked: blindAmount
+        ulocked: BLIND_AMOUNT
+      });
+
+      await assertBalance(wallet, accountName, afterBidConfirmedBalance);
+
+      // after discovery it reverts normally.
+      await wdb.revert(chain.tip.height - 1);
+
+      await assertBalance(wallet, accountName, applyDelta(initialBalance, {
+        // Now we know about our second bid.
+        tx: 1,
+        // 2 bids.
+        coin: 2,
+        // we only spend fee for bidding.
+        unconfirmed: -hardFee,
+        // we locked both blinds.
+        ulocked: BLIND_AMOUNT * 2
       }));
 
-      assertBalance(await wallet.getBalance(accountName), expectedBalances[2]);
+      await wallet.zap(accountName, 0);
+      await assertBalance(wallet, accountName, initialBalance);
+    });
+
+    it('should handle missed bid (on revert)', async () => {
+      const name = grindName(GRIND_NAME_LEN, chain.tip.height, network);
+      const wallet = allWallets[1];
+      const accountName = DEFAULT_ACCOUNT;
+      const opts = { account: accountName, hardFee };
+      const account = await wallet.getAccount(accountName);
+      const ahead = 10;
+
+      // balances
+      let initialBalance = null;
+      let afterBidBalance = null;
+      let afterBidConfirmedBalance = null;
+
+      initialBalance = INIT_BALANCE;
+
+      await assertBalance(wallet, accountName, initialBalance);
+      await primary.sendOpen(name, false);
+      await mineBlocks(openingPeriod);
+
+      const batchActions = [
+        ['BID', name, BID_AMOUNT, BLIND_AMOUNT],
+        ['BID', name, BID_AMOUNT, BLIND_AMOUNT]
+      ];
+
+      const bidMTX = await wallet.createBatch(batchActions, opts);
+      assert.strictEqual(bidMTX.outputs[0].covenant.type, types.BID);
+      assert.strictEqual(bidMTX.outputs[1].covenant.type, types.BID);
+
+      const nextIndex = account.receiveDepth + account.lookahead + ahead;
+      const nextAddr = account.deriveReceive(nextIndex).getAddress();
+      bidMTX.outputs[1].address = nextAddr;
+
+      for (const input of bidMTX.inputs)
+        input.witness.length = 0;
+
+      await wallet.sign(bidMTX);
+      wdb.send(bidMTX.toTX());
+      await forWTX(wallet.id, bidMTX.hash());
+
+      afterBidBalance = applyDelta(initialBalance, {
+        tx: 1,
+        // BID + CHANGE
+        coin: 1,
+        // unknown bid will actually spend coin from our balance.
+        unconfirmed: -hardFee - BLIND_AMOUNT,
+        ulocked: BLIND_AMOUNT
+      });
+
+      await assertBalance(wallet, accountName, afterBidBalance);
+
+      // confirm the tx.
+      await mineBlocks(1);
+
+      afterBidConfirmedBalance = applyDelta(afterBidBalance, {
+        confirmed: -hardFee - BLIND_AMOUNT,
+        clocked: BLIND_AMOUNT
+      });
+
+      await assertBalance(wallet, accountName, afterBidConfirmedBalance);
+
+      for (let i = 0; i < ahead; i++)
+        await wallet.createReceive(accountName);
+
+      await wdb.revert(chain.tip.height - 1);
+      await assertBalance(wallet, accountName, afterBidBalance);
+
+      await wallet.zap(accountName, 0);
+      await assertBalance(wallet, accountName, initialBalance);
+    });
+
+    it('should handle missed bid (on erase)', async () => {
+      const name = grindName(GRIND_NAME_LEN, chain.tip.height, network);
+      const wallet = allWallets[2];
+      const accountName = DEFAULT_ACCOUNT;
+      const opts = { account: accountName, hardFee };
+      const account = await wallet.getAccount(accountName);
+      const ahead = 10;
+
+      // balances
+      let initialBalance = null;
+      let afterBidBalance = null;
+      let afterBidConfirmedBalance = null;
+
+      initialBalance = INIT_BALANCE;
+
+      await assertBalance(wallet, accountName, initialBalance);
+      await primary.sendOpen(name, false);
+      await mineBlocks(openingPeriod);
+
+      const batchActions = [
+        ['BID', name, BID_AMOUNT, BLIND_AMOUNT],
+        ['BID', name, BID_AMOUNT, BLIND_AMOUNT]
+      ];
+
+      const bidMTX = await wallet.createBatch(batchActions, opts);
+      assert.strictEqual(bidMTX.outputs[0].covenant.type, types.BID);
+      assert.strictEqual(bidMTX.outputs[1].covenant.type, types.BID);
+
+      const nextIndex = account.receiveDepth + account.lookahead + ahead;
+      const nextAddr = account.deriveReceive(nextIndex).getAddress();
+      bidMTX.outputs[1].address = nextAddr;
+
+      for (const input of bidMTX.inputs)
+        input.witness.length = 0;
+
+      await wallet.sign(bidMTX);
+      wdb.send(bidMTX.toTX());
+      await forWTX(wallet.id, bidMTX.hash());
+
+      afterBidBalance = applyDelta(initialBalance, {
+        tx: 1,
+        // BID + CHANGE
+        coin: 1,
+        // unknown bid will actually spend coin from our balance.
+        unconfirmed: -hardFee - BLIND_AMOUNT,
+        ulocked: BLIND_AMOUNT
+      });
+
+      await assertBalance(wallet, accountName, afterBidBalance);
+
+      // confirm the tx.
+      await mineBlocks(1);
+
+      afterBidConfirmedBalance = applyDelta(afterBidBalance, {
+        confirmed: -hardFee - BLIND_AMOUNT,
+        clocked: BLIND_AMOUNT
+      });
+
+      await assertBalance(wallet, accountName, afterBidConfirmedBalance);
+
+      await wdb.revert(chain.tip.height - 1);
+      await assertBalance(wallet, accountName, afterBidBalance);
+
+      for (let i = 0; i < ahead; i++)
+        await wallet.createReceive(accountName);
+
+      await wallet.zap(accountName, 0);
+      await assertBalance(wallet, accountName, initialBalance);
     });
   });
 });
