@@ -4,6 +4,9 @@ const assert = require('bsert');
 const Network = require('../lib/protocol/network');
 const FullNode = require('../lib/node/fullnode');
 const WalletPlugin = require('../lib/wallet/plugin');
+const MTX = require('../lib/primitives/mtx');
+const Coin = require('../lib/primitives/coin');
+const Output = require('../lib/primitives/output');
 const {Resource} = require('../lib/dns/resource');
 const {types, grindName} = require('../lib/covenants/rules');
 const {forEventCondition} = require('./util/common');
@@ -16,6 +19,13 @@ const {
   revealPeriod,
   transferLockup
 } = network.names;
+
+const DISCOVER_TYPES = {
+  NONE: 0,
+  BEFORE_CONFIRM: 1,
+  BEFORE_UNCONFIRM: 2,
+  BEFORE_ERASE: 3
+};
 
 const openingPeriod = treeInterval + 2;
 
@@ -82,24 +92,6 @@ describe('Wallet Balance', function() {
 
   const getAddrStr = async (wallet, acct = 0) => {
     return (await wallet.receiveAddress(acct)).toString(network);
-  };
-
-  const getAheadAddr = (account, ahead) => {
-    const nextIndex = account.receiveDepth + account.lookahead + ahead;
-    const nextAddr = account.deriveReceive(nextIndex).getAddress();
-
-    return nextAddr;
-  };
-
-  const catchUpToAhead = async (wallet, account, ahead) => {
-    for (let i = 0; i < ahead; i++)
-      await wallet.createReceive(account);
-  };
-
-  const forWTX = (id, hash) => {
-    return forEventCondition(wdb, 'tx', (wallet, tx) => {
-      return wallet.id === id && tx.hash().equals(hash);
-    });
   };
 
   const mineBlocks = async (blocks) => {
@@ -178,6 +170,25 @@ describe('Wallet Balance', function() {
     };
   };
 
+  const getAheadAddr = (account, ahead, master) => {
+    const nextIndex = account.receiveDepth + account.lookahead + ahead;
+    const receiveKey = account.deriveReceive(nextIndex, master);
+    const nextAddr = receiveKey.getAddress();
+
+    return { nextAddr, receiveKey };
+  };
+
+  const catchUpToAhead = async (wallet, accountName, ahead) => {
+    for (let i = 0; i < ahead; i++)
+      await wallet.createReceive(accountName);
+  };
+
+  const forWTX = (id, hash) => {
+    return forEventCondition(wdb, 'tx', (wallet, tx) => {
+      return wallet.id === id && tx.hash().equals(hash);
+    });
+  };
+
   const getBalanceObj = async (wallet, account) => {
     const balance = await wallet.getBalance(account);
     const {
@@ -231,9 +242,9 @@ describe('Wallet Balance', function() {
     await mineBlocks(1);
   };
 
-  describe('NONE -> NONE (Receive)', function () {
+  describe('NONE -> NONE (Receive) (recv -> confirm)' , function () {
     before(() => {
-      genWallets = 3;
+      genWallets = 4;
       return beforeAll();
     });
 
@@ -241,63 +252,20 @@ describe('Wallet Balance', function() {
 
     const SEND_AMOUNT = 1e6;
 
-    it('should handle normal recv', async () => {
-      const {wallet, accountName} = getNextWallet();
-
-      const recvAddr = await wallet.receiveAddress();
-
-      let initialBalance = null;
-      let afterRecvBalance = null;
-      let afterRecvConfirmedBalance = null;
-
-      initialBalance = INIT_BALANCE;
-
-      await assertBalance(wallet, accountName, initialBalance);
-
-      await primary.send({
-        outputs: [{
-          address: recvAddr,
-          value: SEND_AMOUNT
-        }]
-      });
-
-      afterRecvBalance = applyDelta(initialBalance, {
-        tx: 1,
-        coin: 1,
-        unconfirmed: SEND_AMOUNT
-      });
-
-      await assertBalance(wallet, accountName, afterRecvBalance);
-
-      await mineBlocks(1);
-
-      afterRecvConfirmedBalance = applyDelta(afterRecvBalance, {
-        confirmed: SEND_AMOUNT
-      });
-
-      await assertBalance(wallet, accountName, afterRecvConfirmedBalance);
-
-      // now unconfirm
-      await wdb.revert(chain.tip.height - 1);
-      await assertBalance(wallet, accountName, afterRecvBalance);
-
-      // now erase
-      await wallet.zap(accountName, 0);
-      await assertBalance(wallet, accountName, initialBalance);
-    });
-
-    it('should handle missed coin (on confirm)', async () => {
+    const receiveTXTest = async (balances, discoverAt) => {
       const ahead = 10;
       const {wallet, accountName} = getNextWallet();
       const account = await wallet.getAccount(accountName);
       const recvAddr = await wallet.receiveAddress();
-      const nextAddr = getAheadAddr(account, ahead);
+      const {nextAddr} = getAheadAddr(account, ahead);
 
-      let initialBalance = null;
-      let afterRecvBalance = null;
-      let afterRecvConfirmedBalance = null;
-
-      initialBalance = INIT_BALANCE;
+      const {
+        initialBalance,
+        afterRecvBalance,
+        afterRecvConfirmedBalance,
+        afterRecvUnconfirmedBalance,
+        afterRecvEraseBalance
+      } = balances;
 
       await assertBalance(wallet, accountName, initialBalance);
 
@@ -312,21 +280,61 @@ describe('Wallet Balance', function() {
         }]
       });
 
-      afterRecvBalance = applyDelta(initialBalance, {
+      await assertBalance(wallet, accountName, afterRecvBalance);
+
+      // Now we derive addresses before confirm:
+      if (discoverAt === DISCOVER_TYPES.BEFORE_CONFIRM)
+        await catchUpToAhead(wallet, accountName, ahead);
+
+      // confirm
+      await mineBlocks(1);
+      await assertBalance(wallet, accountName, afterRecvConfirmedBalance);
+
+      if (discoverAt === DISCOVER_TYPES.BEFORE_UNCONFIRM)
+        await catchUpToAhead(wallet, accountName, ahead);
+
+      // Now unconfirm, at this point we are aware of the second coin.
+      await wdb.revert(chain.tip.height - 1);
+      await assertBalance(wallet, accountName, afterRecvUnconfirmedBalance);
+
+      if (discoverAt === DISCOVER_TYPES.BEFORE_ERASE)
+        await catchUpToAhead(wallet, accountName, ahead);
+
+      // now erase.
+      await wallet.zap(accountName, 0);
+      await assertBalance(wallet, accountName, afterRecvEraseBalance);
+    };
+
+    it('should handle normal recv', async () => {
+      const initialBalance = INIT_BALANCE;
+      const afterRecvBalance = applyDelta(initialBalance, {
+        tx: 1,
+        coin: 1,
+        unconfirmed: SEND_AMOUNT
+      });
+;
+      const afterRecvConfirmedBalance = applyDelta(afterRecvBalance, {
+        confirmed: SEND_AMOUNT
+      });
+
+      await receiveTXTest({
+        initialBalance,
+        afterRecvBalance,
+        afterRecvConfirmedBalance,
+        afterRecvUnconfirmedBalance: afterRecvBalance,
+        afterRecvEraseBalance: initialBalance
+      }, DISCOVER_TYPES.NONE);
+    });
+
+    it('should handle missed coin (on confirm)', async () => {
+      const initialBalance = INIT_BALANCE;
+      const afterRecvBalance = applyDelta(initialBalance, {
         tx: 1,
         // NOTE: Actually we receive 2, but we are unaware of another.
         coin: 1,
         unconfirmed: SEND_AMOUNT
       });
-
-      await assertBalance(wallet, accountName, afterRecvBalance);
-
-      // Now we derive addresses before confirm:
-      await catchUpToAhead(wallet, accountName, ahead);
-      // confirm
-      await mineBlocks(1);
-
-      afterRecvConfirmedBalance = applyDelta(afterRecvBalance, {
+      const afterRecvConfirmedBalance = applyDelta(afterRecvBalance, {
         // We should discover another coin here.
         coin: 1,
         // also confirm second balance as well
@@ -335,84 +343,280 @@ describe('Wallet Balance', function() {
         unconfirmed: SEND_AMOUNT
       });
 
-      await assertBalance(wallet, accountName, afterRecvConfirmedBalance);
-
-      // Now unconfirm, at this point we are aware of the second coin.
-      await wdb.revert(chain.tip.height - 1);
-      await assertBalance(wallet, accountName, applyDelta(initialBalance, {
+      const afterRecvUnconfirmedBalance = applyDelta(initialBalance, {
         tx: 1,
         // 2 new coins from initial
         coin: 2,
         // both balances
         unconfirmed: SEND_AMOUNT * 2
-      }));
+      });
 
-      // now erase.
-      await wallet.zap(accountName, 0);
-      await assertBalance(wallet, accountName, initialBalance);
+      await receiveTXTest({
+        initialBalance,
+        afterRecvBalance,
+        afterRecvConfirmedBalance,
+        afterRecvUnconfirmedBalance,
+        afterRecvEraseBalance: initialBalance
+      }, DISCOVER_TYPES.BEFORE_CONFIRM);
     });
 
     it('should handle missed coin (on unconfirm)', async () => {
-      const ahead = 10;
-      const {wallet, accountName} = getNextWallet();
-      const account = await wallet.getAccount(accountName);
-      const recvAddr = await wallet.receiveAddress();
-      const nextAddr = getAheadAddr(account, ahead);
-
-      let initialBalance = null;
-      let afterRecvBalance = null;
-      let afterRecvConfirmedBalance = null;
-
-      initialBalance = INIT_BALANCE;
-
-      await assertBalance(wallet, accountName, initialBalance);
-
-      // NOTE: nextAddr will get discovered on confirmed
-      await primary.send({
-        outputs: [{
-          address: recvAddr,
-          value: SEND_AMOUNT
-        }, {
-          address: nextAddr,
-          value: SEND_AMOUNT
-        }]
-      });
-
-      afterRecvBalance = applyDelta(initialBalance, {
+      const initialBalance = INIT_BALANCE;
+      const afterRecvBalance = applyDelta(initialBalance, {
         tx: 1,
         // NOTE: Actually we receive 2, but we are unaware of another.
         coin: 1,
         unconfirmed: SEND_AMOUNT
       });
 
-      await assertBalance(wallet, accountName, afterRecvBalance);
-
-      // confirm
-      await mineBlocks(1);
-
       // we are still unaware
-      afterRecvConfirmedBalance = applyDelta(afterRecvBalance, {
+      const afterRecvConfirmedBalance = applyDelta(afterRecvBalance, {
         confirmed: SEND_AMOUNT
       });
 
-      await assertBalance(wallet, accountName, afterRecvConfirmedBalance);
-
-      // now we can discover
-      await catchUpToAhead(wallet, accountName, ahead);
-      await wdb.revert(chain.tip.height - 1);
-
       // from initial balance
-      await assertBalance(wallet, accountName, applyDelta(initialBalance, {
+      const afterRecvUnconfirmedBalance = applyDelta(initialBalance, {
         tx: 1,
         // 2 new coins from initial
         coin: 2,
         // both balances
         unconfirmed: SEND_AMOUNT * 2
+      });
+
+      await receiveTXTest({
+        initialBalance,
+        afterRecvBalance,
+        afterRecvConfirmedBalance,
+        afterRecvUnconfirmedBalance,
+        afterRecvEraseBalance: initialBalance
+      }, DISCOVER_TYPES.BEFORE_UNCONFIRM);
+    });
+
+    it('should handle missed coin (on erase)', async () => {
+      const initialBalance = INIT_BALANCE;
+      const afterRecvBalance = applyDelta(initialBalance, {
+        tx: 1,
+        // NOTE: Actually we receive 2, but we are unaware of another.
+        coin: 1,
+        unconfirmed: SEND_AMOUNT
+      });
+
+      // we are still unaware
+      const afterRecvConfirmedBalance = applyDelta(afterRecvBalance, {
+        confirmed: SEND_AMOUNT
+      });
+
+      // still unaware
+      const afterRecvUnconfirmedBalance = afterRecvBalance;
+
+      // Now we discover, but does not matter
+      const afterRecvEraseBalance = initialBalance;
+
+      await receiveTXTest({
+        initialBalance,
+        afterRecvBalance,
+        afterRecvConfirmedBalance,
+        afterRecvUnconfirmedBalance,
+        afterRecvEraseBalance
+      }, DISCOVER_TYPES.BEFORE_ERASE);
+    });
+  });
+
+  describe('NONE -> NONE (Missed & Spent) (recv -> confirm)', function () {
+    before(() => {
+      genWallets = 4;
+      return beforeAll();
+    });
+
+    after(afterAll);
+
+    const SEND_AMOUNT = 1e6;
+
+    const sendTXFromFuture = async (wallet, account, ahead, mined) => {
+      const recvAddr = await wallet.receiveAddress();
+      const changeAddress = await wallet.changeAddress();
+      const {
+        nextAddr,
+        receiveKey
+      } = getAheadAddr(account, ahead, wallet.master);
+
+      const fundTX = await primary.send({
+        outputs: [{
+          address: nextAddr,
+          value: SEND_AMOUNT + hardFee
+        }]
+      });
+
+      if (mined)
+        await mineBlocks(1);
+
+      const coin = Coin.fromTX(fundTX, 0, -1);
+
+      // Spend ahead address, before wallet/knows about it.
+      const mtx = new MTX();
+      mtx.addOutput(new Output({
+        address: recvAddr,
+        value: SEND_AMOUNT
       }));
 
-      // now erase.
-      await wallet.zap(accountName, 0);
+      await mtx.fund([coin], {
+        hardFee,
+        changeAddress
+      });
+
+      await mtx.signAsync(receiveKey);
+      node.mempool.addTX(mtx.toTX());
+      await forWTX(wallet.id, mtx.hash());
+    };
+
+    const missedSpentInputTest = async (balances, discoverAt) => {
+      const ahead = 10;
+      const {wallet, accountName} = getNextWallet();
+      const account = await wallet.getAccount(accountName);
+
+      const {
+        initialBalance,
+        afterRecvBalance,
+        afterRecvConfirmedBalance,
+        afterRecvUnconfirmedBalance,
+        afterRecvEraseBalance
+      } = balances;
+
       await assertBalance(wallet, accountName, initialBalance);
+
+      // recv our missed input as input and recv output
+      await sendTXFromFuture(wallet, account, ahead);
+      await assertBalance(wallet, accountName, afterRecvBalance);
+
+      if (discoverAt === DISCOVER_TYPES.BEFORE_CONFIRM)
+        await catchUpToAhead(wallet, accountName, ahead);
+
+      await mineBlocks(1);
+      await assertBalance(wallet, accountName, afterRecvConfirmedBalance);
+
+      // now unconfirm
+      if (discoverAt === DISCOVER_TYPES.BEFORE_UNCONFIRM)
+        await catchUpToAhead(wallet, accountName, ahead);
+
+      await wdb.revert(chain.tip.height - 1);
+      await assertBalance(wallet, accountName, afterRecvUnconfirmedBalance);
+
+      // now erase
+      if (discoverAt === DISCOVER_TYPES.BEFORE_ERASE)
+        await catchUpToAhead(wallet, accountName, ahead);
+      await wallet.zap(accountName, 0);
+      await assertBalance(wallet, accountName, afterRecvEraseBalance);
+    };
+
+    it('should handle missed recv (not discovered)', async () => {
+      const initialBalance = INIT_BALANCE;
+      const afterRecvBalance = applyDelta(initialBalance, {
+        tx: 1,
+        coin: 1,
+        unconfirmed: SEND_AMOUNT
+      });
+
+      const afterRecvConfirmedBalance = applyDelta(afterRecvBalance, {
+        confirmed: SEND_AMOUNT
+      });
+
+      await missedSpentInputTest({
+        initialBalance,
+        afterRecvBalance,
+        afterRecvConfirmedBalance,
+        afterRecvUnconfirmedBalance: afterRecvBalance,
+        afterRecvEraseBalance: initialBalance
+      }, DISCOVER_TYPES.NONE);
+    });
+
+    it('should handle missed recv (on confirm)', async () => {
+      const initialBalance = INIT_BALANCE;
+      const afterRecvBalance = applyDelta(initialBalance, {
+        tx: 1,
+        coin: 1,
+        unconfirmed: SEND_AMOUNT
+      });
+
+      // Because it is already spent should not affect anything.
+      const afterRecvConfirmedBalance = applyDelta(afterRecvBalance, {
+        tx: 1,
+        confirmed: SEND_AMOUNT
+      });
+
+      const afterRecvUnconfirmedBalance = applyDelta(afterRecvBalance, {
+        // We still know about the transaction
+        tx: 1
+      });
+
+      await missedSpentInputTest({
+        initialBalance,
+        afterRecvBalance,
+        afterRecvConfirmedBalance,
+        afterRecvUnconfirmedBalance,
+        afterRecvEraseBalance: initialBalance
+      }, DISCOVER_TYPES.BEFORE_CONFIRM);
+    });
+
+    it('should handle missed recv (on unconfirm)', async () => {
+      const initialBalance = INIT_BALANCE;
+      const afterRecvBalance = applyDelta(initialBalance, {
+        tx: 1,
+        coin: 1,
+        unconfirmed: SEND_AMOUNT
+      });
+
+      // we still don't know about our out.
+      const afterRecvConfirmedBalance = applyDelta(afterRecvBalance, {
+        confirmed: SEND_AMOUNT
+      });
+
+      const afterRecvUnconfirmedBalance = applyDelta(afterRecvBalance, {
+        // We still know about the transaction
+        // TODO: Should this trigger "addTX for prev TX that we discovered?
+        //    It could potentially be recursive (e.g. we used high depth with
+        //    larg gap in the beginning and then reverted to the normal depth.
+        // We could alternatively emit 'missing tx' event to notify users to
+        // rescan.
+        //
+        // tx: 1
+      });
+
+      await missedSpentInputTest({
+        initialBalance,
+        afterRecvBalance,
+        afterRecvConfirmedBalance,
+        afterRecvUnconfirmedBalance,
+        afterRecvEraseBalance: initialBalance
+      }, DISCOVER_TYPES.BEFORE_UNCONFIRM);
+    });
+
+    it('should handle missed recv (on erase)', async () => {
+      const initialBalance = INIT_BALANCE;
+      const afterRecvBalance = applyDelta(initialBalance, {
+        tx: 1,
+        coin: 1,
+        unconfirmed: SEND_AMOUNT
+      });
+
+      // we still don't know about our out.
+      const afterRecvConfirmedBalance = applyDelta(afterRecvBalance, {
+        confirmed: SEND_AMOUNT
+      });
+
+      // we are still unaware
+      const afterRecvUnconfirmedBalance = afterRecvBalance;
+
+      // because both transactions were in the mempool,
+      // both will get erased.
+      const afterRecvEraseBalance = initialBalance;
+
+      await missedSpentInputTest({
+        initialBalance,
+        afterRecvBalance,
+        afterRecvConfirmedBalance,
+        afterRecvUnconfirmedBalance,
+        afterRecvEraseBalance
+      }, DISCOVER_TYPES.BEFORE_ERASE);
     });
   });
 
@@ -1368,7 +1572,7 @@ describe('Wallet Balance', function() {
       const bidMTX = await wallet.createBatch(batchActions, opts);
       assert.strictEqual(bidMTX.outputs[0].covenant.type, types.BID);
       assert.strictEqual(bidMTX.outputs[1].covenant.type, types.BID);
-      bidMTX.outputs[1].address = getAheadAddr(account, ahead);
+      bidMTX.outputs[1].address = getAheadAddr(account, ahead).nextAddr;
 
       for (const input of bidMTX.inputs)
         input.witness.length = 0;
@@ -1453,7 +1657,7 @@ describe('Wallet Balance', function() {
       assert.strictEqual(bidMTX.outputs[0].covenant.type, types.BID);
       assert.strictEqual(bidMTX.outputs[1].covenant.type, types.BID);
 
-      bidMTX.outputs[1].address = getAheadAddr(account, ahead);;
+      bidMTX.outputs[1].address = getAheadAddr(account, ahead).nextAddr;
 
       for (const input of bidMTX.inputs)
         input.witness.length = 0;
@@ -1529,7 +1733,7 @@ describe('Wallet Balance', function() {
       assert.strictEqual(bidMTX.outputs[0].covenant.type, types.BID);
       assert.strictEqual(bidMTX.outputs[1].covenant.type, types.BID);
 
-      bidMTX.outputs[1].address = getAheadAddr(account, ahead);;
+      bidMTX.outputs[1].address = getAheadAddr(account, ahead).nextAddr;
 
       for (const input of bidMTX.inputs)
         input.witness.length = 0;
