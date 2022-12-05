@@ -622,7 +622,7 @@ describe('Wallet rescan with namestate transitions', function() {
       assert(!(await wallet2.getBids()).length);
     });
 
-    it('should rescan wallet 2', async () => {
+    it('should fully rescan wallet 2', async () => {
       await wdb.rescan(0);
       const bal2 = await wallet2.getBalance();
       assert(bal2.unconfirmed > 0);
@@ -708,20 +708,45 @@ describe('Wallet rescan with namestate transitions', function() {
       wallet3 = await wdb.create({mnemonic});
     });
 
-    it('should just rescan reveal phase', async () => {
+    it('should shallow rescan wallet 3', async () => {
       await wdb.rescan(heightBeforeReveal);
 
-      let bal1 = await wallet1.getBalance();
-      let bal3 = await wallet3.getBalance();
-
+      const bal1 = await wallet1.getBalance();
+      const bal3 = await wallet3.getBalance();
+      // wallet 3 is wrong because it hasn't seen the entire chain history
       assert.notDeepStrictEqual(bal1, bal3);
+    });
 
-      // Complete rescan cleans everything up
+    it('should fully rescan wallet 3 after shallow rescan', async () => {
       await wdb.rescan(0);
 
-      bal1 = await wallet1.getBalance();
-      bal3 = await wallet3.getBalance();
+      const bal1 = await wallet1.getBalance();
+      const bal3 = await wallet3.getBalance();
+      // Wallet 3 is STILL wrong because the shallow rescan
+      // disconnected two output REVEALs (unlocking and unconfirming value)
+      // but did not have the corresponding input BIDs in the db.
+      // (Wallet 1 does, and so it correctly locked those values
+      // when these TXs were disconnected) The result is a corrupted
+      // wallet state that can only be fixed with deep clean + rescan.
+      assert.strictEqual(bal3.ulocked - bal1.ulocked, 3e6);
+      // All other balance data are correct.
+      assert.strictEqual(bal3.clocked,     bal1.clocked);
+      assert.strictEqual(bal3.confirmed,   bal1.confirmed);
+      assert.strictEqual(bal3.unconfirmed, bal1.unconfirmed);
+      assert.strictEqual(bal3.tx,          bal1.tx);
+      assert.strictEqual(bal3.coin,        bal1.coin);
+    });
 
+    it('should deep clean before full rescan of wallet 3', async () => {
+      // Deep clean is required to fix wallet state
+      await wdb.deepClean();
+      await wdb.rescan(0);
+
+      const bal1 = await wallet1.getBalance();
+      const bal3 = await wallet3.getBalance();
+
+      // Should be no different than when we fully rescanned wallet 2
+      // after importing the seed phrase
       assert.deepStrictEqual(bal1, bal3);
     });
   });
