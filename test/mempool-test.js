@@ -22,6 +22,7 @@ const Witness = require('../lib/script/witness');
 const CoinView = require('../lib/coins/coinview');
 const util = require('../lib/utils/util');
 const consensus = require('../lib/protocol/consensus');
+const policy = require('../lib/protocol/policy');
 const MemWallet = require('./util/memwallet');
 const ALL = Script.hashType.ALL;
 const common = require('../lib/blockchain/common');
@@ -63,7 +64,7 @@ const wallet = new MemWallet({ network });
 
 let cachedTX = null;
 
-function dummyInput(addr, hash) {
+function dummyInput(addr, hash, value = 70000) {
   const coin = new Coin();
   coin.height = 0;
   coin.value = 0;
@@ -73,7 +74,7 @@ function dummyInput(addr, hash) {
 
   const fund = new MTX();
   fund.addCoin(coin);
-  fund.addOutput(addr, 70000);
+  fund.addOutput(addr, value);
 
   const [tx, view] = fund.commit();
 
@@ -463,6 +464,85 @@ describe('Mempool', function() {
       const entry = await mempool.getEntry(tx.hash());
       assert.equal(entry.txid(), tx.txid());
     }
+  });
+
+  it('should reject absurd fee', async () => {
+    const wallet = new MemWallet({ network });
+    const addr = wallet.getAddress();
+    const funds = 10000e6;
+
+    const mtx = new MTX();
+    mtx.addCoin(
+      dummyInput(
+        addr,
+        random.randomBytes(32),
+        funds
+      )
+    );
+    mtx.addOutput(wallet.getAddress(), 0); // temp
+    wallet.sign(mtx);
+
+    const vsize = mtx.getVirtualSize();
+    const minFee = (vsize / 1000) * network.minRelay;
+    const absurdFee = minFee * policy.ABSURD_FEE_FACTOR;
+
+    // Revise with exactly absurd fee
+    mtx.outputs[0].value = funds - absurdFee - 1;
+    mtx.inputs[0].witness.items.length = 0;
+    wallet.sign(mtx);
+    const tx1 = mtx.toTX();
+
+    await assert.rejects(
+      mempool.addTX(tx1),
+      {message: /absurdly-high-fee/}
+    );
+
+    // Revise again with just under absurd fee
+    mtx.outputs[0].value = funds - absurdFee;
+    mtx.inputs[0].witness.items.length = 0;
+    wallet.sign(mtx);
+    const tx2 = mtx.toTX();
+
+    await mempool.addTX(tx2);
+  });
+
+  it('should reject too-low fee', async () => {
+    const wallet = new MemWallet({ network });
+    const addr = wallet.getAddress();
+    const funds = 10000e6;
+
+    const mtx = new MTX();
+    mtx.addCoin(
+      dummyInput(
+        addr,
+        random.randomBytes(32),
+        funds
+      )
+    );
+    mtx.addOutput(wallet.getAddress(), 0); // temp
+    wallet.sign(mtx);
+
+    const vsize = mtx.getVirtualSize();
+    const minFee = (vsize / 1000) * network.minRelay;
+
+    // Revise with just under minFee
+    mtx.outputs[0].value = funds - minFee + 1;
+    mtx.inputs[0].witness.items.length = 0;
+    wallet.sign(mtx);
+    const tx1 = mtx.toTX();
+
+    await assert.rejects(
+      mempool.addTX(tx1),
+      {message: /insufficient priority/}
+    );
+
+    // Revise again with exactly minFee
+    mtx.outputs[0].value = funds - minFee;
+    mtx.inputs[0].witness.items.length = 0;
+    wallet.sign(mtx);
+    const tx2 = mtx.toTX();
+
+    await mempool.addTX(tx2);
   });
 
   it('should destroy mempool', async () => {

@@ -251,10 +251,7 @@ describe('Wallet HTTP', function() {
 
     const output = openOutput(name, address);
 
-    const mtx = new MTX();
-    mtx.outputs.push(output);
-
-    const tx = await wallet.createTX(mtx);
+    const tx = await wallet.createTX({outputs: [output]});
     assert.equal(tx.outputs[0].covenant.type, types.OPEN);
   });
 
@@ -263,10 +260,7 @@ describe('Wallet HTTP', function() {
 
     const output = openOutput(name, address);
 
-    const mtx = new MTX();
-    mtx.outputs.push(output);
-
-    const tx = await wallet.send(mtx);
+    const tx = await wallet.send({outputs: [output]});;
     assert.equal(tx.outputs[0].covenant.type, types.OPEN);
   });
 

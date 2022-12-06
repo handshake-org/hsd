@@ -587,7 +587,7 @@ describe('Wallet Auction', function() {
           actions.push(['NONE', addr, 10000]);
         }
 
-        const batch = await wallet.sendBatch(actions, {hardFee: 10});
+        const batch = await wallet.sendBatch(actions, {hardFee: 1000});
 
         assert.strictEqual(batch.outputs.length, 11);
 
@@ -597,7 +597,7 @@ describe('Wallet Auction', function() {
 
         const newBal = await wallet.getBalance();
 
-        assert.strictEqual(oldBal.confirmed - newBal.confirmed, 100010);
+        assert.strictEqual(oldBal.confirmed - newBal.confirmed, 101000);
       });
 
       it('should verify expected name properties', async () => {

@@ -1669,8 +1669,6 @@ class MemWallet {
   async _create(mtx, options) {
     await this.fund(mtx, options);
 
-    assert(mtx.getFee() <= MTX.Selector.MAX_FEE, 'TX exceeds MAX_FEE.');
-
     mtx.sortMembers();
 
     if (options && options.locktime != null)
