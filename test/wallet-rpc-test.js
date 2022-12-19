@@ -9,6 +9,7 @@ const HDPrivateKey = require('../lib/hd/private');
 const Script = require('../lib/script/script');
 const Address = require('../lib/primitives/address');
 const rules = require('../lib/covenants/rules');
+const Amount = require('../lib/ui/amount');
 
 const {types} = rules;
 const {forValue} = require('./util/common');
@@ -950,6 +951,77 @@ describe('Wallet RPC Methods', function() {
       );
       assert(tx.outputs.length === 4);
       await nclient.execute('generatetoaddress', [1, addr]);
+    });
+  });
+
+  describe('gettransaction', function () {
+    let alexAddr, barrieAddr;
+
+    before(async () => {
+      await wclient.createWallet('alex');
+      await wclient.createWallet('barrie');
+      await wclient.execute('selectwallet', ['alex']);
+      alexAddr = await wclient.execute('getnewaddress', []);
+      await wclient.execute('selectwallet', ['barrie']);
+      barrieAddr = await wclient.execute('getnewaddress', []);
+    });
+
+    async function getCoinbaseTXID(height) {
+      const block = await nclient.execute('getblockbyheight', [height]);
+      return block.tx[0];
+    }
+
+    it('should mine 10 tx to each wallet and gettransaction', async () => {
+      await nclient.execute('generatetoaddress', [10, alexAddr]);
+      await nclient.execute('generatetoaddress', [10, barrieAddr]);
+
+      const height = await nclient.execute('getblockcount', []);
+
+      await wclient.execute('selectwallet', ['barrie']);
+      for (let i = 0; i < 10; i++) {
+        const txid = await getCoinbaseTXID(height - i);
+        const json = await wclient.execute('gettransaction', [txid]);
+        assert.strictEqual(json.amount, 2000);
+        assert.strictEqual(json.details[0].category, 'receive');
+        assert.strictEqual(json.details[0].amount, 2000);
+        assert.strictEqual(json.details[0].fee, undefined);
+      }
+
+      await wclient.execute('selectwallet', ['alex']);
+      for (let i = 10; i < 20; i++) {
+        const txid = await getCoinbaseTXID(height - i);
+        const json = await wclient.execute('gettransaction', [txid]);
+        assert.strictEqual(json.amount, 2000);
+        assert.strictEqual(json.details[0].category, 'receive');
+        assert.strictEqual(json.details[0].amount, 2000);
+        assert.strictEqual(json.details[0].fee, undefined);
+      }
+    });
+
+    it('should receive from Barrie to Alex and gettransaction', async () => {
+      await wclient.execute('selectwallet', ['barrie']);
+      const txid = await wclient.execute('sendtoaddress', [alexAddr, 10]);
+      await wclient.execute('selectwallet', ['alex']);
+      const json = await wclient.execute('gettransaction', [txid]);
+      assert.strictEqual(json.amount, 10);
+      assert.strictEqual(json.details[0].category, 'receive');
+      assert.strictEqual(json.details[0].amount, 10);
+      assert.strictEqual(json.details[0].fee, undefined);
+    });
+
+    it('should send from Alex to Barrie and gettransaction', async () => {
+      await wclient.execute('selectwallet', ['alex']);
+      const txid = await wclient.execute('sendtoaddress', [barrieAddr, 21]);
+      await wclient.execute('selectwallet', ['alex']);
+      const json = await wclient.execute('gettransaction', [txid]);
+      assert.strictEqual(json.amount, -21);
+      assert.strictEqual(json.details[0].category, 'send');
+      assert.strictEqual(json.details[0].amount, -21);
+
+      const vsize = 140; // 1-in, 2-out pkh
+      const fee = vsize * network.feeRate / 1000;
+      const amount = Amount.fromBase(fee).toCoins(); // returned in whole HNS units
+      assert.strictEqual(json.details[0].fee, amount * -1); // fees are negative
     });
   });
 });
