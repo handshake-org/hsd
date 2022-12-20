@@ -22,6 +22,13 @@ to these calls.
   - `createbatch` and `sendbatch` create batch transactions with any number
   of outputs with any combination of covenants.
 
+- Updates related to nonces and blinds
+  - Multisig wallets will compute nonces based on the LOWEST public key in the group.
+  This makes multiparty bidding and revealing more deteministic. Older versions would
+  always use the wallet's OWN public key. To preserve compatability with older software:
+    - RPC method `importnonce` now returns an array of blinds instead of a single blind.
+    - HTTP endpoint `/wallet/:id/nonce/:name`'s response replaces 2 string fields (`nonce`, `blind`) with arrays of the same type (`nonces`, `blinds`)
+
 ## v4.0.0
 
 **When upgrading to this version of hsd you must pass
