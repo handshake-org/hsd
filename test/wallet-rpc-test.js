@@ -1024,4 +1024,120 @@ describe('Wallet RPC Methods', function() {
       assert.strictEqual(json.details[0].fee, amount * -1); // fees are negative
     });
   });
+
+  describe('Multisig Auction RPC', function() {
+    // wallet clients
+    let alice, bob;
+
+    // auction
+    let name;
+    const bidValue = 5, blindValue = 5;
+
+    async function signMultisigTx(tx, walletClients) {
+      assert(tx.hex, 'tx must be a json object with `hex`');
+      assert(walletClients.length);
+
+      for (const wclient of walletClients)
+        tx = await wclient.sign({tx: tx.hex});
+
+      return tx;
+    }
+
+    before(async () => {
+      await wclient.createWallet('msAlice', {
+        type: 'multisig',
+        m: 2,
+        n: 2
+      });
+      await wclient.createWallet('msBob', {
+        type: 'multisig',
+        m: 2,
+        n: 2
+      });
+
+      alice = wclient.wallet('msAlice');
+      bob = wclient.wallet('msBob');
+
+      // Initialize both multisig wallets
+      const accountKeys = {
+        alice: (await alice.getAccount('default')).accountKey,
+        bob: (await bob.getAccount('default')).accountKey
+      };
+      await alice.addSharedKey('default', accountKeys.bob);
+      await bob.addSharedKey('default', accountKeys.alice);
+
+      // Fund wallet
+      await wclient.execute('selectwallet', ['msAlice']);
+      const addr = await wclient.execute('getnewaddress', []);
+      await nclient.execute('generatetoaddress', [100, addr]);
+    });
+
+    it('(alice) should open name for auction', async () => {
+      await wclient.execute('selectwallet', ['msAlice']);
+
+      // Create, sign, send OPEN
+      name = await nclient.execute('grindname', [5]);
+      const tx = await wclient.execute('createopen', [name]);
+      const txSigned = await signMultisigTx(tx, [alice, bob]);
+      await nclient.execute('sendrawtransaction', [txSigned.hex]);
+
+      // confirm and advance to bidding phase
+      const addrAlice = await wclient.execute('getnewaddress', []);
+      await nclient.execute('generatetoaddress', [treeInterval + 1, addrAlice]);
+    });
+
+    it('(alice) should bid on name with blind', async () => {
+      await wclient.execute('selectwallet', ['msAlice']);
+
+      // Create, sign, send BID
+      const tx = await wclient.execute(
+        'createbid',
+        [name, bidValue, bidValue + blindValue]
+      );
+      const txSigned = await signMultisigTx(tx, [alice, bob]);
+      await nclient.execute('sendrawtransaction', [txSigned.hex]);
+
+      // confirm and advance to reveal phase
+      const addrAlice = await wclient.execute('getnewaddress', []);
+      await nclient.execute('generatetoaddress', [biddingPeriod + 1, addrAlice]);
+    });
+
+    it('(bob) should not be able to reveal bid', async () => {
+      // Alice can create reveal
+      await wclient.execute('selectwallet', ['msAlice']);
+      assert.doesNotReject(wclient.execute('createreveal', [name]));
+
+      // Bob cannot.
+      await wclient.execute('selectwallet', ['msBob']);
+      assert.rejects(
+        wclient.execute('createreveal', [name]),
+        {message: `Blind value not found: ${name}.`}
+      );
+    });
+
+    it('(bob) should import nonce', async () => {
+      await wclient.execute('selectwallet', ['msBob']);
+      const bidsBob = await wclient.execute('getbids', [name, true, true]);
+      const address = bidsBob[0].address;
+      const blinds = await wclient.execute('importnonce', [name, address, 5]);
+      assert.strictEqual(blinds[0], bidsBob[0].blind);
+    });
+
+    it('(bob) should reveal bid', async () => {
+      await wclient.execute('selectwallet', ['msBob']);
+
+      // Create, sign, send REVEAL
+      const tx = await wclient.execute('createreveal', [name]);
+      const txSigned = await signMultisigTx(tx, [alice, bob]);
+      await nclient.execute('sendrawtransaction', [txSigned.hex]);
+
+      // confirm and advance to close auction
+      const addrAlice = await wclient.execute('getnewaddress', []);
+      await nclient.execute('generatetoaddress', [revealPeriod + 1, addrAlice]);
+
+      // Ensure name is owned
+      const ownedNames = await wclient.execute('getnames', [true]);
+      assert.strictEqual(ownedNames.length, 1);
+    });
+  });
 });

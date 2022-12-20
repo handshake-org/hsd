@@ -463,13 +463,13 @@ describe('Wallet HTTP', function() {
     const nameHash = rules.hashName(name);
 
     const primary = node.plugins.walletdb.wdb.primary;
-    const nonce = await primary.generateNonce(nameHash, address, bid);
-    const blind = rules.blind(bid, nonce);
+    const nonces = await primary.generateNonces(nameHash, address, bid);
+    const blinds = nonces.map(nonce => rules.blind(bid, nonce));
 
     assert.deepStrictEqual(response, {
       address: address.toString(network.type),
-      blind: blind.toString('hex'),
-      nonce: nonce.toString('hex'),
+      blinds: blinds.map(blind => blind.toString('hex')),
+      nonces: nonces.map(nonce => nonce.toString('hex')),
       bid: bid,
       name: name,
       nameHash: nameHash.toString('hex')
@@ -488,13 +488,13 @@ describe('Wallet HTTP', function() {
     const nameHash = rules.hashName(name);
 
     const primary = node.plugins.walletdb.wdb.primary;
-    const nonce = await primary.generateNonce(nameHash, address, bid);
-    const blind = rules.blind(bid, nonce);
+    const nonces = await primary.generateNonces(nameHash, address, bid);
+    const blinds = nonces.map(nonce => rules.blind(bid, nonce));
 
     assert.deepStrictEqual(response, {
       address: address.toString(network.type),
-      blind: blind.toString('hex'),
-      nonce: nonce.toString('hex'),
+      blinds: blinds.map(blind => blind.toString('hex')),
+      nonces: nonces.map(nonce => nonce.toString('hex')),
       bid: bid,
       name: name,
       nameHash: nameHash.toString('hex')

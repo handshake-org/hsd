@@ -336,11 +336,11 @@ describe('Auction RPCs', function() {
     // that same value. Note that "loser" MUST remember their original
     // bid value. If this were a wallet recovery scenario, that value
     // would have to be entered by the user without data from the blockchain.
-    const importedBlind = await util.wrpc(
+    const importedBlinds = await util.wrpc(
       'importnonce',
       [bidName, bidAddress, loserBid.bid]
     );
-    assert.strictEqual(importedBlind, bidBlind);
+    assert.strictEqual(importedBlinds[0], bidBlind);
   });
 
   it('should create REVEAL with signing paths', async () => {
