@@ -1111,7 +1111,7 @@ describe('Wallet RPC Methods', function() {
       await wclient.execute('selectwallet', ['msBob']);
       assert.rejects(
         wclient.execute('createreveal', [name]),
-        {message: `Blind value not found: ${name}.`}
+        {message: `No bids to reveal for name: ${name}.`}
       );
     });
 
