@@ -1,6 +1,6 @@
 # HSD Release Notes & Changelog
 
-## unreleased
+## v5.0.0
 
 ### Node API changes
 
