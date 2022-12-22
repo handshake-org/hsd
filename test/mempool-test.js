@@ -1514,7 +1514,7 @@ describe('Mempool', function() {
       const mtx = new MTX();
       mtx.locktime = chain.height + 1;
       mtx.addInput(new Input());
-      mtx.addOutput(address, 100000);
+      mtx.addOutput(address, 1000000);
       const cb = mtx.toTX();
 
       const block = new Block();
