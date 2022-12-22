@@ -15,7 +15,9 @@ const Coin = require('../lib/primitives/coin');
 const KeyRing = require('../lib/primitives/keyring');
 const Address = require('../lib/primitives/address');
 const Outpoint = require('../lib/primitives/outpoint');
+const Covenant = require('../lib/primitives/covenant');
 const Input = require('../lib/primitives/input');
+const Output = require('../lib/primitives/output');
 const Block = require('../lib/primitives/block');
 const Script = require('../lib/script/script');
 const Witness = require('../lib/script/witness');
@@ -1460,6 +1462,285 @@ describe('Mempool', function() {
       } finally {
         util.now = original;
       }
+    });
+  });
+
+  describe('Consensus limits', function () {
+    const workers = new WorkerPool({
+      enabled: true,
+      size: 2
+    });
+
+    const chain = new Chain({
+      memory: true,
+      blocks,
+      workers,
+      network
+    });
+
+    const mempool = new Mempool({
+      chain,
+      workers,
+      memory: true,
+      minRelay: 0,
+      rejectAbsurdFees: false
+    });
+
+    const wallet = new MemWallet({ network });
+    const address = wallet.createReceive().getAddress();
+
+    // Fake txid for inserting and spending coins
+    const txid = Buffer.alloc(32, 0xab);
+
+    // Anyone can spend address so we don't have to sign
+    const anyoneScript = new Script();
+    const anyoneAddress = Address.fromScript(anyoneScript);
+
+    before(async () => {
+      await blocks.open();
+      await mempool.open();
+      await chain.open();
+      await workers.open();
+    });
+
+    after(async () => {
+      await workers.close();
+      await chain.close();
+      await mempool.close();
+      await blocks.close();
+    });
+
+    it('should fund wallet', async () => {
+      const mtx = new MTX();
+      mtx.locktime = chain.height + 1;
+      mtx.addInput(new Input());
+      mtx.addOutput(address, 1000000);
+      const cb = mtx.toTX();
+
+      const block = new Block();
+      block.txs = [cb];
+      block.prevBlock = chain.tip.hash;
+      block.time = chain.tip.time + 1;
+      block.bits = await chain.getTarget(block.time, chain.tip);
+      block.merkleRoot = block.createMerkleRoot();
+      block.witnessRoot = block.createWitnessRoot();
+      block.treeRoot = chain.db.treeRoot();
+      const entry = await chain.add(block, VERIFY_BODY);
+
+      // Crazy hack to spend coinbase
+      chain.height = 200;
+
+      wallet.addBlock(entry, block.txs);
+    });
+
+    it('should not insert TX with too many OPENs', async () => {
+      let mtx = new MTX();
+      for (let i = consensus.MAX_BLOCK_OPENS + 1; i > 0; i--) {
+        const name = `name_${i}`;
+        mtx.outputs.push(new Output({
+          value: 0,
+          address,
+          covenant: {
+            type: 2, // OPEN
+            items: [
+              rules.hashName(name),      // nameHash
+              Buffer.from([0, 0, 0, 0]), // height is always 0x00000000 for OPEN
+              Buffer.from(name, 'ascii') // raw name
+            ]
+          }
+        }));
+      }
+      mtx = await wallet._create(mtx);
+      const tx = mtx.toTX();
+
+      await assert.rejects(
+        mempool.insertTX(tx),
+        {message: /bad-txns-opens/}
+      );
+    });
+
+    it('should not insert TX with too many UPDATEs', async () => {
+      let mtx = new MTX();
+      for (let i = consensus.MAX_BLOCK_UPDATES + 1; i > 0; i--) {
+        const name = `name_${i}`;
+        mtx.outputs.push(new Output({
+          value: 0,
+          address,
+          covenant: {
+            type: 7, // UPDATE
+            items: [
+              rules.hashName(name),      // nameHash
+              Buffer.from([0, 0, 0, 0]), // height doesn't matter for this test
+              Buffer.from([0])           // empty data resource
+            ]
+          }
+        }));
+      }
+      mtx = await wallet._create(mtx);
+      const tx = mtx.toTX();
+
+      await assert.rejects(
+        mempool.insertTX(tx),
+        {message: /bad-txns-updates/}
+      );
+    });
+
+    it('should not insert TX with too many RENEWs', async () => {
+      let mtx = new MTX();
+      for (let i = consensus.MAX_BLOCK_RENEWALS + 1; i > 0; i--) {
+        const name = `name_${i}`;
+        mtx.outputs.push(new Output({
+          value: 0,
+          address,
+          covenant: {
+            type: 8, // RENEW
+            items: [
+              rules.hashName(name),      // nameHash
+              Buffer.from([0, 0, 0, 0]), // height doesn't matter for this test
+              chain.tip.hash             // renewal block
+            ]
+          }
+        }));
+      }
+      mtx = await wallet._create(mtx);
+      const tx = mtx.toTX();
+
+      await assert.rejects(
+        mempool.insertTX(tx),
+        {message: /bad-txns-renewals/}
+      );
+    });
+
+    it('should insert TX with max OPENs', async () => {
+      let mtx = new MTX();
+      for (let i = consensus.MAX_BLOCK_OPENS; i > 0; i--) {
+        const name = `name_${i}`;
+        mtx.outputs.push(new Output({
+          value: 0,
+          address,
+          covenant: {
+            type: 2, // OPEN
+            items: [
+              rules.hashName(name),      // nameHash
+              Buffer.from([0, 0, 0, 0]), // height is always 0x00000000 for OPEN
+              Buffer.from(name, 'ascii') // raw name
+            ]
+          }
+        }));
+      }
+      mtx = await wallet._create(mtx);
+      const tx = mtx.toTX();
+
+      await mempool.reset();
+      assert.strictEqual(mempool.map.size, 0);
+      await mempool.insertTX(tx);
+      assert.strictEqual(mempool.map.size, 1);
+    });
+
+    it('should insert names and coins into chain', async () => {
+      // Crazy hack to register names on chain without auction or miner
+      chain.db.start();
+      const view = new CoinView();
+
+      for (let i = 1000; i > 0; i--) {
+        // Create name owner
+        const name = `name_${i}`;
+        const nameHash = rules.hashName(name);
+        const coin = new Coin();
+        coin.hash = txid;
+        coin.index = i;
+        coin.address = anyoneAddress;
+        coin.covenant = new Covenant();
+        coin.covenant.type = 7, // UPDATE
+        coin.covenant.items = [
+          nameHash,
+          Buffer.from([0, 0, 0, 0]), // height doesn't matter for this test
+          Buffer.from([0])           // empty data resource
+        ];
+
+        // Insert UTXO
+        view.addCoin(coin);
+        chain.db.saveView(view);
+
+        // Insert nameState
+        const ns = new NameState();
+        ns.name = Buffer.from(name, 'ascii');
+        ns.nameHash = nameHash;
+        ns.height = 0;
+        ns.owner = new Outpoint(txid, i);
+        ns.registered = true;
+        await chain.db.txn.insert(nameHash, ns.encode());
+      }
+
+      await chain.db.commit();
+    });
+
+    it('should insert TX with max UPDATEs', async () => {
+      const mtx = new MTX();
+      for (let i = consensus.MAX_BLOCK_UPDATES; i > 0; i--) {
+        const name = `name_${i}`;
+
+        mtx.inputs.push(new Input({
+          prevout: new Outpoint(txid, i),
+          witness: new Witness([
+            Buffer.from([0x51]), // OP_TRUE
+            anyoneScript.encode()
+          ])
+        }));
+
+        mtx.outputs.push(new Output({
+          value: 0,
+          address: anyoneAddress,
+          covenant: {
+            type: 7, // UPDATE
+            items: [
+              rules.hashName(name),      // nameHash
+              Buffer.from([0, 0, 0, 0]), // height doesn't matter for this test
+              Buffer.from([0])           // empty data resource
+            ]
+          }
+        }));
+      }
+      const tx = mtx.toTX();
+
+      await mempool.reset();
+      assert.strictEqual(mempool.map.size, 0);
+      await mempool.insertTX(tx);
+      assert.strictEqual(mempool.map.size, 1);
+    });
+
+    it('should insert TX with max RENEWs', async () => {
+      const mtx = new MTX();
+      for (let i = consensus.MAX_BLOCK_RENEWALS; i > 0; i--) {
+        const name = `name_${i}`;
+
+        mtx.inputs.push(new Input({
+          prevout: new Outpoint(txid, i),
+          witness: new Witness([
+            Buffer.from([0x51]), // OP_TRUE
+            anyoneScript.encode()
+          ])
+        }));
+
+        mtx.outputs.push(new Output({
+          value: 0,
+          address: anyoneAddress,
+          covenant: {
+            type: 8, // RENEW
+            items: [
+              rules.hashName(name),      // nameHash
+              Buffer.from([0, 0, 0, 0]), // height doesn't matter for this test
+              chain.tip.hash             // renewal block
+            ]
+          }
+        }));
+      }
+      const tx = mtx.toTX();
+
+      await mempool.reset();
+      assert.strictEqual(mempool.map.size, 0);
+      await mempool.insertTX(tx);
+      assert.strictEqual(mempool.map.size, 1);
     });
   });
 });
