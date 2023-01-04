@@ -1,7 +1,7 @@
 Install `hsd`
 =============
 
-`hsd` requires Node.js v12 or higher.
+`hsd` requires Node.js v14 or higher.
 
 Table of contents
 -----------------
