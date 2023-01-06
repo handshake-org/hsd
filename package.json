@@ -17,12 +17,12 @@
     "wallet"
   ],
   "engines": {
-    "node": ">=12.0.0"
+    "node": ">=14.0.0"
   },
   "dependencies": {
     "bcfg": "~0.1.7",
     "bcrypto": "~5.4.0",
-    "bdb": "~1.3.0",
+    "bdb": "~1.4.0",
     "bdns": "~0.1.5",
     "bevent": "~0.1.5",
     "bfile": "~0.2.2",
@@ -39,17 +39,17 @@
     "bsocks": "~0.2.6",
     "btcp": "~0.1.5",
     "buffer-map": "~0.0.7",
-    "bufio": "~1.0.7",
+    "bufio": "~1.2.0",
     "bupnp": "~0.2.6",
     "bval": "~0.1.6",
-    "bweb": "~0.1.10",
+    "bweb": "~0.1.11",
     "goosig": "~0.10.0",
-    "hs-client": "~0.0.11",
+    "hs-client": "~0.0.13",
     "n64": "~0.2.10",
     "urkel": "~1.0.2"
   },
   "devDependencies": {
-    "bmocha": "^2.1.5"
+    "bmocha": "^2.1.8"
   },
   "main": "./lib/hsd.js",
   "bin": {
