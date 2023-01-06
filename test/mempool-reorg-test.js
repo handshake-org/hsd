@@ -5,6 +5,9 @@ const Network = require('../lib/protocol/network');
 const {Resource} = require('../lib/dns/resource');
 const FullNode = require('../lib/node/fullnode');
 const plugin = require('../lib/wallet/plugin');
+const Coin = require('../lib/primitives/coin');
+const Address = require('../lib/primitives/address');
+const MTX = require('../lib/primitives/mtx');
 
 const network = Network.get('regtest');
 const {
@@ -158,5 +161,75 @@ describe('Mempool Covenant Reorg', function () {
     // State after new block
     const res4 = await node.rpc.getNameResource([name]);
     assert.strictEqual(res4.records[0].txt[0], '8');
+  });
+
+  it('should not remove child with no name covenants', async () => {
+    // Clear
+    await wallet.zap(0, 0);
+
+    // Find the change output of last UPDATE
+    const {owner} = await node.chain.db.getNameStateByName(name);
+    const {height, tx} = await wallet.getTX(owner.hash);
+    assert.strictEqual(tx.outputs[0].covenant.type, 7); // UPDATE
+    assert.strictEqual(tx.outputs[1].covenant.type, 0); // NONE
+
+    // We will send 2 TXs, wait for both to enter mempool
+    const waiter = new Promise((resolve) => {
+      let count = 0;
+
+      node.mempool.on('tx', () => {
+        if (++count === 2)
+          resolve();
+      });
+    });
+
+    // Spend the change without covenant
+    const coin = Coin.fromTX(tx, 1, height);
+    const addr = new Address({
+      version: 0,
+      hash: Buffer.alloc(20, 0xfe)
+    });
+    const childNone = new MTX();
+    childNone.addCoin(coin);
+    childNone.addOutput(addr, coin.value - 10000);
+    await wallet.sendMTX(childNone);
+
+    // Also send another UPDATE
+    const childUpdate = await wallet.sendUpdate(name, makeResource());
+
+    // Both should be in mempool
+    await waiter;
+    assert.strictEqual(node.mempool.map.size, 2);
+    assert(node.mempool.getTX(childNone.hash()));
+    assert(node.mempool.getTX(childUpdate.hash()));
+
+    // Reorg, from some other miner with an empty mempool
+    node.miner.mempool = null;
+    const depth = 1;
+    let entry = await node.chain.getEntryByHeight(node.chain.height - depth);
+    for (let i = 0; i <= depth; i++) {
+      const block = await node.miner.cpu.mineBlock(entry);
+      entry = await node.chain.add(block);
+    }
+
+    // State after reorg
+    const res1 = await node.rpc.getNameResource([name]);
+    assert.strictEqual(res1.records[0].txt[0], '7');
+    assert.strictEqual(node.mempool.map.size, 2);
+
+    // The last confirmed name update is now back in mempool
+    assert(node.mempool.getTX(tx.hash()));
+    // The new change-spend is fine even though it's parent is also in mempool
+    assert(node.mempool.getTX(childNone.hash()));
+    // The new update TX is completely gone
+    assert(!node.mempool.getTX(childUpdate.hash()));
+
+    // Everything should be valid in next block
+    node.miner.mempool = node.mempool;
+    await node.rpc.generate([1]);
+    assert.strictEqual(node.mempool.map.size, 0);
+    // State after new block
+    const res2 = await node.rpc.getNameResource([name]);
+    assert.strictEqual(res2.records[0].txt[0], '8');
   });
 });
