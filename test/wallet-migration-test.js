@@ -172,6 +172,7 @@ describe('Wallet Migrations', function() {
       await walletDB.close();
 
       walletDB.options.walletMigrate = lastMigrationID;
+      walletDB.version = 1;
       await walletDB.open();
 
       const versionData = await ldb.get(layout.V.encode());
@@ -240,6 +241,7 @@ describe('Wallet Migrations', function() {
       await fs.mkdirp(location);
 
       walletDB = new WalletDB(walletOptions);
+      walletDB.version = 1;
       ldb = walletDB.db;
 
       WalletMigrator.migrations = testMigrations;
@@ -605,6 +607,7 @@ describe('Wallet Migrations', function() {
     });
 
     const newToOld = (raw) => {
+      // flags, type, m, n, receiveDepth, changeDepth
       const preLen = 1 + 1 + 1 + 1 + 4 + 4;
       const pre = raw.slice(0, preLen);
       const lookahead = raw.slice(preLen, preLen + 4);
@@ -635,6 +638,9 @@ describe('Wallet Migrations', function() {
           const encoded = newToOld(accounts[i].encode(), n + i);
           b.put(layout.a.encode(wallet.wid, i), encoded);
         }
+
+        // previous version
+        walletDB.writeVersion(b, 1);
         await b.write();
       };
 

@@ -22,7 +22,7 @@ to these calls.
 ### Wallet changes
 
 - HTTP Changes:
-  - Wallet and account create methods now accept `lookahead` values more than `200`.
+  - Wallet and account create methods now accept `lookahead` values up to `2^32 - 1`.
 
 - New RPC methods:
   - `createbatch` and `sendbatch` create batch transactions with any number
