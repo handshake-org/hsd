@@ -123,17 +123,19 @@ At this point we don't want to add more complex things to the release candidate,
 only `patch`es until release(feature lock).
 
 Process example (e.g. `latest` was `3.1.0` and we are releasing `4.0.0-rc.1`):
+  - Update network seeds.
+  - Add new checkpoint. Last checkpoint + 6 months.
+  - update `package.json` version to `4.99.0` in `master` branch.
+  - update `package-lock.json` by running `npm install`.
   - create branch `4.x` from the `master`.
   - create branch `4.x-proposal` from the `master`.
-  - update `package.json` version to `4.99.0` in `master` branch.
   - update `package.json` version to `4.0.0-rc.1` in `4.x-proposal` branch.
+  - update `package-lock.json` by running `npm install`.
   - optional: In case we want to omit some changes from the `master`,
     you can also rebase and discard those commits.
   - Create Release doc file for the
-    `docs/release-notes/release-notes-4.0.0-draft.md`.
+    `docs/release-notes/release-notes-4.x-draft.md`.
   - Update CHANGELOG file with the incompatibilities and actions to take.
-  - Update network seeds.
-  - Add new checkpoint. Last checkpoint + 6 months.
   - Create PR: `Release v4.0.0-rc.1` from branch `4.x-proposal` to `4.x`.
     - PR description containing list of PRs (similar to release notes)
     - We can discuss if we want to add something the release candidate for
@@ -151,8 +153,9 @@ accumulate `backport`s for the `patch`es that are found during testing period.
 Process example:
   - backport `patch`(es) from the `master` to the `4.x-proposal`.
   - update `package.json` version to `4.0.0-rc.2` in the `4.x-proposal`.
+  - update `package-lock.json` by running `npm install`.
   - Update Release doc file for the
-    `docs/release-notes/release-notes-4.0.0-draft.md`.
+    `docs/release-notes/release-notes-4.x-draft.md`.
   - Update CHANGELOG file with the incompatibilities and actions to take.
     (should not be any)
   - Create PR `Release v4.0.0-rc.2` from branch `4.x-proposal` to `4.x`.
@@ -165,9 +168,10 @@ Process example:
 #### Release the major version
 Above process continues until last week where we do the actual release:
   - update `package.json` version to `4.0.0` in the `4.x-proposal` branch.
+  - update `package-lock.json` by running `npm install`.
   - Rename relase doc file from
-    `docs/release-notes/release-notes-4.0.0-draft.md` to
-    `docs/release-notes/release-notes-4.0.0.md`
+    `docs/release-notes/release-notes-4.x-draft.md` to
+    `docs/release-notes/release-notes-4.x.md`
   - CHANGELOG should be up to date.
   - Create PR `Release v4.0.0` from the branch `4.x-proposal` to `4.x`.
     - PR list from prev PRs.
@@ -177,12 +181,14 @@ Above process continues until last week where we do the actual release:
   - Update `latest` tag.
   - Update `previous` tag.
   - Update `life-support` tag.
+  - Backport release notes to `master`.
 
 ### Release minor and patches
   This applies to all minor and patches that are being backported to the
 `latest`, `previous` versions. Example `v4.0.0` is `latest` and we want to
 release minor(process is the same for `previous` minor and patch releases):
   - update `package.json` version to `4.1.0` in the `4.x-proposal` branch.
+  - update `package-lock.json` by running `npm install`.
   - Create Release doc file `docs/release-notes/release-notes-4.1.0.md`.
   - NO CHANGES TO CHANGELOG - this is minor.
   - Create PR `Release v4.1.0` from the branch `4.x-proposal` to `4.x`.
@@ -196,6 +202,7 @@ release minor(process is the same for `previous` minor and patch releases):
     - `latest` if we are releasing from the last `major`.
     - `previous` if we are updating `previous` versions `minor`.
     - `life-support` if we are updating `life-support` versions `minor`.
+  - Backport release notes to `master`.
 
 [release-files]: ./release-files.md
 [schedule]: ./release-schedule.md
