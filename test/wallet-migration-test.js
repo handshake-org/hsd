@@ -26,11 +26,42 @@ const wdbFlagError = (id) => {
     + '(Full node may be required for rescan)';
 };
 
+class MockMigration extends AbstractMigration {
+  async check() {
+    return types.MIGRATE;
+  }
+
+  async migrate(_, pending) {
+    return pending;
+  }
+}
+
+const mockMigrations = {
+  0: MigrateMigrations,
+  1: class Migration1 extends MockMigration {
+    static info() {
+      return {
+        name: 'mock migration 1',
+        description: 'desc mock migration 1'
+      };
+    }
+  },
+  2: class Migration2 extends MockMigration {
+    static info() {
+      return {
+        name: 'mock migration 2',
+        description: 'desc mock migration 2'
+      };
+    }
+  }
+};
+
 describe('Wallet Migrations', function() {
   describe('General', function() {
     const location = testdir('migrate-wallet-ensure');
     const migrationsBAK = WalletMigrator.migrations;
-    const lastMigrationID = Math.max(...Object.keys(migrationsBAK));
+    WalletMigrator.migrations = mockMigrations;
+    const lastMigrationID = Math.max(...Object.keys(mockMigrations));
 
     const walletOptions = {
       prefix: location,
@@ -53,7 +84,7 @@ describe('Wallet Migrations', function() {
       walletDB = new WalletDB(walletOptions);
       ldb = walletDB.db;
 
-      WalletMigrator.migrations = migrationsBAK;
+      WalletMigrator.migrations = mockMigrations;
       await walletDB.open();
     });
 
@@ -141,6 +172,7 @@ describe('Wallet Migrations', function() {
       await walletDB.close();
 
       walletDB.options.walletMigrate = lastMigrationID;
+      walletDB.version = 1;
       await walletDB.open();
 
       const versionData = await ldb.get(layout.V.encode());
@@ -209,6 +241,7 @@ describe('Wallet Migrations', function() {
       await fs.mkdirp(location);
 
       walletDB = new WalletDB(walletOptions);
+      walletDB.version = 1;
       ldb = walletDB.db;
 
       WalletMigrator.migrations = testMigrations;
@@ -537,6 +570,130 @@ describe('Wallet Migrations', function() {
 
       assert.strictEqual(rescan, true);
 
+      await walletDB.close();
+    });
+  });
+
+  describe('Mirate account lookahead (integration)', function () {
+    const location = testdir('wallet-change');
+    const migrationsBAK = WalletMigrator.migrations;
+    const TEST_LOOKAHEAD = 150;
+
+    const walletOptions = {
+      prefix: location,
+      memory: false,
+      network: network
+    };
+
+    let walletDB, ldb;
+    before(async () => {
+      WalletMigrator.migrations = {};
+      await fs.mkdirp(location);
+    });
+
+    after(async () => {
+      WalletMigrator.migrations = migrationsBAK;
+      await rimraf(location);
+    });
+
+    beforeEach(async () => {
+      walletDB = new WalletDB(walletOptions);
+      ldb = walletDB.db;
+    });
+
+    afterEach(async () => {
+      if (ldb.opened)
+        await ldb.close();
+    });
+
+    const newToOld = (raw) => {
+      // flags, type, m, n, receiveDepth, changeDepth
+      const preLen = 1 + 1 + 1 + 1 + 4 + 4;
+      const pre = raw.slice(0, preLen);
+      const lookahead = raw.slice(preLen, preLen + 4);
+      const post = raw.slice(preLen + 4);
+
+      return Buffer.concat([
+        pre,
+        Buffer.alloc(1, lookahead[0]),
+        post
+      ]);
+    };
+
+    it('should write old account record', async () => {
+      const setupLookahead = async (wallet, n) => {
+        const accounts = [];
+        let b;
+
+        for (let i = 0; i < 3; i++)
+          accounts.push(await wallet.getAccount(i));
+
+        b = ldb.batch();
+        for (let i = 0; i < 3; i++)
+          await accounts[i].setLookahead(b, n + i);
+        await b.write();
+
+        b = ldb.batch();
+        for (let i = 0; i < 3; i++) {
+          const encoded = newToOld(accounts[i].encode(), n + i);
+          b.put(layout.a.encode(wallet.wid, i), encoded);
+        }
+
+        // previous version
+        walletDB.writeVersion(b, 1);
+        await b.write();
+      };
+
+      await walletDB.open();
+
+      const wallet = walletDB.primary;
+      await wallet.createAccount({});
+      await wallet.createAccount({});
+
+      await setupLookahead(wallet, TEST_LOOKAHEAD + 0);
+
+      const wallet2 = await walletDB.create({});
+      await wallet2.createAccount({});
+      await wallet2.createAccount({});
+      await setupLookahead(wallet2, TEST_LOOKAHEAD + 10);
+
+      await walletDB.close();
+    });
+
+    it('should enable wallet account lookahead migration', () => {
+      WalletMigrator.migrations = {
+        0: WalletMigrator.MigrateAccountLookahead
+      };
+    });
+
+    it('should fail without migrate flag', async () => {
+      const expectedError = migrationError(WalletMigrator.migrations, [0],
+        wdbFlagError(0));
+
+      await assert.rejects(async () => {
+        await walletDB.open();
+      }, {
+        message: expectedError
+      });
+
+      await ldb.close();
+    });
+
+    it('should migrate with migrate flag', async () => {
+      const checkLookahead = async (wallet, n) => {
+        for (let i = 0; i < 3; i++) {
+          const account = await wallet.getAccount(i);
+          assert.strictEqual(account.lookahead, n + i);
+        }
+      };
+
+      walletDB.options.walletMigrate = 0;
+
+      await walletDB.open();
+      const wallet = walletDB.primary;
+      const wallet2 = await walletDB.get(1);
+      await checkLookahead(wallet, TEST_LOOKAHEAD + 0);
+      await checkLookahead(wallet2, TEST_LOOKAHEAD + 10);
       await walletDB.close();
     });
   });

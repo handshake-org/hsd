@@ -104,6 +104,26 @@ describe('Wallet HTTP', function() {
     );
   });
 
+  it('should create wallet with default account 1000 lookahead', async () => {
+    const wname = 'lookahead';
+    await wclient.createWallet(wname, {
+      lookahead: 1000
+    });
+
+    const defAccount = await wclient.getAccount(wname, 'default');
+    assert.strictEqual(defAccount.lookahead, 1000);
+
+    const newAccount = await wclient.createAccount(wname, 'newaccount', {
+      lookahead: 1001
+    });
+    assert.strictEqual(newAccount.lookahead, 1001);
+    const getNewAccount = await wclient.getAccount(wname, 'newaccount', {
+      lookahead: 1001
+    });
+
+    assert.strictEqual(getNewAccount.lookahead, 1001);
+  });
+
   it('should get key by address from watch-only', async () => {
     const phrase = 'abandon abandon abandon abandon abandon abandon '
       + 'abandon abandon abandon abandon abandon about';
