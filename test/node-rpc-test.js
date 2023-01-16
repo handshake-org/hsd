@@ -7,7 +7,7 @@ const Network = require('../lib/protocol/network');
 const consensus = require('../lib/protocol/consensus');
 const MemWallet = require('./util/memwallet');
 const TX = require('../lib/primitives/tx');
-const {NodeClient} = require('hs-client');
+const NodeClient = require('../lib/client/node');
 
 const TIMEOUT = 15000;
 const API_KEY = 'foo';

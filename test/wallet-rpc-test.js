@@ -1,7 +1,7 @@
 'use strict';
 
-const {NodeClient,WalletClient} = require('hs-client');
 const assert = require('bsert');
+const {NodeClient, WalletClient} = require('../lib/client');
 const FullNode = require('../lib/node/fullnode');
 const Network = require('../lib/protocol/network');
 const Mnemonic = require('../lib/hd/mnemonic');

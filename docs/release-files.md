@@ -1,29 +1,32 @@
-Releasing hsd
-=============
+Releasing hsd and hs-client
+===========================
 
 This document contains information about bundling, signing and
 distributing the files.
 
-`hsd` is distributed through several platforms: `github`, `npm`, `brew`.
+`hsd/hs-client` is distributed through several platforms: `github`, `npm`, `brew`.
 
 <!-- markdown-toc -i release-files.md -->
 
 <!-- toc -->
 
-- [Deploying to github (tag)](#deploying-to-github-tag)
-  * [Major, minor and patches](#major-minor-and-patches)
-    + [Major](#major)
-    + [Minor, Patch](#minor-patch)
-- [Deploying to npm](#deploying-to-npm)
-  * [Deploying latest version, minor and patches included](#deploying-latest-version-minor-and-patches-included)
-  * [Deploying support versions (previous and life-support)](#deploying-support-versions-previous-and-life-support)
-- [Deploying to homebrew](#deploying-to-homebrew)
-- [Deploying to handshake.org](#deploying-to-handshakeorg)
-  * [Building tarball](#building-tarball)
-  * [Signing and upload](#signing-and-upload)
+- [hsd](#hsd)
+  * [Deploying to github (tag)](#deploying-to-github-tag)
+    + [Major, minor and patches](#major-minor-and-patches)
+      - [Major](#major)
+      - [Minor, Patch](#minor-patch)
+  * [Deploying to npm](#deploying-to-npm)
+    + [Deploying latest version, minor and patches included](#deploying-latest-version-minor-and-patches-included)
+    + [Deploying support versions (previous and life-support)](#deploying-support-versions-previous-and-life-support)
+  * [Deploying to homebrew](#deploying-to-homebrew)
+  * [Deploying to handshake.org](#deploying-to-handshakeorg)
+    + [Building tarball](#building-tarball)
+    + [Signing and upload](#signing-and-upload)
+- [hs-client](#hs-client)
 
 <!-- tocstop -->
 
+# hsd
 ## Deploying to github (tag)
 
   This does not need many additional actions as we use github as our primary
@@ -119,6 +122,33 @@ and create PR with the relevant updates to the `download/index.html` and
   - Update `download/index.html` with new links.
   - Create PR to the main repository.
 
+# hs-client
+  Since hsd v5 `hs-client` is part of the `hsd`. Original [hs-client repo][hsclient] is now used to
+publish generated content. `hs-client` version will now be strictly tied to
+the `hsd` version. It is then generated from `hsd` code to release separately on
+`git` and `npm`. Most of the process is done by the introduced helper script
+`scripts/gen-hsclient.js`. It can help you setup `hs-client` that just needs
+publishing on `git` and `npm`. It also gives instructions how to do both.
+  After `hsd` has been released we can also release `hs-client` from the same
+commit/tag, just run: `./scripts/gen-hsclient.js` which will generate `hs-client`
+package with `git` setup in `tmp` directory. You can alternatively pass
+`HS_CLIENT_DIR` env variable for custom place. If generating git failed for some
+reason, it will list commands that needs executing and you can proceed manually
+or fix the issues and rerun the script. NOTE, that the script will never try to
+publish by itself, only generate files to review locally.
+  - `./scripts/gen-hsclient.js` - script will also list left commands that are
+    necessary for publishing.
+  - `cd /tmp/hs-client`
+  - `git push -f origin master` - rewrite whole `hs-client` repo with the new content.
+  - `git push -f origin vVersion` - push newly generated tag to the `hs-client`.
+    - You can check the `gen-hsclient` output for the proper version or
+    - `git tag -l` to list.
+  - `npm publish` - this will also tag it as `latest`. If you want to tag it differently
+    you can do so, same as above hsd `npm publish`.
+    - NOTE: You can use `npm publish --dry-run` to see the details before actual
+      release.
+
+
 [homebrew]: https://brew.sh/
 [homebrew-repo]: https://github.com/Homebrew/homebrew-core
 [homebrew-new-formula]: https://github.com/Homebrew/homebrew-core/pull/51014
@@ -126,3 +156,4 @@ and create PR with the relevant updates to the `download/index.html` and
 [homebrew-guidelines]: https://github.com/Homebrew/homebrew-core/blob/master/CONTRIBUTING.md
 [handshake-web]: https://github.com/handshake-org/handshake-web/
 [bpkg]: https://github.com/chjj/bpkg
+[hsclient]: https://github.com/handshake-org/hs-client

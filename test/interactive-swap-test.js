@@ -10,7 +10,7 @@ const Script = require('../lib/script/script');
 const rules = require('../lib/covenants/rules');
 const {types} = rules;
 const {Resource} = require('../lib/dns/resource');
-const {WalletClient} = require('hs-client');
+const WalletClient = require('../lib/client/wallet');
 
 const network = Network.get('regtest');
 

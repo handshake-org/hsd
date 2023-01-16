@@ -5,7 +5,7 @@ const Network = require('../lib/protocol/network');
 const FullNode = require('../lib/node/fullnode');
 const Address = require('../lib/primitives/address');
 const rules = require('../lib/covenants/rules');
-const {WalletClient} = require('hs-client');
+const WalletClient = require('../lib/client/wallet');
 const {forValue} = require('./util/common');
 
 const network = Network.get('regtest');
