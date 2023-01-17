@@ -53,6 +53,8 @@ to these calls.
     - RPC method `importnonce` now returns an array of blinds instead of a single blind.
     - HTTP endpoint `/wallet/:id/nonce/:name`'s response replaces 2 string fields (`nonce`, `blind`) with arrays of the same type (`nonces`, `blinds`)
 
+- Remove `check-lookahead` option from walletdb.
+
 ## v4.0.0
 
 **When upgrading to this version of hsd you must pass
