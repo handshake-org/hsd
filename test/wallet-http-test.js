@@ -124,6 +124,19 @@ describe('Wallet HTTP', function() {
     assert.strictEqual(getNewAccount.lookahead, 1001);
   });
 
+  it('should modify account lookahead to 1000', async () => {
+    const wname = 'lookahead2';
+    await wclient.createWallet(wname);
+
+    const defAccount = await wclient.getAccount(wname, 'default');
+    assert.strictEqual(defAccount.lookahead, 200);
+
+    const modified = await wclient.modifyAccount(wname, 'default', {
+      lookahead: 1000
+    });
+    assert.strictEqual(modified.lookahead, 1000);
+  });
+
   it('should get key by address from watch-only', async () => {
     const phrase = 'abandon abandon abandon abandon abandon abandon '
       + 'abandon abandon abandon abandon abandon about';

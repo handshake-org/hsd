@@ -6,17 +6,21 @@
   Validation and request paremeter errors will no longer return (and log) `500`
 status code, instead will return `400`.
 
-### Wallet configuration
-`hsd.conf` can now be used to define wallet options, when wallet is running as a plugin.
-Configurations with `wallet-` prefix will be passed to the wallet. `hsd.conf` wont be used
-if the wallet is running in standalone mode.
+### Wallet Changes
+#### Configuration
+  `hsd.conf` can now be used to define wallet options, when wallet is running as
+a plugin. Configurations with `wallet-` prefix will be passed to the wallet.
+`hsd.conf` wont be used if the wallet is running in standalone mode.
 
-### Wallet API
+- Remove `check-lookahead` option from walletdb.
+
+#### Wallet API
 
 - HTTP Changes:
   - `/wallet/:id/open` no longer accepts `force` flag. (it was not used)
 - RPC Changes:
   - `createopen` and `sendopen` no longer accept `force` as an argument. (was not used)
+  - Introduce new API to modify account: `PATCH /wallet/:id/account/:account`.
 
 ## v5.0.0
 
@@ -28,10 +32,10 @@ you run it for the first time.**
 - HTTP API endpoint `/` (`hsd-cli getinfo`) now includes "public" networking settings.
 
 - RPCs `getnameinfo` `getnameresource` `verifymessagewithname` and `getnamebyhash`
-now accept an additional boolean parameter `safe` which will resolve the name from the Urkel
-tree at the last "safe height" (committed tree root with > 12 confirmations). SPV
-nodes can use this option and retrieve Urkel proofs from the p2p network to respond
-to these calls.
+now accept an additional boolean parameter `safe` which will resolve the name
+from the Urkel tree at the last "safe height" (committed tree root with > 12
+confirmations). SPV nodes can use this option and retrieve Urkel proofs from the
+p2p network to respond to these calls.
 
 - New RPC methods:
   - `decoderesource` like `decodescript` accepts hex string as input and returns
@@ -47,13 +51,15 @@ to these calls.
   of outputs with any combination of covenants.
 
 - Updates related to nonces and blinds
-  - Multisig wallets will compute nonces based on the LOWEST public key in the group.
-  This makes multiparty bidding and revealing more deteministic. Older versions would
-  always use the wallet's OWN public key. To preserve compatability with older software:
-    - RPC method `importnonce` now returns an array of blinds instead of a single blind.
-    - HTTP endpoint `/wallet/:id/nonce/:name`'s response replaces 2 string fields (`nonce`, `blind`) with arrays of the same type (`nonces`, `blinds`)
-
-- Remove `check-lookahead` option from walletdb.
+  - Multisig wallets will compute nonces based on the LOWEST public key in the
+  group.
+  This makes multiparty bidding and revealing more deteministic. Older versions
+  would always use the wallet's OWN public key. To preserve compatability with
+  older software:
+    - RPC method `importnonce` now returns an array of blinds instead of a
+    single blind.
+    - HTTP endpoint `/wallet/:id/nonce/:name`'s response replaces 2 string
+    fields (`nonce`, `blind`) with arrays of the same type (`nonces`, `blinds`)
 
 ## v4.0.0
 
