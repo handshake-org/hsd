@@ -46,7 +46,7 @@
     "goosig": "~0.10.0",
     "hs-client": "~0.0.13",
     "n64": "~0.2.10",
-    "urkel": "~1.0.2"
+    "nurkel": "~0.0.10"
   },
   "devDependencies": {
     "bmocha": "^2.1.8"

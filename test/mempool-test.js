@@ -647,7 +647,7 @@ describe('Mempool', function() {
       // Ensure mockblocks are unique (required for reorg testing)
       block.merkleRoot = block.createMerkleRoot();
       block.witnessRoot = block.createWitnessRoot();
-      block.treeRoot = chain.db.treeRoot();
+      block.treeRoot = await chain.db.treeRoot();
 
       return [block, view];
     }
@@ -1399,7 +1399,7 @@ describe('Mempool', function() {
       // Ensure mockblocks are unique (required for reorg testing)
       block.merkleRoot = block.createMerkleRoot();
       block.witnessRoot = block.createWitnessRoot();
-      block.treeRoot = chain.db.treeRoot();
+      block.treeRoot = await chain.db.treeRoot();
 
       return [block, view];
     }
@@ -1586,7 +1586,7 @@ describe('Mempool', function() {
       block.bits = await chain.getTarget(block.time, chain.tip);
       block.merkleRoot = block.createMerkleRoot();
       block.witnessRoot = block.createWitnessRoot();
-      block.treeRoot = chain.db.treeRoot();
+      block.treeRoot = await chain.db.treeRoot();
       const entry = await chain.add(block, VERIFY_BODY);
 
       // Crazy hack to spend coinbase

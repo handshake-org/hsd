@@ -265,7 +265,7 @@ describe('Auction Reorg', function() {
       assert((chain.height % treeInterval) === 0);
 
       snapshot = {
-        treeRoot: chain.db.txn.rootHash(),
+        treeRoot: await chain.db.txn.txRootHash(),
         ns: await chain.db.getNameStateByName(NAME1)
       };
     });
@@ -395,10 +395,10 @@ describe('Auction Reorg', function() {
 
     it('should have the same DB root', async () => {
       assert((chain.height % network.names.treeInterval) !== 0);
-      const root = chain.db.txn.rootHash();
+      const root = await chain.db.txn.txRootHash();
       await chain.close();
       await chain.open();
-      assert.bufferEqual(root, chain.db.txn.rootHash());
+      assert.bufferEqual(root, await chain.db.txn.txRootHash());
     });
 
     it('should cleanup', async () => {

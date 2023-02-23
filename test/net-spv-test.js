@@ -10,7 +10,7 @@ const rules = require('../lib/covenants/rules');
 const NameState = require('../lib/covenants/namestate');
 const {Resource} = require('../lib/dns/resource');
 const {types: packetTypes} = require('../lib/net/packets');
-const {types: urkelTypes} = require('urkel').Proof;
+const {proofTypes, statusCodes} = require('nurkel');
 const {forValue} = require('./util/common');
 
 const network = Network.get('regtest');
@@ -112,7 +112,7 @@ describe('SPV', function() {
       const ns = await spv.pool.resolve(Buffer.alloc(32, 0xab));
       assert.strictEqual(ns, null);
       const proofType = await waiter;
-      assert.strictEqual(proofType, urkelTypes.TYPE_DEADEND);
+      assert.strictEqual(proofType, proofTypes.TYPE_DEADEND);
     });
 
     it('should run auction and register name', async () => {
@@ -146,7 +146,7 @@ describe('SPV', function() {
       const ns = await spv.pool.resolve(Buffer.alloc(32, 0xab));
       assert.strictEqual(ns, null);
       const proofType = await waiter;
-      assert.strictEqual(proofType, urkelTypes.TYPE_COLLISION);
+      assert.strictEqual(proofType, proofTypes.TYPE_COLLISION);
     });
 
     it('should get proof of existence with data', async () => {
@@ -162,7 +162,7 @@ describe('SPV', function() {
       const res = Resource.decode(ns.data);
       assert.strictEqual(res.records[0].ns, 'one.');
       const proofType = await waiter;
-      assert.strictEqual(proofType, urkelTypes.TYPE_EXISTS);
+      assert.strictEqual(proofType, proofTypes.TYPE_EXISTS);
     });
 
     it('should update name data', async () => {
@@ -192,7 +192,7 @@ describe('SPV', function() {
       const res = Resource.decode(ns.data);
       assert.strictEqual(res.records[0].ns, 'two.');
       const proofType = await waiter;
-      assert.strictEqual(proofType, urkelTypes.TYPE_EXISTS);
+      assert.strictEqual(proofType, proofTypes.TYPE_EXISTS);
     });
 
     it('should get historical data', async () => {
@@ -216,7 +216,7 @@ describe('SPV', function() {
       const res = Resource.decode(ns.data);
       assert.strictEqual(res.records[0].ns, 'one.');
       const proofType = await waiter1;
-      assert.strictEqual(proofType, urkelTypes.TYPE_EXISTS);
+      assert.strictEqual(proofType, proofTypes.TYPE_EXISTS);
 
       await spv.chain.removeInvalid(entry.hash);
       await forValue(spv.chain, 'height', full.chain.height);
@@ -257,7 +257,7 @@ describe('SPV', function() {
 
       // This is the error thrown by the full node trying to serve the proof.
       assert(err);
-      assert.strictEqual(err.code, 'ERR_MISSING_NODE');
+      assert.strictEqual(statusCodes[err.code], statusCodes.URKEL_ENOTFOUND);
 
       // :-(
       assert.strictEqual(spv.pool.peers.outbound, 0);

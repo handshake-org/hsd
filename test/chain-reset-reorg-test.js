@@ -133,7 +133,7 @@ describe('Chain reorg/reset test', function() {
       // let's mine 2 on the best first.
       const names1 = await mineBlocksOpens(mainMiner, 2);
 
-      assert.bufferEqual(chain.db.treeRoot(), root);
+      assert.bufferEqual(await chain.db.treeRoot(), root);
 
       for (const name of [...names0, ...names1]) {
         assert.strictEqual(await chainTreeHas(chain, name), false);
@@ -145,7 +145,7 @@ describe('Chain reorg/reset test', function() {
       await syncChain(altChain, chain, tipHeight);
       tipHeight += 3;
 
-      assert.bufferEqual(chain.db.treeRoot(), root);
+      assert.bufferEqual(await chain.db.treeRoot(), root);
 
       for (const name of [...names0, ...names2]) {
         assert.strictEqual(await chainTreeHas(chain, name), false);
@@ -176,18 +176,18 @@ describe('Chain reorg/reset test', function() {
         assert.strictEqual(await chainTxnHas(chain, name), false);
       }
 
-      assert.notBufferEqual(chain.db.treeRoot(), root);
+      assert.notBufferEqual(await chain.db.treeRoot(), root);
       // Now txn is empty and its root should be the same as the tree root.
-      assert.bufferEqual(chain.db.treeRoot(), chain.db.txn.rootHash());
-      assert.bufferEqual(altChain.db.treeRoot(), altChain.db.txn.rootHash());
-      assert.bufferEqual(altChain.db.treeRoot(), chain.db.treeRoot());
+      assert.bufferEqual(await chain.db.treeRoot(), await chain.db.txn.txRootHash());
+      assert.bufferEqual(await altChain.db.treeRoot(), await altChain.db.txn.txRootHash());
+      assert.bufferEqual(await altChain.db.treeRoot(), await chain.db.treeRoot());
     });
 
     it('should reorg 3 blocks and check tree (at interval)', async () => {
       assert.strictEqual(chain.tip.height, tipHeight);
       assert.strictEqual(altChain.tip.height, tipHeight);
 
-      const root = chain.db.treeRoot();
+      const root = await chain.db.treeRoot();
 
       // move forward to 48
       const names0 = await mineBlocksOpens(mainMiner, 3);
@@ -199,8 +199,8 @@ describe('Chain reorg/reset test', function() {
         assert.strictEqual(await chainTxnHas(chain, name), true);
       }
 
-      assert.notBufferEqual(chain.db.txn.rootHash(), root);
-      assert.bufferEqual(chain.db.treeRoot(), root);
+      assert.notBufferEqual(await chain.db.txn.txRootHash(), root);
+      assert.bufferEqual(await chain.db.treeRoot(), root);
       assert.strictEqual(chain.tip.height, tipHeight);
 
       // mine 3 blocks.
@@ -324,7 +324,7 @@ describe('Chain reorg/reset test', function() {
       await syncChain(chain, altChain, tipHeight);
       tipHeight += 2;
 
-      assert.bufferEqual(chain.db.treeRoot(), root);
+      assert.bufferEqual(await chain.db.treeRoot(), root);
 
       for (const name of [...names0, ...resetNames]) {
         assert.strictEqual(await chainTreeHas(chain, name), false);
