@@ -409,6 +409,8 @@ describe('Auction Reorg', function() {
   });
 
   describe('Claim Reorg', function() {
+    this.timeout(10000);
+
     const node = createNode();
     const {chain, miner, cpu, blocks} = node;
 

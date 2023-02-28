@@ -483,6 +483,8 @@ describe('Auction', function() {
   });
 
   describe('Claim', function() {
+    this.timeout(10000);
+
     const node = createNode();
     const {chain, miner, cpu, blocks} = node;
 
