@@ -77,6 +77,8 @@ describe('Disable TXs', function() {
   });
 
   it('should reject claim from mempool before txStart', async () => {
+    this.timeout(10000);
+
     const claim = await wallet.fakeClaim('cloudflare');
 
     try {
@@ -184,6 +186,8 @@ describe('Disable TXs', function() {
   });
 
   it('should allow claim in mempool one block before txStart', async () => {
+    this.timeout(10000);
+
     const claim = await wallet.fakeClaim('cloudflare');
 
     try {

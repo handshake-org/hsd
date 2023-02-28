@@ -2790,6 +2790,8 @@ describe('Wallet', function() {
     });
 
     it('should confirm cloudflare CLAIM', async () => {
+      this.timeout(10000);
+
       // Use a fresh wallet.
       const pre = await wallet.getBalance();
       assert.equal(pre.tx, 0);

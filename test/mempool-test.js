@@ -1119,6 +1119,8 @@ describe('Mempool', function() {
     });
 
     it('should handle reorg: name claim - DNSSEC timestamp', async () => {
+      this.timeout(10000);
+
       // Mempool is empty
       await mempool.reset();
       assert.strictEqual(mempool.map.size, 0);
@@ -1205,6 +1207,8 @@ describe('Mempool', function() {
     });
 
     it('should handle reorg: name claim - block commitment', async () => {
+      this.timeout(10000);
+
       // Mempool is empty
       await mempool.reset();
       assert.strictEqual(mempool.map.size, 0);

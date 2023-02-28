@@ -46,6 +46,7 @@ async function mineBlocks(n, addr) {
 
 describe('Reserved Name Claims', function() {
   this.timeout(10000);
+
   before(async () => {
     await node.open();
 
