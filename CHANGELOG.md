@@ -2,7 +2,11 @@
 
 ## v6.0.0
 
-#### Wallet configuration
+### Node and Wallet HTTP API
+  Validation and request paremeter errors will no longer return (and log) `500`
+status code, instead will return `400`.
+
+### Wallet configuration
 `hsd.conf` can now be used to define wallet options, when wallet is running as a plugin.
 Configurations with `wallet-` prefix will be passed to the wallet. `hsd.conf` wont be used
 if the wallet is running in standalone mode.
