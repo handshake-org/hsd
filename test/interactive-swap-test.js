@@ -102,7 +102,7 @@ describe('Interactive name swap', function() {
   });
 
   it('should not be able to send a TRANSFER before REGISTER', async () => {
-    assert.rejects(async () => {
+    await assert.rejects(async () => {
       await alice.sendTransfer(name, bobReceive);
     }, {
       message: `Name is not registered: ${name}.`

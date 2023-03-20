@@ -1662,7 +1662,7 @@ describe('Wallet', function() {
     assert.strictEqual(pending.length, policy.MEMPOOL_MAX_ANCESTORS);
 
     // One more unconfirmed change spend would exceed the limit
-    assert.rejects(async () => {
+    await assert.rejects(async () => {
       await wallet.send({
         outputs: [{
           address: recAddr,

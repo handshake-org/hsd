@@ -93,7 +93,7 @@ describe('BlockStore', function() {
         for (const method of methods) {
           it(`${method}`, async () => {
             assert(store[method]);
-            assert.rejects(async () => {
+            await assert.rejects(async () => {
               await store[method]();
             }, {
               name: 'Error',
