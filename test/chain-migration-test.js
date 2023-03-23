@@ -4,6 +4,7 @@ const assert = require('bsert');
 const fs = require('bfile');
 const {encoding} = require('bufio');
 const {ZERO_HASH} = require('../lib/protocol/consensus');
+const {statusCodes} = require('nurkel');
 const Network = require('../lib/protocol/network');
 const WorkerPool = require('../lib/workers/workerpool');
 const Miner = require('../lib/mining/miner');
@@ -971,7 +972,7 @@ describe('Chain Migrations', function() {
 
       // Now our error should be incorrect tree (after migration)
       assert(error, 'Chain must throw an error.');
-      assert.strictEqual(error.message, `Missing node: ${root.toString('hex')}.`);
+      assert.strictEqual(statusCodes[error.code], statusCodes.URKEL_ENOTFOUND);
 
       const version = getVersion(await ldb.get(layout.V.encode()), 'chain');
       assert.strictEqual(version, 3);

@@ -307,7 +307,7 @@ describe('Node HTTP', function() {
         assert.equal(socketData.length, 1);
 
         const {root, block, entry} = socketData[0];
-        assert.bufferEqual(node.chain.db.treeRoot(), root);
+        assert.bufferEqual(await node.chain.db.treeRoot(), root);
 
         const info = await nclient.getInfo();
         assert.notEqual(pre.chain.tip, info.chain.tip);

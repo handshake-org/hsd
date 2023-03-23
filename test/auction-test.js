@@ -379,10 +379,10 @@ describe('Auction', function() {
 
     it('should have the same DB root', async () => {
       assert((chain.height % network.names.treeInterval) !== 0);
-      const root = chain.db.txn.rootHash();
+      const root = await chain.db.txn.txRootHash();
       await chain.close();
       await chain.open();
-      assert.bufferEqual(root, chain.db.txn.rootHash());
+      assert.bufferEqual(root, await chain.db.txn.txRootHash());
     });
 
     it('should not have transfer stats in JSON yet', async () => {

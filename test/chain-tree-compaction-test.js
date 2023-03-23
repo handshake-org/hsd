@@ -4,6 +4,7 @@ const os = require('os');
 const path = require('path');
 const fs = require('bfile');
 const assert = require('bsert');
+const {statusCodesByVal, statusCodes} = require('nurkel');
 const consensus = require('../lib/protocol/consensus');
 const Network = require('../lib/protocol/network');
 const Miner = require('../lib/mining/miner');
@@ -50,7 +51,6 @@ describe('Tree Compacting', function() {
         `hsd-tree-compacting-test-${Date.now()}`
       );
       const treePath = path.join(prefix, 'tree');
-      const treePart1 = path.join(prefix, 'tree', '0000000001');
 
       // This is the chain we are testing,
       // we are going to compact its tree
@@ -123,11 +123,21 @@ describe('Tree Compacting', function() {
       const checkTree = async (compacted = false) => {
         for (const [index, hash] of treeRoots.entries()) {
           if (compacted && index < (treeRoots.length - 8)) {
-            // Old root node has been deleted, tree state can not be restored.
-            await assert.rejects(
-              chain.db.tree.inject(hash),
-              {message: `Missing node: ${hash.toString('hex')}.`}
+            let err;
+
+            try {
+              // Old root node has been deleted, tree state can not be restored.
+              await chain.db.tree.inject(hash);
+            } catch (e) {
+              err = e;
+            }
+
+            assert(err, 'tree inject must throw.');
+            assert.strictEqual(
+              err.code,
+              statusCodesByVal[statusCodes.URKEL_ENOTFOUND]
             );
+
             continue;
           }
 
@@ -219,9 +229,9 @@ describe('Tree Compacting', function() {
       });
 
       it('should compact tree', async () => {
-        const before = await fs.stat(treePart1);
+        const before = await chain.db.tree.stat();
         await chain.compactTree();
-        const after = await fs.stat(treePart1);
+        const after = await chain.db.tree.stat();
 
         // Urkel Tree should be smaller now.
         // Urkel Tree files are padded to ensure that Meta nodes are written
@@ -274,9 +284,9 @@ describe('Tree Compacting', function() {
       it('should compact tree a second time with no new data', async () => {
         // If user executes rpc compacttree repeatedly,
         // it shouldn't break anything.
-        const before = await fs.stat(treePart1);
+        const before = await chain.db.tree.stat();
         await chain.compactTree();
-        const after = await fs.stat(treePart1);
+        const after = await chain.db.tree.stat();
 
         // Should be no change
         assert.strictEqual(before.size, after.size);
@@ -297,14 +307,14 @@ describe('Tree Compacting', function() {
         await mineBlocks(treeInterval, mempool);
 
         // Tree and txn are synced due to tree commitment.
-        assert.bufferEqual(chain.db.tree.rootHash(), chain.db.txn.rootHash());
+        assert.bufferEqual(await chain.db.tree.treeRootHash(), await chain.db.txn.txRootHash());
 
         // Increment counter and confirm, but do not advance to tree interval.
         send(await wallet.sendUpdate(name, Buffer.from([++counter])), mempool);
         await mineBlocks(1, mempool);
 
         // The txn is updated, but the tree is still in last-committed state
-        assert.notBufferEqual(chain.db.tree.rootHash(), chain.db.txn.rootHash());
+        assert.notBufferEqual(await chain.db.tree.treeRootHash(), await chain.db.txn.txRootHash());
         raw = await chain.db.txn.get(nameHash);
         ns = NameState.decode(raw);
         assert.bufferEqual(ns.data, Buffer.from([counter]));
@@ -313,19 +323,19 @@ describe('Tree Compacting', function() {
         assert.bufferEqual(ns.data, Buffer.from([counter - 1]));
 
         // Save
-        const txnRootBefore = chain.db.txn.rootHash();
-        const treeRootBefore = chain.db.tree.rootHash();
+        const txnRootBefore = await chain.db.txn.txRootHash();
+        const treeRootBefore = await chain.db.tree.treeRootHash();
 
         // Compact
-        const before = await fs.stat(treePart1);
+        const before = await chain.db.tree.stat();
         await chain.compactTree();
-        const after = await fs.stat(treePart1);
+        const after = await chain.db.tree.stat();
         assert(before.size > after.size);
 
         // Check
-        assert.bufferEqual(txnRootBefore, chain.db.txn.rootHash());
-        assert.bufferEqual(treeRootBefore, chain.db.tree.rootHash());
-        assert.notBufferEqual(chain.db.tree.rootHash(), chain.db.txn.rootHash());
+        assert.bufferEqual(txnRootBefore, await chain.db.txn.txRootHash());
+        assert.bufferEqual(treeRootBefore, await chain.db.tree.treeRootHash());
+        assert.notBufferEqual(await chain.db.tree.treeRootHash(), await chain.db.txn.txRootHash());
         raw = await chain.db.txn.get(nameHash);
         ns = NameState.decode(raw);
         assert.bufferEqual(ns.data, Buffer.from([counter]));
@@ -346,14 +356,14 @@ describe('Tree Compacting', function() {
           await mineBlocks(treeInterval, mempool);
         }
 
-        const before = await fs.stat(treePart1);
+        const before = await chain.db.tree.stat();
 
         // Rewind the tree 6 intervals and compact, but do not sync to tip yet.
         const entry = await chain.getEntry(chain.height - 6 * treeInterval);
         await chain.db.compactTree(entry);
 
         // Confirm tree state has been rewound
-        assert.notBufferEqual(chain.db.tree.rootHash(), chain.tip.treeRoot);
+        assert.notBufferEqual(await chain.db.tree.treeRootHash(), chain.tip.treeRoot);
 
         // Oops, we abort before calling chain.syncTree()
         await miner.close();
@@ -368,11 +378,11 @@ describe('Tree Compacting', function() {
         await miner.open();
 
         // Tree was compacted
-        const after = await fs.stat(treePart1);
+        const after = await chain.db.tree.stat();
         assert(before.size > after.size);
 
         // Tree was re-synced automatically to chain tip on restart
-        assert.bufferEqual(chain.db.tree.rootHash(), chain.tip.treeRoot);
+        assert.bufferEqual(await chain.db.tree.treeRootHash(), chain.tip.treeRoot);
         raw = await chain.db.tree.get(nameHash);
         ns = NameState.decode(raw);
         assert.bufferEqual(ns.data, Buffer.from([counter + 21]));
@@ -398,7 +408,7 @@ describe('Tree Compacting', function() {
         const CHAIN_DB_COMMIT = chain.db.commit;
 
         // Current tree root before crash
-        const treeRoot = chain.db.treeRoot();
+        const treeRoot = await chain.db.treeRoot();
 
         // Implement bug where node crashes before database batch is written.
         // When the next block is connected, it should successfully write
@@ -406,7 +416,7 @@ describe('Tree Compacting', function() {
         // or levelDB indexes.
         chain.db.commit = async () => {
           // Tree root has been updated inside Urkel
-          const newRoot1 = chain.db.treeRoot();
+          const newRoot1 = await chain.db.treeRoot();
           assert(!treeRoot.equals(newRoot1));
 
           // Reset batch, otherwise assert(!this.current) fails
@@ -418,7 +428,15 @@ describe('Tree Compacting', function() {
         // Update name and attempt to confirm
         send(update, mempool);
         // Will "crash" node before completing operation
-        await mineBlocks(1, mempool);
+        let err;
+        try {
+          await mineBlocks(1, mempool);
+        } catch (e) {
+          err = e;
+        }
+
+        assert(err, 'mineBlock must fail.');
+        assert.strictEqual(err.message, 'Database is not open.');
         assert(!chain.opened);
 
         // Restore proper batch-write function
@@ -428,7 +446,7 @@ describe('Tree Compacting', function() {
         await chain.open();
 
         // Tree root has been restored from pre-crash state
-        const newRoot2 = chain.db.treeRoot();
+        const newRoot2 = await chain.db.treeRoot();
         assert(treeRoot.equals(newRoot2));
 
         // Try that update again with healthy chainDB
@@ -437,11 +455,11 @@ describe('Tree Compacting', function() {
 
         // Tree has been updated but tree root won't be committed
         // to a block header until the next block.
-        assert(!chain.db.tree.rootHash().equals(chain.tip.treeRoot));
+        assert(!(await chain.db.tree.treeRootHash()).equals(chain.tip.treeRoot));
         await mineBlocks(1);
 
         // Everything is in order
-        assert.bufferEqual(chain.db.tree.rootHash(), chain.tip.treeRoot);
+        assert.bufferEqual(await chain.db.tree.treeRootHash(), chain.tip.treeRoot);
         raw = await chain.db.tree.get(nameHash);
         ns = NameState.decode(raw);
         assert.bufferEqual(ns.data, Buffer.from([counter + 1]));
@@ -469,9 +487,9 @@ describe('Tree Compacting', function() {
 
         await checkTree(true);
 
-        const before = await fs.stat(treePart1);
+        const before = await chain.db.tree.stat();
         await chain.reconstructTree();
-        const after = await fs.stat(treePart1);
+        const after = await chain.db.tree.stat();
 
         assert(before.size < after.size);
 
@@ -486,9 +504,9 @@ describe('Tree Compacting', function() {
         await checkTree(false);
 
         // let's compact again and reconstruct
-        const before = await fs.stat(treePart1);
+        const before = await chain.db.tree.stat();
         await chain.compactTree();
-        const after = await fs.stat(treePart1);
+        const after = await chain.db.tree.stat();
 
         assert(before.size > after.size);
 
@@ -511,9 +529,9 @@ describe('Tree Compacting', function() {
           this.skip();
 
         const tmpPath = treePath + '~';
-        const beforeRecovery = await fs.stat(treePart1);
+        const beforeRecovery = await chain.db.tree.stat();
         await chain.reconstructTree();
-        const afterRecovery = await fs.stat(treePart1);
+        const afterRecovery = await chain.db.tree.stat();
         assert(beforeRecovery.size < afterRecovery.size);
 
         await fs.copy(treePath, tmpPath);
@@ -521,7 +539,7 @@ describe('Tree Compacting', function() {
         await fs.remove(path.join(tmpPath, 'lock'));
 
         await chain.compactTree();
-        const afterCompaction = await fs.stat(treePart1);
+        const afterCompaction= await chain.db.tree.stat();
 
         // If we don't remove existing TMP directory
         // afterCompaction would be bigger than afterRecovery.
@@ -1104,9 +1122,19 @@ describe('Tree Compacting', function() {
           await chain.db.tree.inject(root);
           expected--;
         } else {
-          await assert.rejects(
-            chain.db.tree.inject(root),
-            {message: `Missing node: ${root.toString('hex')}.`}
+          let err;
+
+          try {
+            // Old root node has been deleted, tree state can not be restored.
+            await chain.db.tree.inject(root);
+          } catch (e) {
+            err = e;
+          }
+
+          assert(err, 'tree inject must throw.');
+          assert.strictEqual(
+            err.code,
+            statusCodesByVal[statusCodes.URKEL_ENOTFOUND]
           );
         }
       }

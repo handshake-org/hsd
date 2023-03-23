@@ -142,7 +142,7 @@ describe('Disable GooSig', function() {
       const mtp = await node.chain.getMedianTime(tip);
       const time = Math.max(node.network.now(), mtp + 1);
       const target = await node.chain.getTarget(time, tip);
-      const root = node.chain.db.treeRoot();
+      const root = await node.chain.db.treeRoot();
 
       const template = new BlockTemplate({
         prevBlock: tip.hash,

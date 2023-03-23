@@ -129,7 +129,7 @@ describe('Node Critical Error', function() {
     });
 
     await mineBlocks(node, 50);
-    node.chain.db.tree.store.commit = () => {
+    node.chain.db.txn.commit = () => {
       throw new Error('Disk full!');
     };
     await mineBlocks(node, 50);
