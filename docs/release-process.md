@@ -187,9 +187,9 @@ Above process continues until last week where we do the actual release:
   This applies to all minor and patches that are being backported to the
 `latest`, `previous` versions. Example `v4.0.0` is `latest` and we want to
 release minor(process is the same for `previous` minor and patch releases):
-  - update `package.json` version to `4.1.0` in the `4.x-proposal` branch.
-  - update `package-lock.json` by running `npm install`.
-  - Create Release doc file `docs/release-notes/release-notes-4.1.0.md`.
+  - Update `package.json` version to `4.1.0` in the `4.x-proposal` branch.
+  - Update `package-lock.json` by running `npm install`.
+  - Update Release doc file `docs/release-notes/release-notes-4.x.md`.
   - NO CHANGES TO CHANGELOG - this is minor.
   - Create PR `Release v4.1.0` from the branch `4.x-proposal` to `4.x`.
     - PR description containing list of PRs (similar to release notes)
