@@ -6,7 +6,7 @@ const Address = require('../lib/primitives/address');
 const Claim = require('../lib/primitives/claim');
 const FullNode = require('../lib/node/fullnode');
 const consensus = require('../lib/protocol/consensus');
-const ownership = require('../lib/covenants/ownership');
+const {ownership} = require('../lib/covenants/ownership');
 const reserved = require('../lib/covenants/reserved');
 const {Resource} = require('../lib/dns/resource');
 

@@ -25,11 +25,11 @@ const Claim = require('../../lib/primitives/claim');
 const NameState = require('../../lib/covenants/namestate');
 const NameUndo = require('../../lib/covenants/undo');
 const reserved = require('../../lib/covenants/reserved');
-const ownership = require('../../lib/covenants/ownership');
+const Ownership = require('../../lib/covenants/ownership');
 const policy = require('../../lib/protocol/policy');
 const {Resource} = require('../../lib/dns/resource');
 const Address = require('../../lib/primitives/address');
-const {OwnershipProof} = ownership;
+const {OwnershipProof, ownership} = Ownership;
 const {states} = NameState;
 const {types} = rules;
 

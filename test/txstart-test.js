@@ -13,7 +13,7 @@ const Block = require('../lib/primitives/block');
 const Address = require('../lib/primitives/address');
 const Script = require('../lib/script/script');
 const common = require('../lib/blockchain/common');
-const ownership = require('../lib/covenants/ownership');
+const {ownership} = require('../lib/covenants/ownership');
 const VERIFY_NONE = common.flags.VERIFY_NONE;
 
 const node = new FullNode({

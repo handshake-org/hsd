@@ -11,7 +11,7 @@ const Miner = require('../lib/mining/miner');
 const MemWallet = require('./util/memwallet');
 const Network = require('../lib/protocol/network');
 const rules = require('../lib/covenants/rules');
-const ownership = require('../lib/covenants/ownership');
+const {ownership} = require('../lib/covenants/ownership');
 
 const network = Network.get('regtest');
 const {treeInterval} = network.names;
