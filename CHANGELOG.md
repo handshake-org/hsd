@@ -1,5 +1,14 @@
 # HSD Release Notes & Changelog
 
+## v6.0.0
+
+### Wallet changes
+
+- HTTP Changes:
+  - `/wallet/:id/open` no longer accepts `force` flag. (it was not used)
+- RPC Changes:
+  - `createopen` and `sendopen` no longer accept `force` as an argument. (was not used)
+
 ## v5.0.0
 
 **When upgrading to this version of hsd, you must pass `--wallet-migrate=2` when

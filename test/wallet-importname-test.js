@@ -86,8 +86,8 @@ describe('Wallet Import Name', function() {
     const ns2 = await bob.getNameStateByName(name);
     assert(ns2 === null);
 
-    await alice.sendOpen(name, false);
-    await alice.sendOpen(wrongName, false);
+    await alice.sendOpen(name);
+    await alice.sendOpen(wrongName);
 
     await mineBlocks(network.names.treeInterval);
     await wdb.rescan(0);
@@ -239,9 +239,9 @@ describe('Wallet Import Name', function() {
     let startHeight;
 
     it('should open and bid from Alice\'s wallet', async () => {
-      await alice.sendOpen(name1, false);
-      await alice.sendOpen(name2, false);
-      await alice.sendOpen(name3, false);
+      await alice.sendOpen(name1);
+      await alice.sendOpen(name2);
+      await alice.sendOpen(name3);
       startHeight = node.chain.tip.height;
 
       await mineBlocks(network.names.treeInterval + 1);

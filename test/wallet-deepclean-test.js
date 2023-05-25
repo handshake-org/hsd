@@ -75,7 +75,7 @@ describe('Wallet Deep Clean', function() {
       const name = i < 5 ? `alice${i}` : `bob${i}`;
       const array = i < 5 ? aliceBlinds : bobBlinds;
 
-      await w.sendOpen(name, false, {account: 0});
+      await w.sendOpen(name, {account: 0});
       await mineBlocks(network.names.treeInterval + 2);
 
       // Send two bids so there is a winner/loser and name gets a value

@@ -74,7 +74,7 @@ describe('Multiple accounts participating in same auction', function() {
   });
 
   it('should open an auction and proceed to REVEAL phase', async () => {
-    await wallet.sendOpen(name, false, {account: 0});
+    await wallet.sendOpen(name, {account: 0});
     await mineBlocks(network.names.treeInterval + 2);
     let ns = await node.chain.db.getNameStateByName(name);
     assert(ns.isBidding(node.chain.height, network));

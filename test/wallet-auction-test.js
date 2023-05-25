@@ -89,7 +89,7 @@ describe('Wallet Auction', function() {
 
   describe('Duplicate OPENs', function() {
     it('should open auction', async () => {
-      openAuctionMTX = await winner.createOpen(NAME1, false);
+      openAuctionMTX = await winner.createOpen(NAME1);
       await winner.sign(openAuctionMTX);
       const tx = openAuctionMTX.toTX();
       await wdb.addTX(tx);
@@ -98,7 +98,7 @@ describe('Wallet Auction', function() {
     it('should fail to create duplicate open', async () => {
       let err;
       try {
-        await winner.createOpen(NAME1, false);
+        await winner.createOpen(NAME1);
       } catch (e) {
         err = e;
       }
@@ -120,7 +120,7 @@ describe('Wallet Auction', function() {
     it('should fail to re-open auction during OPEN phase', async () => {
       let err;
       try {
-        await winner.createOpen(NAME1, false);
+        await winner.createOpen(NAME1);
       } catch (e) {
         err = e;
       }
@@ -151,7 +151,7 @@ describe('Wallet Auction', function() {
     it('should fail to re-open auction during BIDDING phase', async () => {
       let err;
       try {
-        await winner.createOpen(NAME1, false);
+        await winner.createOpen(NAME1);
       } catch (e) {
         err = e;
       }
@@ -169,7 +169,7 @@ describe('Wallet Auction', function() {
     });
 
     it('should open auction (again)', async () => {
-      openAuctionMTX2 = await winner.createOpen(NAME1, false);
+      openAuctionMTX2 = await winner.createOpen(NAME1);
       await winner.sign(openAuctionMTX2);
       const tx = openAuctionMTX2.toTX();
       await wdb.addTX(tx);
@@ -178,7 +178,7 @@ describe('Wallet Auction', function() {
     it('should fail to create duplicate open (again)', async () => {
       let err;
       try {
-        await winner.createOpen(NAME1, false);
+        await winner.createOpen(NAME1);
       } catch (e) {
         err = e;
       }
