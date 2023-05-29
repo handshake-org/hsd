@@ -161,12 +161,12 @@ describe('Anyone-can-renew address', function() {
   });
 
   it('should not be owned by either wallet', async  () => {
-    assert.rejects(
+    await assert.rejects(
       alice.sendTransfer(name, aliceReceive),
       {message: `Wallet does not own name: ${name}.`}
     );
 
-    assert.rejects(
+    await assert.rejects(
       bob.sendTransfer(name, bobReceive),
       {message: `Auction not found: ${name}.`}
     );

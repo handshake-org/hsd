@@ -1109,7 +1109,7 @@ describe('Wallet RPC Methods', function() {
 
       // Bob cannot.
       await wclient.execute('selectwallet', ['msBob']);
-      assert.rejects(
+      await assert.rejects(
         wclient.execute('createreveal', [name]),
         {message: `No bids to reveal for name: ${name}.`}
       );
