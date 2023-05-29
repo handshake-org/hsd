@@ -106,7 +106,7 @@ describe('Wallet rescan with namestate transitions', function() {
     it('should run auction', async () => {
       // Poor Bob, all he does is send an OPEN but his wallet will
       // watch all the other activity including TRANSFERS for this name
-      await bob.sendOpen(NAME, true);
+      await bob.sendOpen(NAME);
       // Scatter unrelated TXs throughout the test.
       // This will ensure that txdb.removeBlock() removes TXs
       // in the reverse order from when they were added
@@ -590,7 +590,7 @@ describe('Wallet rescan with namestate transitions', function() {
     });
 
     it('should open and bid from wallet 1', async () => {
-      await wallet1.sendOpen(name, false);
+      await wallet1.sendOpen(name);
       await node.rpc.generateToAddress([treeInterval + 1, addr1]);
       await wallet1.sendBid(name, 1e6, 1e6);
       await node.rpc.generateToAddress([1, addr1]);

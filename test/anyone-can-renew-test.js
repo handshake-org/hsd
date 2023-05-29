@@ -105,7 +105,7 @@ describe('Anyone-can-renew address', function() {
   it('should win name with Alice\'s wallet', async () => {
     heightBeforeOpen = node.chain.height;
 
-    await alice.sendOpen(name, false);
+    await alice.sendOpen(name);
     await mineBlocks(network.names.treeInterval + 1);
 
     await alice.sendBid(name, 100000, 200000);

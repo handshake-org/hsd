@@ -116,7 +116,7 @@ describe('SPV', function() {
     });
 
     it('should run auction and register name', async () => {
-      await wallet.sendOpen(name, false);
+      await wallet.sendOpen(name);
       await mineBlocks(treeInterval + 1);
       await wallet.sendBid(name, 10000, 10000);
       await mineBlocks(biddingPeriod);
