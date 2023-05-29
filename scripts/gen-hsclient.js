@@ -2,65 +2,67 @@
 
 'use strict';
 
-const assert = require('assert');
+const assert = require('bsert');
 const path = require('path');
-const fs = require('bfile');
 const os = require('os');
 const util = require('util');
 const cp = require('child_process');
 const exec = util.promisify(cp.exec);
+const fs = require('bfile');
+const Config = require('bcfg');
 
 const ROOT = path.dirname(__dirname);
+const NAME = 'hs-client';
 const HSD_PKG = require(path.join(ROOT, 'package.json'));
 
 const REMOTE = 'git@github.com:handshake-org/hs-client.git';
 
 const INIT_HS_CLIENT_PKG = {
-  name: "hs-client",
-  description: "HSD node and wallet client",
+  name: 'hs-client',
+  description: 'HSD node and wallet client',
   keywords: [
-    "http",
-    "request",
-    "socket.io",
-    "websockets"
+    'http',
+    'request',
+    'socket.io',
+    'websockets'
   ],
-  main: "./lib/client/index.js",
+  main: './lib/client/index.js',
   bin: {
-    "hsd-cli": "./bin/hsd-cli",
-    "hsd-rpc": "./bin/hsd-rpc",
-    "hsw-cli": "./bin/hsw-cli",
-    "hsw-rpc": "./bin/hsw-rpc"
+    'hsd-cli': './bin/hsd-cli',
+    'hsd-rpc': './bin/hsd-rpc',
+    'hsw-cli': './bin/hsw-cli',
+    'hsw-rpc': './bin/hsw-rpc'
   },
   engines: {
-    node: ">=8.0.0"
+    node: '>=8.0.0'
   }
-}
+};
 
 const INHERIT_PROPERTIES = [
-  "version",
-  "license",
-  "repository",
-  "homepage",
-  "bugs",
-  "author"
+  'version',
+  'license',
+  'repository',
+  'homepage',
+  'bugs',
+  'author'
 ];
 
 const DEPENDENCIES = [
-  "bcfg",
-  "bcurl",
-  "bsert"
+  'bcfg',
+  'bcurl',
+  'bsert'
 ];
 
 const COPY_FILES = [
-  ".npmignore",
-  ".gitignore",
-  "bin/hsd-cli",
-  "bin/hsw-cli",
-  "bin/hsd-rpc",
-  "bin/hsw-rpc",
-  "lib/client/index.js",
-  "lib/client/wallet.js",
-  "lib/client/node.js",
+  '.npmignore',
+  '.gitignore',
+  'bin/hsd-cli',
+  'bin/hsw-cli',
+  'bin/hsd-rpc',
+  'bin/hsw-rpc',
+  'lib/client/index.js',
+  'lib/client/wallet.js',
+  'lib/client/node.js'
 ];
 
 const README = `
@@ -78,33 +80,30 @@ const {NodeClient, WalletClient} = require('hs-client');
 \`\`\`
 `;
 
-async function ensureDir() {
-  if (!await fs.exists(ROOT))
-    throw new Error(`${ROOT} does not exist.`);
+const HELP = `Usage: gen-hsclient [DIRECTORY] [OPTIONS]...
+Generate hs-client package in DIRECTORY.
 
-  const {HS_CLIENT_DIR} = process.env;
+OPTIONS:
+  --no-git - Don't setup git.
+  --verbose - Verbose output.
+  --no-steps - Don't print next steps.
+`;
 
-  let HS_PKG = HS_CLIENT_DIR ? path.resolve(HS_CLIENT_DIR) : null;
+async function ensureDir(dir) {
+  dir = path.resolve(dir);
 
-  if (!HS_PKG)
-    HS_PKG = path.join(os.tmpdir(), `hs-client`);
+  if (dir.startsWith(ROOT))
+    throw new Error(`${NAME} needs to be outside of the hsd. ${dir}`);
 
-
-  if (HS_PKG.startsWith(ROOT))
-    throw new Error(`hs-client needs to be outside of the hsd. ${HS_PKG}`);
-
-  console.log('hs-client directory: ', HS_PKG);
-
-  if (await fs.exists(HS_PKG)) {
+  if (await fs.exists(dir)) {
     throw new Error(
-      `Directory ${HS_PKG} already exists.`
+      `Directory ${dir} already exists.`
       + ' Please remove to proceed or choose different directory.'
     );
   }
 
-  await fs.mkdir(HS_PKG);
-
-  return HS_PKG;
+  await fs.mkdir(dir);
+  return dir;
 }
 
 async function setupPackageContent(dir) {
@@ -120,7 +119,7 @@ async function setupPackageContent(dir) {
   }
 
   const hsClientPkg = {
-    ...INIT_HS_CLIENT_PKG,
+    ...INIT_HS_CLIENT_PKG
   };
 
   for (const name of INHERIT_PROPERTIES) {
@@ -140,8 +139,7 @@ async function setupPackageContent(dir) {
   return hsClientPkg;
 }
 
-async function setupGit(dir, version) {
-  console.log('Setting up git: ', dir);
+async function setupGit(dir, version, log) {
   const commands = [
     'git init -b master',
     `git remote add origin ${REMOTE}`,
@@ -155,35 +153,85 @@ async function setupGit(dir, version) {
     `git push -f origin v${version}`
   ];
 
+  log('Setting up git: ', dir);
+
   for (const cmd of [...commands]) {
-    console.log(`executing: ${cmd} in ${dir}.`);
+    log(` > ${cmd} in ${dir}.`);
 
     try {
-      console.log(await execCmd(cmd, dir));
+      log(await execCmd(cmd, dir));
     } catch (e) {
       console.log(`Failed to execute: ${cmd}.`);
       console.log(e.message);
-      console.log(' You can proceed manually');
+      console.log('You need to proceed manually.');
       break;
     }
 
     commands.shift();
   }
 
-  for (const command of [...commands, ...manualCommands])
-    console.log(`Needs exec: ${command}`);
+  return [...commands, ...manualCommands];
 }
 
 (async () => {
-  const HS_PKG = await ensureDir();
-  const pkg = await setupPackageContent(HS_PKG);
+  const config = new Config('hsd', {
+    alias: {
+      'v': 'verbose'
+    }
+  });
 
-  await setupGit(HS_PKG, pkg.version);
-  console.log('Needs: npm publish');
+  config.load({
+    argv: true,
+    env: true
+  });
+
+  if (config.bool('help')) {
+    console.log(HELP);
+    process.exit(0);
+  }
+
+  const dir = config.str(0, tmpdir());
+  const verbose = config.bool('verbose', false);
+  const noGit = config.bool('no-git', false);
+  const noSteps = config.bool('no-steps', false);
+
+  const log = verbose ? console.log : () => {};
+
+  const pkgDir = await ensureDir(dir);
+
+  log(`Copying files to ${pkgDir}...`);
+  const pkg = await setupPackageContent(pkgDir);
+  let gitNext = null;
+
+  if (!noGit)
+    gitNext = await setupGit(pkgDir, pkg.version, log);
+
+  if (noSteps)
+    return;
+
+  console.log(`Generated ${pkgDir}.`);
+  console.log('Next steps:');
+  console.log(` $ cd ${pkgDir}`);
+
+  if (!noGit) {
+    assert(gitNext);
+    console.log('Git Next:');
+    for (const cmd of gitNext)
+      console.log(` $ ${cmd}`);
+  }
+
+  console.log('NPM Next:');
+  console.log(' $ npm publish --dry-run # check if everything is ok');
+  console.log(' $ npm publish');
 })().catch((err) => {
+  console.log('Try passing --help for help.');
   console.error(err.stack);
   process.exit(1);
 });
+
+function tmpdir() {
+  return path.join(os.tmpdir(), NAME + '-' + Date.now());
+}
 
 async function execCmd(cmd, cwd, timeout = 2000) {
   assert(cwd, 'CWD is required.');
@@ -193,7 +241,7 @@ async function execCmd(cmd, cwd, timeout = 2000) {
     timeout
   });
 
-  if (stderr.length != 0)
+  if (stderr.length !== 0)
     throw new Error(stderr);
 
   return stdout;

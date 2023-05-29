@@ -123,7 +123,7 @@ and create PR with the relevant updates to the `download/index.html` and
   - Create PR to the main repository.
 
 # hs-client
-  Since hsd v5 `hs-client` is part of the `hsd`. Original [hs-client repo][hsclient] is now used to
+  Since hsd v6 `hs-client` is part of the `hsd`. Original [hs-client repo][hsclient] is now used to
 publish generated content. `hs-client` version will now be strictly tied to
 the `hsd` version. It is then generated from `hsd` code to release separately on
 `git` and `npm`. Most of the process is done by the introduced helper script
@@ -132,12 +132,12 @@ publishing on `git` and `npm`. It also gives instructions how to do both.
   After `hsd` has been released we can also release `hs-client` from the same
 commit/tag, just run: `./scripts/gen-hsclient.js` which will generate `hs-client`
 package with `git` setup in `tmp` directory. You can alternatively pass
-`HS_CLIENT_DIR` env variable for custom place. If generating git failed for some
+`DIRECTORY` as argument for custom path. If generating git failed for some
 reason, it will list commands that needs executing and you can proceed manually
 or fix the issues and rerun the script. NOTE, that the script will never try to
 publish by itself, only generate files to review locally.
-  - `./scripts/gen-hsclient.js` - script will also list left commands that are
-    necessary for publishing.
+  - `./scripts/gen-hsclient.js /tmp/hs-client` - script will also list the commands,
+    that needs running for publishing to the git and npm.
   - `cd /tmp/hs-client`
   - `git push -f origin master` - rewrite whole `hs-client` repo with the new content.
   - `git push -f origin vVersion` - push newly generated tag to the `hs-client`.
