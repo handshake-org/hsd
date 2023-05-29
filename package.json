@@ -59,7 +59,9 @@
     "hs-seeder": "./bin/hs-seeder",
     "hs-wallet": "./bin/hsw",
     "hsd-cli": "./bin/hsd-cli",
-    "hsw-cli": "./bin/hsw-cli"
+    "hsd-rpc": "./bin/hsd-rpc",
+    "hsw-cli": "./bin/hsw-cli",
+    "hsw-rpc": "./bin/hsw-rpc"
   },
   "scripts": {
     "build-docs": "jsdoc -c jsdoc.json",
