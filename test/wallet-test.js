@@ -1845,7 +1845,7 @@ describe('Wallet', function() {
    }
 
     assert(err);
-    assert.equal(err.message, 'At least one output required.');
+    assert.equal(err.message, 'At least one output is required.');
   });
 
   it('should cleanup', async () => {
