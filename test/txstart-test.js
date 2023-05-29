@@ -41,9 +41,7 @@ node.chain.on('connect', (entry, block) => {
 wallet.getNameStatus = async (nameHash) => {
   assert(Buffer.isBuffer(nameHash));
   const height = node.chain.height + 1;
-  const state = await node.chain.getNextState();
-  const hardened = state.hasHardening();
-  return node.chain.db.getNameStatus(nameHash, height, hardened);
+  return node.chain.db.getNameStatus(nameHash, height);
 };
 
 describe('Disable TXs', function() {

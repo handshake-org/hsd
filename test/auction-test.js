@@ -58,9 +58,7 @@ function createNode() {
       wallet.getNameStatus = async (nameHash) => {
         assert(Buffer.isBuffer(nameHash));
         const height = chain.height + 1;
-        const state = await chain.getNextState();
-        const hardened = state.hasHardening();
-        return chain.db.getNameStatus(nameHash, height, hardened);
+        return chain.db.getNameStatus(nameHash, height);
       };
 
       return wallet;
