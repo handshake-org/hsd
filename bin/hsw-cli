@@ -21,6 +21,7 @@ const HELP = `
 Commands:
   $ abandon [hash]: Abandon a transaction.
   $ account create [account-name]: Create account.
+  $ account modify [account-name]: Set account options.
   $ account get [account-name]: Get account details.
   $ account list: List account names.
   $ address [account-name]: Derive new address.
@@ -229,6 +230,18 @@ class CLI {
     };
 
     const account = await this.wallet.createAccount(name, options);
+
+    this.log(account);
+  }
+
+  async modifyAccount() {
+    const name = this.config.str([0, 'name']);
+
+    const options = {
+      lookahead: this.config.uint('lookahead')
+    };
+
+    const account = await this.wallet.modifyAccount(name, options);
 
     this.log(account);
   }
@@ -577,6 +590,11 @@ class CLI {
         if (this.argv[0] === 'create') {
           this.argv.shift();
           await this.createAccount();
+          break;
+        }
+        if (this.argv[0] === 'modify') {
+          this.argv.shift();
+          await this.modifyAccount();
           break;
         }
         if (this.argv[0] === 'get')
