@@ -14,7 +14,7 @@ const {
   Network,
   Path
 } = require('..');
-const {NodeClient, WalletClient} = require('hs-client');
+const {NodeClient, WalletClient} = require('../lib/client');
 const {forValue} = require('./util/common');
 
 class TestUtil {

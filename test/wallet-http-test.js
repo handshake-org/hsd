@@ -1,6 +1,6 @@
 'use strict';
 
-const {NodeClient, WalletClient} = require('hs-client');
+const {NodeClient, WalletClient} = require('../lib/client');
 const Network = require('../lib/protocol/network');
 const FullNode = require('../lib/node/fullnode');
 const MTX = require('../lib/primitives/mtx');

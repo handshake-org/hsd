@@ -2,7 +2,7 @@
 
 const assert = require('bsert');
 const bio = require('bufio');
-const {NodeClient} = require('hs-client');
+const NodeClient = require('../lib/client/node');
 const Network = require('../lib/protocol/network');
 const FullNode = require('../lib/node/fullnode');
 const Address = require('../lib/primitives/address');
