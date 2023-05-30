@@ -2,7 +2,12 @@
 
 ## v6.0.0
 
-### Wallet changes
+#### Wallet configuration
+`hsd.conf` can now be used to define wallet options, when wallet is running as a plugin.
+Configurations with `wallet-` prefix will be passed to the wallet. `hsd.conf` wont be used
+if the wallet is running in standalone mode.
+
+### Wallet API
 
 - HTTP Changes:
   - `/wallet/:id/open` no longer accepts `force` flag. (it was not used)
