@@ -1,0 +1,920 @@
+'use strict';
+
+const assert = require('bsert');
+const {NodeClient, WalletClient} = require('../lib/client');
+const {ownership} = require('../lib/covenants/ownership');
+const Network = require('../lib/protocol/network');
+const FullNode = require('../lib/node/fullnode');
+const {forEvent} = require('./util/common');
+const chainCommon = require('../lib/blockchain/common');
+const {BufferMap} = require('buffer-map');
+const {thresholdStates} = chainCommon;
+const {isReserved, isLockedUp, hashName} = require('../lib/covenants/rules');
+
+const SOFT_FORK_NAME = 'icannlockup';
+
+const network = Network.get('regtest');
+const deployments = network.deployments;
+const activationThreshold = network.activationThreshold;
+const minerWindow = network.minerWindow;
+
+const ACTUAL_START = deployments[SOFT_FORK_NAME].startTime;
+const ACTUAL_TIMEOUT = deployments[SOFT_FORK_NAME].timeout;
+const ACTUAL_CLAIM_PERIOD = network.names.claimPeriod;
+
+/*
+ * Test ICANN LOCKUP activation paths.
+ * It includes test for bip9 activation for the
+ * `icannlockup` soft fork - when it fails
+ * and the names become auctionable as well
+ * as the path where it succeeds and auctions
+ * become illegal "forever".
+ *   Soft-fork in regtest will be setup to activate after 3 windows and one
+ * window for DEFINED -> STARTED state.
+ * Soft-fork voting will only happen in 2 windows.
+ * In regtest this means: 144 + 144 + 144 + 144 (4 window) blocks will be set
+ * for claimPeriod end.
+ * Soft forking period for: 144 + 144 (2 window) blocks.
+ * Steps:
+ *  - 144 defined
+ *  - 144 + 144 started (Active voting)
+ *  - 144 locked in or failed end of claim period.
+ *
+ * Test will run failure and success paths and make sure both give
+ * results soft-fork expects:
+ *  - on failure: names can be auctioned.
+ *  - on success: root, top100, custom and zero become
+ *  unauctionable via mempool and blocks, for those running
+ *  the node with updated software.
+ */
+
+describe('BIP9 - ICANN lockup (integration)', function() {
+  this.timeout(20000);
+
+  const CUSTOM = [
+    'cloudflare',
+    'nlnetlabs',
+    'dnscrypt'
+  ];
+
+  const TOP100 = [
+    'paypal',
+    'baidu',
+    'sohu'
+  ];
+
+  const ROOT = [
+    'nl',
+    'fr',
+    'aw',
+    'pl',
+    'nc'
+  ];
+
+  const OTHER = [
+    'steamdb',
+    'ishares',
+    'bforbank',
+    'raspbian-france'
+  ];
+
+  const checkBIP9Info = (info, expected) => {
+    expected = expected || {};
+    expected.startTime = expected.startTime || deployments[SOFT_FORK_NAME].startTime;
+    expected.timeout = expected.timeout || deployments[SOFT_FORK_NAME].timeout;
+
+    assert(info, 'BIP9 info should be returned');
+    assert.strictEqual(info.status, expected.status);
+    assert.strictEqual(info.bit, deployments[SOFT_FORK_NAME].bit);
+    assert.strictEqual(info.startTime, expected.startTime);
+    assert.strictEqual(info.timeout, expected.timeout);
+  };
+
+  const checkBIP9Statistcs = (stats, expected) => {
+    expected = expected || {};
+
+    assert.strictEqual(stats.period, expected.period || minerWindow);
+    assert.strictEqual(stats.threshold, expected.threshold || activationThreshold);
+    assert.strictEqual(stats.elapsed, expected.elapsed);
+    assert.strictEqual(stats.count, expected.count);
+    assert.strictEqual(stats.possible, expected.possible);
+  };
+
+  describe('Rules', function() {
+    const main = Network.get('main');
+    const {claimPeriod} = main.names;
+
+    const testCases = [];
+
+    for (const name of [...ROOT, ...TOP100, ...CUSTOM, ...OTHER]) {
+      testCases.push({
+        name,
+        lockup: false,
+        reserved: true,
+        height: claimPeriod - 1,
+        testName: `should not lockup before extended period times out (${name}), `
+          + 'and be reserved (ALL)'
+      });
+    }
+
+    for (const name of [...ROOT, ...TOP100, ...CUSTOM]) {
+      testCases.push({
+        name,
+        lockup: true,
+        reserved: false,
+        height: claimPeriod,
+        testName: `should lockup after extended period times out (${name}), `
+          + 'and not be reserved (ROOT, TOP100, CUSTOM)'
+      });
+    }
+
+    for (const name of OTHER) {
+      testCases.push({
+        name,
+        lockup: false,
+        reserved: false,
+        height: claimPeriod,
+        testName: `should not lockup after extended period times out (${name}), `
+          + 'and not be reserved (OTHER))'
+      });
+    }
+
+    for (const {name, lockup, reserved, height, testName} of testCases) {
+      it(testName, () => {
+        const hash = hashName(name);
+
+        assert.strictEqual(lockup, isLockedUp(hash, height, main));
+        assert.strictEqual(reserved, isReserved(hash, height, main));
+      });
+    }
+  });
+
+  describe('BIP9 - ICANN lockup - failure (integration)', function() {
+    this.timeout(20000);
+
+    let node, chain;
+    let nodeClient, walletClient;
+    let wdb, wallet;
+
+    const FROOT = ROOT.slice();
+    const FTOP100 = TOP100.slice();
+    const FCUSTOM = CUSTOM.slice();
+    const FOTHER = OTHER.slice();
+
+    before(async () => {
+      node = new FullNode({
+        memory: true,
+        network: network.type,
+        plugins: [require('../lib/wallet/plugin')]
+      });
+
+      await node.ensure();
+      await node.open();
+
+      chain = node.chain;
+
+      deployments[SOFT_FORK_NAME].startTime = 0;
+      deployments[SOFT_FORK_NAME].timeout = 0xffffffff;
+      network.names.claimPeriod = minerWindow * 4;
+
+      // Ignore claim validation
+      ownership.ignore = true;
+
+      nodeClient = new NodeClient({
+        port: network.rpcPort,
+        timeout: 10000
+      });
+
+      walletClient = new WalletClient({
+        port: network.walletPort,
+        timeout: 10000
+      });
+
+      const walletPlugin = node.require('walletdb');
+      wdb = walletPlugin.wdb;
+      wallet = await wdb.get('primary');
+
+      const account = await walletClient.getAccount('primary', 'default');
+      const receive = account.receiveAddress;
+      node.miner.addAddress(receive);
+
+      await walletClient.execute('selectwallet', ['primary']);
+    });
+
+    after(async () => {
+      // Enable claim validation
+      ownership.ignore = false;
+
+      deployments[SOFT_FORK_NAME].startTime = ACTUAL_START;
+      deployments[SOFT_FORK_NAME].timeout = ACTUAL_TIMEOUT;
+      network.names.claimPeriod = ACTUAL_CLAIM_PERIOD;
+
+      await node.close();
+    });
+
+    it('should get deployment stats', async () => {
+      const state = await getICANNLockupState(chain);
+      const bip9info = await getBIP9Info(nodeClient, SOFT_FORK_NAME);
+
+      assert.strictEqual(state, thresholdStates.DEFINED);
+      checkBIP9Info(bip9info, { status: 'defined' });
+    });
+
+    it('should start the soft-fork', async () => {
+      for (let i = 0; i < minerWindow - 2; i++)
+        await mineBlock(node);
+
+      // We are now at the threshold of the window.
+      {
+        const state = await getICANNLockupState(chain);
+        const bip9info = await getBIP9Info(nodeClient, SOFT_FORK_NAME);
+        assert.strictEqual(state, thresholdStates.DEFINED);
+        checkBIP9Info(bip9info, { status: 'defined' });
+      }
+
+      // go into new window and change the state to started.
+      await mineBlock(node);
+
+      {
+        const state = await getICANNLockupState(chain);
+        const bip9info = await getBIP9Info(nodeClient, SOFT_FORK_NAME);
+        assert.strictEqual(state, thresholdStates.STARTED);
+        checkBIP9Info(bip9info, { status: 'started' });
+
+        assert.deepStrictEqual(bip9info.statistics, {
+          period: minerWindow,
+          threshold: activationThreshold,
+          elapsed: 0,
+          count: 0,
+          possible: true
+        });
+      }
+    });
+
+    it('should fail to OPEN for the claimable names', async () => {
+      let err;
+      try {
+        await walletClient.createOpen('primary', {
+          name: FROOT[0]
+        });
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert(err.message, `Name is reserved: ${FROOT[0]}`);
+    });
+
+    it('should be possible to claim for now', async () => {
+      const root = FROOT.shift();
+      const other = FOTHER.shift();
+
+      const names = [root, other];
+
+      const mempoolClaim = forEvent(node.mempool, 'claim', names.length, 20000);
+
+      for (const name of names) {
+        const claim = await wallet.makeFakeClaim(name);
+        await wdb.sendClaim(claim);
+      }
+
+      await mempoolClaim;
+
+      assert.strictEqual(node.mempool.claims.size, names.length);
+    });
+
+    it('should fail first window right away', async () => {
+      const maxFailures = minerWindow - activationThreshold;
+
+      for (let i = 0; i < maxFailures; i++)
+        await mineBlock(node);
+
+      {
+        const state = await getICANNLockupState(chain);
+        const bip9info = await getBIP9Info(nodeClient, SOFT_FORK_NAME);
+        assert.strictEqual(state, thresholdStates.STARTED);
+        checkBIP9Info(bip9info, { status: 'started' });
+
+        checkBIP9Statistcs(bip9info.statistics, {
+          elapsed: maxFailures,
+          count: 0,
+          possible: true
+        });
+      }
+
+      await mineBlock(node);
+
+      {
+        const state = await getICANNLockupState(chain);
+        const bip9info = await getBIP9Info(nodeClient, SOFT_FORK_NAME);
+        assert.strictEqual(state, thresholdStates.STARTED);
+        checkBIP9Info(bip9info, { status: 'started' });
+
+        checkBIP9Statistcs(bip9info.statistics, {
+          elapsed: maxFailures + 1,
+          count: 0,
+          possible: false
+        });
+      }
+
+      // finish the whole window.
+      for (let i = 0; i < activationThreshold - 1; i++)
+        await mineBlock(node);
+
+      {
+        const state = await getICANNLockupState(chain);
+        const bip9info = await getBIP9Info(nodeClient, SOFT_FORK_NAME);
+        assert.strictEqual(state, thresholdStates.STARTED);
+        checkBIP9Info(bip9info, { status: 'started' });
+
+        checkBIP9Statistcs(bip9info.statistics, {
+          elapsed: 0,
+          count: 0,
+          possible: true
+        });
+      }
+    });
+
+    it('should fail second window by 1 vote', async () => {
+      // Because we want this new window to be the last one,
+      // here we manipulate the deployment timeout.
+      // Because the deployment state in the window gets
+      // cached, we can safely modify timeout in the beginning of the
+      // window.
+      deployments[SOFT_FORK_NAME].timeout = 1;
+
+      for (let i = 0; i < activationThreshold - 1; i++)
+        await mineBlock(node, { setICANNLockup: true });
+
+      {
+        const state = await getICANNLockupState(chain);
+        const bip9info = await getBIP9Info(nodeClient, SOFT_FORK_NAME);
+        assert.strictEqual(state, thresholdStates.STARTED);
+        checkBIP9Info(bip9info, { status: 'started' });
+
+        checkBIP9Statistcs(bip9info.statistics, {
+          elapsed: activationThreshold - 1,
+          count: activationThreshold - 1,
+          possible: true
+        });
+      }
+
+      // mine everything else w/o a vote.
+      for (let i = 0; i < minerWindow - activationThreshold; i++) {
+        await mineBlock(node);
+
+        const state = await getICANNLockupState(chain);
+        const bip9info = await getBIP9Info(nodeClient, SOFT_FORK_NAME);
+        assert.strictEqual(state, thresholdStates.STARTED);
+        checkBIP9Info(bip9info, { status: 'started' });
+
+        checkBIP9Statistcs(bip9info.statistics, {
+          elapsed: activationThreshold + i,
+          count: activationThreshold - 1,
+          possible: true
+        });
+      }
+
+      {
+        const state = await getICANNLockupState(chain);
+        const bip9info = await getBIP9Info(nodeClient, SOFT_FORK_NAME);
+        assert.strictEqual(state, thresholdStates.STARTED);
+        checkBIP9Info(bip9info, { status: 'started' });
+
+        checkBIP9Statistcs(bip9info.statistics, {
+          elapsed: minerWindow - 1,
+          count: activationThreshold - 1,
+          possible: true
+        });
+      }
+
+      // After this it should go to the FAILED state.
+      await mineBlock(node);
+
+      {
+        const state = await getICANNLockupState(chain);
+        const bip9info = await getBIP9Info(nodeClient, SOFT_FORK_NAME);
+        assert.strictEqual(state, thresholdStates.FAILED);
+        checkBIP9Info(bip9info, { status: 'failed' });
+
+        assert(!bip9info.statistics);
+      }
+    });
+
+    it('should still allow claims before claimPeriod', async () => {
+      // Just go on the edge of the claim period.
+      // Leave a room for the next test.
+      while (chain.tip.height < network.names.claimPeriod - 4)
+        await mineBlock(node);
+
+      const custom = FCUSTOM.shift();
+      const top100 = FTOP100.shift();
+
+      const names = [custom, top100];
+
+      const mempoolClaim = forEvent(node.mempool, 'claim', names.length, 20000);
+
+      for (const name of names) {
+        const claim = await wallet.makeFakeClaim(name);
+        await node.mempool.insertClaim(claim);
+      }
+
+      await mempoolClaim;
+      assert.strictEqual(node.mempool.claims.size, names.length);
+      await mineBlock(node);
+    });
+
+    it('should fail to claim and invalidate', async () => {
+      const root = FROOT.shift();
+      const other = FOTHER.shift();
+
+      const rootClaim = await wallet.makeFakeClaim(root);
+      const otherClaim = await wallet.makeFakeClaim(other);
+
+      // Should insert one claim in the mempool.
+      await node.mempool.insertClaim(rootClaim);
+      assert.strictEqual(node.mempool.claims.size, 1);
+
+      await mineBlock(node, { ignoreClaims: true });
+      assert.strictEqual(node.mempool.claims.size, 1);
+
+      while (chain.tip.height < network.names.claimPeriod - 1) {
+        assert.strictEqual(node.mempool.claims.size, 1);
+        await mineBlock(node, { ignoreClaims: true });
+      }
+
+      // Claim should get invalidated.
+      assert.strictEqual(node.mempool.claims.size, 0);
+
+      let err;
+
+      try {
+        await node.mempool.insertClaim(otherClaim);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.type, 'VerifyError');
+      assert.strictEqual(err.reason, 'invalid-covenant');
+
+      assert.strictEqual(node.mempool.claims.size, 0);
+    });
+
+    it('should open the auction', async () => {
+      const root = FROOT.shift();
+      const custom = FCUSTOM.shift();
+      const top100 = FTOP100.shift();
+      const other = FOTHER.shift();
+
+      const names = [root, custom, top100, other];
+
+      const opens = forEvent(node.mempool, 'tx', names.length, 20000);
+
+      for (const name of names) {
+        const mtx = await wallet.createOpen(name);
+        await wallet.sign(mtx);
+        const tx = mtx.toTX();
+        await wdb.addTX(tx);
+        await node.mempool.addTX(tx);
+      }
+
+      await opens;
+
+      await mineBlock(node);
+
+      for (const name of names) {
+        const ns = await nodeClient.execute('getnameinfo', [name]);
+        assert(!ns.start.locked);
+        assert.strictEqual(ns.info.state, 'OPENING');
+      }
+
+      for (let i = 0; i < network.names.treeInterval + 1; i++)
+        await mineBlock(node);
+
+      for (const name of names) {
+        const ns = await nodeClient.execute('getnameinfo', [name]);
+        assert(!ns.start.locked);
+        assert.strictEqual(ns.info.state, 'BIDDING');
+      }
+    });
+  });
+
+  describe('BIP9 - ICANN lockup - success (integration)', function() {
+    this.timeout(20000);
+
+    let node, chain;
+    let nodeClient, walletClient;
+    let wdb, wallet;
+
+    const FROOT = ROOT.slice();
+    const FTOP100 = TOP100.slice();
+    const FCUSTOM = CUSTOM.slice();
+    const FOTHER = OTHER.slice();
+
+    before(async () => {
+      node = new FullNode({
+        memory: true,
+        network: network.type,
+        plugins: [require('../lib/wallet/plugin')]
+      });
+
+      await node.ensure();
+      await node.open();
+
+      chain = node.chain;
+
+      deployments[SOFT_FORK_NAME].startTime = 0;
+      deployments[SOFT_FORK_NAME].timeout = 0xffffffff;
+      network.names.claimPeriod = minerWindow * 4;
+
+      // Ignore claim validation
+      ownership.ignore = true;
+
+      nodeClient = new NodeClient({
+        port: network.rpcPort,
+        timeout: 10000
+      });
+
+      walletClient = new WalletClient({
+        port: network.walletPort,
+        timeout: 10000
+      });
+
+      const walletPlugin = node.require('walletdb');
+      wdb = walletPlugin.wdb;
+      wallet = await wdb.get('primary');
+
+      const account = await walletClient.getAccount('primary', 'default');
+      const receive = account.receiveAddress;
+      node.miner.addAddress(receive);
+
+      await walletClient.execute('selectwallet', ['primary']);
+    });
+
+    after(async () => {
+      // Enable claim validation
+      ownership.ignore = false;
+
+      // Enable claim validation
+      // ownership.ignore = false;
+      deployments[SOFT_FORK_NAME].startTime = ACTUAL_START;
+      deployments[SOFT_FORK_NAME].timeout = ACTUAL_TIMEOUT;
+      network.names.claimPeriod = ACTUAL_CLAIM_PERIOD;
+
+      await node.close();
+    });
+
+    it('should get deployment stats', async () => {
+      const state = await getICANNLockupState(chain);
+      const bip9info = await getBIP9Info(nodeClient, SOFT_FORK_NAME);
+
+      assert.strictEqual(state, thresholdStates.DEFINED);
+      checkBIP9Info(bip9info, { status: 'defined' });
+    });
+
+    it('should start the soft-fork', async () => {
+      for (let i = 0; i < minerWindow - 2; i++)
+        await mineBlock(node);
+
+      // We are now at the threshold of the window.
+      {
+        const state = await getICANNLockupState(chain);
+        const bip9info = await getBIP9Info(nodeClient, SOFT_FORK_NAME);
+        assert.strictEqual(state, thresholdStates.DEFINED);
+        checkBIP9Info(bip9info, { status: 'defined' });
+      }
+
+      // go into new window and change the state to started.
+      await mineBlock(node);
+
+      {
+        const state = await getICANNLockupState(chain);
+        const bip9info = await getBIP9Info(nodeClient, SOFT_FORK_NAME);
+        assert.strictEqual(state, thresholdStates.STARTED);
+        checkBIP9Info(bip9info, { status: 'started' });
+
+        assert.deepStrictEqual(bip9info.statistics, {
+          period: minerWindow,
+          threshold: activationThreshold,
+          elapsed: 0,
+          count: 0,
+          possible: true
+        });
+      }
+    });
+
+    it('should fail to OPEN for the claimable names', async () => {
+      let err;
+      try {
+        await walletClient.createOpen('primary', {
+          name: FROOT[0]
+        });
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert(err.message, `Name is reserved: ${FROOT[0]}`);
+    });
+
+    it('should be possible to claim for now', async () => {
+      const root = FROOT.shift();
+      const other = FOTHER.shift();
+
+      const names = [root, other];
+
+      const mempoolClaim = forEvent(node.mempool, 'claim', names.length, 20000);
+
+      for (const name of names) {
+        const claim = await wallet.makeFakeClaim(name);
+        await wdb.sendClaim(claim);
+      }
+
+      await mempoolClaim;
+
+      assert.strictEqual(node.mempool.claims.size, names.length);
+    });
+
+    it('should fail first window right away', async () => {
+      const maxFailures = minerWindow - activationThreshold;
+
+      for (let i = 0; i < maxFailures; i++)
+        await mineBlock(node);
+
+      {
+        const state = await getICANNLockupState(chain);
+        const bip9info = await getBIP9Info(nodeClient, SOFT_FORK_NAME);
+        assert.strictEqual(state, thresholdStates.STARTED);
+        checkBIP9Info(bip9info, { status: 'started' });
+
+        checkBIP9Statistcs(bip9info.statistics, {
+          elapsed: maxFailures,
+          count: 0,
+          possible: true
+        });
+      }
+
+      await mineBlock(node);
+
+      {
+        const state = await getICANNLockupState(chain);
+        const bip9info = await getBIP9Info(nodeClient, SOFT_FORK_NAME);
+        assert.strictEqual(state, thresholdStates.STARTED);
+        checkBIP9Info(bip9info, { status: 'started' });
+
+        checkBIP9Statistcs(bip9info.statistics, {
+          elapsed: maxFailures + 1,
+          count: 0,
+          possible: false
+        });
+      }
+
+      // finish the whole window.
+      for (let i = 0; i < activationThreshold - 1; i++)
+        await mineBlock(node);
+
+      {
+        const state = await getICANNLockupState(chain);
+        const bip9info = await getBIP9Info(nodeClient, SOFT_FORK_NAME);
+        assert.strictEqual(state, thresholdStates.STARTED);
+        checkBIP9Info(bip9info, { status: 'started' });
+
+        checkBIP9Statistcs(bip9info.statistics, {
+          elapsed: 0,
+          count: 0,
+          possible: true
+        });
+      }
+    });
+
+    it('should succeed second window by 1 vote', async () => {
+      for (let i = 0; i < activationThreshold; i++)
+        await mineBlock(node, { setICANNLockup: true });
+
+      {
+        const state = await getICANNLockupState(chain);
+        const bip9info = await getBIP9Info(nodeClient, SOFT_FORK_NAME);
+        assert.strictEqual(state, thresholdStates.STARTED);
+        checkBIP9Info(bip9info, { status: 'started' });
+
+        checkBIP9Statistcs(bip9info.statistics, {
+          elapsed: activationThreshold,
+          count: activationThreshold,
+          possible: true
+        });
+      }
+
+      // mine everything else w/o a vote.
+      for (let i = 0; i < minerWindow - activationThreshold - 1; i++) {
+        await mineBlock(node);
+
+        const state = await getICANNLockupState(chain);
+        const bip9info = await getBIP9Info(nodeClient, SOFT_FORK_NAME);
+        assert.strictEqual(state, thresholdStates.STARTED);
+        checkBIP9Info(bip9info, { status: 'started' });
+
+        checkBIP9Statistcs(bip9info.statistics, {
+          elapsed: activationThreshold + i + 1,
+          count: activationThreshold,
+          possible: true
+        });
+      }
+
+      {
+        const state = await getICANNLockupState(chain);
+        const bip9info = await getBIP9Info(nodeClient, SOFT_FORK_NAME);
+        assert.strictEqual(state, thresholdStates.STARTED);
+        checkBIP9Info(bip9info, { status: 'started' });
+
+        checkBIP9Statistcs(bip9info.statistics, {
+          elapsed: minerWindow - 1,
+          count: activationThreshold,
+          possible: true
+        });
+      }
+
+      // After this it should go to the ACTIVE state.
+      await mineBlock(node);
+
+      {
+        const state = await getICANNLockupState(chain);
+        const bip9info = await getBIP9Info(nodeClient, SOFT_FORK_NAME);
+
+        assert.strictEqual(state, thresholdStates.LOCKED_IN);
+        checkBIP9Info(bip9info, { status: 'locked_in' });
+
+        assert(!bip9info.statistics);
+      }
+    });
+
+    it('should still allow claims before claimPeriod', async () => {
+      // Just go on the edge of the claim period.
+      // Leave a room for the next test.
+      while (chain.tip.height < network.names.claimPeriod - 4)
+        await mineBlock(node);
+
+      const custom = FCUSTOM.shift();
+      const top100 = FTOP100.shift();
+
+      const names = [custom, top100];
+
+      const mempoolClaim = forEvent(node.mempool, 'claim', names.length, 20000);
+
+      for (const name of names) {
+        const claim = await wallet.makeFakeClaim(name);
+        await node.mempool.insertClaim(claim);
+      }
+
+      await mempoolClaim;
+      assert.strictEqual(node.mempool.claims.size, names.length);
+      await mineBlock(node);
+    });
+
+    it('should fail to claim and invalidate', async () => {
+      const root = FROOT.shift();
+      const other = FOTHER.shift();
+
+      const rootClaim = await wallet.makeFakeClaim(root);
+      const otherClaim = await wallet.makeFakeClaim(other);
+
+      await node.mempool.insertClaim(rootClaim);
+      assert.strictEqual(node.mempool.claims.size, 1);
+
+      await mineBlock(node, { ignoreClaims: true });
+      assert.strictEqual(node.mempool.claims.size, 1);
+
+      while (chain.tip.height < network.names.claimPeriod - 1) {
+        assert.strictEqual(node.mempool.claims.size, 1);
+        await mineBlock(node, { ignoreClaims: true });
+      }
+
+      assert.strictEqual(node.chain.tip.height + 1, network.names.claimPeriod);
+      // Claim should get invalidated.
+      assert.strictEqual(node.mempool.claims.size, 0);
+
+      let err;
+
+      try {
+        await node.mempool.insertClaim(otherClaim);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.type, 'VerifyError');
+      assert.strictEqual(err.reason, 'invalid-covenant');
+
+      assert.strictEqual(node.mempool.claims.size, 0);
+    });
+
+    it('should fail to open the auction for ICANN TLDs', async () => {
+      const root = FROOT.shift();
+      const custom = FCUSTOM.shift();
+      const top100 = FTOP100.shift();
+
+      const names = [root, custom, top100];
+
+      for (const name of names) {
+        const mtx = await wallet.createOpen(name);
+        await wallet.sign(mtx);
+        const tx = mtx.toTX();
+        await wdb.addTX(tx);
+
+        let err;
+        try {
+          await node.mempool.addTX(tx);
+        } catch (e) {
+          err = e;
+        }
+
+        assert(err);
+        assert.strictEqual(err.type, 'VerifyError');
+        assert.strictEqual(err.reason, 'invalid-covenant');
+        assert.strictEqual(node.mempool.claims.size, 0);
+      }
+
+      await mineBlock(node);
+
+      for (const name of names) {
+        const ns = await nodeClient.execute('getnameinfo', [name]);
+        assert.strictEqual(ns.start.locked, true);
+        assert.strictEqual(ns.info, null);
+      }
+    });
+
+    it('should open auction for OTHERs', async () => {
+      const names = [...FOTHER];
+
+      const opens = forEvent(node.mempool, 'tx', names.length, 20000);
+
+      for (const name of names) {
+        const tx = await wallet.sendOpen(name);
+        assert(tx);
+      }
+
+      await opens;
+      await mineBlock(node);
+
+      for (const name of names) {
+        const ns = await nodeClient.execute('getnameinfo', [name]);
+        assert.strictEqual(ns.start.locked, false);
+        assert.strictEqual(ns.info.state, 'OPENING');
+      }
+
+      for (let i = 0; i < network.names.treeInterval + 1; i++)
+        await mineBlock(node);
+
+      for (const name of names) {
+        const ns = await nodeClient.execute('getnameinfo', [name]);
+        assert(!ns.start.locked);
+        assert.strictEqual(ns.info.state, 'BIDDING');
+      }
+    });
+  });
+});
+
+async function mineBlock(node, opts = {}) {
+  assert(node);
+  const chain = node.chain;
+  const miner = node.miner;
+
+  const setICANNLockup = opts.setICANNLockup || false;
+  const ignoreClaims = opts.ignoreClaims || false;
+
+  const forBlock = forEvent(node, 'block', 1, 2000);
+
+  let backupClaims = null;
+
+  if (ignoreClaims) {
+    backupClaims = node.mempool.claims;
+    node.mempool.claims = new BufferMap();
+  }
+
+  const job = await miner.cpu.createJob(chain.tip);
+
+  if (setICANNLockup)
+    job.attempt.version |= (1 << deployments[SOFT_FORK_NAME].bit);
+
+  job.refresh();
+
+  if (ignoreClaims)
+    node.mempool.claims = backupClaims;
+
+  const block = await job.mineAsync();
+  await chain.add(block);
+  await forBlock;
+
+  return block;
+}
+
+async function getICANNLockupState(chain) {
+  const prev = chain.tip;
+  const state =  await chain.getState(prev, deployments.icannlockup);
+  return state;
+}
+
+async function getBIP9Info(nodeClient, name) {
+  const info = await nodeClient.execute('getblockchaininfo');
+  return info.softforks[name];
+}
