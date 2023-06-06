@@ -21,6 +21,7 @@ const minerWindow = network.minerWindow;
 const ACTUAL_START = deployments[SOFT_FORK_NAME].startTime;
 const ACTUAL_TIMEOUT = deployments[SOFT_FORK_NAME].timeout;
 const ACTUAL_CLAIM_PERIOD = network.names.claimPeriod;
+const ACTUAL_RENEWAL_WINDOW = network.names.renewalWindow;
 
 /*
  * Test ICANN LOCKUP activation paths.
@@ -160,6 +161,9 @@ describe('BIP9 - ICANN lockup (integration)', function() {
     const FTOP100 = TOP100.slice();
     const FCUSTOM = CUSTOM.slice();
     const FOTHER = OTHER.slice();
+    const CLAIMED = [];
+    const CLAIMED_ROOT = [];
+    const CLAIMED_OTHER = [];
 
     before(async () => {
       node = new FullNode({
@@ -176,6 +180,7 @@ describe('BIP9 - ICANN lockup (integration)', function() {
       deployments[SOFT_FORK_NAME].startTime = 0;
       deployments[SOFT_FORK_NAME].timeout = 0xffffffff;
       network.names.claimPeriod = minerWindow * 4;
+      network.names.renewalWindow = minerWindow * 6;
 
       // Ignore claim validation
       ownership.ignore = true;
@@ -208,6 +213,7 @@ describe('BIP9 - ICANN lockup (integration)', function() {
       deployments[SOFT_FORK_NAME].startTime = ACTUAL_START;
       deployments[SOFT_FORK_NAME].timeout = ACTUAL_TIMEOUT;
       network.names.claimPeriod = ACTUAL_CLAIM_PERIOD;
+      network.names.renewalWindow = ACTUAL_RENEWAL_WINDOW;
 
       await node.close();
     });
@@ -269,18 +275,25 @@ describe('BIP9 - ICANN lockup (integration)', function() {
       const root = FROOT.shift();
       const other = FOTHER.shift();
 
-      const names = [root, other];
+      const mempoolClaim = forEvent(node.mempool, 'claim', 2, 20000);
 
-      const mempoolClaim = forEvent(node.mempool, 'claim', names.length, 20000);
-
-      for (const name of names) {
-        const claim = await wallet.makeFakeClaim(name);
+      {
+        const claim = await wallet.makeFakeClaim(root);
         await wdb.sendClaim(claim);
+        CLAIMED.push(root);
+        CLAIMED_ROOT.push(root);
+      }
+
+      {
+        const claim = await wallet.makeFakeClaim(other);
+        await wdb.sendClaim(claim);
+        CLAIMED.push(other);
+        CLAIMED_OTHER.push(other);
       }
 
       await mempoolClaim;
 
-      assert.strictEqual(node.mempool.claims.size, names.length);
+      assert.strictEqual(node.mempool.claims.size, 2);
     });
 
     it('should fail first window right away', async () => {
@@ -498,6 +511,56 @@ describe('BIP9 - ICANN lockup (integration)', function() {
         assert.strictEqual(ns.info.state, 'BIDDING');
       }
     });
+
+    it('should open expired claims', async () => {
+      const rootName = CLAIMED_ROOT[0];
+      const otherName = CLAIMED_OTHER[0];
+      const names = [rootName, otherName];
+
+      const root = await nodeClient.execute('getnameinfo', [rootName]);
+      const other = await nodeClient.execute('getnameinfo', [otherName]);
+      const commitHeight = root.info.height;
+      const expireHeight = commitHeight + network.names.renewalWindow;
+
+      // They were claimed in the same block.
+      assert.strictEqual(root.info.height, other.info.height);
+      assert.ok(expireHeight > network.names.claimPeriod);
+
+      // let them expire.
+      while (chain.tip.height < expireHeight)
+        await mineBlock(node);
+
+      for (const name of names) {
+        const nameExp = await nodeClient.execute('getnameinfo', [name]);
+        assert.strictEqual(nameExp.info, null);
+      }
+
+      // Only OTHER open gets added.
+      const opens = forEvent(node.mempool, 'tx', names.length, 20000);
+
+      for (const name of names) {
+        const mtx = await wallet.createOpen(name);
+        await wallet.sign(mtx);
+        const tx = await mtx.toTX();
+        await wdb.addTX(tx);
+        await node.mempool.addTX(tx);
+      }
+
+      await opens;
+      await mineBlock(node);
+
+      for (const name of names) {
+        const afterOpen = await nodeClient.execute('getnameinfo', [name]);
+        assert.strictEqual(afterOpen.info.state, 'OPENING');
+      }
+
+      await mineNBlocks(network.names.treeInterval + 1, node);
+
+      for (const name of names) {
+        const nameAfterInterval = await nodeClient.execute('getnameinfo', [name]);
+        assert.strictEqual(nameAfterInterval.info.state, 'BIDDING');
+      }
+    });
   });
 
   describe('BIP9 - ICANN lockup - success (integration)', function() {
@@ -511,6 +574,9 @@ describe('BIP9 - ICANN lockup (integration)', function() {
     const FTOP100 = TOP100.slice();
     const FCUSTOM = CUSTOM.slice();
     const FOTHER = OTHER.slice();
+    const CLAIMED = [];
+    const CLAIMED_ROOT = [];
+    const CLAIMED_OTHER = [];
 
     before(async () => {
       node = new FullNode({
@@ -527,6 +593,7 @@ describe('BIP9 - ICANN lockup (integration)', function() {
       deployments[SOFT_FORK_NAME].startTime = 0;
       deployments[SOFT_FORK_NAME].timeout = 0xffffffff;
       network.names.claimPeriod = minerWindow * 4;
+      network.names.renewalWindow = minerWindow * 6;
 
       // Ignore claim validation
       ownership.ignore = true;
@@ -561,6 +628,7 @@ describe('BIP9 - ICANN lockup (integration)', function() {
       deployments[SOFT_FORK_NAME].startTime = ACTUAL_START;
       deployments[SOFT_FORK_NAME].timeout = ACTUAL_TIMEOUT;
       network.names.claimPeriod = ACTUAL_CLAIM_PERIOD;
+      network.names.renewalWindow = ACTUAL_RENEWAL_WINDOW;
 
       await node.close();
     });
@@ -574,8 +642,7 @@ describe('BIP9 - ICANN lockup (integration)', function() {
     });
 
     it('should start the soft-fork', async () => {
-      for (let i = 0; i < minerWindow - 2; i++)
-        await mineBlock(node);
+      await mineNBlocks(minerWindow - 2, node);
 
       // We are now at the threshold of the window.
       {
@@ -622,25 +689,33 @@ describe('BIP9 - ICANN lockup (integration)', function() {
       const root = FROOT.shift();
       const other = FOTHER.shift();
 
-      const names = [root, other];
+      const mempoolClaim = forEvent(node.mempool, 'claim', 2, 20000);
 
-      const mempoolClaim = forEvent(node.mempool, 'claim', names.length, 20000);
-
-      for (const name of names) {
-        const claim = await wallet.makeFakeClaim(name);
+      {
+        // send ICANN TLD.
+        const claim = await wallet.makeFakeClaim(root);
         await wdb.sendClaim(claim);
+        CLAIMED.push(root);
+        CLAIMED_ROOT.push(root);
+      }
+
+      {
+        // send OTHER.
+        const claim = await wallet.makeFakeClaim(other);
+        await wdb.sendClaim(claim);
+        CLAIMED.push(other);
+        CLAIMED_OTHER.push(other);
       }
 
       await mempoolClaim;
 
-      assert.strictEqual(node.mempool.claims.size, names.length);
+      assert.strictEqual(node.mempool.claims.size, 2);
     });
 
     it('should fail first window right away', async () => {
       const maxFailures = minerWindow - activationThreshold;
 
-      for (let i = 0; i < maxFailures; i++)
-        await mineBlock(node);
+      await mineNBlocks(maxFailures, node);
 
       {
         const state = await getICANNLockupState(chain);
@@ -671,8 +746,7 @@ describe('BIP9 - ICANN lockup (integration)', function() {
       }
 
       // finish the whole window.
-      for (let i = 0; i < activationThreshold - 1; i++)
-        await mineBlock(node);
+      await mineNBlocks(activationThreshold - 1, node);
 
       {
         const state = await getICANNLockupState(chain);
@@ -689,8 +763,7 @@ describe('BIP9 - ICANN lockup (integration)', function() {
     });
 
     it('should succeed second window by 1 vote', async () => {
-      for (let i = 0; i < activationThreshold; i++)
-        await mineBlock(node, { setICANNLockup: true });
+      await mineNBlocks(activationThreshold, node, { setICANNLockup: true });
 
       {
         const state = await getICANNLockupState(chain);
@@ -862,8 +935,7 @@ describe('BIP9 - ICANN lockup (integration)', function() {
         assert.strictEqual(ns.info.state, 'OPENING');
       }
 
-      for (let i = 0; i < network.names.treeInterval + 1; i++)
-        await mineBlock(node);
+      await mineNBlocks(network.names.treeInterval + 1, node);
 
       for (const name of names) {
         const ns = await nodeClient.execute('getnameinfo', [name]);
@@ -871,8 +943,81 @@ describe('BIP9 - ICANN lockup (integration)', function() {
         assert.strictEqual(ns.info.state, 'BIDDING');
       }
     });
+
+    it('should fail to open expired TLDs, but open for OTHERs', async () => {
+      const rootName = CLAIMED_ROOT[0];
+      const otherName = CLAIMED_OTHER[0];
+      const root = await nodeClient.execute('getnameinfo', [rootName]);
+      const other = await nodeClient.execute('getnameinfo', [otherName]);
+      const commitHeight = root.info.height;
+      const expireHeight = commitHeight + network.names.renewalWindow;
+
+      // They were claimed in the same block.
+      assert.strictEqual(root.info.height, other.info.height);
+      assert.ok(expireHeight > network.names.claimPeriod);
+
+      // let them expire.
+      while (chain.tip.height < expireHeight)
+        await mineBlock(node);
+
+      const rootExp0 = await nodeClient.execute('getnameinfo', [rootName]);
+      const otherExp = await nodeClient.execute('getnameinfo', [otherName]);
+      assert.strictEqual(rootExp0.info, null);
+      assert.strictEqual(otherExp.info, null);
+
+      // Only OTHER open gets added.
+      const opens = forEvent(node.mempool, 'tx', 1, 20000);
+
+      // Fail for the TLD.
+      let err;
+
+      {
+        const mtx = await wallet.createOpen(rootName);
+        await wallet.sign(mtx);
+        const tx = await mtx.toTX();
+        await wdb.addTX(tx);
+
+        try {
+          await node.mempool.addTX(tx);
+        } catch (e) {
+          err = e;
+        }
+      }
+
+      assert(err);
+      assert.strictEqual(err.type, 'VerifyError');
+      assert.strictEqual(err.reason, 'invalid-covenant');
+
+      {
+        // Should not fail for OTHER (as they are auctionable)
+        const mtx = await wallet.createOpen(otherName);
+        await wallet.sign(mtx);
+        const tx = await mtx.toTX();
+        await wdb.addTX(tx);
+        await node.mempool.addTX(tx);
+      }
+
+      await opens;
+      await mineBlock(node);
+
+      const rootAfterOpen = await nodeClient.execute('getnameinfo', [rootName]);
+      assert.strictEqual(rootAfterOpen.start.locked, true);
+      assert.strictEqual(rootAfterOpen.info, null);
+
+      const otherAfterOpen = await nodeClient.execute('getnameinfo', [otherName]);
+      assert.strictEqual(otherAfterOpen.info.state, 'OPENING');
+
+      await mineNBlocks(network.names.treeInterval + 1, node);
+      const otherAfterInterval = await nodeClient.execute('getnameinfo', [otherName]);
+      assert.strictEqual(otherAfterInterval.info.state, 'BIDDING');
+    });
   });
 });
+
+async function mineNBlocks(n, node, opts = {}) {
+  for (let i = 0; i < n; i++)
+    await mineBlock(node, opts);
+}
 
 async function mineBlock(node, opts = {}) {
   assert(node);
