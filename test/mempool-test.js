@@ -33,7 +33,7 @@ const rules = require('../lib/covenants/rules');
 const {types} = rules;
 const NameState = require('../lib/covenants/namestate');
 const {states} = NameState;
-const ownership = require('../lib/covenants/ownership');
+const {ownership} = require('../lib/covenants/ownership');
 
 const ONE_HASH = Buffer.alloc(32, 0x00);
 ONE_HASH[0] = 0x01;

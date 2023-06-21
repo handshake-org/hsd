@@ -4,7 +4,7 @@ const assert = require('bsert');
 const {BufferMap} = require('buffer-map');
 const Network = require('../lib/protocol/network');
 const FullNode = require('../lib/node/fullnode');
-const ownership = require('../lib/covenants/ownership');
+const {ownership} = require('../lib/covenants/ownership');
 const rules = require('../lib/covenants/rules');
 const {forEvent} = require('./util/common');
 

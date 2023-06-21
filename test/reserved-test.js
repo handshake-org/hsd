@@ -24,7 +24,10 @@ describe('Reserved', function() {
         'hex'),
       target: 'twitter.com.',
       value: 630133143116,
-      root: false
+      root: false,
+      top100: true,
+      custom: false,
+      zero: false
     });
   });
 
@@ -39,7 +42,10 @@ describe('Reserved', function() {
         'hex'),
       target: 'craigslist.org.',
       value: 503513487,
-      root: false
+      root: false,
+      top100: false,
+      custom: false,
+      zero: false
     });
   });
 
@@ -54,7 +60,10 @@ describe('Reserved', function() {
         'hex'),
       target: 'google.',
       value: 660214983416,
-      root: true
+      root: true,
+      top100: true,
+      custom: false,
+      zero: false
     });
   });
 
@@ -69,7 +78,10 @@ describe('Reserved', function() {
         'hex'),
       target: 'eth.ens.domains.',
       value: 136503513487,
-      root: false
+      root: false,
+      top100: false,
+      custom: true,
+      zero: false
     });
   });
 
@@ -90,7 +102,10 @@ describe('Reserved', function() {
         'hex'),
       target: 'kp.',
       value: 0,
-      root: true
+      root: true,
+      top100: false,
+      custom: false,
+      zero: true
     });
   });
 
@@ -133,7 +148,10 @@ describe('Reserved', function() {
         hash: Buffer.from(hash, 'hex'),
         target: name,
         value,
-        root
+        root,
+        top100,
+        custom,
+        zero
       });
 
       total += value;

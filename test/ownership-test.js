@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('bsert');
-const ownership = require('../lib/covenants/ownership');
+const {ownership} = require('../lib/covenants/ownership');
 const Address = require('../lib/primitives/address');
 const Network = require('../lib/protocol/network');
 const network = Network.get('regtest');
