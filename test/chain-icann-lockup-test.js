@@ -44,7 +44,7 @@ const ACTUAL_RENEWAL_WINDOW = network.names.renewalWindow;
  * Test will run failure and success paths and make sure both give
  * results soft-fork expects:
  *  - on failure: names can be auctioned.
- *  - on success: root, top100, custom and zero become
+ *  - on success: root, custom, and zero become
  *  unauctionable via mempool and blocks, for those running
  *  the node with updated software.
  */
@@ -118,14 +118,14 @@ describe('BIP9 - ICANN lockup (integration)', function() {
       });
     }
 
-    for (const name of [...ROOT, ...TOP100, ...CUSTOM]) {
+    for (const name of [...ROOT, ...CUSTOM]) {
       testCases.push({
         name,
         lockup: true,
         reserved: false,
         height: claimPeriod,
         testName: `should lockup after extended period times out (${name}), `
-          + 'and not be reserved (ROOT, TOP100, CUSTOM)'
+          + 'and not be reserved (ROOT, CUSTOM)'
       });
     }
 
@@ -884,9 +884,8 @@ describe('BIP9 - ICANN lockup (integration)', function() {
     it('should fail to open the auction for ICANN TLDs', async () => {
       const root = FROOT.shift();
       const custom = FCUSTOM.shift();
-      const top100 = FTOP100.shift();
 
-      const names = [root, custom, top100];
+      const names = [root, custom];
 
       for (const name of names) {
         const mtx = await wallet.createOpen(name);
