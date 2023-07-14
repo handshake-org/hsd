@@ -828,15 +828,28 @@ describe('Wallet Auction', function() {
       let startHeight;
 
       const oldRenewalWindow = network.names.renewalWindow;
-      before(() => {
+      let oldLookahead;
+
+      before(async () => {
         network.names.renewalWindow = 160;
 
         for (let i = 0; i < 800; i++)
           names.push(`name_${i}`);
+
+        // Increase lookahead
+        oldLookahead = (await wallet.getAccount('default')).lookahead;
+        await wallet.modifyAccount('default', {
+          lookahead: consensus.MAX_BLOCK_OPENS + 1
+        });
       });
 
-      after(() => {
+      after(async () => {
         network.names.renewalWindow = oldRenewalWindow;
+
+        // Reset lookahead
+        await wallet.modifyAccount('default', {
+          lookahead: oldLookahead
+        });
       });
 
       it('should not batch too many OPENs', async () => {
@@ -846,7 +859,7 @@ describe('Wallet Auction', function() {
 
         await assert.rejects(
           wallet.createBatch(batch),
-          {message: 'Too many OPENs.'} // Might exceed wallet lookahead also
+          {message: 'Too many OPENs.'}
         );
       });
 
