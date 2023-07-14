@@ -44,7 +44,7 @@ const ACTUAL_RENEWAL_WINDOW = network.names.renewalWindow;
  * Test will run failure and success paths and make sure both give
  * results soft-fork expects:
  *  - on failure: names can be auctioned.
- *  - on success: root, top100, custom and zero become
+ *  - on success: root and top10k
  *  unauctionable via mempool and blocks, for those running
  *  the node with updated software.
  */
@@ -58,10 +58,12 @@ describe('BIP9 - ICANN lockup (integration)', function() {
     'dnscrypt'
   ];
 
-  const TOP100 = [
+  // Names from 10k alexa.
+  const TOP10k = [
     'paypal',
-    'baidu',
-    'sohu'
+    'steamdb',
+    'nvidia',
+    'docker'
   ];
 
   const ROOT = [
@@ -69,11 +71,12 @@ describe('BIP9 - ICANN lockup (integration)', function() {
     'fr',
     'aw',
     'pl',
-    'nc'
+    'baidu'
   ];
 
+  // These will get unreserved for because they fall out of 10k.
   const OTHER = [
-    'steamdb',
+    'web',
     'ishares',
     'bforbank',
     'raspbian-france'
@@ -103,40 +106,61 @@ describe('BIP9 - ICANN lockup (integration)', function() {
 
   describe('Rules', function() {
     const main = Network.get('main');
-    const {claimPeriod} = main.names;
+    const {claimPeriod, alexaLockupPeriod} = main.names;
 
     const testCases = [];
 
-    for (const name of [...ROOT, ...TOP100, ...CUSTOM, ...OTHER]) {
+    for (const name of [...ROOT, ...TOP10k, ...CUSTOM, ...OTHER]) {
       testCases.push({
         name,
         lockup: false,
         reserved: true,
         height: claimPeriod - 1,
-        testName: `should not lockup before extended period times out (${name}), `
+        testName: `should not lockup before claim period ends (${name}), `
           + 'and be reserved (ALL)'
       });
     }
 
-    for (const name of [...ROOT, ...TOP100, ...CUSTOM]) {
+    for (const name of [...ROOT, ...TOP10k, ...CUSTOM]) {
       testCases.push({
         name,
         lockup: true,
         reserved: false,
         height: claimPeriod,
-        testName: `should lockup after extended period times out (${name}), `
-          + 'and not be reserved (ROOT, TOP100, CUSTOM)'
+        testName: 'should get locked after claim period ends and '
+          + `before alexaLockupPeriod ends (ROOT, TOP 10k) (${name})`
       });
     }
 
-    for (const name of OTHER) {
+    for (const name of [...ROOT, ...TOP10k, ...CUSTOM]) {
+      testCases.push({
+        name,
+        lockup: true,
+        reserved: false,
+        height: alexaLockupPeriod - 1,
+        testName: 'should get locked after claim period ends and '
+          + `before alexaLockupPeriod ends (ROOT, TOP 10k) (${name}) (last)`
+      });
+    }
+
+    for (const name of [...ROOT]) {
+      testCases.push({
+        name,
+        lockup: true,
+        reserved: false,
+        height: alexaLockupPeriod,
+        testName: `should get locked even after alexaLockupPeriod (ROOT) (${name})`
+      });
+    }
+
+    // after another 4 years all names will become tradeable.
+    for (const name of [...TOP10k, ...CUSTOM, ...OTHER]) {
       testCases.push({
         name,
         lockup: false,
         reserved: false,
-        height: claimPeriod,
-        testName: `should not lockup after extended period times out (${name}), `
-          + 'and not be reserved (OTHER))'
+        height: alexaLockupPeriod,
+        testName: `should get unlocked after alexaLockupPeriod (NON-ROOT) (${name})`
       });
     }
 
@@ -158,7 +182,7 @@ describe('BIP9 - ICANN lockup (integration)', function() {
     let wdb, wallet;
 
     const FROOT = ROOT.slice();
-    const FTOP100 = TOP100.slice();
+    const FTOP10k = TOP10k.slice();
     const FCUSTOM = CUSTOM.slice();
     const FOTHER = OTHER.slice();
     const CLAIMED = [];
@@ -421,9 +445,9 @@ describe('BIP9 - ICANN lockup (integration)', function() {
         await mineBlock(node);
 
       const custom = FCUSTOM.shift();
-      const top100 = FTOP100.shift();
+      const top10k = FTOP10k.shift();
 
-      const names = [custom, top100];
+      const names = [custom, top10k];
 
       const mempoolClaim = forEvent(node.mempool, 'claim', names.length, 20000);
 
@@ -477,10 +501,10 @@ describe('BIP9 - ICANN lockup (integration)', function() {
     it('should open the auction', async () => {
       const root = FROOT.shift();
       const custom = FCUSTOM.shift();
-      const top100 = FTOP100.shift();
+      const top10k = FTOP10k.shift();
       const other = FOTHER.shift();
 
-      const names = [root, custom, top100, other];
+      const names = [root, custom, top10k, other];
 
       const opens = forEvent(node.mempool, 'tx', names.length, 20000);
 
@@ -571,7 +595,7 @@ describe('BIP9 - ICANN lockup (integration)', function() {
     let wdb, wallet;
 
     const FROOT = ROOT.slice();
-    const FTOP100 = TOP100.slice();
+    const FTOP10k = TOP10k.slice();
     const FCUSTOM = CUSTOM.slice();
     const FOTHER = OTHER.slice();
     const CLAIMED = [];
@@ -828,9 +852,9 @@ describe('BIP9 - ICANN lockup (integration)', function() {
         await mineBlock(node);
 
       const custom = FCUSTOM.shift();
-      const top100 = FTOP100.shift();
+      const top10k = FTOP10k.shift();
 
-      const names = [custom, top100];
+      const names = [custom, top10k];
 
       const mempoolClaim = forEvent(node.mempool, 'claim', names.length, 20000);
 
@@ -884,9 +908,9 @@ describe('BIP9 - ICANN lockup (integration)', function() {
     it('should fail to open the auction for ICANN TLDs', async () => {
       const root = FROOT.shift();
       const custom = FCUSTOM.shift();
-      const top100 = FTOP100.shift();
+      const top10k = FTOP10k.shift();
 
-      const names = [root, custom, top100];
+      const names = [root, custom, top10k];
 
       for (const name of names) {
         const mtx = await wallet.createOpen(name);
