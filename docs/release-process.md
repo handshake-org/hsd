@@ -124,7 +124,7 @@ only `patch`es until release(feature lock).
 
 Process example (e.g. `latest` was `3.1.0` and we are releasing `4.0.0-rc.1`):
   - Update network seeds.
-  - Add new checkpoint. Last checkpoint + 6 months.
+  - Add a new checkpoint which should be ~4-6 months before the release.
   - update `package.json` version to `4.99.0` in `master` branch.
   - update `package-lock.json` by running `npm install`.
   - create branch `4.x` from the `master`.
