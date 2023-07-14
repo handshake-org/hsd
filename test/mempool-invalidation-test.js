@@ -6,15 +6,19 @@ const Network = require('../lib/protocol/network');
 const FullNode = require('../lib/node/fullnode');
 const {ownership} = require('../lib/covenants/ownership');
 const rules = require('../lib/covenants/rules');
+const {states} = require('../lib/covenants/namestate');
+const {Resource} = require('../lib/dns/resource');
 const {forEvent} = require('./util/common');
 
 const network = Network.get('regtest');
 const {
   treeInterval,
-  claimPeriod
+  claimPeriod,
+  renewalWindow
 } = network.names;
 
 const ACTUAL_CLAIM_PERIOD = claimPeriod;
+const ACTUAL_RENEWAL_WINDOW = renewalWindow;
 
 describe('Mempool Invalidation', function() {
   const NAMES = [
@@ -30,6 +34,298 @@ describe('Mempool Invalidation', function() {
     // other
     'steamdb'
   ];
+
+  describe('Covenant invalidation (Integration)', function() {
+    this.timeout(3000);
+    let node, wallet, wallet2;
+
+    const getNameState = async (name) => {
+      const ns = await node.chain.db.getNameStateByName(name);
+
+      if (!ns)
+        return null;
+
+      return ns.state(node.chain.tip.height + 1, network);
+    };
+
+    const isExpired = async (name) => {
+      const ns = await node.chain.db.getNameStateByName(name);
+
+      if (!ns)
+        return true;
+
+      return ns.isExpired(node.chain.tip.height + 1, network);
+    };
+
+    before(async () => {
+      network.names.renewalWindow = 200;
+
+      node = new FullNode({
+        memory: true,
+        network: network.type,
+        plugins: [require('../lib/wallet/plugin')]
+      });
+
+      await node.ensure();
+      await node.open();
+
+      const walletPlugin = node.require('walletdb');
+      const wdb = walletPlugin.wdb;
+      wallet = await wdb.get('primary');
+      wallet2 = await wdb.create({
+        id: 'secondary'
+      });
+
+      const addr = await wallet.receiveAddress('default');
+      node.miner.addAddress(addr.toString());
+
+      for (let i = 0; i < treeInterval; i++)
+        await mineBlock(node);
+
+      const fundTX = forEvent(node.mempool, 'tx', 1, 2000);
+      const w2addr = (await wallet2.receiveAddress('default')).toString();
+
+      await wallet.send({
+        outputs: [{
+          address: w2addr,
+          value: 10e6
+        }, {
+          address: w2addr,
+          value: 10e6
+        }, {
+          address: w2addr,
+          value: 10e6
+        }]
+      });
+
+      await fundTX;
+      await mineBlock(node);
+    });
+
+    after(async () => {
+      network.names.renewalWindow = ACTUAL_RENEWAL_WINDOW;
+      await node.close();
+    });
+
+    it('should invalidate opens', async () => {
+      // This is handled in remove Double Opens on addBlock.
+      assert.strictEqual(node.mempool.map.size, 0);
+
+      const name = rules.grindName(10, 0, network);
+
+      const txEvents = forEvent(node.mempool, 'tx', 1, 2000);
+
+      const blkopen = await wallet.createOpen(name);
+      await wallet.sign(blkopen);
+
+      const memopen = await wallet2.sendOpen(name);
+      await txEvents;
+
+      assert(node.mempool.map.has(memopen.hash()));
+      assert.strictEqual(node.mempool.map.size, 1);
+
+      assert.strictEqual(await getNameState(name), null);
+
+      {
+        const tx = blkopen.commit();
+        await mineBlock(node, {
+          empty: true,
+          txs: [tx]
+        });
+      }
+
+      assert.strictEqual(await getNameState(name), states.OPENING);
+
+      assert.strictEqual(node.mempool.map.size, 0);
+      // we don't want coins to get stuck in the wallet.
+      wallet2.abandon(memopen.hash());
+    });
+
+    it('should invalidate bids', async () => {
+      assert.strictEqual(node.mempool.map.size, 0);
+
+      const name = rules.grindName(10, 0, network);
+      const txEvent = forEvent(node.mempool, 'tx', 1, 2000);
+      await wallet.sendOpen(name);
+      await txEvent;
+
+      for (let i = 0; i < treeInterval + 1; i++)
+        await mineBlock(node);
+
+      assert.strictEqual(await getNameState(name), states.BIDDING);
+
+      const txEvents = forEvent(node.mempool, 'tx', 2, 2000);
+      const bid1 = await wallet2.sendBid(name, 1e6, 1e6);
+      const bid2 = await wallet.sendBid(name, 1e6, 1e6);
+      await txEvents;
+
+      assert.strictEqual(node.mempool.map.size, 2);
+
+      // leave 2 blocks, 1 for bid inclusion another for ending bidding period.
+      for (let i = 0; i < network.names.biddingPeriod - 2; i++)
+        await mineBlock(node, { empty: true });
+
+      assert.strictEqual(node.mempool.map.size, 2);
+      assert.strictEqual(await getNameState(name), states.BIDDING);
+
+      {
+        // this one finally ends the bidding period.
+        await mineBlock(node, {
+          empty: true,
+          txs: [[bid1]]
+        });
+      }
+
+      assert(node.mempool.map.has(bid2.hash()));
+      assert.strictEqual(node.mempool.map.size, 1);
+
+      await mineBlock(node, { empty: true });
+      assert.strictEqual(node.mempool.map.size, 0);
+      assert.strictEqual(await getNameState(name), states.REVEAL);
+
+      await wallet.abandon(bid2.hash());
+    });
+
+    it('should invalidate reveals', async () => {
+      let txEvents;
+      assert.strictEqual(node.mempool.map.size, 0);
+
+      const name = rules.grindName(10, 0, network);
+
+      await wallet.sendOpen(name);
+
+      for (let i = 0; i < treeInterval + 1; i++)
+        await mineBlock(node);
+
+      txEvents = forEvent(node.mempool, 'tx', 2, 2000);
+      await wallet.sendBid(name, 1e6, 1e6);
+      await wallet2.sendBid(name, 1e6, 1e6);
+      await txEvents;
+
+      assert.strictEqual(node.mempool.map.size, 2);
+
+      for (let i = 0; i < network.names.biddingPeriod; i++)
+        await mineBlock(node);
+
+      assert.strictEqual(node.mempool.map.size, 0);
+      assert.strictEqual(await getNameState(name), states.REVEAL);
+
+      txEvents = forEvent(node.mempool, 'tx', 2, 2000);
+      const reveal1 = await wallet.sendReveal(name);
+      const reveal2 = await wallet2.sendReveal(name);
+      await txEvents;
+
+      assert.strictEqual(node.mempool.map.size, 2);
+      assert.strictEqual(await getNameState(name), states.REVEAL);
+
+      for (let i = 0; i < network.names.revealPeriod - 1; i++)
+        await mineBlock(node, { empty: true });
+
+      // include only one in the last block.
+      await mineBlock(node, {
+        empty: true,
+        txs: [[reveal2]]
+      });
+
+      assert.strictEqual(await getNameState(name), states.CLOSED);
+      assert.strictEqual(node.mempool.map.size, 0);
+      await wallet.abandon(reveal1.hash());
+    });
+
+    it('should invalidate reveals with expire', async () => {
+      let txEvents;
+      assert.strictEqual(node.mempool.map.size, 0);
+
+      const name = rules.grindName(10, 0, network);
+
+      await wallet.sendOpen(name);
+
+      for (let i = 0; i < treeInterval + 1; i++)
+        await mineBlock(node);
+
+      txEvents = forEvent(node.mempool, 'tx', 2, 2000);
+      await wallet.sendBid(name, 1e6, 1e6);
+      await wallet2.sendBid(name, 1e6, 1e6);
+      await txEvents;
+
+      assert.strictEqual(node.mempool.map.size, 2);
+
+      for (let i = 0; i < network.names.biddingPeriod; i++)
+        await mineBlock(node);
+
+      assert.strictEqual(node.mempool.map.size, 0);
+      assert.strictEqual(await getNameState(name), states.REVEAL);
+
+      txEvents = forEvent(node.mempool, 'tx', 2, 2000);
+      await wallet.sendReveal(name);
+      await wallet2.sendReveal(name);
+      await txEvents;
+
+      assert.strictEqual(node.mempool.map.size, 2);
+      assert.strictEqual(await getNameState(name), states.REVEAL);
+
+      for (let i = 0; i < network.names.revealPeriod; i++)
+        await mineBlock(node, { empty: true });
+
+      assert.strictEqual(await getNameState(name), states.CLOSED);
+      assert.strictEqual(node.mempool.map.size, 0);
+    });
+
+    it('should invalidate updates when name expires', async () => {
+      let txEvents;
+
+      assert.strictEqual(node.mempool.map.size, 0);
+      const name = rules.grindName(10, 0, network);
+
+      await wallet.sendOpen(name);
+
+      for (let i = 0; i < treeInterval + 1; i++)
+        await mineBlock(node);
+
+      txEvents = forEvent(node.mempool, 'tx', 2, 2000);
+      await wallet.sendBid(name, 1e6, 1e6);
+      await wallet2.sendBid(name, 1e6, 1e6);
+      await txEvents;
+
+      assert.strictEqual(node.mempool.map.size, 2);
+
+      for (let i = 0; i < network.names.biddingPeriod; i++)
+        await mineBlock(node);
+
+      assert.strictEqual(node.mempool.map.size, 0);
+      assert.strictEqual(await getNameState(name), states.REVEAL);
+
+      txEvents = forEvent(node.mempool, 'tx', 2, 2000);
+      await wallet.sendReveal(name);
+      await wallet2.sendReveal(name);
+      await txEvents;
+
+      for (let i = 0; i < network.names.revealPeriod; i++)
+        await mineBlock(node);
+
+      assert.strictEqual(await getNameState(name), states.CLOSED);
+
+      await wallet.sendUpdate(name, Resource.fromJSON({ records: [] }));
+
+      for (let i = 0; i < network.names.renewalWindow - 2; i++)
+        await mineBlock(node);
+
+      txEvents = forEvent(node.mempool, 'tx', 1, 2000);
+      await wallet.sendRenewal(name);
+      await txEvents;
+      assert.strictEqual(node.mempool.map.size, 1);
+
+      assert.strictEqual(await getNameState(name), states.CLOSED);
+      assert.strictEqual(await isExpired(name), false);
+
+      await mineBlock(node, { empty: true });
+      assert.strictEqual(node.mempool.map.size, 1);
+      assert.strictEqual(await isExpired(name), false);
+      await mineBlock(node, { empty: true });
+      assert.strictEqual(await isExpired(name), true);
+      assert.strictEqual(node.mempool.map.size, 0);
+    });
+  });
 
   describe('Claim Invalidation (Integration)', function() {
     this.timeout(50000);
@@ -263,6 +559,8 @@ async function mineBlock(node, opts = {}) {
   const ignoreClaims = opts.ignoreClaims ?? false;
   const tip = opts.tip || chain.tip;
   const blockWait = opts.blockWait ?? true;
+  const empty = opts.empty ?? false;
+  const txs = opts.txs ?? [];
 
   let forBlock = null;
 
@@ -270,17 +568,30 @@ async function mineBlock(node, opts = {}) {
     forBlock = forEvent(node, 'block', 1, 2000);
 
   let backupClaims = null;
+  let backupTXs = null;
 
   if (ignoreClaims) {
     backupClaims = node.mempool.claims;
     node.mempool.claims = new BufferMap();
   }
+
+  if (empty) {
+    backupTXs = node.mempool.map;
+    node.mempool.map = new BufferMap();
+  }
+
   const job = await miner.cpu.createJob(tip);
+
+  for (const [tx, view] of txs)
+    job.pushTX(tx, view);
 
   job.refresh();
 
   if (ignoreClaims)
     node.mempool.claims = backupClaims;
+
+  if (empty)
+    node.mempool.map = backupTXs;
 
   const block = await job.mineAsync();
   const entry = await chain.add(block);
