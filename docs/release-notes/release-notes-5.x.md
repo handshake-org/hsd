@@ -76,3 +76,6 @@ v5.x Release notes
 # v5.1
 ## Changelog
   - \[[`6b47c3a0`](https://github.com/handshake-org/hsd/commit/6b47c3a0)] - [#805](https://github.com/handshake-org/hsd/pull/805) - **SEMVER-MINOR network**: update last checkpoint (@nodech - Nodari Chkuaselidze)
+  - \[[`15f74ccf`](https://github.com/handshake-org/hsd/commit/15f74ccf)] - [#824](https://github.com/handshake-org/hsd/pull/824) - **SEMVER-MINOR rpc**: Added totalSigs to JSON response for scriptToJSON (@Nathanwoodburn - Nathan Woodburn)
+  - \[[`81bddcd2`](https://github.com/handshake-org/hsd/commit/81bddcd2)] - [#825](https://github.com/handshake-org/hsd/pull/825) - **wallet**: fix makeBatch to generate addresses early (@rithvikvibhu - Rithvik Vibhu)
+  - \[[`ed27e7f6`](https://github.com/handshake-org/hsd/commit/ed27e7f6)] - [#826](https://github.com/handshake-org/hsd/pull/826) - **mempool**: more invalidation tests. (@nodech - Nodari Chkuaselidze)
