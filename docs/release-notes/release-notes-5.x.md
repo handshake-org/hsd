@@ -9,6 +9,8 @@ v5.x Release notes
     + [Node changes](#node-changes)
     + [Wallet changes](#wallet-changes)
   * [Changelog](#changelog)
+- [v5.1](#v51)
+  * [Changelog](#changelog-1)
 
 <!-- tocstop -->
 
@@ -70,3 +72,10 @@ v5.x Release notes
   - \[[`9cf8cb83`](https://github.com/handshake-org/hsd/commit/9cf8cb83)] - [#776](https://github.com/handshake-org/hsd/pull/776) - **docker/docs**: Fix npm warning (@NetOpWibby)
   - \[[`395878a0`](https://github.com/handshake-org/hsd/commit/395878a0)] - [#775](https://github.com/handshake-org/hsd/pull/775) - **docs**: fix doc (@Falci - Fernando Falci)
   - \[[`fb5501c5`](https://github.com/handshake-org/hsd/commit/fb5501c5)] - [#765](https://github.com/handshake-org/hsd/pull/765) - **chore(BIP39)**: added Portuguese wordlist (@Falci - Fernando Falci)
+
+# v5.1
+## Changelog
+  - \[[`6b47c3a0`](https://github.com/handshake-org/hsd/commit/6b47c3a0)] - [#805](https://github.com/handshake-org/hsd/pull/805) - **SEMVER-MINOR network**: update last checkpoint (@nodech - Nodari Chkuaselidze)
+  - \[[`15f74ccf`](https://github.com/handshake-org/hsd/commit/15f74ccf)] - [#824](https://github.com/handshake-org/hsd/pull/824) - **SEMVER-MINOR rpc**: Added totalSigs to JSON response for scriptToJSON (@Nathanwoodburn - Nathan Woodburn)
+  - \[[`81bddcd2`](https://github.com/handshake-org/hsd/commit/81bddcd2)] - [#825](https://github.com/handshake-org/hsd/pull/825) - **wallet**: fix makeBatch to generate addresses early (@rithvikvibhu - Rithvik Vibhu)
+  - \[[`ed27e7f6`](https://github.com/handshake-org/hsd/commit/ed27e7f6)] - [#826](https://github.com/handshake-org/hsd/pull/826) - **mempool**: more invalidation tests. (@nodech - Nodari Chkuaselidze)

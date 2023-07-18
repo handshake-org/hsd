@@ -119,6 +119,8 @@ describe('Checkpoints', function() {
   });
 
   it('should CLAIM and REGISTER a reserved name', async () => {
+    this.timeout(10000);
+
     const claim = await wallet.fakeClaim('cloudflare');
 
     await mineBlock(null, [claim], null, 'claim');
