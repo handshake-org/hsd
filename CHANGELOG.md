@@ -3,8 +3,8 @@
 ## v6.0.0
 
 ### Node and Wallet HTTP API
-  Validation and request paremeter errors will no longer return (and log) `500`
-status code, instead will return `400`.
+  Validation errors, request paremeter errors or bad HTTP requests will no
+longer return (and log) `500` status code, instead will return `400`.
 
 ### Wallet Changes
 #### Configuration
