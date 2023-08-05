@@ -85,7 +85,7 @@ class CLI {
         'n': 'network',
         'u': 'url',
         'uri': 'url',
-        'k': 'api-key',
+        'k': 'apikey',
         's': 'ssl',
         'h': 'httphost',
         'p': 'httpport'
