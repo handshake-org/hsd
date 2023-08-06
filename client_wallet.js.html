@@ -1,0 +1,1635 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: client/wallet.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: client/wallet.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/*!
+ * wallet.js - http wallet for bcoin
+ * Copyright (c) 2017, Christopher Jeffrey (MIT License).
+ * https://github.com/bcoin-org/bcoin
+ */
+
+'use strict';
+
+// NOTE: This is part of generated `hs-client`.
+// Don't introduce any unnecessary dependencies to this.
+
+const assert = require('bsert');
+const EventEmitter = require('events');
+const {Client} = require('bcurl');
+
+/**
+ * Wallet Client
+ * @alias module:client.WalletClient
+ * @extends {bcurl.Client}
+ */
+
+class WalletClient extends Client {
+  /**
+   * Create a wallet client.
+   * @param {Object?} options
+   */
+
+  constructor(options) {
+    super(options);
+    this.wallets = new Map();
+  }
+
+  /**
+   * Open the client.
+   * @private
+   * @returns {Promise}
+   */
+
+  init() {
+    this.bind('tx', (id, details) => {
+      this.dispatch(id, 'tx', details);
+    });
+
+    this.bind('confirmed', (id, details) => {
+      this.dispatch(id, 'confirmed', details);
+    });
+
+    this.bind('unconfirmed', (id, details) => {
+      this.dispatch(id, 'unconfirmed', details);
+    });
+
+    this.bind('conflict', (id, details) => {
+      this.dispatch(id, 'conflict', details);
+    });
+
+    this.bind('updated', (id, details) => {
+      this.dispatch(id, 'updated', details);
+    });
+
+    this.bind('address', (id, receive) => {
+      this.dispatch(id, 'address', receive);
+    });
+
+    this.bind('balance', (id, balance) => {
+      this.dispatch(id, 'balance', balance);
+    });
+  }
+
+  /**
+   * Dispatch event.
+   * @private
+   */
+
+  dispatch(id, event, ...args) {
+    const wallet = this.wallets.get(id);
+
+    if (wallet)
+      wallet.emit(event, ...args);
+  }
+
+  /**
+   * Open the client.
+   * @returns {Promise}
+   */
+
+  async open() {
+    await super.open();
+    this.init();
+  }
+
+  /**
+   * Close the client.
+   * @returns {Promise}
+   */
+
+  async close() {
+    await super.close();
+    this.wallets = new Map();
+  }
+
+  /**
+   * Auth with server.
+   * @returns {Promise}
+   */
+
+  async auth() {
+    await this.call('auth', this.password);
+  }
+
+  /**
+   * Make an RPC call.
+   * @returns {Promise}
+   */
+
+  execute(name, params) {
+    return super.execute('/', name, params);
+  }
+
+  /**
+   * Create a wallet object.
+   */
+
+  wallet(id, token) {
+    return new Wallet(this, id, token);
+  }
+
+  /**
+   * Join a wallet.
+   */
+
+  all(token) {
+    return this.call('join', '*', token);
+  }
+
+  /**
+   * Leave a wallet.
+   */
+
+  none() {
+    return this.call('leave', '*');
+  }
+
+  /**
+   * Join a wallet.
+   */
+
+  join(id, token) {
+    return this.call('join', id, token);
+  }
+
+  /**
+   * Leave a wallet.
+   */
+
+  leave(id) {
+    return this.call('leave', id);
+  }
+
+  /**
+   * Rescan the chain.
+   * @param {Number} height
+   * @returns {Promise}
+   */
+
+  rescan(height) {
+    return this.post('/rescan', { height });
+  }
+
+  /**
+   * Resend pending transactions.
+   * @returns {Promise}
+   */
+
+  resend() {
+    return this.post('/resend');
+  }
+
+  /**
+   * Backup the walletdb.
+   * @param {String} path
+   * @returns {Promise}
+   */
+
+  backup(path) {
+    return this.post('/backup', { path });
+  }
+
+  /**
+   * Get list of all wallet IDs.
+   * @returns {Promise}
+   */
+
+  getWallets() {
+    return this.get('/wallet');
+  }
+
+  /**
+   * Create a wallet.
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createWallet(id, options) {
+    if (id == null)
+      throw new Error('Wallet id is required.');
+
+    return this.put(`/wallet/${id}`, options);
+  }
+
+  /**
+   * Get wallet transaction history.
+   * @param {String} account
+   * @returns {Promise}
+   */
+
+  getHistory(id, account) {
+    return this.get(`/wallet/${id}/tx/history`, { account });
+  }
+
+  /**
+   * Get wallet coins.
+   * @param {String} account
+   * @returns {Promise}
+   */
+
+  getCoins(id, account) {
+    return this.get(`/wallet/${id}/coin`, { account });
+  }
+
+  /**
+   * Get all unconfirmed transactions.
+   * @param {String} account
+   * @returns {Promise}
+   */
+
+  getPending(id, account) {
+    return this.get(`/wallet/${id}/tx/unconfirmed`, { account });
+  }
+
+  /**
+   * Calculate wallet balance.
+   * @param {String} account
+   * @returns {Promise}
+   */
+
+  getBalance(id, account) {
+    return this.get(`/wallet/${id}/balance`, { account });
+  }
+
+  /**
+   * Get last N wallet transactions.
+   * @param {String} account
+   * @param {Number} limit - Max number of transactions.
+   * @returns {Promise}
+   */
+
+  getLast(id, account, limit) {
+    return this.get(`/wallet/${id}/tx/last`, { account, limit });
+  }
+
+  /**
+   * Get wallet transactions by timestamp range.
+   * @param {String} account
+   * @param {Object} options
+   * @param {Number} options.start - Start time.
+   * @param {Number} options.end - End time.
+   * @param {Number?} options.limit - Max number of records.
+   * @param {Boolean?} options.reverse - Reverse order.
+   * @returns {Promise}
+   */
+
+  getRange(id, account, options) {
+    return this.get(`/wallet/${id}/tx/range`, {
+      account: account,
+      start: options.start,
+      end: options.end,
+      limit: options.limit,
+      reverse: options.reverse
+    });
+  }
+
+  /**
+   * Get transaction (only possible if the transaction
+   * is available in the wallet history).
+   * @param {Hash} hash
+   * @returns {Promise}
+   */
+
+  getTX(id, hash) {
+    return this.get(`/wallet/${id}/tx/${hash}`);
+  }
+
+  /**
+   * Get wallet blocks.
+   * @param {Number} height
+   * @returns {Promise}
+   */
+
+  getBlocks(id) {
+    return this.get(`/wallet/${id}/block`);
+  }
+
+  /**
+   * Get wallet block.
+   * @param {Number} height
+   * @returns {Promise}
+   */
+
+  getBlock(id, height) {
+    return this.get(`/wallet/${id}/block/${height}`);
+  }
+
+  /**
+   * Get unspent coin (only possible if the transaction
+   * is available in the wallet history).
+   * @param {Hash} hash
+   * @param {Number} index
+   * @returns {Promise}
+   */
+
+  getCoin(id, hash, index) {
+    return this.get(`/wallet/${id}/coin/${hash}/${index}`);
+  }
+
+  /**
+   * Get name state for the given name.
+   * {@see hsd.NameState}
+   * @param {String} id
+   * @param {String} name
+   * @returns {Promise}
+   */
+
+  getName(id, name) {
+    return this.get(`/wallet/${id}/name/${name}`);
+  }
+
+  /**
+   * Get name state for all names
+   * that the wallet is managing.
+   * {@see hsd.NameState}
+   * @param {String} id
+   * @returns {Promise}
+   */
+
+  getNames(id) {
+    return this.get(`/wallet/${id}/name`);
+  }
+
+  /**
+   * Get bids, reveals and name state
+   * for the given name.
+   * {@see hsd.NameState}
+   * {@see hsd.BlindBid}
+   * {@see hsd.BidReveal}
+   * @param {String} id
+   * @param {String} name
+   * @returns {Promise}
+   */
+
+  getAuctionByName(id, name) {
+    return this.get(`/wallet/${id}/auction/${name}`);
+  }
+
+  /**
+   * Get bids, reveals and name state
+   * for all names the wallet manages.
+   * {@see hsd.NameState}
+   * {@see hsd.BlindBid}
+   * {@see hsd.BidReveal}
+   * @param {String} id
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  getAuctions(id, options) {
+    return this.get(`/wallet/${id}/auction`, options);
+  }
+
+  /**
+   * Get bids for a given name.
+   * {@see hsd.BlindBid}
+   * @param {String} id
+   * @param {String?} name
+   * @param {Object?} options
+   * @param {Boolean?} options.own
+   * @returns {Promise}
+   */
+
+  getBidsByName(id, name, options) {
+    return this.get(`/wallet/${id}/bid/${name}`, options);
+  }
+
+  /**
+   * Get bids for all names.
+   * the wallet manages.
+   * {@see hsd.BlindBid}
+   * @param {String} id
+   * @param {Object?} options
+   * @param {Boolean?} options.own
+   * @returns {Promise}
+   */
+
+  getBids(id, options) {
+    return this.get(`/wallet/${id}/bid`, options);
+  }
+
+  /**
+   * Get wallet reveal for a given name.
+   * {@see hsd.BidReveal}
+   * @param {String} id
+   * @param {String?} name
+   * @param {Object?} options
+   * @param {Boolean?} options.own
+   * @returns {Promise}
+   */
+
+  getRevealsByName(id, name, options) {
+    return this.get(`/wallet/${id}/reveal/${name}`, options);
+  }
+
+  /**
+   * Get wallet reveals for all names
+   * the wallet manages.
+   * {@see hsd.BidReveal}
+   * @param {String} id
+   * @param {Object?} options
+   * @param {Boolean?} options.own
+   * @returns {Promise}
+   */
+
+  getReveals(id, options) {
+    return this.get(`/wallet/${id}/reveal`, options);
+  }
+
+  /**
+   * Get name resource.
+   * {@see hsd.Resource}
+   * @param {String} id
+   * @param {String} name
+   * @returns {Promise}
+   */
+
+  getResource(id, name) {
+    return this.get(`/wallet/${id}/resource/${name}`);
+  }
+
+  /*
+   * Deterministically regenerate a bid's nonce.
+   * @param {String} id
+   * @param {String} name
+   * @param {Object} options
+   * @param {String} options.address
+   * @param {Number} options.bid
+   * @returns {Promise}
+   */
+
+  getNonce(id, name, options) {
+    return this.get(`/wallet/${id}/nonce/${name}`, options);
+  }
+
+  /**
+   * @param {Number} now - Current time.
+   * @param {Number} age - Age delta.
+   * @returns {Promise}
+   */
+
+  zap(id, account, age) {
+    return this.post(`/wallet/${id}/zap`, { account, age });
+  }
+
+  /**
+   * @param {Number} id
+   * @param {Hash} hash
+   * @returns {Promise}
+   */
+
+  abandon(id, hash) {
+    return this.del(`/wallet/${id}/tx/${hash}`);
+  }
+
+  /**
+   * Create a transaction, fill.
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createTX(id, options) {
+    return this.post(`/wallet/${id}/create`, options);
+  }
+
+  /**
+   * Create pre-signed bid and reveal txs,
+   * fill, and optionally sign and broadcast.
+   * @param {Object} options
+   * @param {String} options.name
+   * @param {Number} options.bid
+   * @param {Number} options.lockup
+   * @param {String} options.passphrase
+   * @param {Boolean} options.sign
+   * @param {Boolean} options.broadcastBid
+   * @returns {Promise}
+   */
+
+  createAuctionTxs(id, options) {
+    return this.post(`/wallet/${id}/auction`, options);
+  }
+
+  /**
+   * Create a transaction, fill, sign, and broadcast.
+   * @param {Object} options
+   * @param {String} options.address
+   * @param {Amount} options.value
+   * @returns {Promise}
+   */
+
+  send(id, options) {
+    return this.post(`/wallet/${id}/send`, options);
+  }
+
+  /**
+   * Create open transaction.
+   * @param {String} id
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createOpen(id, options) {
+    return this.post(`/wallet/${id}/open`, options);
+  }
+
+  /**
+   * Create bid transaction.
+   * @param {String} id
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createBid(id, options) {
+    return this.post(`/wallet/${id}/bid`, options);
+  }
+
+  /**
+   * Create reveal transaction.
+   * @param {String} id
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createReveal(id, options) {
+    return this.post(`/wallet/${id}/reveal`, options);
+  }
+
+  /**
+   * Create redeem transaction.
+   * @param {String} id
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createRedeem(id, options) {
+    return this.post(`/wallet/${id}/redeem`, options);
+  }
+
+  /**
+   * Create update transaction.
+   * @param {String} id
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createUpdate(id, options) {
+    return this.post(`/wallet/${id}/update`, options);
+  }
+
+  /**
+   * Create renewal transaction.
+   * @param {String} id
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createRenewal(id, options) {
+    return this.post(`/wallet/${id}/renewal`, options);
+  }
+
+  /**
+   * Create transfer transaction.
+   * @param {String} id
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createTransfer(id, options) {
+    return this.post(`/wallet/${id}/transfer`, options);
+  }
+
+  /**
+   * Create cancel transaction.
+   * @param {String} id
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createCancel(id, options) {
+    return this.post(`/wallet/${id}/cancel`, options);
+  }
+
+  /**
+   * Create finalize transaction.
+   * @param {String} id
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createFinalize(id, options) {
+    return this.post(`/wallet/${id}/finalize`, options);
+  }
+
+  /**
+   * Create revoke transaction.
+   * @param {String} id
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createRevoke(id, options) {
+    return this.post(`/wallet/${id}/revoke`, options);
+  }
+
+  /**
+   * Sign a transaction.
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  sign(id, options) {
+    return this.post(`/wallet/${id}/sign`, options);
+  }
+
+  /**
+   * Get the raw wallet JSON.
+   * @returns {Promise}
+   */
+
+  getInfo(id) {
+    return this.get(`/wallet/${id}`);
+  }
+
+  /**
+   * Get wallet accounts.
+   * @returns {Promise} - Returns Array.
+   */
+
+  getAccounts(id) {
+    return this.get(`/wallet/${id}/account`);
+  }
+
+  /**
+   * Get wallet master key.
+   * @returns {Promise}
+   */
+
+  getMaster(id) {
+    return this.get(`/wallet/${id}/master`);
+  }
+
+  /**
+   * Get wallet account.
+   * @param {String} account
+   * @returns {Promise}
+   */
+
+  getAccount(id, account) {
+    return this.get(`/wallet/${id}/account/${account}`);
+  }
+
+  /**
+   * Create account.
+   * @param {String} name
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createAccount(id, name, options) {
+    if (name == null)
+      throw new Error('Account name is required.');
+
+    return this.put(`/wallet/${id}/account/${name}`, options);
+  }
+
+  /**
+   * Modify account.
+   * @param {String} id
+   * @param {String} name
+   * @param {Object} options
+   * @returns {Promise&lt;Object>}
+   */
+
+  modifyAccount(id, name, options) {
+    return this.patch(`/wallet/${id}/account/${name}`, options);
+  }
+
+  /**
+   * Create address.
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createAddress(id, account) {
+    return this.post(`/wallet/${id}/address`, { account });
+  }
+
+  /**
+   * Create change address.
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createChange(id, account) {
+    return this.post(`/wallet/${id}/change`, { account });
+  }
+
+  /**
+   * Change or set master key`s passphrase.
+   * @param {String|Buffer} passphrase
+   * @param {(String|Buffer)?} old
+   * @returns {Promise}
+   */
+
+  setPassphrase(id, passphrase, old) {
+    return this.post(`/wallet/${id}/passphrase`, { passphrase, old });
+  }
+
+  /**
+   * Generate a new token.
+   * @param {(String|Buffer)?} passphrase
+   * @returns {Promise}
+   */
+
+  retoken(id, passphrase) {
+    return this.post(`/wallet/${id}/retoken`, {
+      passphrase
+    });
+  }
+
+  /**
+   * Import private key.
+   * @param {Number|String} account
+   * @param {String} key
+   * @returns {Promise}
+   */
+
+  importPrivate(id, account, privateKey, passphrase) {
+    return this.post(`/wallet/${id}/import`, {
+      account,
+      privateKey,
+      passphrase
+    });
+  }
+
+  /**
+   * Import public key.
+   * @param {Number|String} account
+   * @param {String} key
+   * @returns {Promise}
+   */
+
+  importPublic(id, account, publicKey) {
+    return this.post(`/wallet/${id}/import`, {
+      account,
+      publicKey
+    });
+  }
+
+  /**
+   * Import address.
+   * @param {Number|String} account
+   * @param {String} address
+   * @returns {Promise}
+   */
+
+  importAddress(id, account, address) {
+    return this.post(`/wallet/${id}/import`, { account, address });
+  }
+
+  /**
+   * Lock a coin.
+   * @param {String} hash
+   * @param {Number} index
+   * @returns {Promise}
+   */
+
+  lockCoin(id, hash, index) {
+    return this.put(`/wallet/${id}/locked/${hash}/${index}`);
+  }
+
+  /**
+   * Unlock a coin.
+   * @param {String} hash
+   * @param {Number} index
+   * @returns {Promise}
+   */
+
+  unlockCoin(id, hash, index) {
+    return this.del(`/wallet/${id}/locked/${hash}/${index}`);
+  }
+
+  /**
+   * Get locked coins.
+   * @returns {Promise}
+   */
+
+  getLocked(id) {
+    return this.get(`/wallet/${id}/locked`);
+  }
+
+  /**
+   * Lock wallet.
+   * @returns {Promise}
+   */
+
+  lock(id) {
+    return this.post(`/wallet/${id}/lock`);
+  }
+
+  /**
+   * Unlock wallet.
+   * @param {String} passphrase
+   * @param {Number} timeout
+   * @returns {Promise}
+   */
+
+  unlock(id, passphrase, timeout) {
+    return this.post(`/wallet/${id}/unlock`, { passphrase, timeout });
+  }
+
+  /**
+   * Get wallet key.
+   * @param {String} address
+   * @returns {Promise}
+   */
+
+  getKey(id, address) {
+    return this.get(`/wallet/${id}/key/${address}`);
+  }
+
+  /**
+   * Get wallet key WIF dump.
+   * @param {String} address
+   * @param {String?} passphrase
+   * @returns {Promise}
+   */
+
+  getWIF(id, address, passphrase) {
+    return this.get(`/wallet/${id}/wif/${address}`, { passphrase });
+  }
+
+  /**
+   * Add a public account key to the wallet for multisig.
+   * @param {String} account
+   * @param {String} key - Account (bip44) key (base58).
+   * @returns {Promise}
+   */
+
+  addSharedKey(id, account, accountKey) {
+    return this.put(`/wallet/${id}/shared-key`, { account, accountKey });
+  }
+
+  /**
+   * Remove a public account key to the wallet for multisig.
+   * @param {String} account
+   * @param {String} key - Account (bip44) key (base58).
+   * @returns {Promise}
+   */
+
+  removeSharedKey(id, account, accountKey) {
+    return this.del(`/wallet/${id}/shared-key`, { account, accountKey });
+  }
+
+  /**
+   * Resend wallet transactions.
+   * @returns {Promise}
+   */
+
+  resendWallet(id) {
+    return this.post(`/wallet/${id}/resend`);
+  }
+}
+
+/**
+ * Wallet Instance
+ * @extends {EventEmitter}
+ */
+
+class Wallet extends EventEmitter {
+  /**
+   * Create a wallet client.
+   * @param {Object?} options
+   */
+
+  constructor(parent, id, token) {
+    super();
+    this.parent = parent;
+    this.client = parent.clone();
+    this.client.token = token;
+    this.id = id;
+    this.token = token;
+  }
+
+  /**
+   * Open wallet.
+   * @returns {Promise}
+   */
+
+  async open() {
+    await this.parent.join(this.id, this.token);
+    this.parent.wallets.set(this.id, this);
+  }
+
+  /**
+   * Close wallet.
+   * @returns {Promise}
+   */
+
+  async close() {
+    await this.parent.leave(this.id);
+    this.parent.wallets.delete(this.id);
+  }
+
+  /**
+   * Get wallet transaction history.
+   * @param {String} account
+   * @returns {Promise}
+   */
+
+  getHistory(account) {
+    return this.client.getHistory(this.id, account);
+  }
+
+  /**
+   * Get wallet coins.
+   * @param {String} account
+   * @returns {Promise}
+   */
+
+  getCoins(account) {
+    return this.client.getCoins(this.id, account);
+  }
+
+  /**
+   * Get all unconfirmed transactions.
+   * @param {String} account
+   * @returns {Promise}
+   */
+
+  getPending(account) {
+    return this.client.getPending(this.id, account);
+  }
+
+  /**
+   * Calculate wallet balance.
+   * @param {String} account
+   * @returns {Promise}
+   */
+
+  getBalance(account) {
+    return this.client.getBalance(this.id, account);
+  }
+
+  /**
+   * Get last N wallet transactions.
+   * @param {String} account
+   * @param {Number} limit - Max number of transactions.
+   * @returns {Promise}
+   */
+
+  getLast(account, limit) {
+    return this.client.getLast(this.id, account, limit);
+  }
+
+  /**
+   * Get wallet transactions by timestamp range.
+   * @param {String} account
+   * @param {Object} options
+   * @param {Number} options.start - Start time.
+   * @param {Number} options.end - End time.
+   * @param {Number?} options.limit - Max number of records.
+   * @param {Boolean?} options.reverse - Reverse order.
+   * @returns {Promise}
+   */
+
+  getRange(account, options) {
+    return this.client.getRange(this.id, account, options);
+  }
+
+  /**
+   * Get transaction (only possible if the transaction
+   * is available in the wallet history).
+   * @param {Hash} hash
+   * @returns {Promise}
+   */
+
+  getTX(hash) {
+    return this.client.getTX(this.id, hash);
+  }
+
+  /**
+   * Get wallet blocks.
+   * @param {Number} height
+   * @returns {Promise}
+   */
+
+  getBlocks() {
+    return this.client.getBlocks(this.id);
+  }
+
+  /**
+   * Get wallet block.
+   * @param {Number} height
+   * @returns {Promise}
+   */
+
+  getBlock(height) {
+    return this.client.getBlock(this.id, height);
+  }
+
+  /**
+   * Get unspent coin (only possible if the transaction
+   * is available in the wallet history).
+   * @param {Hash} hash
+   * @param {Number} index
+   * @returns {Promise}
+   */
+
+  getCoin(hash, index) {
+    return this.client.getCoin(this.id, hash, index);
+  }
+
+  /**
+   * Get name state for the given name.
+   * {@see hsd.NameState}
+   * @param {String} name
+   * @returns {Promise}
+   */
+
+  getName(name) {
+    return this.client.getName(this.id, name);
+  }
+
+  /**
+   * Get name state for all names
+   * that the wallet is managing.
+   * {@see hsd.NameState}
+   * @returns {Promise}
+   */
+
+  getNames() {
+    return this.client.getNames(this.id);
+  }
+
+  /**
+   * Get bids, reveals and name state
+   * for the given name.
+   * {@see hsd.NameState}
+   * {@see hsd.BlindBid}
+   * {@see hsd.BidReveal}
+   * @param {String} name
+   * @returns {Promise}
+   */
+
+  getAuctionByName(name) {
+    return this.client.getAuctionByName(this.id, name);
+  }
+
+  /**
+   * Get bids, reveals and name state
+   * for all names the wallet manages.
+   * {@see hsd.NameState}
+   * {@see hsd.BlindBid}
+   * {@see hsd.BidReveal}
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  getAuctions(options) {
+    return this.client.getAuctions(this.id, options);
+  }
+
+  /**
+   * Get bids for a given name.
+   * {@see hsd.BlindBid}
+   * @param {String?} name
+   * @param {Object?} options
+   * @param {Boolean?} options.own
+   * @returns {Promise}
+   */
+
+  getBidsByName(name, options) {
+    return this.client.getBidsByName(this.id, name, options);
+  }
+
+  /**
+   * Get bids for all names.
+   * the wallet manages.
+   * {@see hsd.BlindBid}
+   * @param {Object?} options
+   * @param {Boolean?} options.own
+   * @returns {Promise}
+   */
+
+  getBids(options) {
+    return this.client.getBids(this.id, options);
+  }
+
+  /**
+   * Get wallet reveal for a given name.
+   * {@see hsd.BidReveal}
+   * @param {String?} name
+   * @param {Object?} options
+   * @param {Boolean?} options.own
+   * @returns {Promise}
+   */
+
+  getRevealsByName(name, options) {
+    return this.client.getRevealsByName(this.id, name, options);
+  }
+
+  /**
+   * Get wallet reveals for all names
+   * the wallet manages.
+   * {@see hsd.BidReveal}
+   * @param {Object?} options
+   * @param {Boolean?} options.own
+   * @returns {Promise}
+   */
+
+  getReveals(options) {
+    return this.client.getReveals(this.id, options);
+  }
+
+  /**
+   * Get name resource.
+   * {@see hsd.Resource}
+   * @param {String} name
+   * @returns {Promise}
+   */
+
+  getResource(name) {
+    return this.client.getResource(this.id, name);
+  }
+
+  /*
+   * Deterministically regenerate a bid's nonce.
+   * @param {String} name
+   * @param {Object} options
+   * @param {String} options.address
+   * @param {Number} options.bid
+   * @returns {Promise}
+   */
+
+  getNonce(name, options) {
+    return this.client.getNonce(this.id, name, options);
+  }
+
+  /**
+   * @param {Number} now - Current time.
+   * @param {Number} age - Age delta.
+   * @returns {Promise}
+   */
+
+  zap(account, age) {
+    return this.client.zap(this.id, account, age);
+  }
+
+  /**
+   * Used to remove a pending transaction from the wallet.
+   * That is likely the case if it has a policy or low fee
+   * that prevents it from proper network propagation.
+   * @param {Hash} hash
+   * @returns {Promise}
+   */
+
+  abandon(hash) {
+    return this.client.abandon(this.id, hash);
+  }
+
+  /**
+   * Create a transaction, fill.
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createTX(options) {
+    return this.client.createTX(this.id, options);
+  }
+
+  /**
+   * Create pre-signed bid and reveal txs,
+   * fill, and optionally sign and broadcast.
+   * @param {Object} options
+   * @param {String} options.name
+   * @param {Number} options.bid
+   * @param {Number} options.lockup
+   * @param {String} options.passphrase
+   * @param {Boolean} options.sign
+   * @param {Boolean} options.broadcastBid
+   * @returns {Promise}
+   */
+
+   createAuctionTxs(options) {
+    return this.client.createAuctionTxs(this.id, options);
+  }
+
+  /**
+   * Create a transaction, fill, sign, and broadcast.
+   * @param {Object} options
+   * @param {String} options.address
+   * @param {Amount} options.value
+   * @returns {Promise}
+   */
+
+  send(options) {
+    return this.client.send(this.id, options);
+  }
+
+  /**
+   * Create open transaction.
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createOpen(options) {
+    return this.client.createOpen(this.id, options);
+  }
+
+  /**
+   * Create bid transaction.
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createBid(options) {
+    return this.client.createBid(this.id, options);
+  }
+
+  /**
+   * Create reveal transaction.
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createReveal(options) {
+    return this.client.createReveal(this.id, options);
+  }
+
+  /**
+   * Create redeem transaction.
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createRedeem(options) {
+    return this.client.createRedeem(this.id, options);
+  }
+
+  /**
+   * Create update transaction.
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createUpdate(options) {
+    return this.client.createUpdate(this.id, options);
+  }
+
+  /**
+   * Create renewal transaction.
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createRenewal(options) {
+    return this.client.createRenewal(this.id, options);
+  }
+
+  /**
+   * Create transfer transaction.
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createTransfer(options) {
+    return this.client.createTransfer(this.id, options);
+  }
+
+  /**
+   * Create cancel transaction.
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createCancel(options) {
+    return this.client.createCancel(this.id, options);
+  }
+
+  /**
+   * Create finalize transaction.
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createFinalize(options) {
+    return this.client.createFinalize(this.id, options);
+  }
+
+  /**
+   * Create revoke transaction.
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createRevoke(options) {
+    return this.client.createRevoke(this.id, options);
+  }
+
+  /**
+   * Sign a transaction.
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  sign(options) {
+    return this.client.sign(this.id, options);
+  }
+
+  /**
+   * Get the raw wallet JSON.
+   * @returns {Promise}
+   */
+
+  getInfo() {
+    return this.client.getInfo(this.id);
+  }
+
+  /**
+   * Get wallet accounts.
+   * @returns {Promise} - Returns Array.
+   */
+
+  getAccounts() {
+    return this.client.getAccounts(this.id);
+  }
+
+  /**
+   * Get wallet master key.
+   * @returns {Promise}
+   */
+
+  getMaster() {
+    return this.client.getMaster(this.id);
+  }
+
+  /**
+   * Get wallet account.
+   * @param {String} account
+   * @returns {Promise}
+   */
+
+  getAccount(account) {
+    return this.client.getAccount(this.id, account);
+  }
+
+  /**
+   * Create account.
+   * @param {String} name
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createAccount(name, options) {
+    return this.client.createAccount(this.id, name, options);
+  }
+
+  /**
+   * Modify account.
+   * @param {String} name
+   * @param {Object} options
+   * @returns {Promise&lt;Object>}
+   */
+
+  modifyAccount(name, options) {
+    return this.client.modifyAccount(this.id, name, options);
+  }
+
+  /**
+   * Create address.
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createAddress(account) {
+    return this.client.createAddress(this.id, account);
+  }
+
+  /**
+   * Create change address.
+   * @param {Object} options
+   * @returns {Promise}
+   */
+
+  createChange(account) {
+    return this.client.createChange(this.id, account);
+  }
+
+  /**
+   * Change or set master key`s passphrase.
+   * @param {String|Buffer} passphrase
+   * @param {(String|Buffer)?} old
+   * @returns {Promise}
+   */
+
+  setPassphrase(passphrase, old) {
+    return this.client.setPassphrase(this.id, passphrase, old);
+  }
+
+  /**
+   * Generate a new token.
+   * @param {(String|Buffer)?} passphrase
+   * @returns {Promise}
+   */
+
+  async retoken(passphrase) {
+    const result = await this.client.retoken(this.id, passphrase);
+
+    assert(result);
+    assert(typeof result.token === 'string');
+
+    this.token = result.token;
+
+    return result;
+  }
+
+  /**
+   * Import private key.
+   * @param {Number|String} account
+   * @param {String} key
+   * @returns {Promise}
+   */
+
+  importPrivate(account, privateKey, passphrase) {
+    return this.client.importPrivate(this.id, account, privateKey, passphrase);
+  }
+
+  /**
+   * Import public key.
+   * @param {Number|String} account
+   * @param {String} key
+   * @returns {Promise}
+   */
+
+  importPublic(account, publicKey) {
+    return this.client.importPublic(this.id, account, publicKey);
+  }
+
+  /**
+   * Import address.
+   * @param {Number|String} account
+   * @param {String} address
+   * @returns {Promise}
+   */
+
+  importAddress(account, address) {
+    return this.client.importAddress(this.id, account, address);
+  }
+
+  /**
+   * Lock a coin.
+   * @param {String} hash
+   * @param {Number} index
+   * @returns {Promise}
+   */
+
+  lockCoin(hash, index) {
+    return this.client.lockCoin(this.id, hash, index);
+  }
+
+  /**
+   * Unlock a coin.
+   * @param {String} hash
+   * @param {Number} index
+   * @returns {Promise}
+   */
+
+  unlockCoin(hash, index) {
+    return this.client.unlockCoin(this.id, hash, index);
+  }
+
+  /**
+   * Get locked coins.
+   * @returns {Promise}
+   */
+
+  getLocked() {
+    return this.client.getLocked(this.id);
+  }
+
+  /**
+   * Lock wallet.
+   * @returns {Promise}
+   */
+
+  lock() {
+    return this.client.lock(this.id);
+  }
+
+  /**
+   * Unlock wallet.
+   * @param {String} passphrase
+   * @param {Number} timeout
+   * @returns {Promise}
+   */
+
+  unlock(passphrase, timeout) {
+    return this.client.unlock(this.id, passphrase, timeout);
+  }
+
+  /**
+   * Get wallet key.
+   * @param {String} address
+   * @returns {Promise}
+   */
+
+  getKey(address) {
+    return this.client.getKey(this.id, address);
+  }
+
+  /**
+   * Get wallet key WIF dump.
+   * @param {String} address
+   * @param {String?} passphrase
+   * @returns {Promise}
+   */
+
+  getWIF(address, passphrase) {
+    return this.client.getWIF(this.id, address, passphrase);
+  }
+
+  /**
+   * Add a public account key to the wallet for multisig.
+   * @param {String} account
+   * @param {String} key - Account (bip44) key (base58).
+   * @returns {Promise}
+   */
+
+  addSharedKey(account, accountKey) {
+    return this.client.addSharedKey(this.id, account, accountKey);
+  }
+
+  /**
+   * Remove a public account key to the wallet for multisig.
+   * @param {String} account
+   * @param {String} key - Account (bip44) key (base58).
+   * @returns {Promise}
+   */
+
+  removeSharedKey(account, accountKey) {
+    return this.client.removeSharedKey(this.id, account, accountKey);
+  }
+
+  /**
+   * Resend wallet transactions.
+   * @returns {Promise}
+   */
+
+  resend() {
+    return this.client.resendWallet(this.id);
+  }
+}
+
+/*
+ * Expose
+ */
+
+module.exports = WalletClient;
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-blockchain.html">blockchain</a></li><li><a href="module-blockchain_common.html">blockchain/common</a></li><li><a href="module-blockstore.html">blockstore</a></li><li><a href="module-blockstore_common.html">blockstore/common</a></li><li><a href="module-blockstore_records.html">blockstore/records</a></li><li><a href="module-client.html">client</a></li><li><a href="module-coins.html">coins</a></li><li><a href="module-covenants.html">covenants</a></li><li><a href="module-dns_common.html">dns/common</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-hd.html">hd</a></li><li><a href="module-hsd.html">hsd</a></li><li><a href="module-mempool.html">mempool</a></li><li><a href="module-mining.html">mining</a></li><li><a href="module-mining_common.html">mining/common</a></li><li><a href="module-net.html">net</a></li><li><a href="module-net_bip152.html">net/bip152</a></li><li><a href="module-net_common.html">net/common</a></li><li><a href="module-net_packets.html">net/packets</a></li><li><a href="module-node.html">node</a></li><li><a href="module-primitives.html">primitives</a></li><li><a href="module-protocol.html">protocol</a></li><li><a href="module-protocol_consensus.html">protocol/consensus</a></li><li><a href="module-protocol_errors.html">protocol/errors</a></li><li><a href="module-protocol_networks.html">protocol/networks</a></li><li><a href="module-protocol_policy.html">protocol/policy</a></li><li><a href="module-script.html">script</a></li><li><a href="module-script_common.html">script/common</a></li><li><a href="module-ui.html">ui</a></li><li><a href="module-utils.html">utils</a></li><li><a href="module-utils_util.html">utils/util</a></li><li><a href="module-wallet.html">wallet</a></li><li><a href="module-wallet_common.html">wallet/common</a></li><li><a href="module-wallet_plugin.html">wallet/plugin</a></li><li><a href="module-wallet_records.html">wallet/records</a></li><li><a href="module-workers.html">workers</a></li><li><a href="module-workers_jobs.html">workers/jobs</a></li><li><a href="module-workers_packets.html">workers/packets</a></li></ul><h3>Classes</h3><ul><li><a href="AirdropKey.html">AirdropKey</a></li><li><a href="AirdropProof.html">AirdropProof</a></li><li><a href="BidReveal.html">BidReveal</a></li><li><a href="BitField.html">BitField</a></li><li><a href="BitView.html">BitView</a></li><li><a href="BlindBid.html">BlindBid</a></li><li><a href="BlindValue.html">BlindValue</a></li><li><a href="BlockProof.html">BlockProof</a></li><li><a href="Brontide.html">Brontide</a></li><li><a href="BrontideStream.html">BrontideStream</a></li><li><a href="ChainFlags.html">ChainFlags</a></li><li><a href="ChainState.html">ChainState</a></li><li><a href="CipherState.html">CipherState</a></li><li><a href="Claim.html">Claim</a></li><li><a href="DetailsMember.html">DetailsMember</a></li><li><a href="DS.html">DS</a></li><li><a href="Field.html">Field</a></li><li><a href="GLUE4.html">GLUE4</a></li><li><a href="GLUE6.html">GLUE6</a></li><li><a href="HandshakeState.html">HandshakeState</a></li><li><a href="HashList.html">HashList</a></li><li><a href="LockedUp.html">LockedUp</a></li><li><a href="MigrateAccountLookahead.html">MigrateAccountLookahead</a></li><li><a href="MigrateBlockStore.html">MigrateBlockStore</a></li><li><a href="MigrateChainState.html">MigrateChainState</a></li><li><a href="MigrateChangeAddress.html">MigrateChangeAddress</a></li><li><a href="MigrateMigrations.html">MigrateMigrations</a></li><li><a href="MigrateTreeState.html">MigrateTreeState</a></li><li><a href="module.migrations.MigrationState.html">MigrationState</a></li><li><a href="module-blockchain.Chain.html">Chain</a></li><li><a href="module-blockchain.ChainDB.html">ChainDB</a></li><li><a href="module-blockchain.ChainEntry.html">ChainEntry</a></li><li><a href="module-blockchain.ChainMigrator.html">ChainMigrator</a></li><li><a href="module-blockchain.ChainMigratorOptions.html">ChainMigratorOptions</a></li><li><a href="module-blockchain.ChainOptions.html">ChainOptions</a></li><li><a href="module-blockchain.DeploymentState.html">DeploymentState</a></li><li><a href="module-blockchain.WalletMigrationResult.html">WalletMigrationResult</a></li><li><a href="module-blockchain.WalletMigrator.html">WalletMigrator</a></li><li><a href="module-blockstore.AbstractBatch.html">AbstractBatch</a></li><li><a href="module-blockstore.AbstractBlockStore.html">AbstractBlockStore</a></li><li><a href="module-blockstore.FileBatch.html">FileBatch</a></li><li><a href="module-blockstore.LevelBatch.html">LevelBatch</a></li><li><a href="module-blockstore_records-BlockRecord.html">BlockRecord</a></li><li><a href="module-blockstore_records-FileRecord.html">FileRecord</a></li><li><a href="module-blockstore_FileBlockStore.html">blockstore:FileBlockStore</a></li><li><a href="module-blockstore_LevelBlockStore.html">blockstore:LevelBlockStore</a></li><li><a href="module-client.NodeClient.html">NodeClient</a></li><li><a href="module-client.WalletClient.html">WalletClient</a></li><li><a href="module-coins.CoinEntry.html">CoinEntry</a></li><li><a href="module-coins.Coins.html">Coins</a></li><li><a href="module-coins.CoinView.html">CoinView</a></li><li><a href="module-coins.UndoCoins.html">UndoCoins</a></li><li><a href="module-currency.Amount.html">Amount</a></li><li><a href="module-errors-CriticalError.html">CriticalError</a></li><li><a href="module-hd.Mnemonic.html">Mnemonic</a></li><li><a href="module-hd.PrivateKey.html">PrivateKey</a></li><li><a href="module-hd.PublicKey.html">PublicKey</a></li><li><a href="module-http.HTTPOptions.html">HTTPOptions</a></li><li><a href="module-http.RPC.html">RPC</a></li><li><a href="module-http.Server.html">Server</a></li><li><a href="module-http.TransactionOptions.html">TransactionOptions</a></li><li><a href="module-mempool.AirdropEntry.html">AirdropEntry</a></li><li><a href="module-mempool.ClaimEntry.html">ClaimEntry</a></li><li><a href="module-mempool.ConfirmStats.html">ConfirmStats</a></li><li><a href="module-mempool.Mempool.html">Mempool</a></li><li><a href="module-mempool.MempoolEntry.html">MempoolEntry</a></li><li><a href="module-mempool.MempoolOptions.html">MempoolOptions</a></li><li><a href="module-mempool.PolicyEstimator.html">PolicyEstimator</a></li><li><a href="module-migrations.AbstractMigration.html">AbstractMigration</a></li><li><a href="module-migrations.MigrationResult.html">MigrationResult</a></li><li><a href="module-migrations.Migrator.html">Migrator</a></li><li><a href="module-mining.BlockAirdrop.html">BlockAirdrop</a></li><li><a href="module-mining.BlockClaim.html">BlockClaim</a></li><li><a href="module-mining.BlockEntry.html">BlockEntry</a></li><li><a href="module-mining.BlockTemplate.html">BlockTemplate</a></li><li><a href="module-mining.CPUMiner.html">CPUMiner</a></li><li><a href="module-mining.Miner.html">Miner</a></li><li><a href="module-mining.MinerOptions.html">MinerOptions</a></li><li><a href="module-net.BroadcastItem.html">BroadcastItem</a></li><li><a href="module-net.Framer.html">Framer</a></li><li><a href="module-net.HostEntry.html">HostEntry</a></li><li><a href="module-net.HostList.html">HostList</a></li><li><a href="module-net.HostListOptions.html">HostListOptions</a></li><li><a href="module-net.LocalAddress.html">LocalAddress</a></li><li><a href="module-net.NetAddress.html">NetAddress</a></li><li><a href="module-net.Parser.html">Parser</a></li><li><a href="module-net.Peer.html">Peer</a></li><li><a href="module-net.PeerList.html">PeerList</a></li><li><a href="module-net.PeerOptions.html">PeerOptions</a></li><li><a href="module-net.Pool.html">Pool</a></li><li><a href="module-net.PoolOptions.html">PoolOptions</a></li><li><a href="module-net_bip152-CompactBlock.html">CompactBlock</a></li><li><a href="module-net_bip152-TXRequest.html">TXRequest</a></li><li><a href="module-net_bip152-TXResponse.html">TXResponse</a></li><li><a href="module-net_packets-AddrPacket.html">AddrPacket</a></li><li><a href="module-net_packets-AirdropPacket.html">AirdropPacket</a></li><li><a href="module-net_packets-BlockPacket.html">BlockPacket</a></li><li><a href="module-net_packets-BlockTxnPacket.html">BlockTxnPacket</a></li><li><a href="module-net_packets-ClaimPacket.html">ClaimPacket</a></li><li><a href="module-net_packets-CmpctBlockPacket.html">CmpctBlockPacket</a></li><li><a href="module-net_packets-FeeFilterPacket.html">FeeFilterPacket</a></li><li><a href="module-net_packets-FilterAddPacket.html">FilterAddPacket</a></li><li><a href="module-net_packets-FilterClearPacket.html">FilterClearPacket</a></li><li><a href="module-net_packets-FilterLoadPacket.html">FilterLoadPacket</a></li><li><a href="module-net_packets-GetAddrPacket.html">GetAddrPacket</a></li><li><a href="module-net_packets-GetBlocksPacket.html">GetBlocksPacket</a></li><li><a href="module-net_packets-GetBlockTxnPacket.html">GetBlockTxnPacket</a></li><li><a href="module-net_packets-GetDataPacket.html">GetDataPacket</a></li><li><a href="module-net_packets-GetHeadersPacket.html">GetHeadersPacket</a></li><li><a href="module-net_packets-GetProofPacket.html">GetProofPacket</a></li><li><a href="module-net_packets-HeadersPacket.html">HeadersPacket</a></li><li><a href="module-net_packets-InvPacket.html">InvPacket</a></li><li><a href="module-net_packets-MempoolPacket.html">MempoolPacket</a></li><li><a href="module-net_packets-MerkleBlockPacket.html">MerkleBlockPacket</a></li><li><a href="module-net_packets-NotFoundPacket.html">NotFoundPacket</a></li><li><a href="module-net_packets-Packet.html">Packet</a></li><li><a href="module-net_packets-PingPacket.html">PingPacket</a></li><li><a href="module-net_packets-PongPacket.html">PongPacket</a></li><li><a href="module-net_packets-ProofPacket.html">ProofPacket</a></li><li><a href="module-net_packets-RejectPacket.html">RejectPacket</a></li><li><a href="module-net_packets-SendCmpctPacket.html">SendCmpctPacket</a></li><li><a href="module-net_packets-SendHeadersPacket.html">SendHeadersPacket</a></li><li><a href="module-net_packets-TXPacket.html">TXPacket</a></li><li><a href="module-net_packets-UnknownPacket.html">UnknownPacket</a></li><li><a href="module-net_packets-VerackPacket.html">VerackPacket</a></li><li><a href="module-net_packets-VersionPacket.html">VersionPacket</a></li><li><a href="module-node.FullNode.html">FullNode</a></li><li><a href="module-node.Node.html">Node</a></li><li><a href="module-node.NodeClient.html">NodeClient</a></li><li><a href="module-node.NullClient.html">NullClient</a></li><li><a href="module-node.SPVNode.html">SPVNode</a></li><li><a href="module-primitives.AbstractBlock.html">AbstractBlock</a></li><li><a href="module-primitives.Address.html">Address</a></li><li><a href="module-primitives.Block.html">Block</a></li><li><a href="module-primitives.Coin.html">Coin</a></li><li><a href="module-primitives.CoinSelector.html">CoinSelector</a></li><li><a href="module-primitives.Covenant.html">Covenant</a></li><li><a href="module-primitives.Headers.html">Headers</a></li><li><a href="module-primitives.Input.html">Input</a></li><li><a href="module-primitives.InvItem.html">InvItem</a></li><li><a href="module-primitives.KeyRing.html">KeyRing</a></li><li><a href="module-primitives.MemBlock.html">MemBlock</a></li><li><a href="module-primitives.MerkleBlock.html">MerkleBlock</a></li><li><a href="module-primitives.MTX.html">MTX</a></li><li><a href="module-primitives.Outpoint.html">Outpoint</a></li><li><a href="module-primitives.Output.html">Output</a></li><li><a href="module-primitives.TX.html">TX</a></li><li><a href="module-primitives.TXMeta.html">TXMeta</a></li><li><a href="module-protocol.Network.html">Network</a></li><li><a href="module-protocol.TimeData.html">TimeData</a></li><li><a href="module-protocol_errors-VerifyError.html">VerifyError</a></li><li><a href="module-script.Opcode.html">Opcode</a></li><li><a href="module-script.Script.html">Script</a></li><li><a href="module-script.ScriptError.html">ScriptError</a></li><li><a href="module-script.ScriptNum.html">ScriptNum</a></li><li><a href="module-script.SigCache.html">SigCache</a></li><li><a href="module-script.Stack.html">Stack</a></li><li><a href="module-script.Witness.html">Witness</a></li><li><a href="module-ui.URI.html">URI</a></li><li><a href="module-wallet.Account.html">Account</a></li><li><a href="module-wallet.Balance.html">Balance</a></li><li><a href="module-wallet.BlockRecord.html">BlockRecord</a></li><li><a href="module-wallet.Credit.html">Credit</a></li><li><a href="module-wallet.Details.html">Details</a></li><li><a href="module-wallet.HTTP.html">HTTP</a></li><li><a href="module-wallet.MasterKey.html">MasterKey</a></li><li><a href="module-wallet.Path.html">Path</a></li><li><a href="module-wallet.Paths.html">Paths</a></li><li><a href="module-wallet.RPC.html">RPC</a></li><li><a href="module-wallet.TXDB.html">TXDB</a></li><li><a href="module-wallet.Wallet.html">Wallet</a></li><li><a href="module-wallet.WalletCoinView.html">WalletCoinView</a></li><li><a href="module-wallet.WalletDB.html">WalletDB</a></li><li><a href="module-wallet.WalletKey.html">WalletKey</a></li><li><a href="module-wallet.WalletMigratorOptions.html">WalletMigratorOptions</a></li><li><a href="module-wallet.WalletOptions.html">WalletOptions</a></li><li><a href="module-wallet_plugin-Plugin.html">Plugin</a></li><li><a href="module-wallet_records-BlockMeta.html">BlockMeta</a></li><li><a href="module-wallet_records-ChainState.html">ChainState</a></li><li><a href="module-wallet_records-MapRecord.html">MapRecord</a></li><li><a href="module-wallet_records-TXRecord.html">TXRecord</a></li><li><a href="module-workers.Framer.html">Framer</a></li><li><a href="module-workers.Master.html">Master</a></li><li><a href="module-workers.Parent.html">Parent</a></li><li><a href="module-workers.Parser.html">Parser</a></li><li><a href="module-workers.Worker.html">Worker</a></li><li><a href="module-workers.WorkerPool.html">WorkerPool</a></li><li><a href="module-workers_packets-CheckInputPacket.html">CheckInputPacket</a></li><li><a href="module-workers_packets-CheckInputResultPacket.html">CheckInputResultPacket</a></li><li><a href="module-workers_packets-CheckPacket.html">CheckPacket</a></li><li><a href="module-workers_packets-CheckResultPacket.html">CheckResultPacket</a></li><li><a href="module-workers_packets-ECSignPacket.html">ECSignPacket</a></li><li><a href="module-workers_packets-ECSignResultPacket.html">ECSignResultPacket</a></li><li><a href="module-workers_packets-ECVerifyPacket.html">ECVerifyPacket</a></li><li><a href="module-workers_packets-ECVerifyResultPacket.html">ECVerifyResultPacket</a></li><li><a href="module-workers_packets-EnvPacket.html">EnvPacket</a></li><li><a href="module-workers_packets-ErrorPacket.html">ErrorPacket</a></li><li><a href="module-workers_packets-ErrorResultPacket.html">ErrorResultPacket</a></li><li><a href="module-workers_packets-EventPacket.html">EventPacket</a></li><li><a href="module-workers_packets-LogPacket.html">LogPacket</a></li><li><a href="module-workers_packets-MinePacket.html">MinePacket</a></li><li><a href="module-workers_packets-MineResultPacket.html">MineResultPacket</a></li><li><a href="module-workers_packets-Packet.html">Packet</a></li><li><a href="module-workers_packets-ScryptPacket.html">ScryptPacket</a></li><li><a href="module-workers_packets-ScryptResultPacket.html">ScryptResultPacket</a></li><li><a href="module-workers_packets-SignInputPacket.html">SignInputPacket</a></li><li><a href="module-workers_packets-SignInputResultPacket.html">SignInputResultPacket</a></li><li><a href="module-workers_packets-SignPacket.html">SignPacket</a></li><li><a href="module-workers_packets-SignResultPacket.html">SignResultPacket</a></li><li><a href="NameDelta.html">NameDelta</a></li><li><a href="NameState.html">NameState</a></li><li><a href="NS.html">NS</a></li><li><a href="Ownership.html">Ownership</a></li><li><a href="Proof.html">Proof</a></li><li><a href="ProofData.html">ProofData</a></li><li><a href="RecursiveServer.html">RecursiveServer</a></li><li><a href="Reserved.html">Reserved</a></li><li><a href="Resource.html">Resource</a></li><li><a href="RootCache.html">RootCache</a></li><li><a href="RootServer.html">RootServer</a></li><li><a href="Seeder.html">Seeder</a></li><li><a href="SlidingWindow.html">SlidingWindow</a></li><li><a href="StateCache.html">StateCache</a></li><li><a href="SymmetricState.html">SymmetricState</a></li><li><a href="SYNTH4.html">SYNTH4</a></li><li><a href="SYNTH6.html">SYNTH6</a></li><li><a href="TXT.html">TXT</a></li><li><a href="Wallet.html">Wallet</a></li><li><a href="WalletNode.html">WalletNode</a></li></ul><h3>Global</h3><ul><li><a href="global.html#bindExit">bindExit</a></li><li><a href="global.html#checksig">checksig</a></li><li><a href="global.html#decode">decode</a></li><li><a href="global.html#encode">encode</a></li><li><a href="global.html#fromFloat">fromFloat</a></li><li><a href="global.html#groupKey">groupKey</a></li><li><a href="global.html#insert">insert</a></li><li><a href="global.html#listenExit">listenExit</a></li><li><a href="global.html#migrationLayout">migrationLayout</a></li><li><a href="global.html#oldLayout">oldLayout</a></li><li><a href="global.html#remove">remove</a></li><li><a href="global.html#search">search</a></li><li><a href="global.html#toFloat">toFloat</a></li><li><a href="global.html#validateKey">validateKey</a></li><li><a href="global.html#validateSignature">validateSignature</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 1.1.2</a> on Sun Aug 06 2023 11:22:43 GMT+0000 (Coordinated Universal Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
