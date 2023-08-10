@@ -62,7 +62,9 @@ const COPY_FILES = [
   'bin/hsw-rpc',
   'lib/client/index.js',
   'lib/client/wallet.js',
-  'lib/client/node.js'
+  'lib/client/node.js',
+  'LICENSE',
+  'SECURITY.md'
 ];
 
 const README = `
@@ -139,21 +141,35 @@ async function setupPackageContent(dir) {
   return hsClientPkg;
 }
 
-async function setupGit(dir, version, log) {
+async function setupGit(dir, log) {
   const commands = [
     'git init -b master',
     `git remote add origin ${REMOTE}`,
+    'git fetch -q origin master',
+    'git pull -q origin master',
+    'git rm -r .'
+  ];
+
+  log('Setting up git: ', dir);
+
+  for (const cmd of [...commands]) {
+    log(` > ${cmd} in ${dir}.`);
+    log(await execCmd(cmd, dir, 20000));
+    commands.shift();
+  }
+}
+
+async function finalGit(dir, version, log) {
+  const commands = [
     'git add .',
     `git commit --gpg-sign -m "v${version}"`,
     `git tag --sign v${version} -m "v${version}"`
   ];
 
   const manualCommands = [
-    'git push -f origin master',
-    `git push -f origin v${version}`
+    'git push origin master',
+    `git push origin v${version}`
   ];
-
-  log('Setting up git: ', dir);
 
   for (const cmd of [...commands]) {
     log(` > ${cmd} in ${dir}.`);
@@ -199,15 +215,19 @@ async function setupGit(dir, version, log) {
 
   const pkgDir = await ensureDir(dir);
 
+  if (!noSteps && !noGit)
+    await setupGit(pkgDir, log);
+
   log(`Copying files to ${pkgDir}...`);
   const pkg = await setupPackageContent(pkgDir);
-  let gitNext = null;
-
-  if (!noGit)
-    gitNext = await setupGit(pkgDir, pkg.version, log);
 
   if (noSteps)
     return;
+
+  let gitNext;
+
+  if (!noGit)
+    gitNext = await finalGit(pkgDir, pkg.version, log);
 
   console.log(`Generated ${pkgDir}.`);
   console.log('Next steps:');
