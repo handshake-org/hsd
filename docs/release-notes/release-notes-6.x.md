@@ -76,5 +76,6 @@ a plugin. Configurations with `wallet-` prefix will be passed to the wallet.
   - \[[`2bb8f0b0`](https://github.com/handshake-org/hsd/commit/2bb8f0b0)] - [#810](https://github.com/handshake-org/hsd/pull/810) - **docs**: Minor doc fix about release docs  (@nodech - Nodari Chkuaselidze)
   - \[[`6b47c3a0`](https://github.com/handshake-org/hsd/commit/6b47c3a0)] - [#805](https://github.com/handshake-org/hsd/pull/805) - **net**: update last checkpoint.  (@nodech - Nodari Chkuaselidze)
   - \[[`008374ca`](https://github.com/handshake-org/hsd/commit/008374ca)] - [#800](https://github.com/handshake-org/hsd/pull/800) - **docs**: backport v5.0.0 release notes.  (@nodech - Nodari Chkuaselidze)
+  - \[[`500d638d`](https://github.com/handshake-org/hsd/commit/500d638d)] - [#838](https://github.com/handshake-org/hsd/pull/838) - **scripts**: Update hs-client generator.  (@nodech - Nodari Chkuaselidze)
 
 [hs-client]: https://github.com/handshake-org/hs-client
