@@ -227,6 +227,10 @@ describe('Wallet', function() {
       await wdb.addTX(t4.toTX());
 
       const balance = await alice.getBalance();
+      // UCoins:
+      //  t4:0 - 11k
+      //  t4:1 - 11k
+      assert.strictEqual(balance.coin, 2);
       assert.strictEqual(balance.unconfirmed, 22000);
     }
 
@@ -234,28 +238,56 @@ describe('Wallet', function() {
       await wdb.addTX(t1.toTX());
 
       const balance = await alice.getBalance();
+      // UCoins:
+      //  t1:0 - 50k
+      //  t1:1 - 1k
+      //  t4:0 - 11k
+      //  t4:1 - 11k
+      assert.strictEqual(balance.coin, 4);
+      // 22000 + 51000 = 73000
       assert.strictEqual(balance.unconfirmed, 73000);
     }
 
     {
       await wdb.addTX(t2.toTX());
 
+      // t2 spends 50k from t1, but adds 48k from t2
+      // 2k less = 71000. BUT t2 output is consumed by t4 so:
+      // -24k. 71000 - 24000 = 47000
+      // UCoins:
+      //  t1:0 - 1k (t1:1 - 50k gone)
+      //  t2:0 - 24k (t2:1 is already consumed by t4)
+      //  t4:0 - 11k
+      //  t4:1 - 11k
       const balance = await alice.getBalance();
-      assert.strictEqual(balance.unconfirmed, 71000);
+      assert.strictEqual(balance.coin, 4);
+      assert.strictEqual(balance.unconfirmed, 47000);
     }
 
     {
       await wdb.addTX(t3.toTX());
 
+      // UCoins consumed:
+      //  t1:1 - 1k
+      //  t2:0 - 24k
+      //  t3:0 - 23k - already spent by t4
+      // UCoins:
+      //  t4:0 - 11k
+      //  t4:1 - 11k
       const balance = await alice.getBalance();
-      assert.strictEqual(balance.unconfirmed, 69000);
+      assert.strictEqual(balance.coin, 2);
+      assert.strictEqual(balance.unconfirmed, 22000);
     }
 
     {
       await wdb.addTX(f1.toTX());
+      // Coins consumed:
+      //  t4:1 - 11k
+      // Coins:
+      //  t4:0 - 11k
 
       const balance = await alice.getBalance();
-      assert.strictEqual(balance.unconfirmed, 58000);
+      assert.strictEqual(balance.unconfirmed, 11000);
 
       const txs = await alice.getHistory();
       assert(txs.some((wtx) => {
@@ -535,34 +567,67 @@ describe('Wallet', function() {
     await alice.sign(f1);
 
     {
+      // Coins:
+      //  t4:0 - 11k
+      //  t4:1 - 11k
       await wdb.addTX(t4.toTX());
       const balance = await alice.getBalance();
+      assert.strictEqual(balance.coin, 2);
       assert.strictEqual(balance.unconfirmed, 22000);
     }
 
     {
+      // Coins:
+      //  t1:0 - 50k
+      //  t1:1 - 1k
+      //  t4:0 - 11k
+      //  t4:1 - 11k
       await wdb.addTX(t1.toTX());
       const balance = await alice.getBalance();
+      assert.strictEqual(balance.coin, 4);
       assert.strictEqual(balance.unconfirmed, 73000);
     }
 
     {
+      // Coins consumed:
+      //  t1:0 - 50k
+      // Coins already spent:
+      //  t2:1 - 24k
+      // Coins:
+      //  t1:1 - 1k
+      //  t2:0 - 24k
+      //  t4:0 - 11k
+      //  t4:1 - 11k
       await wdb.addTX(t2.toTX());
       const balance = await alice.getBalance();
-      assert.strictEqual(balance.unconfirmed, 71000);
+      assert.strictEqual(balance.coin, 4);
+      assert.strictEqual(balance.unconfirmed, 47000);
     }
 
     {
+      // Coins consumed:
+      //  t1:1 - 1k
+      //  t2:0 - 24k
+      // Coins already spent:
+      //  t3:0 - 23k
+      // Coins:
+      //  t4:0 - 11k
+      //  t4:1 - 11k
       await wdb.addTX(t3.toTX());
       const balance = await alice.getBalance();
-      assert.strictEqual(balance.unconfirmed, 69000);
+      assert.strictEqual(balance.coin, 2);
+      assert.strictEqual(balance.unconfirmed, 22000);
     }
 
     {
       await wdb.addTX(f1.toTX());
 
+      // Coins consumed (alice)
+      //  t4:1 - 11k
+      // Coins:
+      //  t4:0 - 11k
       const balance = await alice.getBalance();
-      assert.strictEqual(balance.unconfirmed, 58000);
+      assert.strictEqual(balance.unconfirmed, 11000);
 
       const txs = await alice.getHistory();
       assert(txs.some((wtx) => {
