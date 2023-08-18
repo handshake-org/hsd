@@ -19,6 +19,7 @@ const {forEventCondition} = require('./util/common');
  *  - Add CoinView support to chain <-> wallet and update input tests.
  *  - Add coin discovery on unconfirm
  *  - Add spent coin state recovery on unconfirm/confirm for pending txs.
+ *  - Add spent coin state recovery on insert/insert(block) and confirm.
  */
 
 const network = Network.get('regtest');
@@ -1015,7 +1016,7 @@ describe('Wallet Balance', function() {
     const sendOpen = async (wallet) => {
       const name = grindName(GRIND_NAME_LEN, chain.tip.height, network);
 
-      await wallet.sendOpen(name, false, {
+      await wallet.sendOpen(name, {
         hardFee: HARD_FEE
       });
     };
