@@ -504,32 +504,16 @@ describe('Wallet Balance', function() {
     const balances = { ...undiscovered };
 
     switch (discoverAt) {
-      case BEFORE_CONFIRM: {
+      case BEFORE_CONFIRM:
         balances.confirmedBalance = discovered.confirmedBalance;
-
-        // TODO: After unconfirm detection, remove next line.
+      case BEFORE_UNCONFIRM:
         balances.unconfirmedBalance = discovered.unconfirmedBalance;
-      }
-
-      case BEFORE_UNCONFIRM: {
-        // TODO: After unconfirm detection, uncomment next line.
-        // balances.unconfirmedBalance = discovered.unconfirmedBalance;
-      }
-
       case BEFORE_ERASE:
-      case BEFORE_BLOCK_CONFIRM: {
+      case BEFORE_BLOCK_CONFIRM:
         balances.blockConfirmedBalance = discovered.blockConfirmedBalance;
-
-        // TODO: After unconfirm detection, remove next line.
+      case BEFORE_BLOCK_UNCONFIRM:
         balances.blockUnconfirmedBalance = discovered.blockUnconfirmedBalance;
-      }
-
-      case BEFORE_BLOCK_UNCONFIRM: {
-        // TODO: After unconfirm detection, uncomment next line.
-        // balances.blockUnconfirmedBalance = undiscovered.blockUnconfirmedBalance;
         balances.blockFinalConfirmedBalance = discovered.blockConfirmedBalance;
-      }
-
       case NONE:
       default:
     }
@@ -965,43 +949,13 @@ describe('Wallet Balance', function() {
     UNDISCOVERED.blockConfirmedBalance = UNDISCOVERED.confirmedBalance;
     UNDISCOVERED.blockUnconfirmedBalance = UNDISCOVERED.unconfirmedBalance;
 
-    const checks = checkBalances(UNDISCOVERED);
-
-    it('should spend credit (no discovery)', async () => {
-      await test(checks, DISCOVER_TYPES.NONE);
-    });
-
-    it('should spend credit, discover on confirm', async () => {
-      // Here we discover another output on Confirm.
-      // But it is spent right away from the next transaction
-      // that gets committed. So nothing will actually change.
-      await test(checks, DISCOVER_TYPES.BEFORE_CONFIRM);
-    });
-
-    it('should spend credit, discover on unconfirm', async () => {
-      // Here we don't actually discover output. We could but that
-      // is another TODO: Add spent in pending credit discovery.
-      // Balance will be the same, but the entries in the database
-      // for the coin will be different.
-      await test(checks, DISCOVER_TYPES.BEFORE_UNCONFIRM);
-    });
-
-    it('should spend credit, discover on erase', async () => {
-      // Nothing should happen as outputs go away.. Does not matter
-      // if we discover.
-      await test(checks, DISCOVER_TYPES.BEFORE_ERASE);
-    });
-
-    it('should spend credit, discover on block confirm', async () => {
-      // Here we discover the coins, but because they are spent right away
-      // it must not change the coin/balance.
-      // Test for that is covered above in normal receive.
-      await test(checks, DISCOVER_TYPES.BEFORE_BLOCK_CONFIRM);
-    });
-
-    it('should spend credit, discover on block unconfirm', async () => {
-      // Same as UNCONFIRM note.
-      await test(checks, DISCOVER_TYPES.BEFORE_BLOCK_UNCONFIRM);
+    genTests({
+      name: 'should spend credit',
+      undiscovered: UNDISCOVERED,
+      discovered: UNDISCOVERED,
+      tester: test,
+      checker: checkBalances,
+      discoverer: defDiscover
     });
   });
 
