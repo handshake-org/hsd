@@ -3,7 +3,7 @@ v6.x Release notes
 
 <!-- toc -->
 
-- [v6.0](#v60)
+- [v6.0.0](#v600)
   * [How to Upgrade](#how-to-upgrade)
   * [Notable Changes](#notable-changes)
     + [Network](#network)
@@ -13,10 +13,12 @@ v6.x Release notes
       - [Configuration](#configuration)
       - [Wallet API](#wallet-api)
   * [Changelog](#changelog)
+- [v6.1.0](#v610)
+  * [Changelog](#changelog-1)
 
 <!-- tocstop -->
 
-# v6.0
+# v6.0.0
 ## How to Upgrade
   This version does not have any migrations, so upgrade does not need an action.
 
@@ -79,3 +81,11 @@ a plugin. Configurations with `wallet-` prefix will be passed to the wallet.
   - \[[`500d638d`](https://github.com/handshake-org/hsd/commit/500d638d)] - [#838](https://github.com/handshake-org/hsd/pull/838) - **scripts**: Update hs-client generator.  (@nodech - Nodari Chkuaselidze)
 
 [hs-client]: https://github.com/handshake-org/hs-client
+
+# v6.1.0
+Re-enable bip9 signalling that was disabled in v2. See [#842](https://github.com/handshake-org/hsd/pull/842)
+- `getblocktemplate` can now start signalling soft-forks again using `rules` parameter. (e.g. `getblocktemplate '{ "rules": [ "icannlockup" ] }'`)
+- `getwork` will now signal **ALL** soft-forks again.
+
+## Changelog
+  - \[[`6dc5249d`](https://github.com/handshake-org/hsd/commit/6dc5249d)] - [#842](https://github.com/handshake-org/hsd/pull/842) - **SEMVER-MINOR miner**: Fix bip9 signalling.  (@rithvikvibhu - Rithvik Vibhu)

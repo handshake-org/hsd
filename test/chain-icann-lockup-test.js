@@ -1062,6 +1062,10 @@ async function mineBlock(node, opts = {}) {
 
   const job = await miner.cpu.createJob(chain.tip);
 
+  // opt out of all (esp. `hardening`) as
+  // some domains in this test still use RSA-1024
+  job.attempt.version = 0;
+
   if (setICANNLockup)
     job.attempt.version |= (1 << deployments[SOFT_FORK_NAME].bit);
 
