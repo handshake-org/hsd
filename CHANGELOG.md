@@ -1,5 +1,15 @@
 # HSD Release Notes & Changelog
 
+## Unreleased
+
+### Wallet API:
+
+- HTTP Changes:
+  - All transaction creating endpoints now accept `hardFee` for specifying the
+    exact fee.
+  - All transaction sending endpoints now fundlock/queue tx creation. (no more
+    conflicting transactions)
+
 ## v6.0.0
 
 ### Node and Wallet HTTP API
