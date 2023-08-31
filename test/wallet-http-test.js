@@ -1734,6 +1734,7 @@ describe('Wallet HTTP', function() {
       checkDoubleSpends(txs);
 
       // spend all money for now.
+      // Passphrase not necessary as the wallet is unlocked.
       await rcwallet1.send({
         subtractFee: true,
         outputs: [{
@@ -1806,7 +1807,7 @@ describe('Wallet HTTP', function() {
       assert.strictEqual(balance1.coin, 6);
       assert.strictEqual(balance1.confirmed, HARD_FEE * 3);
 
-      // 3 bids (nothing extra)
+      // 6 bids (nothing extra)
       assert.strictEqual(balance2.coin, 6);
       assert.strictEqual(balance2.confirmed, (HARD_FEE - 1) * 6);
     });
@@ -1860,11 +1861,13 @@ describe('Wallet HTTP', function() {
     it('should register 3 times', async () => {
       const promises = [];
 
+      // We don't have funds to fund anything.
+      // Add 3 coins to pay for the fees and cause
+      // double spend.
       await fundNcoins(rcwallet1, 3, HARD_FEE);
 
       const forMemTX = common.forEvent(node.mempool, 'tx', 3);
 
-      // We don't have funds to fund anything.
       for (let i = 0; i < 3; i++) {
         promises.push(rcwallet1.createUpdate({
           name: NAMES[i],
