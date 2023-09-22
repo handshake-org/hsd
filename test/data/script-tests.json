@@ -10736,6 +10736,18 @@
     "result": "NEGATIVE_LOCKTIME"
   },
   {
+    "comments": "CHECKLOCKTIMEVERIFY automatically fails if stack top is negative",
+    "script": "OP_CHECKLOCKTIMEVERIFY",
+    "value": 0,
+    "witness": [
+      "81"
+    ],
+    "locktime": 0,
+    "sequence": 4294967295,
+    "flags": [],
+    "result": "NEGATIVE_LOCKTIME"
+  },
+  {
     "comments": "CSV fails if stack top is not minimally encoded",
     "script": "OP_CHECKSEQUENCEVERIFY",
     "value": 0,
