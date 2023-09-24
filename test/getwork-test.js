@@ -22,8 +22,10 @@ const {wdb} = node.require('walletdb');
 
 let wallet = null;
 
+const TIMEOUT = 45000;
+
 describe('Get Work', function() {
-  this.timeout(45000);
+  this.timeout(TIMEOUT);
 
   it('should open chain and miner', async () => {
     await node.open();
@@ -36,13 +38,15 @@ describe('Get Work', function() {
   });
 
   it('should mine 10 blocks', async () => {
-    const connectEvents = forEvent(chain, 'connect', 10, 10000);
+    const DELAY = 500;
+    const waits = DELAY * 10;
+    const connectEvents = forEvent(chain, 'connect', 10, TIMEOUT - waits);
     for (let i = 0; i < 10; i++) {
       const block = await miner.mineBlock();
       assert(block);
       await chain.add(block);
       // lower mtp.
-      await sleep(500);
+      await sleep(DELAY);
     }
 
     await connectEvents;
