@@ -360,9 +360,24 @@ describe('Script', function() {
       (1 << 24) - 1, (1 << 31), 1500, -1500
     ];
 
+    const serializationVectorBI = [
+      1n - 1n << 32n,
+      1n << 40n
+    ];
+
     it('should serialize script numbers correctly', () => {
       for (const [num, bytes] of sn2bytesVector) {
         const sn = ScriptNum.fromNumber(num);
+        const numBytes = sn.encode();
+        const testBuffer = Buffer.from(bytes);
+
+        assert.bufferEqual(numBytes, testBuffer);
+      }
+    });
+
+    it('should serialize script numbers correctly (BigInt)', () => {
+      for (const [num, bytes] of sn2bytesVector) {
+        const sn = ScriptNum.fromBigInt(BigInt(num));
         const numBytes = sn.encode();
         const testBuffer = Buffer.from(bytes);
 
@@ -374,6 +389,20 @@ describe('Script', function() {
       for (const num of serializationVector) {
         const encoded = ScriptNum.fromNumber(num).encode();
         const final = ScriptNum.decode(encoded).toNumber();
+
+        assert.strictEqual(num, final);
+      }
+    });
+
+    it('should serialize/deserialize script numbers correctly (BigInt)', () => {
+      const all = [
+        ...serializationVector.map(n => BigInt(n)),
+        ...serializationVectorBI
+      ];
+
+      for (const num of all) {
+        const encoded = ScriptNum.fromBigInt(num).encode();
+        const final = ScriptNum.decode(encoded).toBigInt();
 
         assert.strictEqual(num, final);
       }
