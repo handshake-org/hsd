@@ -175,6 +175,7 @@ describe('Namestate', function() {
               'hoursUntilValidFinalize'
             ]
           );
+
           heightWithTransfer++;
         }
 
