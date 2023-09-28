@@ -14,7 +14,7 @@ const {
   oldLayout
 } = require('../lib/migrations/migrator');
 const {migrationError} = require('./util/migrations');
-const {rimraf, testdir} = require('./util/common');
+const {forEvent, rimraf, testdir} = require('./util/common');
 
 const NETWORK = 'regtest';
 const network = Network.get(NETWORK);
@@ -77,7 +77,7 @@ describe('Wallet Migrations', function() {
       return ids;
     };
 
-    let walletDB, ldb;
+    let walletDB, ldb, wdbOpenSync;
     beforeEach(async () => {
       await fs.mkdirp(location);
 
@@ -85,7 +85,10 @@ describe('Wallet Migrations', function() {
       ldb = walletDB.db;
 
       WalletMigrator.migrations = mockMigrations;
-      await walletDB.open();
+
+      wdbOpenSync = wdbOpenSyncFn(walletDB);
+
+      await wdbOpenSync();
     });
 
     afterEach(async () => {
@@ -173,7 +176,7 @@ describe('Wallet Migrations', function() {
 
       walletDB.options.walletMigrate = lastMigrationID;
       walletDB.version = 1;
-      await walletDB.open();
+      await wdbOpenSync();
 
       const versionData = await ldb.get(layout.V.encode());
       const version = getVersion(versionData, 'wallet');
@@ -236,7 +239,7 @@ describe('Wallet Migrations', function() {
       network: network
     };
 
-    let walletDB, ldb;
+    let walletDB, ldb, wdbOpenSync;
     beforeEach(async () => {
       await fs.mkdirp(location);
 
@@ -245,6 +248,8 @@ describe('Wallet Migrations', function() {
       ldb = walletDB.db;
 
       WalletMigrator.migrations = testMigrations;
+
+      wdbOpenSync = wdbOpenSyncFn(walletDB);
     });
 
     afterEach(async () => {
@@ -258,7 +263,7 @@ describe('Wallet Migrations', function() {
     });
 
     it('should initialize fresh walletdb migration state', async () => {
-      await walletDB.open();
+      await wdbOpenSync();
 
       const rawState = await ldb.get(layout.M.encode());
       const state = MigrationState.decode(rawState);
@@ -271,7 +276,8 @@ describe('Wallet Migrations', function() {
     });
 
     it('should not migrate pre-old migration state w/o flag', async () => {
-      await walletDB.open();
+      await wdbOpenSync();
+
       const b = ldb.batch();
       b.del(layout.M.encode());
       await b.write();
@@ -297,7 +303,8 @@ describe('Wallet Migrations', function() {
     });
 
     it('should migrate pre-old migration state with flag', async () => {
-      await walletDB.open();
+      await wdbOpenSync();
+
       const b = ldb.batch();
       b.del(layout.M.encode());
       writeVersion(b, 'wallet', 0);
@@ -305,7 +312,7 @@ describe('Wallet Migrations', function() {
       await walletDB.close();
 
       walletDB.options.walletMigrate = 1;
-      await walletDB.open();
+      await wdbOpenSync();
 
       const versionData = await ldb.get(layout.V.encode());
       const version = getVersion(versionData, 'wallet');
@@ -322,7 +329,7 @@ describe('Wallet Migrations', function() {
     });
 
     it('should not migrate from last old migration state w/o flag', async () => {
-      await walletDB.open();
+      await wdbOpenSync();
 
       const b = ldb.batch();
       b.del(layout.M.encode());
@@ -351,7 +358,7 @@ describe('Wallet Migrations', function() {
     });
 
     it('should not migrate from last old migration state with flag', async () => {
-      await walletDB.open();
+      await wdbOpenSync();
 
       const b = ldb.batch();
       b.del(layout.M.encode());
@@ -360,7 +367,7 @@ describe('Wallet Migrations', function() {
       await walletDB.close();
 
       walletDB.options.walletMigrate = 1;
-      await walletDB.open();
+      await wdbOpenSync();
       const rawState = await ldb.get(layout.M.encode());
       const state = MigrationState.decode(rawState);
 
@@ -386,7 +393,7 @@ describe('Wallet Migrations', function() {
         }
       };
 
-      await walletDB.open();
+      await wdbOpenSync();
 
       const b = ldb.batch();
       b.del(layout.M.encode());
@@ -438,7 +445,7 @@ describe('Wallet Migrations', function() {
         }
       };
 
-      await walletDB.open();
+      await wdbOpenSync();
 
       const b = ldb.batch();
       b.del(layout.M.encode());
@@ -448,7 +455,7 @@ describe('Wallet Migrations', function() {
       await walletDB.close();
 
       walletDB.options.walletMigrate = 2;
-      await walletDB.open();
+      await wdbOpenSync();
 
       assert.strictEqual(migrated1, false);
       assert.strictEqual(migrated2, true);
@@ -480,7 +487,7 @@ describe('Wallet Migrations', function() {
 
     const ADD_CHANGE_DEPTH = 10;
 
-    let walletDB, ldb;
+    let walletDB, ldb, wdbOpenSync;
     const missingAddrs = [];
     before(async () => {
       WalletMigrator.migrations = {};
@@ -495,6 +502,7 @@ describe('Wallet Migrations', function() {
     beforeEach(async () => {
       walletDB = new WalletDB(walletOptions);
       ldb = walletDB.db;
+      wdbOpenSync = wdbOpenSyncFn(walletDB);
     });
 
     afterEach(async () => {
@@ -503,7 +511,7 @@ describe('Wallet Migrations', function() {
     });
 
     it('should set incorrect walletdb state', async () => {
-      await walletDB.open();
+      await wdbOpenSync();
 
       const wallet = walletDB.primary;
       const account = await wallet.getAccount(0);
@@ -522,7 +530,7 @@ describe('Wallet Migrations', function() {
     });
 
     it('should have missing addresses', async () => {
-      await walletDB.open();
+      await wdbOpenSync();
       const wallet = walletDB.primary;
 
       for (const addr of missingAddrs) {
@@ -560,7 +568,7 @@ describe('Wallet Migrations', function() {
         rescan = true;
       };
 
-      await walletDB.open();
+      await wdbOpenSync();
       const wallet = walletDB.primary;
 
       for (const addr of missingAddrs) {
@@ -574,7 +582,7 @@ describe('Wallet Migrations', function() {
     });
   });
 
-  describe('Mirate account lookahead (integration)', function () {
+  describe('Migrate account lookahead (integration)', function () {
     const location = testdir('wallet-change');
     const migrationsBAK = WalletMigrator.migrations;
     const TEST_LOOKAHEAD = 150;
@@ -585,7 +593,7 @@ describe('Wallet Migrations', function() {
       network: network
     };
 
-    let walletDB, ldb;
+    let walletDB, ldb, wdbOpenSync;
     before(async () => {
       WalletMigrator.migrations = {};
       await fs.mkdirp(location);
@@ -599,6 +607,7 @@ describe('Wallet Migrations', function() {
     beforeEach(async () => {
       walletDB = new WalletDB(walletOptions);
       ldb = walletDB.db;
+      wdbOpenSync = wdbOpenSyncFn(walletDB);
     });
 
     afterEach(async () => {
@@ -644,7 +653,7 @@ describe('Wallet Migrations', function() {
         await b.write();
       };
 
-      await walletDB.open();
+      await wdbOpenSync();
 
       const wallet = walletDB.primary;
       await wallet.createAccount({});
@@ -689,7 +698,7 @@ describe('Wallet Migrations', function() {
 
       walletDB.options.walletMigrate = 0;
 
-      await walletDB.open();
+      await wdbOpenSync();
       const wallet = walletDB.primary;
       const wallet2 = await walletDB.get(1);
       await checkLookahead(wallet, TEST_LOOKAHEAD + 0);
@@ -719,3 +728,11 @@ function getVersion(data, name) {
 
   return data.readUInt32LE(name.length);
 }
+
+function wdbOpenSyncFn(wdb) {
+  return async () => {
+    const forSync = forEvent(wdb, 'sync done');
+    await wdb.open();
+    await forSync;
+  };
+};
