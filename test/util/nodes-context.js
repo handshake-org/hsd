@@ -5,7 +5,7 @@ const FullNode = require('../../lib/node/fullnode');
 const Network = require('../../lib/protocol/network');
 const Logger = require('blgr');
 
-class NodeContext {
+class NodesContext {
   constructor(network, size) {
     this.network = Network.get(network);
     this.size = size || 4;
@@ -120,4 +120,4 @@ class NodeContext {
   }
 }
 
-module.exports = NodeContext;
+module.exports = NodesContext;

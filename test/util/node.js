@@ -1,0 +1,213 @@
+'use strict';
+
+const assert = require('bsert');
+const common = require('./common');
+const fs = require('bfile');
+const SPVNode = require('../../lib/node/spvnode');
+const FullNode = require('../../lib/node/fullnode');
+const plugin = require('../../lib/wallet/plugin');
+const Network = require('../../lib/protocol/network');
+const {NodeClient, WalletClient} = require('../../lib/client');
+
+class NodeContext {
+  constructor(options = {}) {
+    this.name = 'node-test';
+    this.options = {};
+    this.node = null;
+    this.opened = false;
+
+    this.nclient = null;
+    this.wclient = null;
+
+    this.fromOptions(options);
+  }
+
+  fromOptions(options) {
+    const fnodeOptions = {
+      ...options,
+      memory: true,
+      workers: true,
+      network: 'regtest',
+      listen: false,
+      wallet: false,
+      spv: false
+    };
+
+    if (options.network != null)
+      fnodeOptions.network = Network.get(options.network).type;
+
+    if (options.name != null)
+      fnodeOptions.name = options.name;
+
+    if (options.listen != null) {
+      assert(typeof options.listen === 'boolean');
+      fnodeOptions.listen = options.listen;
+    }
+
+    if (options.prefix != null) {
+      fnodeOptions.prefix = this.prefix;
+      fnodeOptions.memory = false;
+    }
+
+    if (options.memory != null) {
+      assert(!fnodeOptions.prefix, 'Can not set prefix with memory.');
+      fnodeOptions.memory = options.memory;
+    }
+
+    if (!this.memory && !this.prefix)
+      fnodeOptions.prefix = common.testdir(this.name);
+
+    if (options.wallet != null)
+      fnodeOptions.wallet = options.wallet;
+
+    if (options.apiKey != null) {
+      assert(typeof options.apiKey === 'string');
+      fnodeOptions.apiKey = options.apiKey;
+    }
+
+    if (options.spv != null) {
+      assert(typeof options.spv === 'boolean');
+      fnodeOptions.spv = options.spv;
+    }
+
+    if (options.httpPort != null) {
+      assert(typeof options.httpPort === 'number');
+      fnodeOptions.httpPort = options.httpPort;
+    }
+
+    if (options.indexTX != null) {
+      assert(typeof options.indexTX === 'boolean');
+      fnodeOptions.indexTX = options.indexTX;
+    }
+
+    if (options.indexAddress != null) {
+      assert(typeof options.indexAddress === 'boolean');
+      fnodeOptions.indexAddress = options.indexAddress;
+    }
+
+    if (options.prune != null) {
+      assert(typeof options.prune === 'boolean');
+      fnodeOptions.prune = options.prune;
+    }
+
+    if (options.compactOnInit != null) {
+      assert(typeof options.compactOnInit === 'boolean');
+      fnodeOptions.compactOnInit = options.compactOnInit;
+    }
+
+    if (options.compactTreeInitInterval != null) {
+      assert(typeof options.compactTreeInitInterval === 'number');
+      fnodeOptions.compactTreeInitInterval = options.compactTreeInitInterval;
+    }
+
+    if (fnodeOptions.spv)
+      this.node = new SPVNode(fnodeOptions);
+    else
+      this.node = new FullNode(fnodeOptions);
+
+    if (options.timeout != null)
+      fnodeOptions.timeout = options.timeout;
+
+    if (fnodeOptions.wallet)
+      this.node.use(plugin);
+
+    this.nclient = new NodeClient({
+      timeout: fnodeOptions.timeout,
+      apiKey: fnodeOptions.apiKey,
+      port: fnodeOptions.httpPort || this.node.network.rpcPort
+    });
+
+    if (fnodeOptions.wallet) {
+      this.wclient = new WalletClient({
+        timeout: fnodeOptions.timeout,
+        port: this.node.network.walletPort
+      });
+    }
+
+    this.options = fnodeOptions;
+  }
+
+  get network() {
+    return this.node.network;
+  }
+
+  get miner() {
+    return this.node.miner;
+  }
+
+  get mempool() {
+    return this.node.mempool;
+  }
+
+  get chain() {
+    return this.node.chain;
+  }
+
+  get wdb() {
+    return this.node.get('walletdb').wdb;
+  }
+
+  async open() {
+    if (this.prefix)
+      await fs.mkdirp(this.prefix);
+
+    await this.node.ensure();
+    await this.node.open();
+    await this.node.connect();
+    this.node.startSync();
+
+    if (this.wclient)
+      await this.wclient.open();
+
+    await this.nclient.open();
+
+    this.opened = true;
+  }
+
+  async close() {
+    if (!this.opened)
+      return;
+
+    if (this.wclient)
+      await this.wclient.close();
+    await this.nclient.close();
+
+    const close = common.forEvent(this.node, 'close');
+    await this.node.close();
+    await close;
+
+    this.opened = false;
+  }
+
+  async destroy() {
+    if (this.prefix)
+      await fs.rimraf(this.prefix);
+  }
+
+  /**
+   * Execute an RPC using the node client.
+   * @param {String}  method - RPC method
+   * @param {Array}   params - method parameters
+   * @returns {Promise<Array>} - Returns a two item array with the
+   * RPC's return value or null as the first item and an error or
+   * null as the second item.
+   */
+
+  async nrpc(method, params) {
+    return this.nclient.execute(method, params);
+  }
+
+  /**
+   * Execute an RPC using the wallet client.
+   * @param {String}  method - RPC method
+   * @param {Array}   params - method parameters
+   * @returns {Promise} - Returns a two item array with the RPC's return value
+   * or null as the first item and an error or null as the second item.
+   */
+
+  async wrpc(method, params) {
+    return this.wclient.execute(method, params);
+  };
+}
+
+module.exports = NodeContext;
