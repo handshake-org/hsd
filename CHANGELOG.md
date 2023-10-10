@@ -5,6 +5,12 @@
 **When upgrading to this version of hsd, you must pass `--wallet-migrate=3` when
 you run it for the first time.**
 
+### Primitives
+- TX Changes:
+  - tx.test no longer updates the filter.
+  - Introduce TX.testAndMaybeUpdate method for potentially updating filter while
+    testing. (old tx.test)
+
 ### Node Changes
 #### Node HTTP API
   - `GET /` or `getInfo()` now has more properties:
