@@ -19,6 +19,8 @@ class NodeContext {
     this.nclient = null;
     this.wclient = null;
 
+    this.clients = [];
+
     this.fromOptions(options);
   }
 
@@ -117,11 +119,15 @@ class NodeContext {
       port: fnodeOptions.httpPort || this.node.network.rpcPort
     });
 
+    this.clients.push(this.nclient);
+
     if (fnodeOptions.wallet) {
       this.wclient = new WalletClient({
         timeout: fnodeOptions.timeout,
         port: this.node.network.walletPort
       });
+
+      this.clients.push(this.wclient);
     }
 
     this.options = fnodeOptions;
@@ -143,9 +149,41 @@ class NodeContext {
     return this.node.chain;
   }
 
+  get height() {
+    return this.chain.tip.height;
+  }
+
   get wdb() {
     return this.node.get('walletdb').wdb;
   }
+
+  /*
+   * Event Listeners wrappers
+   */
+
+  on(event, listener) {
+    this.node.on(event, listener);
+  }
+
+  once(event, listener) {
+    this.node.once(event, listener);
+  }
+
+  addListener(event, listener) {
+    this.node.addListener(event, listener);
+  }
+
+  removeListener(event, listener) {
+    this.node.removeListener(event, listener);
+  }
+
+  removeAllListeners(event) {
+    this.node.removeAllListeners(event);
+  }
+
+  /*
+   * Life Cycle
+   */
 
   async open() {
     if (this.prefix)
@@ -168,11 +206,15 @@ class NodeContext {
     if (!this.opened)
       return;
 
-    if (this.wclient)
-      await this.wclient.close();
-    await this.nclient.close();
-
     const close = common.forEvent(this.node, 'close');
+    const closeClients = [];
+
+    for (const client of this.clients) {
+      if (client.opened)
+        closeClients.push(client.close());
+    }
+
+    await Promise.all(closeClients);
     await this.node.close();
     await close;
 
@@ -208,6 +250,43 @@ class NodeContext {
   async wrpc(method, params) {
     return this.wclient.execute(method, params);
   };
+
+  /**
+   * Create new client
+   * @param {Object} [options]
+   * @returns {NodeClient}
+   */
+
+  nodeClient(options = {}) {
+    const client = new NodeClient({
+      timeout: this.options.timeout,
+      apiKey: this.options.apiKey,
+      port: this.options.httpPort || this.network.rpcPort,
+      ...options
+    });
+
+    this.clients.push(client);
+
+    return client;
+  }
+
+  /**
+   * Create new wallet client.
+   * @param {Object} [options]
+   * @returns {WalletClient}
+   */
+
+  walletClient(options = {}) {
+    const client = new WalletClient({
+      timeout: this.options.timeout,
+      port: this.network.walletPort,
+      ...options
+    });
+
+    this.clients.push(client);
+
+    return client;
+  }
 }
 
 module.exports = NodeContext;

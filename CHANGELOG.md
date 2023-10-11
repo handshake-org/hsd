@@ -12,6 +12,9 @@ you run it for the first time.**
     testing. (old tx.test)
 
 ### Node Changes
+  Add support for the interactive rescan, that allows more control over rescan
+process and allows parallel rescans.
+
 #### Node HTTP API
   - `GET /` or `getInfo()` now has more properties:
     - `treeRootHeight` - height at which the block txns are accumulated
@@ -28,6 +31,13 @@ you run it for the first time.**
       - `compactInterval` - what is the current compaction interval config.
       - `nextCompaction` - when will the next compaction trigger after restart.
       - `lastCompaction` - when was the last compaction run.
+  - Introduce `scan interactive` hook (start, filter)
+
+### Node HTTP Client:
+  - Introduce `scanInteractive` method that starts interactive rescan.
+    - expects ws hook for `block rescan interactive` params `rawEntry, rawTXs`
+      that returns scanAction.
+    - expects ws hook for `block rescan interactive abort` param `message`.
 
 ### Wallet Changes
 #### Configuration
