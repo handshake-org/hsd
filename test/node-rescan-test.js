@@ -5,7 +5,7 @@ const {BufferSet} = require('buffer-map');
 const {BloomFilter} = require('@handshake-org/bfilter');
 const TX = require('../lib/primitives/tx');
 const nodeCommon = require('../lib/blockchain/common');
-const {scanAction} = nodeCommon;
+const {scanActions} = nodeCommon;
 const NodeContext = require('./util/node');
 const {forEvent} = require('./util/common');
 const MemWallet = require('./util/memwallet');
@@ -169,7 +169,7 @@ describe('Node Rescan Interactive API', function() {
           assert(hashset.has(tx.hash()));
 
         return {
-          type: scanAction.NEXT
+          type: scanActions.NEXT
         };
       });
     });
@@ -194,12 +194,12 @@ describe('Node Rescan Interactive API', function() {
 
         if (count === 5) {
           return {
-            type: scanAction.ABORT
+            type: scanActions.ABORT
           };
         }
 
         return {
-          type: scanAction.NEXT
+          type: scanActions.NEXT
         };
       };
 
@@ -229,12 +229,12 @@ describe('Node Rescan Interactive API', function() {
 
         if (count === 5) {
           return {
-            type: scanAction.ABORT
+            type: scanActions.ABORT
           };
         }
 
         return {
-          type: scanAction.REPEAT_SET,
+          type: scanActions.REPEAT_SET,
           filter: test.filter
         };
       };
@@ -265,12 +265,12 @@ describe('Node Rescan Interactive API', function() {
 
         if (count === 5) {
           return {
-            type: scanAction.ABORT
+            type: scanActions.ABORT
           };
         }
 
         return {
-          type: scanAction.REPEAT
+          type: scanActions.REPEAT
         };
       };
 
@@ -307,7 +307,7 @@ describe('Node Rescan Interactive API', function() {
 
       if (filterAndTxs.length === 0) {
         return {
-          type: scanAction.ABORT
+          type: scanActions.ABORT
         };
       }
 
@@ -315,7 +315,7 @@ describe('Node Rescan Interactive API', function() {
       test = filterAndTxs.shift();
 
       return {
-        type: scanAction.REPEAT_SET,
+        type: scanActions.REPEAT_SET,
         filter: test.filter
       };
     };
@@ -348,7 +348,7 @@ describe('Node Rescan Interactive API', function() {
 
       if (testTXs.length === 0) {
         return {
-          type: scanAction.ABORT
+          type: scanActions.ABORT
         };
       }
 
@@ -358,7 +358,7 @@ describe('Node Rescan Interactive API', function() {
       expected++;
 
       return {
-        type: scanAction.REPEAT_ADD,
+        type: scanActions.REPEAT_ADD,
         chunks: chunks
       };
     };
@@ -388,7 +388,7 @@ describe('Node Rescan Interactive API', function() {
         counterObj.count++;
 
         return {
-          type: scanAction.NEXT
+          type: scanActions.NEXT
         };
       };
     };
@@ -447,7 +447,7 @@ describe('Node Rescan Interactive API', function() {
             assert(hashset.has(tx.hash()));
 
           return {
-            type: scanAction.NEXT
+            type: scanActions.NEXT
           };
         });
 
@@ -486,12 +486,12 @@ describe('Node Rescan Interactive API', function() {
 
           if (count === 5) {
             return {
-              type: scanAction.ABORT
+              type: scanActions.ABORT
             };
           }
 
           return {
-            type: scanAction.NEXT
+            type: scanActions.NEXT
           };
         });
 
@@ -538,12 +538,12 @@ describe('Node Rescan Interactive API', function() {
 
           if (count === 5) {
             return {
-              type: scanAction.ABORT
+              type: scanActions.ABORT
             };
           }
 
           return {
-            type: scanAction.REPEAT_SET,
+            type: scanActions.REPEAT_SET,
             filter: test.filter ? test.filter.encode() : null
           };
         });
@@ -590,12 +590,12 @@ describe('Node Rescan Interactive API', function() {
 
           if (count === 5) {
             return {
-              type: scanAction.ABORT
+              type: scanActions.ABORT
             };
           }
 
           return {
-            type: scanAction.REPEAT,
+            type: scanActions.REPEAT,
             filter: test.filter ? test.filter.encode() : null
           };
         });
@@ -646,14 +646,14 @@ describe('Node Rescan Interactive API', function() {
 
         if (filterAndTxs.length === 0) {
           return {
-            type: scanAction.ABORT
+            type: scanActions.ABORT
           };
         }
 
         test = filterAndTxs.shift();
 
         return {
-          type: scanAction.REPEAT_SET,
+          type: scanActions.REPEAT_SET,
           filter: test.filter.encode()
         };
       });
@@ -691,7 +691,7 @@ describe('Node Rescan Interactive API', function() {
 
         if (testTXs.length === 0) {
           return {
-            type: scanAction.ABORT
+            type: scanActions.ABORT
           };
         }
 
@@ -701,7 +701,7 @@ describe('Node Rescan Interactive API', function() {
         expected++;
 
         return {
-          type: scanAction.REPEAT_ADD,
+          type: scanActions.REPEAT_ADD,
           chunks: chunks
         };
       });
@@ -745,7 +745,7 @@ describe('Node Rescan Interactive API', function() {
           counterObj.count++;
 
           return {
-            type: scanAction.NEXT
+            type: scanActions.NEXT
           };
         };
       };
