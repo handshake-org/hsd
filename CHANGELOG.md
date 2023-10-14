@@ -8,6 +8,7 @@ you run it for the first time.**
 ### Wallet Changes:
 
 - Add migration that recalculates txdb balances to fix any inconsistencies.
+- WalletDB Now emits events for: `open`, `close`, `connect`, `disconnect`.
 - HTTP Changes:
   - All transaction creating endpoints now accept `hardFee` for specifying the
     exact fee.
