@@ -470,20 +470,15 @@ describe('Wallet Balance', function() {
 
     for (const [key, [balanceName, name]] of Object.entries(BALANCE_CHECK_MAP)) {
       checks[key] = async (wallet) => {
-        let bname = balanceName;
-
-        if (bname === 'blockFinalConfirmedBalance' && !defBalances[bname])
-          bname = 'blockConfirmedBalance';
-
-        await assertBalance(wallet, DEFAULT_ACCOUNT, defBalances[bname],
+        await assertBalance(wallet, DEFAULT_ACCOUNT, defBalances[balanceName],
           `${name} balance is incorrect in the account ${DEFAULT_ACCOUNT}.`);
 
         if (altBalances != null) {
-          await assertBalance(wallet, ALT_ACCOUNT, altBalances[bname],
+          await assertBalance(wallet, ALT_ACCOUNT, altBalances[balanceName],
             `${name} balance is incorrect in the account ${ALT_ACCOUNT}.`);
         }
 
-        await assertBalance(wallet, -1, walletBalances[bname],
+        await assertBalance(wallet, -1, walletBalances[balanceName],
           `${name} balance is incorrect for the wallet.`);
       };
     }
@@ -502,6 +497,9 @@ describe('Wallet Balance', function() {
     }
 
     const balances = { ...undiscovered };
+
+    if (balances.blockFinalConfirmedBalance == null)
+      balances.blockFinalConfirmedBalance = balances.blockConfirmedBalance;
 
     switch (discoverAt) {
       case BEFORE_CONFIRM:
@@ -535,7 +533,6 @@ describe('Wallet Balance', function() {
       undiscovered,
       discovered,
       tester,
-      checker,
       discoverer
     } = options;
 
@@ -544,12 +541,12 @@ describe('Wallet Balance', function() {
       if (Array.isArray(undiscovered)) {
         return async () => {
           const balances = combineBalances(undiscovered, discovered, type);
-          await tester(checker(balances[0], balances[1], balances[2]), discoverer, type);
+          await tester(checkBalances(balances[0], balances[1], balances[2]), discoverer, type);
         };
       }
       return async () => {
         const balances = combineBalances(undiscovered, discovered, type);
-        await tester(checker(balances), discoverer, type);
+        await tester(checkBalances(balances), discoverer, type);
       };
     };
 
@@ -722,7 +719,6 @@ describe('Wallet Balance', function() {
       undiscovered: UNDISCOVERED,
       discovered: DISCOVERED,
       tester: testReceive,
-      checker: checkBalances,
       discoverer: defDiscover
     });
   });
@@ -832,6 +828,8 @@ describe('Wallet Balance', function() {
     UNDISCOVERED.blockUnconfirmedBalance = applyDelta(UNDISCOVERED.blockConfirmedBalance, {
       confirmed: SEND_AMOUNT
     });
+
+    UNDISCOVERED.blockFinalConfirmedBalance = UNDISCOVERED.blockConfirmedBalance;
 
     it('should spend normal credit (no discovery)', async () => {
       const balances = UNDISCOVERED;
@@ -954,7 +952,6 @@ describe('Wallet Balance', function() {
       undiscovered: UNDISCOVERED,
       discovered: UNDISCOVERED,
       tester: test,
-      checker: checkBalances,
       discoverer: defDiscover
     });
   });
@@ -1005,6 +1002,7 @@ describe('Wallet Balance', function() {
 
       balances.blockConfirmedBalance = balances.confirmedBalance;
       balances.blockUnconfirmedBalance = balances.unconfirmedBalance;
+      balances.blockFinalConfirmedBalance = balances.blockConfirmedBalance;
 
       await testOpen(
         checkBalances(balances),
@@ -1105,7 +1103,6 @@ describe('Wallet Balance', function() {
       undiscovered: UNDISCOVERED,
       discovered: DISCOVERED,
       tester: testBidReceive,
-      checker: checkBalances,
       discoverer: defDiscover
     });
   });
@@ -1196,7 +1193,6 @@ describe('Wallet Balance', function() {
       undiscovered: UNDISCOVERED,
       discovered: DISCOVERED,
       tester: testForeign,
-      checker: checkBalances,
       discoverer: defDiscover
     });
   });
@@ -1388,7 +1384,6 @@ describe('Wallet Balance', function() {
       undiscovered: [UNDISCOVERED_WALLET, UNDISCOVERED_DEFAULT, UNDISCOVERED_ALT],
       discovered: [DISCOVERED_WALLET, DISCOVERED_DEFAULT, DISCOVERED_ALT],
       tester: testCrossAcctBalance,
-      checker: checkBalances,
       discoverer: altDiscover
     });
   });
@@ -1503,7 +1498,6 @@ describe('Wallet Balance', function() {
       undiscovered: UNDISCOVERED,
       discovered: DISCOVERED,
       tester: testReveal,
-      checker: checkBalances,
       discoverer: defDiscover
     });
   });
@@ -1739,7 +1733,6 @@ describe('Wallet Balance', function() {
       undiscovered: [UNDISCOVERED_WALLET, UNDISCOVERED_DEFAULT, UNDISCOVERED_ALT],
       discovered: [DISCOVERED_WALLET, DISCOVERED_DEFAULT, DISCOVERED_ALT],
       tester: testCrossActReveal,
-      checker: checkBalances,
       discoverer: altDiscover
     });
   });
@@ -1832,7 +1825,6 @@ describe('Wallet Balance', function() {
       undiscovered: UNDISCOVERED,
       discovered: DISCOVERED,
       tester: testForeignReveal,
-      checker: checkBalances,
       discoverer: defDiscover
     });
   });
@@ -1975,7 +1967,6 @@ describe('Wallet Balance', function() {
       undiscovered: UNDISCOVERED,
       discovered: DISCOVERED,
       tester: testRevealRedeems,
-      checker: checkBalances,
       discoverer: defDiscover
     });
   });
@@ -2079,7 +2070,6 @@ describe('Wallet Balance', function() {
       undiscovered: UNDISCOVERED,
       discovered: DISCOVERED,
       tester: testRevealRedeems,
-      checker: checkBalances,
       discoverer: defDiscover
     });
   });
@@ -2160,7 +2150,6 @@ describe('Wallet Balance', function() {
       undiscovered: UPDATE_UNDISCOVERED,
       discovered: UPDATE_DISCOVERED,
       tester: testSendUpdate,
-      checker: checkBalances,
       discoverer: defDiscover
     });
   });
@@ -2201,7 +2190,6 @@ describe('Wallet Balance', function() {
       undiscovered: UPDATE_UNDISCOVERED,
       discovered: UPDATE_DISCOVERED,
       tester: testSendRevokes,
-      checker: checkBalances,
       discoverer: defDiscover
     });
   });
@@ -2241,7 +2229,6 @@ describe('Wallet Balance', function() {
       undiscovered: UPDATE_UNDISCOVERED,
       discovered: UPDATE_DISCOVERED,
       tester: testSendRenews,
-      checker: checkBalances,
       discoverer: defDiscover
     });
   });
@@ -2280,7 +2267,6 @@ describe('Wallet Balance', function() {
       undiscovered: UPDATE_UNDISCOVERED,
       discovered: UPDATE_DISCOVERED,
       tester: testSendTransfer,
-      checker: checkBalances,
       discoverer: defDiscover
     });
   });
@@ -2374,7 +2360,6 @@ describe('Wallet Balance', function() {
       undiscovered: UNDISCOVERED,
       discovered: DISCOVERED,
       tester: testSendFinalizes,
-      checker: checkBalances,
       discoverer: defDiscover
     });
   });
@@ -2559,7 +2544,6 @@ describe('Wallet Balance', function() {
       undiscovered: [UNDISCOVERED_WALLET, UNDISCOVERED_DEFAULT, UNDISCOVERED_ALT],
       discovered: [DISCOVERED_WALLET, DISCOVERED_DEFAULT, DISCOVERED_ALT],
       tester: testSendFinalizes,
-      checker: checkBalances,
       discoverer: altDiscover
     });
   });
