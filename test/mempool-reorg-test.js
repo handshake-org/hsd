@@ -8,6 +8,7 @@ const plugin = require('../lib/wallet/plugin');
 const Coin = require('../lib/primitives/coin');
 const Address = require('../lib/primitives/address');
 const MTX = require('../lib/primitives/mtx');
+const {forEvent} = require('./util/common');
 
 const network = Network.get('regtest');
 const {
@@ -25,8 +26,13 @@ describe('Mempool Covenant Reorg', function () {
   let wallet, name;
 
   before(async () => {
+    const wdb = node.require('walletdb').wdb;
+    const syncDone = forEvent(wdb, 'sync done');
     await node.open();
+
     wallet = node.get('walletdb').wdb.primary;
+
+    await syncDone;
   });
 
   after(async () => {

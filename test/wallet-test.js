@@ -2158,6 +2158,7 @@ describe('Wallet', function() {
 
     before(async () => {
       await wdb.open();
+      await wdb.connect();
       wallet = await wdb.create();
       recip = await wdb.create();
       // rollout all names
@@ -2165,6 +2166,7 @@ describe('Wallet', function() {
     });
 
     after(async () => {
+      await wdb.disconnect();
       await wdb.close();
     });
 
@@ -2962,6 +2964,7 @@ describe('Wallet', function() {
 
     before(async () => {
       await wdb.open();
+      await wdb.connect();
       wallet = await wdb.create();
 
       for (let i = 0; i < 3; i++) {
@@ -2971,6 +2974,7 @@ describe('Wallet', function() {
     });
 
     after(async () => {
+      await wdb.disconnect();
       await wdb.close();
     });
 

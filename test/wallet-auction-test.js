@@ -64,6 +64,7 @@ describe('Wallet Auction', function() {
     await chain.open();
     await miner.open();
     await wdb.open();
+    await wdb.connect();
 
     // Set up wallet
     winner = await wdb.create();
@@ -81,6 +82,7 @@ describe('Wallet Auction', function() {
   });
 
   after(async () => {
+    await wdb.disconnect();
     await wdb.close();
     await miner.close();
     await chain.close();
