@@ -2,9 +2,14 @@
 
 const assert = require('bsert');
 const fs = require('bfile');
+const random = require('bcrypto/lib/random');
 const Network = require('../lib/protocol/network');
+const rules = require('../lib/covenants/rules');
+const Coin = require('../lib/primitives/coin');
 const WalletDB = require('../lib/wallet/walletdb');
 const layouts = require('../lib/wallet/layout');
+const TXDB = require('../lib/wallet/txdb');
+const {Credit} = TXDB;
 const WalletMigrator = require('../lib/wallet/migrations');
 const {MigrateMigrations} = require('../lib/wallet/migrations');
 const MigrationState = require('../lib/migrations/state');
@@ -236,7 +241,7 @@ describe('Wallet Migrations', function() {
     const walletOptions = {
       prefix: location,
       memory: false,
-      network: network
+      network
     };
 
     let walletDB, ldb, wdbOpenSync;
@@ -703,6 +708,254 @@ describe('Wallet Migrations', function() {
       const wallet2 = await walletDB.get(1);
       await checkLookahead(wallet, TEST_LOOKAHEAD + 0);
       await checkLookahead(wallet2, TEST_LOOKAHEAD + 10);
+      await walletDB.close();
+    });
+  });
+
+  describe('Migrate txdb  (integration)', function() {
+    const location = testdir('walet-txdb-refresh');
+    const migrationsBAK = WalletMigrator.migrations;
+
+    const walletOptions = {
+      prefix: location,
+      memory: false,
+      network
+    };
+
+    const balanceEquals = (balance, expected) => {
+      assert.strictEqual(balance.tx, expected.tx);
+      assert.strictEqual(balance.coin, expected.coin);
+      assert.strictEqual(balance.unconfirmed, expected.unconfirmed);
+      assert.strictEqual(balance.confirmed, expected.confirmed);
+      assert.strictEqual(balance.ulocked, expected.ulocked);
+      assert.strictEqual(balance.clocked, expected.clocked);
+    };
+
+    let walletDB, ldb, wdbOpenSync;
+    before(async () => {
+      WalletMigrator.migrations = {};
+      await fs.mkdirp(location);
+    });
+
+    after(async () => {
+      WalletMigrator.migrations = migrationsBAK;
+      await rimraf(location);
+    });
+
+    beforeEach(async () => {
+      walletDB = new WalletDB(walletOptions);
+      ldb = walletDB.db;
+      wdbOpenSync = wdbOpenSyncFn(walletDB);
+    });
+
+    afterEach(async () => {
+      if (ldb.opened)
+        await ldb.close();
+    });
+
+    it('should write some coins w/o updating balance', async () => {
+      // generate credits for the first 10 addresses stored on initialization.
+      await wdbOpenSync();
+
+      const wallet = walletDB.primary;
+
+      await wallet.createAccount({
+        name: 'alt'
+      });
+
+      const randomCoin = (options) => {
+        const coin = new Coin({
+          version: 1,
+          coinbase: false,
+          hash: random.randomBytes(32),
+          index: 0,
+          ...options
+        });
+
+        if (options.covenantType != null)
+          coin.covenant.type = options.covenantType;
+
+        return coin;
+      };
+
+      const coins = [];
+      const spentCoins = [];
+
+      const addCoin = (addr, spent, confirmed, bid) => {
+        const list = spent ? spentCoins : coins;
+
+        const coin = randomCoin({
+          value: 1e6,
+          address: addr.getAddress(),
+          height: confirmed ? 1 : -1
+        });
+
+        if (bid)
+          coin.covenant.type = rules.types.BID;
+
+        list.push(coin);
+      };
+
+      for (let i = 0; i < 5; i++) {
+        const addr0 = await wallet.createReceive(0);
+        const addr1 = await wallet.createReceive(1);
+
+        // 5 NONE coins to default account, of each type:
+        //  confirmed spent,
+        //  unconfirmed spent,
+        //  unconfirmed unspent,
+        //  confirmed unspent
+
+        // confirmed += 1e6 * 5;
+        // unconfirmed += 1e6 * 5;
+        // coin += 5;
+        addCoin(addr0, false, true);
+
+        // confirmed += 1e6 * 5;
+        // unconfirmed += 0;
+        // coin += 0;
+        addCoin(addr0, true, true);
+
+        // confirmed += 0;
+        // unconfirmed += 0;
+        // coin += 0;
+        addCoin(addr0, true, false);
+
+        // confirmed += 0;
+        // unconfirmed += 1e6 * 5;
+        // coin += 5;
+        addCoin(addr0, false, false);
+
+        // 5 BID coins to alt account, of each type:
+        //  confirmed spent,
+        //  unconfirmed spent,
+        //  unconfirmed unspent,
+        //  confirmed unspent
+
+        // confirmed += 1e6 * 5;
+        // unconfirmed += 1e6 * 5;
+        // coin += 5;
+        // locked += 1e6 * 5;
+        // unlocked += 1e6 * 5;
+        addCoin(addr1, false, true, true);
+
+        // confirmed += 1e6 * 5;
+        // unconfirmed += 0;
+        // coin += 0;
+        // locked += 1e6 * 5;
+        // unlocked += 0;
+        addCoin(addr1, true, true, true);
+
+        // confirmed += 0;
+        // unconfirmed += 0;
+        // coin += 0;
+        // locked += 0;
+        // unlocked += 0;
+        addCoin(addr1, true, false, true);
+
+        // confirmed += 0;
+        // unconfirmed += 1e6 * 5;
+        // coin += 5;
+        // locked += 0;
+        // unlocked += 1e6 * 5;
+        addCoin(addr1, false, false, true);
+      }
+
+      const batch = wallet.txdb.bucket.batch();
+      for (const coin of coins) {
+        const path = await wallet.txdb.getPath(coin);
+        const credit = new Credit(coin);
+        await wallet.txdb.saveCredit(batch, credit, path);
+      }
+
+      for (const coin of spentCoins) {
+        const path = await wallet.txdb.getPath(coin);
+        const credit = new Credit(coin, true);
+        await wallet.txdb.saveCredit(batch, credit, path);
+      }
+
+      await batch.write();
+
+      await walletDB.close();
+    });
+
+    it('should have incorrect balance before migration', async () => {
+      await wdbOpenSync();
+
+      const wallet = walletDB.primary;
+      const balance = await wallet.getBalance(-1);
+      const defBalance = await wallet.getBalance(0);
+      const altBalance = await wallet.getBalance(1);
+
+      const empty = {
+        tx: 0,
+        coin: 0,
+        unconfirmed: 0,
+        confirmed: 0,
+        ulocked: 0,
+        clocked: 0
+      };
+
+      balanceEquals(balance, empty);
+      balanceEquals(defBalance, empty);
+      balanceEquals(altBalance, empty);
+
+      await walletDB.close();
+    });
+
+    it('should enable txdb migration', () => {
+      WalletMigrator.migrations = {
+        0: WalletMigrator.MigrateTXDBBalances
+      };
+    });
+
+    it('should migrate', async () => {
+      walletDB.options.walletMigrate = 0;
+
+      await wdbOpenSync();
+
+      const wallet = walletDB.primary;
+      const balance = await wallet.getBalance(-1);
+      const defBalance = await wallet.getBalance(0);
+      const altBalance = await wallet.getBalance(1);
+
+      const expectedDefault = {
+        tx: 0,
+        coin: 10,
+
+        confirmed: 10e6,
+        unconfirmed: 10e6,
+
+        ulocked: 0,
+        clocked: 0
+      };
+
+      const expectedAlt = {
+        tx: 0,
+        coin: 10,
+
+        confirmed: 10e6,
+        unconfirmed: 10e6,
+
+        ulocked: 10e6,
+        clocked: 10e6
+      };
+
+      const expecteBalance = {
+        tx: expectedDefault.tx + expectedAlt.tx,
+        coin: expectedDefault.coin + expectedAlt.coin,
+
+        confirmed: expectedDefault.confirmed + expectedAlt.confirmed,
+        unconfirmed: expectedDefault.unconfirmed + expectedAlt.unconfirmed,
+
+        ulocked: expectedDefault.ulocked + expectedAlt.ulocked,
+        clocked: expectedDefault.clocked + expectedAlt.clocked
+      };
+
+      balanceEquals(defBalance, expectedDefault);
+      balanceEquals(altBalance, expectedAlt);
+      balanceEquals(balance, expecteBalance);
+
       await walletDB.close();
     });
   });

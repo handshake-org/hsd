@@ -220,6 +220,12 @@ async function assertBalance(wallet, accountName, expected, message) {
   assert.deepStrictEqual(balance2, expected, message);
 }
 
+async function assertRecalcBalance(wallet, accountName, expected, message) {
+  await wallet.recalculateBalances();
+  const balance = await getBalanceObj(wallet, accountName);
+  assert.deepStrictEqual(balance, expected, message);
+}
+
 /**
  * @param {BalanceObj} balance
  * @param {BalanceObj} delta
@@ -475,16 +481,52 @@ describe('Wallet Balance', function() {
 
     for (const [key, [balanceName, name]] of Object.entries(BALANCE_CHECK_MAP)) {
       checks[key] = async (wallet) => {
-        await assertBalance(wallet, DEFAULT_ACCOUNT, defBalances[balanceName],
-          `${name} balance is incorrect in the account ${DEFAULT_ACCOUNT}.`);
+        await assertBalance(
+          wallet,
+          DEFAULT_ACCOUNT,
+          defBalances[balanceName],
+          `${name} balance is incorrect in the account ${DEFAULT_ACCOUNT}.`
+        );
+
+        await assertRecalcBalance(
+          wallet,
+          DEFAULT_ACCOUNT,
+          defBalances[balanceName],
+          `${name} balance is incorrect `
+            + `after recalculation in the account ${DEFAULT_ACCOUNT}.`
+        );
 
         if (altBalances != null) {
-          await assertBalance(wallet, ALT_ACCOUNT, altBalances[balanceName],
-            `${name} balance is incorrect in the account ${ALT_ACCOUNT}.`);
+          await assertBalance(
+            wallet,
+            ALT_ACCOUNT,
+            altBalances[balanceName],
+            `${name} balance is incorrect in the account ${ALT_ACCOUNT}.`
+          );
+
+          await assertRecalcBalance(
+            wallet,
+            ALT_ACCOUNT,
+            altBalances[balanceName],
+            `${name} balance is incorrect `
+            + `after recalculation in the account ${ALT_ACCOUNT}.`
+          );
         }
 
-        await assertBalance(wallet, -1, walletBalances[balanceName],
-          `${name} balance is incorrect for the wallet.`);
+        await assertBalance(
+          wallet,
+          -1,
+          walletBalances[balanceName],
+          `${name} balance is incorrect for the wallet.`
+        );
+
+        await assertRecalcBalance(
+          wallet,
+          -1,
+          walletBalances[balanceName],
+          `${name} balance is incorrect `
+          + 'after recalculate for the wallet.'
+        );
       };
     }
 
