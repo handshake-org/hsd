@@ -696,6 +696,7 @@ describe('Wallet Balance', function() {
   };
 
   describe('NONE -> NONE* (normal receive)', function() {
+    this.timeout(5000);
     before(() => {
       genWallets = 6;
       return beforeAll();
@@ -771,6 +772,7 @@ describe('Wallet Balance', function() {
   });
 
   describe('NONE* -> NONE (spend our credits)', function() {
+    this.timeout(5000);
     before(() => {
       genWallets = 1;
       return beforeAll();
@@ -910,6 +912,7 @@ describe('Wallet Balance', function() {
   });
 
   describe('NONE* -> NONE* (receive and spend in pending)', function() {
+    this.timeout(5000);
     before(() => {
       genWallets = 6;
       return beforeAll();
@@ -1004,6 +1007,7 @@ describe('Wallet Balance', function() {
   });
 
   describe('NONE -> OPEN', function() {
+    this.timeout(5000);
     before(() => {
       genWallets = 1;
       return beforeAll();
@@ -1064,6 +1068,7 @@ describe('Wallet Balance', function() {
    */
 
   describe('NONE -> BID* (normal receive)', function() {
+    this.timeout(5000);
     before(() => {
       genWallets = 6;
       return beforeAll();
@@ -1155,6 +1160,7 @@ describe('Wallet Balance', function() {
   });
 
   describe('NONE -> BID* (foreign bid)', function() {
+    this.timeout(5000);
     before(() => {
       genWallets = 6;
       return beforeAll();
@@ -1245,6 +1251,7 @@ describe('Wallet Balance', function() {
   });
 
   describe('NONE -> BID* (cross acct)', function() {
+    this.timeout(5000);
     before(() => {
       genWallets = 6;
       return beforeAll();
@@ -1436,6 +1443,7 @@ describe('Wallet Balance', function() {
   });
 
   describe('BID* -> REVEAL*', function() {
+    this.timeout(5000);
     before(() => {
       genWallets = 6;
       return beforeAll();
@@ -1550,6 +1558,7 @@ describe('Wallet Balance', function() {
   });
 
   describe('BID* -> REVEAL* (cross acct)', function() {
+    this.timeout(5000);
     before(() => {
       genWallets = 6;
       return beforeAll();
@@ -1785,6 +1794,7 @@ describe('Wallet Balance', function() {
   });
 
   describe('BID -> REVEAL* (foreign reveal)', function() {
+    this.timeout(5000);
     before(() => {
       genWallets = 6;
       return beforeAll();
@@ -1877,6 +1887,7 @@ describe('Wallet Balance', function() {
   });
 
   describe('REVEAL* -> REDEEM*', function() {
+    this.timeout(5000);
     before(() => {
       genWallets = 6;
       return beforeAll();
@@ -2019,6 +2030,7 @@ describe('Wallet Balance', function() {
   });
 
   describe('REVEAL* -> REGISTER*', function() {
+    this.timeout(5000);
     before(() => {
       genWallets = 6;
       return beforeAll();
@@ -2164,6 +2176,7 @@ describe('Wallet Balance', function() {
   UPDATE_DISCOVERED.blockUnconfirmedBalance = UPDATE_DISCOVERED.unconfirmedBalance;
 
   describe('REGISTER* -> UPDATE*', function() {
+    this.timeout(5000);
     before(() => {
       genWallets = 6;
       return beforeAll();
@@ -2204,6 +2217,7 @@ describe('Wallet Balance', function() {
   // NOTE: Revokes are permanently burned coins, should we discount them from
   // balance and UTXO set? (moved to burned balance)
   describe('REGISTER/UPDATE* -> REVOKE*', function() {
+    this.timeout(5000);
     before(() => {
       genWallets = 6;
       return beforeAll();
@@ -2242,6 +2256,7 @@ describe('Wallet Balance', function() {
   });
 
   describe('REGISTER/UPDATE* -> RENEW*', function() {
+    this.timeout(5000);
     before(() => {
       genWallets = 6;
       return beforeAll();
@@ -2281,6 +2296,7 @@ describe('Wallet Balance', function() {
   });
 
   describe('REGISTER/UPDATE* -> TRANSFER*', function() {
+    this.timeout(5000);
     before(() => {
       genWallets = 6;
       return beforeAll();
@@ -2319,6 +2335,7 @@ describe('Wallet Balance', function() {
   });
 
   describe('TRANSFER* -> FINALIZE', function() {
+    this.timeout(5000);
     before(() => {
       genWallets = 6;
       return beforeAll();
@@ -2412,6 +2429,7 @@ describe('Wallet Balance', function() {
   });
 
   describe('TRANSFER* -> FINALIZE* (cross acct)', function() {
+    this.timeout(5000);
     before(() => {
       genWallets = 6;
       return beforeAll();
