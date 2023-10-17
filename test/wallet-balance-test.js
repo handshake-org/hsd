@@ -213,6 +213,11 @@ async function getBalanceObj(wallet, accountName) {
 async function assertBalance(wallet, accountName, expected, message) {
   const balance = await getBalanceObj(wallet, accountName);
   assert.deepStrictEqual(balance, expected, message);
+
+  // recalculate balance test
+  await wallet.recalculateBalances();
+  const balance2 = await getBalanceObj(wallet, accountName);
+  assert.deepStrictEqual(balance2, expected, message);
 }
 
 /**
