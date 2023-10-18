@@ -30,7 +30,6 @@ const ALL = Script.hashType.ALL;
 const common = require('../lib/blockchain/common');
 const VERIFY_BODY = common.flags.VERIFY_BODY;
 const rules = require('../lib/covenants/rules');
-const {types} = rules;
 const NameState = require('../lib/covenants/namestate');
 const {states} = NameState;
 const {ownership} = require('../lib/covenants/ownership');
@@ -960,10 +959,7 @@ describe('Mempool', function() {
       const name = rules.grindName(10, 0, mempool.network);
       const rawName = Buffer.from(name, 'ascii');
       const nameHash = rules.hashName(rawName);
-      open.outputs[0].covenant.type = types.OPEN;
-      open.outputs[0].covenant.pushHash(nameHash);
-      open.outputs[0].covenant.pushU32(0);
-      open.outputs[0].covenant.push(rawName);
+      open.outputs[0].covenant.setOpen(nameHash, rawName);
 
       chaincoins.sign(open);
       open = open.toTX();
@@ -993,11 +989,12 @@ describe('Mempool', function() {
       bid.addCoin(bidCoin);
       bid.addOutput(addr, 70000);
 
-      bid.outputs[0].covenant.type = types.BID;
-      bid.outputs[0].covenant.pushHash(nameHash);
-      bid.outputs[0].covenant.pushU32(ns.height);
-      bid.outputs[0].covenant.push(rawName);
-      bid.outputs[0].covenant.pushHash(Buffer.alloc(32, 0x01));
+      bid.outputs[0].covenant.setBid(
+        nameHash,
+        ns.height,
+        rawName,
+        Buffer.alloc(32, 0x01)
+      );
 
       chaincoins.sign(bid);
       bid = bid.toTX();

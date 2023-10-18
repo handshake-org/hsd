@@ -163,14 +163,15 @@ describe('Interactive name swap', function() {
     const output0 = new Output();
     output0.value = coin.value;
     output0.address = bobReceive;
-    output0.covenant.type = types.FINALIZE;
-    output0.covenant.pushHash(nameHash);
-    output0.covenant.pushU32(ns.height);
-    output0.covenant.push(Buffer.from(name, 'ascii'));
-    output0.covenant.pushU8(0); // flags, may be required if name was CLAIMed
-    output0.covenant.pushU32(ns.claimed);
-    output0.covenant.pushU32(ns.renewals);
-    output0.covenant.pushHash(await wdb.getRenewalBlock());
+    output0.covenant.setFinalize(
+      nameHash,
+      ns.height,
+      Buffer.from(name, 'ascii'),
+      0, // flags, may be required if name was CLAIMed
+      ns.claimed,
+      ns.renewals,
+      await wdb.getRenewalBlock(),
+    );
 
     const output1 = new Output();
     output1.address = aliceReceive;

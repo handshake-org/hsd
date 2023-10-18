@@ -2103,10 +2103,7 @@ function openOutput(name, address) {
   const output = new Output();
   output.address = Address.fromString(address);
   output.value = 0;
-  output.covenant.type = types.OPEN;
-  output.covenant.pushHash(nameHash);
-  output.covenant.pushU32(0);
-  output.covenant.push(rawName);
+  output.covenant.setOpen(nameHash, rawName);
 
   return output;
 }

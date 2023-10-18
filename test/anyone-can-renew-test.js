@@ -184,10 +184,12 @@ describe('Anyone-can-renew address', function() {
       value: coin.value,
       address: coin.address
     }));
-    mtx.output(0).covenant.type = rules.types.RENEW;
-    mtx.output(0).covenant.pushHash(nameHash);
-    mtx.output(0).covenant.pushU32(heightBeforeOpen + 1);
-    mtx.output(0).covenant.pushHash(node.chain.tip.hash);
+
+    mtx.output(0).covenant.setRenew(
+      nameHash,
+      heightBeforeOpen + 1,
+      node.chain.tip.hash
+    );
 
     await alice.fund(mtx, {coins: [coin]});
     await alice.finalize(mtx, {coins: [coin]});
@@ -212,10 +214,12 @@ describe('Anyone-can-renew address', function() {
       value: coin.value,
       address: coin.address
     }));
-    mtx.output(0).covenant.type = rules.types.UPDATE;
-    mtx.output(0).covenant.pushHash(nameHash);
-    mtx.output(0).covenant.pushU32(heightBeforeOpen + 1);
-    mtx.output(0).covenant.push(Buffer.alloc(1));
+
+    mtx.output(0).covenant.setUpdate(
+      nameHash,
+      heightBeforeOpen + 1,
+      Buffer.alloc(1)
+    );
 
     await alice.fund(mtx, {coins: [coin]});
     await alice.finalize(mtx, {coins: [coin]});
@@ -240,11 +244,12 @@ describe('Anyone-can-renew address', function() {
       value: coin.value,
       address: coin.address
     }));
-    mtx.output(0).covenant.type = rules.types.TRANSFER;
-    mtx.output(0).covenant.pushHash(nameHash);
-    mtx.output(0).covenant.pushU32(heightBeforeOpen + 1);
-    mtx.output(0).covenant.pushU8(0);
-    mtx.output(0).covenant.push(Buffer.alloc(20));
+
+    mtx.output(0).covenant.setTransfer(
+      nameHash,
+      heightBeforeOpen + 1,
+      new Address({ version: 0, hash: Buffer.alloc(20) })
+    );
 
     await alice.fund(mtx, {coins: [coin]});
     await alice.finalize(mtx, {coins: [coin]});
@@ -269,10 +274,12 @@ describe('Anyone-can-renew address', function() {
       value: coin.value,
       address: coin.address
     }));
-    mtx.output(0).covenant.type = rules.types.RENEW;
-    mtx.output(0).covenant.pushHash(nameHash);
-    mtx.output(0).covenant.pushU32(heightBeforeOpen + 1);
-    mtx.output(0).covenant.pushHash(node.chain.tip.hash);
+
+    mtx.output(0).covenant.setRenew(
+      nameHash,
+      heightBeforeOpen + 1,
+      node.chain.tip.hash
+    );
 
     await alice.fund(mtx, {coins: [coin]});
     await alice.finalize(mtx, {coins: [coin]});
@@ -294,10 +301,12 @@ describe('Anyone-can-renew address', function() {
       value: coin.value,
       address: coin.address
     }));
-    mtx.output(0).covenant.type = rules.types.RENEW;
-    mtx.output(0).covenant.pushHash(nameHash);
-    mtx.output(0).covenant.pushU32(heightBeforeOpen + 1);
-    mtx.output(0).covenant.pushHash(node.chain.tip.hash);
+
+    mtx.output(0).covenant.setRenew(
+      nameHash,
+      heightBeforeOpen + 1,
+      node.chain.tip.hash
+    );
 
     await bob.fund(mtx, {coins: [coin]});
     await bob.finalize(mtx, {coins: [coin]});

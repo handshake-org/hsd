@@ -26,7 +26,6 @@ const HDPrivateKey = require('../lib/hd/private');
 const Mnemonic = require('../lib/hd/mnemonic');
 const Wallet = require('../lib/wallet/wallet');
 const rules = require('../lib/covenants/rules');
-const {types, hashName} = rules;
 const {forValue} = require('./util/common');
 
 const KEY1 = 'xprv9s21ZrQH143K3Aj6xQBymM31Zb4BVc7wxqfUhMZrzewdDVCt'
@@ -1690,7 +1689,7 @@ describe('Wallet', function() {
     await wdb.addTXMap(b, mtx.hash(), wid);
 
     // Add one name to NameMap
-    await wdb.addNameMap(b, hashName('test123'), wid);
+    await wdb.addNameMap(b, rules.hashName('test123'), wid);
 
     await b.write();
 
@@ -1699,7 +1698,7 @@ describe('Wallet', function() {
     assert(wids.has(wid));
 
     // Should have wid in NameMap
-    let map = await wdb.getNameMap(hashName('test123'));
+    let map = await wdb.getNameMap(rules.hashName('test123'));
     assert(map.wids.has(wid));
 
     // Remove wallet
@@ -1710,7 +1709,7 @@ describe('Wallet', function() {
     assert.strictEqual(wids, null);
 
     // Should not return wid from NameMap after wid is removed
-    map = await wdb.getNameMap(hashName('test123'));
+    map = await wdb.getNameMap(rules.hashName('test123'));
     assert.strictEqual(map, null);
 
     // Should not return wallet after it is removed
@@ -2308,11 +2307,11 @@ describe('Wallet', function() {
 
       const output = new Output();
       output.value = secondHighest;
-      output.covenant.type = types.REVEAL;
-      output.covenant.pushHash(nameHash);
-      output.covenant.pushU32(start);
-      output.covenant.push(Buffer.from(name, 'ascii'));
-      output.covenant.pushHash(Buffer.alloc(32));
+      output.covenant.setReveal(
+        nameHash,
+        start,
+        Buffer.alloc(32)
+      );
 
       const mtx = new MTX();
       mtx.outputs.push(output);
@@ -2674,11 +2673,11 @@ describe('Wallet', function() {
 
       const output = new Output();
       output.value = secondHighest;
-      output.covenant.type = types.REVEAL;
-      output.covenant.pushHash(nameHash);
-      output.covenant.pushU32(start);
-      output.covenant.push(Buffer.from(name, 'ascii'));
-      output.covenant.pushHash(Buffer.alloc(32));
+      output.covenant.setReveal(
+        nameHash,
+        start,
+        Buffer.alloc(32),
+      );
 
       const mtx = new MTX();
       mtx.outputs.push(output);
