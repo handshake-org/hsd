@@ -722,7 +722,7 @@ describe('Wallet Migrations', function() {
       assert.strictEqual(balance.clocked, expected.clocked);
     };
 
-    let walletDB, ldb, wdbOpenSync;
+    let walletDB, ldb;
     before(async () => {
       WalletMigrator.migrations = {};
       await fs.mkdirp(location);
@@ -736,7 +736,6 @@ describe('Wallet Migrations', function() {
     beforeEach(async () => {
       walletDB = new WalletDB(walletOptions);
       ldb = walletDB.db;
-      wdbOpenSync = wdbOpenSyncFn(walletDB);
     });
 
     afterEach(async () => {
@@ -746,7 +745,7 @@ describe('Wallet Migrations', function() {
 
     it('should write some coins w/o updating balance', async () => {
       // generate credits for the first 10 addresses stored on initialization.
-      await wdbOpenSync();
+      await walletDB.open();
 
       const wallet = walletDB.primary;
 
@@ -871,7 +870,7 @@ describe('Wallet Migrations', function() {
     });
 
     it('should have incorrect balance before migration', async () => {
-      await wdbOpenSync();
+      await walletDB.open();
 
       const wallet = walletDB.primary;
       const balance = await wallet.getBalance(-1);
@@ -903,7 +902,7 @@ describe('Wallet Migrations', function() {
     it('should migrate', async () => {
       walletDB.options.walletMigrate = 0;
 
-      await wdbOpenSync();
+      await walletDB.open();
 
       const wallet = walletDB.primary;
       const balance = await wallet.getBalance(-1);
