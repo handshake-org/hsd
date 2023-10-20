@@ -2,8 +2,12 @@
 
 ## Unreleased
 
-### Wallet API:
+**When upgrading to this version of hsd, you must pass `--wallet-migrate=3` when
+you run it for the first time.**
 
+### Wallet Changes:
+
+- Add migration that recalculates txdb balances to fix any inconsistencies.
 - HTTP Changes:
   - All transaction creating endpoints now accept `hardFee` for specifying the
     exact fee.
