@@ -1030,10 +1030,7 @@ class MemWallet {
     const output = new Output();
     output.address = addr;
     output.value = 0;
-    output.covenant.type = types.OPEN;
-    output.covenant.pushHash(nameHash);
-    output.covenant.pushU32(0);
-    output.covenant.push(rawName);
+    output.covenant.setOpen(nameHash, rawName);
 
     const mtx = new MTX();
     mtx.outputs.push(output);
@@ -1084,11 +1081,7 @@ class MemWallet {
     const output = new Output();
     output.address = addr;
     output.value = lockup;
-    output.covenant.type = types.BID;
-    output.covenant.pushHash(nameHash);
-    output.covenant.pushU32(start);
-    output.covenant.push(rawName);
-    output.covenant.pushHash(blind);
+    output.covenant.setBid(nameHash, start, rawName, blind);
 
     const mtx = new MTX();
     mtx.outputs.push(output);
@@ -1148,10 +1141,7 @@ class MemWallet {
       const output = new Output();
       output.address = coin.address;
       output.value = value;
-      output.covenant.type = types.REVEAL;
-      output.covenant.pushHash(nameHash);
-      output.covenant.pushU32(ns.height);
-      output.covenant.pushHash(nonce);
+      output.covenant.setReveal(nameHash, ns.height, nonce);
 
       mtx.addOutpoint(prevout);
       mtx.outputs.push(output);
@@ -1208,9 +1198,7 @@ class MemWallet {
       const output = new Output();
       output.address = coin.address;
       output.value = coin.value;
-      output.covenant.type = types.REDEEM;
-      output.covenant.pushHash(nameHash);
-      output.covenant.pushU32(ns.height);
+      output.covenant.setRedeem(nameHash, ns.height);
 
       mtx.outputs.push(output);
     }
@@ -1268,16 +1256,13 @@ class MemWallet {
     output.address = coin.address;
     output.value = ns.value;
 
-    output.covenant.type = types.REGISTER;
-    output.covenant.pushHash(nameHash);
-    output.covenant.pushU32(ns.height);
+    let record = EMPTY;
 
     if (resource)
-      output.covenant.push(resource);
-    else
-      output.covenant.push(EMPTY);
+      record = resource;
 
-    output.covenant.pushHash(this.getRenewalBlock());
+    const blockHash = this.getRenewalBlock();
+    output.covenant.setRegister(nameHash, ns.height, record, blockHash);
 
     const mtx = new MTX();
     mtx.addOutpoint(ns.owner);
@@ -1337,10 +1322,7 @@ class MemWallet {
     const output = new Output();
     output.address = coin.address;
     output.value = coin.value;
-    output.covenant.type = types.UPDATE;
-    output.covenant.pushHash(nameHash);
-    output.covenant.pushU32(ns.height);
-    output.covenant.push(resource);
+    output.covenant.setUpdate(nameHash, ns.height, resource);
 
     const mtx = new MTX();
     mtx.addOutpoint(ns.owner);
@@ -1392,10 +1374,7 @@ class MemWallet {
     const output = new Output();
     output.address = coin.address;
     output.value = coin.value;
-    output.covenant.type = types.RENEW;
-    output.covenant.pushHash(nameHash);
-    output.covenant.pushU32(ns.height);
-    output.covenant.pushHash(this.getRenewalBlock());
+    output.covenant.setRenew(nameHash, ns.height, this.getRenewalBlock());
 
     const mtx = new MTX();
     mtx.addOutpoint(ns.owner);
@@ -1445,11 +1424,7 @@ class MemWallet {
     const output = new Output();
     output.address = coin.address;
     output.value = coin.value;
-    output.covenant.type = types.TRANSFER;
-    output.covenant.pushHash(nameHash);
-    output.covenant.pushU32(ns.height);
-    output.covenant.pushU8(address.version);
-    output.covenant.push(address.hash);
+    output.covenant.setTransfer(nameHash, ns.height, address);
 
     const mtx = new MTX();
     mtx.addOutpoint(ns.owner);
@@ -1499,10 +1474,7 @@ class MemWallet {
     const output = new Output();
     output.address = coin.address;
     output.value = coin.value;
-    output.covenant.type = types.UPDATE;
-    output.covenant.pushHash(nameHash);
-    output.covenant.pushU32(ns.height);
-    output.covenant.push(EMPTY);
+    output.covenant.setUpdate(nameHash, ns.height, EMPTY);
 
     const mtx = new MTX();
     mtx.addOutpoint(ns.owner);
@@ -1559,14 +1531,15 @@ class MemWallet {
     const output = new Output();
     output.address = address;
     output.value = coin.value;
-    output.covenant.type = types.FINALIZE;
-    output.covenant.pushHash(nameHash);
-    output.covenant.pushU32(ns.height);
-    output.covenant.push(rawName);
-    output.covenant.pushU8(flags);
-    output.covenant.pushU32(ns.claimed);
-    output.covenant.pushU32(ns.renewals);
-    output.covenant.pushHash(this.getRenewalBlock());
+    output.covenant.setFinalize(
+      nameHash,
+      ns.height,
+      rawName,
+      flags,
+      ns.claimed,
+      ns.renewals,
+      this.getRenewalBlock(),
+    );
 
     const mtx = new MTX();
     mtx.addOutpoint(ns.owner);
@@ -1615,9 +1588,7 @@ class MemWallet {
     const output = new Output();
     output.address = coin.address;
     output.value = coin.value;
-    output.covenant.type = types.REVOKE;
-    output.covenant.pushHash(nameHash);
-    output.covenant.pushU32(ns.height);
+    output.covenant.setRevoke(nameHash, ns.height);
 
     const mtx = new MTX();
     mtx.addOutpoint(ns.owner);

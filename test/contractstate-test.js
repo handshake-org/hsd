@@ -23,30 +23,17 @@ function nameContext(name, type) {
 
   switch (type) {
     case types.OPEN:
-      output.covenant.type = types.OPEN;
-      output.covenant.pushHash(nameHash);         // nameHash
-      output.covenant.pushU32(0);                 // start
-      output.covenant.push(rawName);              // rawName
+      output.covenant.setOpen(nameHash, rawName);
       break;
     case types.BID:
-      output.covenant.type = types.BID;
-      output.covenant.pushHash(nameHash);         // nameHash
-      output.covenant.pushU32(0);                 // start
-      output.covenant.push(rawName);              // rawName
-      output.covenant.pushHash(Buffer.alloc(32)); // blind
+      output.covenant.setBid(nameHash, 0, rawName, Buffer.alloc(32));
       break;
     case types.REVEAL:
-      output.covenant.type = types.REVEAL;
-      output.covenant.pushHash(nameHash);         // nameHash
-      output.covenant.pushU32(100);               // height
-      output.covenant.pushHash(Buffer.alloc(32)); // nonce
+      output.covenant.setReveal(nameHash, 100, Buffer.alloc(32));
       break;
     case types.UPDATE: {
       const data = Buffer.from('hello world', 'ascii');
-      output.covenant.type = types.UPDATE;
-      output.covenant.pushHash(nameHash);         // nameHash
-      output.covenant.pushU32(100);               // height
-      output.covenant.push(data);                 // record
+      output.covenant.setUpdate(nameHash, 100, data);
       break;
     }
   }
