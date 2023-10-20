@@ -6,8 +6,21 @@
 you run it for the first time.**
 
 ### Wallet Changes:
+#### Configuration
+  Wallet now has option `wallet-migrate-no-rescan`/`migrate-no-rescan` if you
+want to disable rescan when migration recommends it. It may result in the
+incorrect txdb state, but can be useful if you know the issue does not affect
+your wallet or is not critical.
+
+#### Wallet API
 
 - Add migration that recalculates txdb balances to fix any inconsistencies.
+- WalletDB Now emits events for: `open`, `close`, `connect`, `disconnect`.
+- WalletDB
+  - `open()` no longer calls `connect` and needs separate call `connect`.
+  - `open()` no longer calls scan, instead only rollbacks and waits for
+    sync to do the rescan.
+  - emits events for: `open`, `close`, `connect`, `disconnect`, `sync done`.
 - HTTP Changes:
   - All transaction creating endpoints now accept `hardFee` for specifying the
     exact fee.

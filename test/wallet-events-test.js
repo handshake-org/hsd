@@ -7,11 +7,13 @@ const Wallet = require('../lib/wallet/wallet');
 const WalletKey = require('../lib/wallet/walletkey');
 const ChainEntry = require('../lib/blockchain/chainentry');
 const MemWallet = require('./util/memwallet');
+const {forEvent} = require('./util/common');
 
 describe('WalletDB Events', function () {
   const node = new FullNode({
     memory: true,
     network: 'regtest',
+    noDNS: true,
     plugins: [require('../lib/wallet/plugin')]
   });
 
@@ -35,15 +37,31 @@ describe('WalletDB Events', function () {
     await node.close();
   });
 
-  it('should emit `tx` events', async () => {
-    const waiter = new Promise((resolve) => {
-      wdb.once('tx', (w, tx) => resolve([w, tx]));
-    });
+  it('should emit `open`/`close` and `connect`/`disconnect` events', async () => {
+    const closeEvent = forEvent(wdb, 'close');
+    const disconnectEvent = forEvent(wdb, 'disconnect');
+    await node.close();
+    await disconnectEvent;
+    await closeEvent;
 
+    const openEvent = forEvent(wdb, 'open');
+    const connectEvent = forEvent(wdb, 'connect');
+    const syncDone = forEvent(wdb, 'sync done');
+    await node.open();
+    await openEvent;
+    await connectEvent;
+    await syncDone;
+
+    wallet = await wdb.get('primary');
+  });
+
+  it('should emit `tx` events', async () => {
+    const waiter = forEvent(wdb, 'tx');
     const walletReceive = await wallet.receiveAddress();
     await mineBlocks(1, walletReceive);
 
-    const [w, tx] = await waiter;
+    const events = await waiter;
+    const [w, tx] = events[0].values;
 
     assert(w);
     assert(w instanceof Wallet);
@@ -55,14 +73,13 @@ describe('WalletDB Events', function () {
   });
 
   it('should emit `address` events', async () => {
-    const waiter = new Promise((resolve) => {
-      wdb.once('address', (w, walletKey) => resolve([w, walletKey]));
-    });
+    const waiter = forEvent(wdb, 'address');
 
     const walletReceive = await wallet.receiveAddress();
     await mineBlocks(1, walletReceive);
 
-    const [w, walletKey] = await waiter;
+    const events = await waiter;
+    const [w, walletKey] = events[0].values;
 
     assert(w);
     assert(w instanceof Wallet);
@@ -75,10 +92,7 @@ describe('WalletDB Events', function () {
 
   describe('should emit `block connect` events', () => {
     it('with a block that includes a wallet tx', async () => {
-      const waiter = new Promise((resolve) => {
-        wdb.once('block connect', (entry, txs) => resolve([entry, txs]));
-      });
-
+      const waiter = forEvent(wdb, 'block connect');
       const walletReceive = await wallet.receiveAddress();
 
       await wallet.send({
@@ -89,7 +103,8 @@ describe('WalletDB Events', function () {
 
       await mineBlocks(1);
 
-      const [entry, txs] = await waiter;
+      const events = await waiter;
+      const [entry, txs] = events[0].values;
 
       assert(entry);
       assert(entry instanceof ChainEntry);
@@ -127,15 +142,14 @@ describe('WalletDB Events', function () {
         otherTx = otherMtx.toTX();
       }
 
-      const waiter = new Promise((resolve) => {
-        wdb.once('block connect', (entry, txs) => resolve([entry, txs]));
-      });
+      const waiter = forEvent(wdb, 'block connect');
 
       await node.sendTX(otherTx);
 
       await mineBlocks(1);
 
-      const [entry, txs] = await waiter;
+      const events = await waiter;
+      const [entry, txs] = events[0].values;
 
       assert(entry);
       assert(entry instanceof ChainEntry);
@@ -158,14 +172,13 @@ describe('WalletDB Events', function () {
       await mineBlocks(1);
 
       // Disconnect it
-      const waiter = new Promise((resolve) => {
-        wdb.once('block disconnect', entry => resolve(entry));
-      });
+      const waiter = forEvent(wdb, 'block disconnect');
 
       const entryToDisconnect = node.chain.tip;
       await node.chain.disconnect(entryToDisconnect);
 
-      const entry = await waiter;
+      const events = await waiter;
+      const entry = events[0].values[0];
 
       assert(entry);
       assert(entry instanceof ChainEntry);
@@ -173,18 +186,16 @@ describe('WalletDB Events', function () {
     });
 
     it('with a block that does not include a wallet tx', async () => {
-        const waiter = new Promise((resolve) => {
-          wdb.once('block disconnect', entry => resolve(entry));
-        });
+      const waiter = forEvent(wdb, 'block disconnect');
+      const entryToDisconnect = node.chain.tip;
+      await node.chain.disconnect(entryToDisconnect);
 
-        const entryToDisconnect = node.chain.tip;
-        await node.chain.disconnect(entryToDisconnect);
+      const events = await waiter;
+      const entry = events[0].values[0];
 
-        const entry = await waiter;
-
-        assert(entry);
-        assert(entry instanceof ChainEntry);
-        assert(entry.hash = entryToDisconnect.hash);
+      assert(entry);
+      assert(entry instanceof ChainEntry);
+      assert(entry.hash = entryToDisconnect.hash);
     });
   });
 });
