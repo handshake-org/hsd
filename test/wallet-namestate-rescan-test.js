@@ -21,77 +21,81 @@ const {
 const GNAME_SIZE = 10;
 
 describe('Wallet rescan with namestate transitions', function() {
-  describe('Only sends OPEN', function() {
-    // Bob runs a full node with wallet plugin
-    const node = new FullNode({
+  let node, wdb;
+  let alice, aliceAddr;
+  let bob, bobAddr;
+
+  async function mineBlocks(n, addr) {
+    addr = addr ? addr : new Address().toString('regtest');
+    const blocks = [];
+    for (let i = 0; i < n; i++) {
+      const block = await node.miner.mineBlock(null, addr);
+      await node.chain.add(block);
+      blocks.push(block);
+    }
+
+    return blocks;
+  }
+
+  async function sendTXs() {
+    const aliceTX = await alice.send({
+      outputs: [{
+        address: aliceAddr,
+        value: 20000
+      }]
+    });
+    alice.addTX(aliceTX.toTX());
+    await node.mempool.addTX(aliceTX.toTX());
+    await bob.send({
+      outputs: [{
+        address: bobAddr,
+        value: 20000
+      }]
+    });
+  }
+
+  const beforeAll = async () => {
+    node = new FullNode({
       network: network.type,
       memory: true,
       plugins: [require('../lib/wallet/plugin')]
     });
+
     node.on('error', (err) => {
       assert(false, err);
     });
 
-    const {wdb} = node.require('walletdb');
-    let bob, bobAddr;
+    wdb = node.require('walletdb').wdb;
 
-    // Alice is some other wallet on the network
-    const alice = new MemWallet({ network });
-    const aliceAddr = alice.getAddress();
+    alice = new MemWallet({ network });
+    aliceAddr = alice.getAddress();
 
     // Connect MemWallet to chain as minimally as possible
     node.chain.on('connect', (entry, block) => {
       alice.addBlock(entry, block.txs);
     });
+
     alice.getNameStatus = async (nameHash) => {
       assert(Buffer.isBuffer(nameHash));
       const height = node.chain.height + 1;
       return node.chain.db.getNameStatus(nameHash, height);
     };
 
-    const NAME = rules.grindName(GNAME_SIZE, 4, network);
+    await node.open();
+    bob = await wdb.create();
+    bobAddr = await bob.receiveAddress();
+  };
 
-    // Hash of the FINALIZE transaction
+  const afterAll = async () => {
+    await node.close();
+  };
+
+  describe('Only sends OPEN', function() {
+    const NAME = rules.grindName(GNAME_SIZE, 4, network);
     let aliceFinalizeHash;
 
-    async function mineBlocks(n, addr) {
-      addr = addr ? addr : new Address().toString('regtest');
-      const blocks = [];
-      for (let i = 0; i < n; i++) {
-        const block = await node.miner.mineBlock(null, addr);
-        await node.chain.add(block);
-        blocks.push(block);
-      }
-
-      return blocks;
-    }
-
-    async function sendTXs() {
-      const aliceTX = await alice.send({
-        outputs: [{
-          address: aliceAddr,
-          value: 20000
-        }]
-      });
-      alice.addTX(aliceTX.toTX());
-      await node.mempool.addTX(aliceTX.toTX());
-      await bob.send({
-        outputs: [{
-          address: bobAddr,
-          value: 20000
-        }]
-      });
-    }
-
-    before(async () => {
-      await node.open();
-      bob = await wdb.create();
-      bobAddr = await bob.receiveAddress();
-    });
-
-    after(async () => {
-      await node.close();
-    });
+    before(beforeAll);
+    after(afterAll);
 
     it('should fund wallets', async () => {
       const blocks = 10;
@@ -274,78 +278,12 @@ describe('Wallet rescan with namestate transitions', function() {
   });
 
   describe('Bids, loses, shallow rescan', function() {
-    // Bob runs a full node with wallet plugin
-    const node = new FullNode({
-      network: network.type,
-      memory: true,
-      plugins: [require('../lib/wallet/plugin')]
-    });
-    node.on('error', (err) => {
-      assert(false, err);
-    });
-
-    const {wdb} = node.require('walletdb');
-    let bob, bobAddr;
-
-    // Alice is some other wallet on the network
-    const alice = new MemWallet({ network });
-    const aliceAddr = alice.getAddress();
-
-    // Connect MemWallet to chain as minimally as possible
-    node.chain.on('connect', (entry, block) => {
-      alice.addBlock(entry, block.txs);
-    });
-    alice.getNameStatus = async (nameHash) => {
-      assert(Buffer.isBuffer(nameHash));
-      const height = node.chain.height + 1;
-      return node.chain.db.getNameStatus(nameHash, height);
-    };
-
     const NAME = rules.grindName(GNAME_SIZE, 4, network);
-
-    // Block that confirmed the bids
-    let bidBlockHash;
-    // Hash of the FINALIZE transaction
     let aliceFinalizeHash;
+    let bidBlockHash;
 
-    async function mineBlocks(n, addr) {
-      addr = addr ? addr : new Address().toString('regtest');
-      const blocks = [];
-      for (let i = 0; i < n; i++) {
-        const block = await node.miner.mineBlock(null, addr);
-        await node.chain.add(block);
-        blocks.push(block);
-      }
-
-      return blocks;
-    }
-
-    async function sendTXs() {
-      const aliceTX = await alice.send({
-        outputs: [{
-          address: aliceAddr,
-          value: 20000
-        }]
-      });
-      alice.addTX(aliceTX.toTX());
-      await node.mempool.addTX(aliceTX.toTX());
-      await bob.send({
-        outputs: [{
-          address: bobAddr,
-          value: 20000
-        }]
-      });
-    }
-
-    before(async () => {
-      await node.open();
-      bob = await wdb.create();
-      bobAddr = await bob.receiveAddress();
-    });
-
-    after(async () => {
-      await node.close();
-    });
+    before(beforeAll);
+    after(afterAll);
 
     it('should fund wallets', async () => {
       const blocks = 10;
@@ -562,26 +500,14 @@ describe('Wallet rescan with namestate transitions', function() {
   });
 
   describe('Restore from seed', function() {
-    const node = new FullNode({
-      network: network.type,
-      memory: true,
-      plugins: [require('../lib/wallet/plugin')]
-    });
-
-    const {wdb} = node.require('walletdb');
     let wallet1, wallet2, wallet3;
     let addr1;
     let heightBeforeReveal;
 
     const name = rules.grindName(4, 4, network);
 
-    before(async () => {
-      await node.open();
-    });
-
-    after(async () => {
-      await node.close();
-    });
+    before(beforeAll);
+    after(afterAll);
 
     it('should create and fund wallet 1', async () => {
       wallet1 = await wdb.create();
