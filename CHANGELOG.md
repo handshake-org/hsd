@@ -5,7 +5,25 @@
 **When upgrading to this version of hsd, you must pass `--wallet-migrate=3` when
 you run it for the first time.**
 
-### Wallet Changes:
+### Node Changes
+#### Node HTTP API
+  - `GET /` or `getInfo()` now has more properties:
+    - `treeRootHeight` - height at which the block txns are accumulated
+      in the current branch.
+    - `indexers`
+      - `indexTX` - is tx indexer enabled.
+      - `indexAddress` - is addr indexer enabled.
+    - `options` 
+      - `spv` is the Node SPV?
+      - `prune` does node have pruning enabled.
+    - `treeCompaction`
+      - `compacted` - whethere tree is compacted or not.
+      - `compactOnInit` - is tree compaction on init enabled.
+      - `compactInterval` - what is the current compaction interval config.
+      - `nextCompaction` - when will the next compaction trigger after restart.
+      - `lastCompaction` - when was the last compaction run.
+
+### Wallet Changes
 #### Configuration
   Wallet now has option `wallet-migrate-no-rescan`/`migrate-no-rescan` if you
 want to disable rescan when migration recommends it. It may result in the

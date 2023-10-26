@@ -5,6 +5,7 @@ const bio = require('bufio');
 const NodeClient = require('../lib/client/node');
 const Network = require('../lib/protocol/network');
 const FullNode = require('../lib/node/fullnode');
+const SPVNode = require('../lib/node/spvnode');
 const Address = require('../lib/primitives/address');
 const Mnemonic = require('../lib/hd/mnemonic');
 const Witness = require('../lib/script/witness');
@@ -16,10 +17,151 @@ const MTX = require('../lib/primitives/mtx');
 const rules = require('../lib/covenants/rules');
 const common = require('./util/common');
 const mnemonics = require('./data/mnemonic-english.json');
+const {forEvent} = common;
 // Commonly used test mnemonic
 const phrase = mnemonics[0][1];
 
 describe('Node HTTP', function() {
+  describe('Chain info', function() {
+    const network = Network.get('regtest');
+    const nclient = new NodeClient({
+      port: network.rpcPort
+    });
+
+    let node;
+
+    afterEach(async () => {
+      if (node && node.opened) {
+        const close = forEvent(node, 'close');
+        await node.close();
+        await close;
+      }
+
+      node = null;
+    });
+
+    it('should get full node chain info', async () => {
+      node = new FullNode({
+        network: network.type
+      });
+
+      await node.open();
+
+      const {chain} = await nclient.getInfo();
+      assert.strictEqual(chain.height, 0);
+      assert.strictEqual(chain.tip, network.genesis.hash.toString('hex'));
+      assert.strictEqual(chain.treeRoot, Buffer.alloc(32, 0).toString('hex'));
+      assert.strictEqual(chain.progress, 0);
+      assert.strictEqual(chain.indexers.indexTX, false);
+      assert.strictEqual(chain.indexers.indexAddress, false);
+      assert.strictEqual(chain.options.spv, false);
+      assert.strictEqual(chain.options.prune, false);
+      assert.strictEqual(chain.treeCompaction.compacted, false);
+      assert.strictEqual(chain.treeCompaction.compactOnInit, false);
+      assert.strictEqual(chain.treeCompaction.compactInterval, null);
+      assert.strictEqual(chain.treeCompaction.nextCompaction, null);
+      assert.strictEqual(chain.treeCompaction.lastCompaction, null);
+    });
+
+    it('should get fullnode chain info with indexers', async () => {
+      node = new FullNode({
+        network: network.type,
+        indexAddress: true,
+        indexTX: true
+      });
+
+      await node.open();
+
+      const {chain} = await nclient.getInfo();
+      assert.strictEqual(chain.indexers.indexTX, true);
+      assert.strictEqual(chain.indexers.indexAddress, true);
+    });
+
+    it('should get fullnode chain info with pruning', async () => {
+      node = new FullNode({
+        network: network.type,
+        prune: true
+      });
+
+      await node.open();
+
+      const {chain} = await nclient.getInfo();
+      assert.strictEqual(chain.options.prune, true);
+    });
+
+    it('should get fullnode chain info with compact', async () => {
+      node = new FullNode({
+        network: network.type,
+        compactTreeOnInit: true,
+        compactTreeInitInterval: 20000
+      });
+
+      await node.open();
+
+      const {chain} = await nclient.getInfo();
+      assert.strictEqual(chain.treeCompaction.compacted, false);
+      assert.strictEqual(chain.treeCompaction.compactOnInit, true);
+      assert.strictEqual(chain.treeCompaction.compactInterval, 20000);
+      assert.strictEqual(chain.treeCompaction.lastCompaction, null);
+      // last compaction height + keepBlocks + compaction interval
+      // regtest: 0 + 10000 + 20000
+      assert.strictEqual(chain.treeCompaction.nextCompaction, 30000);
+    });
+
+    it('should get spv node chain info', async () => {
+      node = new SPVNode({
+        network: network.type
+      });
+
+      await node.open();
+
+      const {chain} = await nclient.getInfo();
+      assert.strictEqual(chain.options.spv, true);
+    });
+
+    it('should get next tree update height', async () => {
+      const someAddr = 'rs1q7q3h4chglps004u3yn79z0cp9ed24rfrhvrxnx';
+      node = new FullNode({
+        network: network.type
+      });
+      const interval = network.names.treeInterval;
+
+      await node.open();
+
+      {
+        // 0th block will be 0.
+        const {chain} = await nclient.getInfo();
+        assert.strictEqual(chain.treeRootHeight, 0);
+      }
+
+      // blocks from 1 - 4 will be 1.
+      // last block commits the tree root.
+      for (let i = 0; i < interval - 1; i++) {
+        await node.rpc.generateToAddress([1, someAddr]);
+        const {chain} = await nclient.getInfo();
+        assert.strictEqual(chain.treeRootHeight, 1);
+      }
+
+      {
+        // block 5 is also 1 and it commits the new root.
+        await node.rpc.generateToAddress([1, someAddr]);
+        const {chain} = await nclient.getInfo();
+        assert.strictEqual(chain.treeRootHeight, 1);
+      }
+
+      for (let i = 0; i < interval; i++) {
+        await node.rpc.generateToAddress([1, someAddr]);
+        const {chain} = await nclient.getInfo();
+        assert.strictEqual(chain.treeRootHeight, interval + 1);
+      }
+
+      // This block will be part of the new tree batch.
+      await node.rpc.generateToAddress([1, someAddr]);
+      const {chain} = await nclient.getInfo();
+      assert.strictEqual(chain.treeRootHeight, interval * 2 + 1);
+    });
+  });
+
   describe('Networking info', function() {
     it('should not have public address: regtest', async () => {
       const network = Network.get('regtest');
