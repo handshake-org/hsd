@@ -438,7 +438,7 @@ describe('Wallet Balance', function() {
         await discoverFn(wallet, ahead, opts);
 
       // Final look at full picture.
-      await wdb.scan(chain.tip.height - 1);
+      await wdb.rescan(chain.tip.height - 1);
       await checks.blockConfirmCheck(wallet, ahead, opts);
 
       if (discoverAt === BEFORE_BLOCK_UNCONFIRM)
@@ -449,7 +449,7 @@ describe('Wallet Balance', function() {
       await checks.blockUnconfirmCheck(wallet, ahead, opts);
 
       // Clean up wallet.
-      await wdb.scan(chain.tip.height - 1);
+      await wdb.rescan(chain.tip.height - 1);
       await checks.blockFinalConfirmCheck(wallet, ahead, opts);
     };
   };
