@@ -382,6 +382,51 @@ describe('Wallet', function() {
     }
   });
 
+  it('should remove unconfirmed coinbase tx', async () => {
+    const wallet = await wdb.create();
+
+    const block = nextBlock(wdb);
+    const normalTX = new MTX();
+
+    normalTX.addInput(dummyInput());
+    normalTX.addOutput(await wallet.receiveAddress(), 5000);
+
+    assert(!normalTX.isCoinbase());
+
+    const cbTX = new MTX();
+
+    cbTX.addInput({
+      prevout: new Outpoint()
+    });
+
+    cbTX.addOutput(await wallet.receiveAddress(), 5000);
+    assert(cbTX.isCoinbase());
+
+    const pendingBefore = await wallet.getPending();
+    assert.strictEqual(pendingBefore.length, 0);
+
+    await wdb.addBlock(block, [cbTX.toTX(), normalTX.toTX()]);
+
+    const balanceBefore = await wallet.getBalance();
+
+    assert.strictEqual(balanceBefore.confirmed, balanceBefore.unconfirmed);
+    assert.strictEqual(balanceBefore.confirmed, 10000);
+    assert.strictEqual(balanceBefore.tx, 2);
+    assert.strictEqual(balanceBefore.coin, 2);
+
+    await wdb.removeBlock(block, [cbTX.toTX(), normalTX.toTX()]);
+    const pending = await wallet.getPending();
+
+    assert.strictEqual(pending.length, 1);
+
+    const balance = await wallet.getBalance();
+
+    assert.strictEqual(balance.confirmed, 0);
+    assert.strictEqual(balance.unconfirmed, 5000);
+    assert.strictEqual(balance.tx, 1);
+    assert.strictEqual(balance.coin, 1);
+  });
+
   it('should handle double-spend (not our input)', async () => {
     const wallet = await wdb.create();
 
