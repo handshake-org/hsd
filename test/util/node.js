@@ -8,6 +8,7 @@ const FullNode = require('../../lib/node/fullnode');
 const plugin = require('../../lib/wallet/plugin');
 const Network = require('../../lib/protocol/network');
 const {NodeClient, WalletClient} = require('../../lib/client');
+const Logger = require('blgr');
 
 class NodeContext {
   constructor(options = {}) {
@@ -15,6 +16,11 @@ class NodeContext {
     this.options = {};
     this.node = null;
     this.opened = false;
+    this.logger = new Logger({
+      console: true,
+      filename: null,
+      level: 'none'
+    });
 
     this.nclient = null;
     this.wclient = null;
@@ -32,7 +38,8 @@ class NodeContext {
       network: 'regtest',
       listen: false,
       wallet: false,
-      spv: false
+      spv: false,
+      logger: this.logger
     };
 
     if (options.network != null)
@@ -224,6 +231,18 @@ class NodeContext {
   async destroy() {
     if (this.prefix)
       await fs.rimraf(this.prefix);
+  }
+
+  /*
+   * Helpers
+   */
+
+  enableLogging() {
+    this.logger.setLevel('debug');
+  }
+
+  disableLogging() {
+    this.logger.setLevel('none');
   }
 
   /**

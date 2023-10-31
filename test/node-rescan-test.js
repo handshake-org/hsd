@@ -7,7 +7,7 @@ const TX = require('../lib/primitives/tx');
 const nodeCommon = require('../lib/blockchain/common');
 const {scanActions} = nodeCommon;
 const NodeContext = require('./util/node');
-const {forEvent} = require('./util/common');
+const {forEvent, sleep} = require('./util/common');
 const MemWallet = require('./util/memwallet');
 const rules = require('../lib/covenants/rules');
 
@@ -770,6 +770,41 @@ describe('Node Rescan Interactive API', function() {
         assert.strictEqual(events[i + 1].id, 2);
         i++;
       }
+    });
+
+    // Make sure the client closing does not cause the chain locker to get
+    // indefinitely locked. (https://github.com/bcoin-org/bsock/pull/11)
+    it('should stop rescan when client closes', async () => {
+      const client2 = nodeCtx.nodeClient();
+
+      const addr = funderWallet.getAddress().toString(nodeCtx.network);
+
+      // Client does not need rescan hooks, because we make
+      // sure that the rescan hooks are never actually called.
+      // Client closes before they are called.
+      // We simulate this by acquiring chain lock before we
+      // call rescan and then closing the client.
+      const unlock = await nodeCtx.chain.locker.lock();
+      const rescan = client.rescanInteractive(0);
+      let err = null;
+      rescan.catch(e => err = e);
+
+      // make sure call reaches the server.
+      await sleep(50);
+      await client.close();
+      try {
+        await rescan;
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert(err.message, 'Job timed out.');
+      unlock();
+
+      // Make sure lock was unlocked.
+      // w/o bsock update this will fail with timeout.
+      await client2.execute('generatetoaddress', [1, addr]);
     });
   });
 });
