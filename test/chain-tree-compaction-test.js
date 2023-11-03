@@ -418,7 +418,11 @@ describe('Tree Compacting', function() {
         // Update name and attempt to confirm
         send(update, mempool);
         // Will "crash" node before completing operation
-        await mineBlocks(1, mempool);
+        try {
+          await mineBlocks(1, mempool);
+        } catch (e) {
+          ;
+        }
         assert(!chain.opened);
 
         // Restore proper batch-write function

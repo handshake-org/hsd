@@ -21,6 +21,12 @@ const {
 
 describe('RootServer', function() {
   const ns = new RootServer({
+    chain: {
+      safeEntry: {
+        treeRoot: Buffer.alloc(32),
+        time: Date.now() / 1000
+      }
+    },
     port: 25349 // regtest
   });
 
@@ -155,6 +161,12 @@ describe('RootServer', function() {
 
 describe('RootServer Blacklist', function() {
   const ns = new RootServer({
+    chain: {
+      safeEntry: {
+        treeRoot: Buffer.alloc(32),
+        time: Date.now() / 1000
+      }
+    },
     port: 25349, // regtest
     lookup: (hash) => {
       // Normally an Urkel Tree goes here.
@@ -219,6 +231,12 @@ describe('RootServer Blacklist', function() {
 
 describe('RootServer Plugins', function() {
   const ns = new RootServer({
+    chain: {
+      safeEntry: {
+        treeRoot: Buffer.alloc(32),
+        time: Date.now() / 1000
+      }
+    },
     port: 25349, // regtest
     lookup: (hash) => {
       // Normally an Urkel Tree goes here.
@@ -311,6 +329,12 @@ describe('RootServer Plugins', function() {
 
 describe('RootServer DNSSEC', function () {
   const ns = new RootServer({
+    chain: {
+      safeEntry: {
+        treeRoot: Buffer.alloc(32),
+        time: Date.now() / 1000
+      }
+    },
     port: 25349, // regtest
     lookup: (hash) => {
       assert(hash instanceof Buffer);
@@ -670,6 +694,12 @@ describe('RootServer SIG0', function() {
 
   it('should answer with SIG0', async () => {
     ns = new RootServer({
+      chain: {
+        safeEntry: {
+          treeRoot: Buffer.alloc(32),
+          time: Date.now() / 1000
+        }
+      },
       port: 25349
     });
 
@@ -689,6 +719,12 @@ describe('RootServer SIG0', function() {
 
   it('should not answer with SIG0', async () => {
     ns = new RootServer({
+      chain: {
+        safeEntry: {
+          treeRoot: Buffer.alloc(32),
+          time: Date.now() / 1000
+        }
+      },
       port: 25349,
       noSig0: true
     });
