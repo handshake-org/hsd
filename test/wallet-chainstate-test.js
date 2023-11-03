@@ -506,7 +506,7 @@ describe('WalletDB ChainState', function() {
     assert.strictEqual(wdb.state.marked, true);
   });
 
-  it.skip('should recover to the proper mark/startHeight after corruption', async () => {
+  it('should recover to the proper mark/startHeight after corruption', async () => {
     // If we receive a block that has TXs (meaning wdb should care) but it
     // DB/Node closes/crashes and restarted node does not have txs in the blocks.
     // startHeight and mark will be set incorrectly.
