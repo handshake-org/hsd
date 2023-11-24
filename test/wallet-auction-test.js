@@ -18,7 +18,6 @@ const {Resource} = require('../lib/dns/resource');
 const {forEvent} = require('./util/common');
 
 const network = Network.get('regtest');
-const NAME1 = rules.grindName(10, 2, network);
 const {
   treeInterval,
   biddingPeriod,
@@ -58,7 +57,10 @@ const wdb = new WalletDB({
 });
 
 describe('Wallet Auction', function() {
-  let wallet;
+  let wallet, wallet2;
+
+  const name1 = rules.grindName(10, 2, network);
+  const name2 = rules.grindName(10, 2, network);
 
   before(async () => {
     // Open
@@ -70,6 +72,7 @@ describe('Wallet Auction', function() {
 
     // Set up wallet
     wallet = await wdb.create();
+    wallet2 = await wdb.create();
     chain.on('connect', async (entry, block) => {
       await wdb.addBlock(entry, block.txs);
     });
@@ -79,10 +82,16 @@ describe('Wallet Auction', function() {
     });
 
     // Generate blocks to roll out name and fund wallet
-    let winnerAddr = await wallet.createReceive();
-    winnerAddr = winnerAddr.getAddress().toString(network);
-    for (let i = 0; i < 10; i++) {
-      const block = await cpu.mineBlock(null, winnerAddr);
+    let walletAddr = await wallet.createReceive();
+    walletAddr = walletAddr.getAddress().toString(network);
+    for (let i = 0; i < 5; i++) {
+      const block = await cpu.mineBlock(null, walletAddr);
+      await chain.add(block);
+    }
+
+    walletAddr = (await wallet2.createReceive()).getAddress().toString(network);
+    for (let i = 0; i < 5; i++) {
+      const block = await cpu.mineBlock(null, walletAddr);
       await chain.add(block);
     }
   });
@@ -108,7 +117,7 @@ describe('Wallet Auction', function() {
 
     it('should open auction', async () => {
       for (let i = 0; i < OPENS1; i++) {
-        const open = await wallet.createOpen(NAME1);
+        const open = await wallet.createOpen(name1);
         await wallet.sign(open);
 
         assert.strictEqual(open.inputs.length, 1);
@@ -133,13 +142,13 @@ describe('Wallet Auction', function() {
     it('should fail to create duplicate open', async () => {
       let err;
       try {
-        await wallet.createOpen(NAME1);
+        await wallet.createOpen(name1);
       } catch (e) {
         err = e;
       }
 
       assert(err);
-      assert.strictEqual(err.message, `Already sent an open for: ${NAME1}.`);
+      assert.strictEqual(err.message, `Already sent an open for: ${name1}.`);
     });
 
     it('should not accept own duplicate open', async () => {
@@ -183,13 +192,13 @@ describe('Wallet Auction', function() {
     it('should fail to re-open auction during OPEN phase', async () => {
       let err;
       try {
-        await wallet.createOpen(NAME1);
+        await wallet.createOpen(name1);
       } catch (e) {
         err = e;
       }
 
       assert(err);
-      assert.strictEqual(err.message, `Name is already opening: ${NAME1}.`);
+      assert.strictEqual(err.message, `Name is already opening: ${name1}.`);
     });
 
     it('should mine enough blocks to enter BIDDING phase', async () => {
@@ -201,7 +210,7 @@ describe('Wallet Auction', function() {
     });
 
     it('should fail to send bid to null address', async () => {
-      const mtx = await wallet.makeBid(NAME1, 1000, 2000, 0);
+      const mtx = await wallet.makeBid(name1, 1000, 2000, 0);
       mtx.outputs[0].address = new Address();
       await wallet.fill(mtx);
       await wallet.finalize(mtx);
@@ -214,13 +223,13 @@ describe('Wallet Auction', function() {
     it('should fail to re-open auction during BIDDING phase', async () => {
       let err;
       try {
-        await wallet.createOpen(NAME1);
+        await wallet.createOpen(name1);
       } catch (e) {
         err = e;
       }
 
       assert(err);
-      assert.strictEqual(err.message, `Name is not available: ${NAME1}.`);
+      assert.strictEqual(err.message, `Name is not available: ${name1}.`);
     });
 
     it('should mine enough blocks to expire auction', async () => {
@@ -241,13 +250,13 @@ describe('Wallet Auction', function() {
     it('should fail to create duplicate open (again)', async () => {
       let err;
       try {
-        await wallet.createOpen(NAME1);
+        await wallet.createOpen(name1);
       } catch (e) {
         err = e;
       }
 
       assert(err);
-      assert.strictEqual(err.message, `Already sent an open for: ${NAME1}.`);
+      assert.strictEqual(err.message, `Already sent an open for: ${name1}.`);
     });
 
     it('should confirm OPEN transaction', async () => {
@@ -259,7 +268,7 @@ describe('Wallet Auction', function() {
       const block = await job.mineAsync();
       assert(await chain.add(block));
 
-      let ns = await chain.db.getNameStateByName(NAME1);
+      let ns = await chain.db.getNameStateByName(name1);
       let state = ns.state(chain.height, network);
       assert.strictEqual(state, states.OPENING);
 
@@ -269,7 +278,7 @@ describe('Wallet Auction', function() {
         assert(await chain.add(block));
       }
 
-      ns = await chain.db.getNameStateByName(NAME1);
+      ns = await chain.db.getNameStateByName(name1);
       state = ns.state(chain.height, network);
       assert.strictEqual(state, states.BIDDING);
     });
@@ -354,6 +363,31 @@ describe('Wallet Auction', function() {
 
       const secondTX = await wallet.getTX(openTXs[insertIndexes[2]].hash());
       assert.notStrictEqual(secondTX, null);
+    });
+
+    it('should handle foreign double open after sending open', async () => {
+      const open = await wallet.createOpen(name2);
+      await wallet.sign(open);
+
+      const open2 = await wallet2.createOpen(name2);
+      await wallet2.sign(open2);
+
+      // try to open.
+      await wdb.addTX(open.toTX());
+      const pending1 = await wallet.getPending();
+      assert.strictEqual(pending1.length, 1);
+      assert.bufferEqual(pending1[0].hash, open.hash());
+
+      const job = await cpu.createJob();
+      const [tx, view] = open2.commit();
+      job.addTX(tx, view);
+      job.refresh();
+
+      const block = await job.mineAsync();
+      assert(await chain.add(block));
+
+      const pending1after = await wallet.getPending();
+      assert.strictEqual(pending1after.length, 0);
     });
   });
 
