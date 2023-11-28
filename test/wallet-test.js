@@ -2723,7 +2723,7 @@ describe('Wallet', function() {
       output.covenant.setReveal(
         nameHash,
         start,
-        Buffer.alloc(32),
+        Buffer.alloc(32)
       );
 
       const mtx = new MTX();

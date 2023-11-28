@@ -170,7 +170,7 @@ describe('Interactive name swap', function() {
       0, // flags, may be required if name was CLAIMed
       ns.claimed,
       ns.renewals,
-      await wdb.getRenewalBlock(),
+      await wdb.getRenewalBlock()
     );
 
     const output1 = new Output();

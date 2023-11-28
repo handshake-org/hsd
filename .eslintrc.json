@@ -1,19 +1,9 @@
 {
   "env": {
-    "es6": true,
+    "es2020": true,
     "node": true
   },
   "extends": "eslint:recommended",
-  "globals": {
-    "Atomics": "readable",
-    "BigInt": "readable",
-    "BigInt64Array": "readable",
-    "BigUint64Array": "readable",
-    "queueMicrotask": "readable",
-    "SharedArrayBuffer": "readable",
-    "TextEncoder": "readable",
-    "TextDecoder": "readable"
-  },
   "overrides": [
     {
       "files": ["*.mjs"],
@@ -44,9 +34,8 @@
       }
     }
   ],
-  "parser": "babel-eslint",
   "parserOptions": {
-    "ecmaVersion": 10,
+    "ecmaVersion": 11,
     "ecmaFeatures": {
       "globalReturn": true
     },

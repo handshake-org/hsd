@@ -1538,7 +1538,7 @@ class MemWallet {
       flags,
       ns.claimed,
       ns.renewals,
-      this.getRenewalBlock(),
+      this.getRenewalBlock()
     );
 
     const mtx = new MTX();
