@@ -5,16 +5,13 @@ const WalletClient = require('../lib/client/wallet');
 const consensus = require('../lib/protocol/consensus');
 const Network = require('../lib/protocol/network');
 const util = require('../lib/utils/util');
-const blake2b = require('bcrypto/lib/blake2b');
 const random = require('bcrypto/lib/random');
 const FullNode = require('../lib/node/fullnode');
 const WalletDB = require('../lib/wallet/walletdb');
 const WorkerPool = require('../lib/workers/workerpool');
 const Address = require('../lib/primitives/address');
 const MTX = require('../lib/primitives/mtx');
-const ChainEntry = require('../lib/blockchain/chainentry');
 const {Resource} = require('../lib/dns/resource');
-const Block = require('../lib/primitives/block');
 const Coin = require('../lib/primitives/coin');
 const KeyRing = require('../lib/primitives/keyring');
 const Input = require('../lib/primitives/input');
@@ -27,6 +24,14 @@ const Mnemonic = require('../lib/hd/mnemonic');
 const Wallet = require('../lib/wallet/wallet');
 const rules = require('../lib/covenants/rules');
 const {forValue} = require('./util/common');
+const wutils = require('./util/wallet');
+const {
+  dummyInput,
+  curBlock,
+  nextBlock,
+  curEntry,
+  nextEntry
+} = wutils;
 
 const KEY1 = 'xprv9s21ZrQH143K3Aj6xQBymM31Zb4BVc7wxqfUhMZrzewdDVCt'
   + 'qUP9iWfcHgJofs25xbaUpCps9GDXj83NiWvQCAkWQhVj5J4CorfnpKX94AZ';
@@ -46,57 +51,6 @@ let importedKey = null;
 let doubleSpendWallet = null;
 let doubleSpendCoin = null;
 let watchWallet = null;
-
-function fromU32(num) {
-  const data = Buffer.allocUnsafe(4);
-  data.writeUInt32LE(num, 0, true);
-  return data;
-}
-
-function curBlock(wdb) {
-  return fakeBlock(wdb.state.height);
-};
-
-function nextBlock(wdb) {
-  return fakeBlock(wdb.state.height + 1);
-}
-
-function fakeBlock(height) {
-  const prev = blake2b.digest(fromU32((height - 1) >>> 0));
-  const hash = blake2b.digest(fromU32(height >>> 0));
-  const root = blake2b.digest(fromU32((height | 0x80000000) >>> 0));
-
-  return {
-    hash: hash,
-    prevBlock: prev,
-    merkleRoot: root,
-    time: 500000000 + (height * (10 * 60)),
-    bits: 0,
-    nonce: 0,
-    height: height,
-    version: 0,
-    witnessRoot: Buffer.alloc(32),
-    treeRoot: Buffer.alloc(32),
-    reservedRoot: Buffer.alloc(32),
-    extraNonce: Buffer.alloc(24),
-    mask: Buffer.alloc(32)
-  };
-}
-
-function curEntry(wdb) {
-  return new ChainEntry(curBlock(wdb));
-}
-
-function nextEntry(wdb) {
-  const cur = curEntry(wdb);
-  const next = new Block(nextBlock(wdb));
-  return ChainEntry.fromBlock(next, cur);
-}
-
-function dummyInput() {
-  const hash = random.randomBytes(32);
-  return Input.fromOutpoint(new Outpoint(hash, 0));
-}
 
 describe('Wallet', function() {
   this.timeout(5000);
