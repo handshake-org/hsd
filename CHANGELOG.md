@@ -25,10 +25,13 @@ you run it for the first time.**
 
 ### Wallet Changes
 #### Configuration
-  Wallet now has option `wallet-migrate-no-rescan`/`migrate-no-rescan` if you
-want to disable rescan when migration recommends it. It may result in the
-incorrect txdb state, but can be useful if you know the issue does not affect
-your wallet or is not critical.
+- Wallet now has option `wallet-migrate-no-rescan`/`migrate-no-rescan` if you
+  want to disable rescan when migration recommends it. It may result in the
+  incorrect txdb state, but can be useful if you know the issue does not affect
+  your wallet or is not critical.
+- Add `--wallet-preload-all` (or `--preload-all` for standalone wallet node)
+  that will open all wallets before starting other services (e.g. HTTP).
+  By default this is set to `false`.
 
 #### Wallet API
 
