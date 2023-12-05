@@ -17,8 +17,9 @@ class CachedStubResolver extends StubResolver {
     super(options);
 
     this.enabled = true;
-    this.cacheOnDisk = false;
-    this.cacheFile = path.join(tmpdir(), 'hsd', 'dns-cache.json');
+    this.cacheOnDisk = process.env['HSD_TEST_DNS_FILE_CACHE'] === 'true';
+    this.cacheDir = path.join(tmpdir(), 'hsd-test');
+    this.cacheFile = path.join(this.cacheDir, 'dns-cache.json');
 
     this.loadCacheSync();
   }
@@ -26,6 +27,9 @@ class CachedStubResolver extends StubResolver {
   loadCacheSync() {
     if (!this.cacheOnDisk)
       return;
+
+    if (!fs.existsSync(this.cacheDir))
+      fs.mkdirSync(this.cacheDir);
 
     if (fs.existsSync(this.cacheFile))
       CACHE = JSON.parse(fs.readFileSync(this.cacheFile, 'utf8'));
