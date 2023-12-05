@@ -9,6 +9,7 @@ const MemWallet = require('./util/memwallet');
 const Network = require('../lib/protocol/network');
 const rules = require('../lib/covenants/rules');
 const {ownership} = require('../lib/covenants/ownership');
+const {CachedStubResolver} = require('./util/stub');
 
 const network = Network.get('regtest');
 const GNAME_SIZE = 10;
@@ -68,6 +69,16 @@ function createNode() {
 
 describe('Auction', function() {
   this.timeout(15000);
+
+  const originalResolver = ownership.Resolver;
+
+  before(() => {
+    ownership.Resolver = CachedStubResolver;
+  });
+
+  after(() => {
+    ownership.Resolver = originalResolver;
+  });
 
   describe('Vickrey Auction', function() {
     const node = createNode();

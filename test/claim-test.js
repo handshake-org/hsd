@@ -9,6 +9,7 @@ const consensus = require('../lib/protocol/consensus');
 const {ownership} = require('../lib/covenants/ownership');
 const reserved = require('../lib/covenants/reserved');
 const {Resource} = require('../lib/dns/resource');
+const {CachedStubResolver} = require('./util/stub');
 
 const network = Network.get('regtest');
 
@@ -47,15 +48,19 @@ async function mineBlocks(n, addr) {
 describe('Reserved Name Claims', function() {
   this.timeout(10000);
 
+  const originalResolver = ownership.Resolver;
+
   before(async () => {
     await node.open();
 
     wallet = await wdb.create();
     addr = await wallet.receiveAddress();
+    ownership.Resolver = CachedStubResolver;
   });
 
   after(async () => {
     await node.close();
+    ownership.Resolver = originalResolver;
   });
 
   // Reset the ownership flag after every test,

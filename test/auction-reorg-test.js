@@ -12,6 +12,7 @@ const MemWallet = require('./util/memwallet');
 const Network = require('../lib/protocol/network');
 const rules = require('../lib/covenants/rules');
 const {ownership} = require('../lib/covenants/ownership');
+const {CachedStubResolver} = require('./util/stub');
 
 const network = Network.get('regtest');
 const {treeInterval} = network.names;
@@ -72,6 +73,16 @@ function createNode() {
 
 describe('Auction Reorg', function() {
   this.timeout(20000);
+
+  const originalResolver = ownership.Resolver;
+
+  before(() => {
+    ownership.Resolver = CachedStubResolver;
+  });
+
+  after(() => {
+    ownership.Resolver = originalResolver;
+  });
 
   describe('Vickrey Auction Reorg', function() {
     const node = createNode();
