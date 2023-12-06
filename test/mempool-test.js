@@ -33,6 +33,7 @@ const rules = require('../lib/covenants/rules');
 const NameState = require('../lib/covenants/namestate');
 const {states} = NameState;
 const {ownership} = require('../lib/covenants/ownership');
+const {CachedStubResolver} = require('./util/stub');
 
 const ONE_HASH = Buffer.alloc(32, 0x00);
 ONE_HASH[0] = 0x01;
@@ -74,6 +75,16 @@ async function getMockBlock(chain, txs = [], cb = true) {
 
 describe('Mempool', function() {
   this.timeout(5000);
+
+  const originalResolver = ownership.Resolver;
+
+  before(() => {
+    ownership.Resolver = CachedStubResolver;
+  });
+
+  after(() => {
+    ownership.Resolver = originalResolver;
+  });
 
   describe('Mempool TXs', function() {
     let workers, blocks, chain, mempool, wallet;

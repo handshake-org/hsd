@@ -13,6 +13,7 @@ const Network = require('../lib/protocol/network');
 const rules = require('../lib/covenants/rules');
 const {Resource} = require('../lib/dns/resource');
 const AirdropProof = require('../lib/primitives/airdropproof');
+const {CachedStubResolver} = require('./util/stub');
 
 const network = Network.get('regtest');
 
@@ -91,8 +92,11 @@ async function mineBlocks(n, label) {
 }
 
 describe('Checkpoints', function() {
+  const originalResolver = ownership.Resolver;
+
   before(async () => {
     ownership.ignore = true;
+    ownership.Resolver = CachedStubResolver;
 
     await blocks.open();
     await chainGenerator.open();
@@ -105,6 +109,7 @@ describe('Checkpoints', function() {
     await blocks.close();
 
     ownership.ignore = false;
+    ownership.Resolver = originalResolver;
   });
 
   it('should add addrs to miner', async () => {

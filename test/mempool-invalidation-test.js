@@ -9,6 +9,7 @@ const rules = require('../lib/covenants/rules');
 const {states} = require('../lib/covenants/namestate');
 const {Resource} = require('../lib/dns/resource');
 const {forEvent} = require('./util/common');
+const {CachedStubResolver} = require('./util/stub');
 
 const network = Network.get('regtest');
 const {
@@ -21,6 +22,16 @@ const ACTUAL_CLAIM_PERIOD = claimPeriod;
 const ACTUAL_RENEWAL_WINDOW = renewalWindow;
 
 describe('Mempool Invalidation', function() {
+  const originalResolver = ownership.Resolver;
+
+  before(() => {
+    ownership.Resolver = CachedStubResolver;
+  });
+
+  after(() => {
+    ownership.Resolver = originalResolver;
+  });
+
   const NAMES = [
     // roots
     'nl',
