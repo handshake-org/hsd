@@ -148,8 +148,8 @@ describe('Mempool Invalidation', function() {
       assert.strictEqual(await getNameState(name), states.OPENING);
 
       assert.strictEqual(node.mempool.map.size, 0);
-      // we don't want coins to get stuck in the wallet.
-      wallet2.abandon(memopen.hash());
+      const pending = await wallet2.getPending();
+      assert.strictEqual(pending.length, 0);
     });
 
     it('should invalidate bids', async () => {
