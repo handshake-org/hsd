@@ -28,6 +28,7 @@ class NodeContext {
     this.clients = [];
 
     this.fromOptions(options);
+    this.init();
   }
 
   fromOptions(options) {
@@ -39,7 +40,10 @@ class NodeContext {
       listen: false,
       wallet: false,
       spv: false,
-      logger: this.logger
+      logger: this.logger,
+
+      // wallet plugin options
+      walletHttpPort: null
     };
 
     if (options.network != null)
@@ -69,11 +73,6 @@ class NodeContext {
     if (options.wallet != null)
       fnodeOptions.wallet = options.wallet;
 
-    if (options.apiKey != null) {
-      assert(typeof options.apiKey === 'string');
-      fnodeOptions.apiKey = options.apiKey;
-    }
-
     if (options.spv != null) {
       assert(typeof options.spv === 'boolean');
       fnodeOptions.spv = options.spv;
@@ -84,60 +83,33 @@ class NodeContext {
       fnodeOptions.httpPort = options.httpPort;
     }
 
-    if (options.indexTX != null) {
-      assert(typeof options.indexTX === 'boolean');
-      fnodeOptions.indexTX = options.indexTX;
+    if (options.walletHttpPort != null) {
+      assert(typeof options.walletHttpPort === 'number');
+      fnodeOptions.walletHttpPort = options.walletHttpPort;
     }
 
-    if (options.indexAddress != null) {
-      assert(typeof options.indexAddress === 'boolean');
-      fnodeOptions.indexAddress = options.indexAddress;
-    }
-
-    if (options.prune != null) {
-      assert(typeof options.prune === 'boolean');
-      fnodeOptions.prune = options.prune;
-    }
-
-    if (options.compactOnInit != null) {
-      assert(typeof options.compactOnInit === 'boolean');
-      fnodeOptions.compactOnInit = options.compactOnInit;
-    }
-
-    if (options.compactTreeInitInterval != null) {
-      assert(typeof options.compactTreeInitInterval === 'number');
-      fnodeOptions.compactTreeInitInterval = options.compactTreeInitInterval;
-    }
-
-    if (fnodeOptions.spv)
-      this.node = new SPVNode(fnodeOptions);
-    else
-      this.node = new FullNode(fnodeOptions);
-
-    if (options.timeout != null)
+    if (options.timeout != null)  {
+      assert(typeof options.timeout === 'number');
       fnodeOptions.timeout = options.timeout;
-
-    if (fnodeOptions.wallet)
-      this.node.use(plugin);
-
-    this.nclient = new NodeClient({
-      timeout: fnodeOptions.timeout,
-      apiKey: fnodeOptions.apiKey,
-      port: fnodeOptions.httpPort || this.node.network.rpcPort
-    });
-
-    this.clients.push(this.nclient);
-
-    if (fnodeOptions.wallet) {
-      this.wclient = new WalletClient({
-        timeout: fnodeOptions.timeout,
-        port: this.node.network.walletPort
-      });
-
-      this.clients.push(this.wclient);
     }
 
     this.options = fnodeOptions;
+  }
+
+  init() {
+    if (this.options.spv)
+      this.node = new SPVNode(this.options);
+    else
+      this.node = new FullNode(this.options);
+
+    if (this.options.wallet)
+      this.node.use(plugin);
+
+    // Initial wallets.
+    this.nclient = this.nodeClient();
+
+    if (this.options.wallet)
+      this.wclient = this.walletClient();
   }
 
   get network() {
@@ -298,7 +270,7 @@ class NodeContext {
   walletClient(options = {}) {
     const client = new WalletClient({
       timeout: this.options.timeout,
-      port: this.network.walletPort,
+      port: this.options.walletHttpPort || this.network.walletPort,
       ...options
     });
 

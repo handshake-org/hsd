@@ -13,7 +13,7 @@ const Coin = require('../lib/primitives/coin');
 const MTX = require('../lib/primitives/mtx');
 const rules = require('../lib/covenants/rules');
 const common = require('./util/common');
-const NodeContext = require('./util/node');
+const NodeContext = require('./util/node-context');
 const mnemonics = require('./data/mnemonic-english.json');
 
 // Commonly used test mnemonic
