@@ -2,10 +2,7 @@
 
 const assert = require('bsert');
 const bio = require('bufio');
-const NodeClient = require('../lib/client/node');
 const Network = require('../lib/protocol/network');
-const FullNode = require('../lib/node/fullnode');
-const SPVNode = require('../lib/node/spvnode');
 const Address = require('../lib/primitives/address');
 const Mnemonic = require('../lib/hd/mnemonic');
 const Witness = require('../lib/script/witness');
@@ -16,40 +13,32 @@ const Coin = require('../lib/primitives/coin');
 const MTX = require('../lib/primitives/mtx');
 const rules = require('../lib/covenants/rules');
 const common = require('./util/common');
+const NodeContext = require('./util/node');
 const mnemonics = require('./data/mnemonic-english.json');
-const {forEvent} = common;
+
 // Commonly used test mnemonic
 const phrase = mnemonics[0][1];
 
 describe('Node HTTP', function() {
   describe('Chain info', function() {
-    const network = Network.get('regtest');
-    const nclient = new NodeClient({
-      port: network.rpcPort
-    });
-
-    let node;
+    let nodeCtx;
 
     afterEach(async () => {
-      if (node && node.opened) {
-        const close = forEvent(node, 'close');
-        await node.close();
-        await close;
-      }
+      if (nodeCtx && nodeCtx.opened)
+        await nodeCtx.close();
 
-      node = null;
+      nodeCtx = null;
     });
 
     it('should get full node chain info', async () => {
-      node = new FullNode({
-        network: network.type
+      nodeCtx = new NodeContext({
+        network: 'regtest'
       });
 
-      await node.open();
-
-      const {chain} = await nclient.getInfo();
+      await nodeCtx.open();
+      const {chain} = await nodeCtx.nclient.getInfo();
       assert.strictEqual(chain.height, 0);
-      assert.strictEqual(chain.tip, network.genesis.hash.toString('hex'));
+      assert.strictEqual(chain.tip, nodeCtx.network.genesis.hash.toString('hex'));
       assert.strictEqual(chain.treeRoot, Buffer.alloc(32, 0).toString('hex'));
       assert.strictEqual(chain.progress, 0);
       assert.strictEqual(chain.indexers.indexTX, false);
@@ -64,41 +53,40 @@ describe('Node HTTP', function() {
     });
 
     it('should get fullnode chain info with indexers', async () => {
-      node = new FullNode({
-        network: network.type,
+      nodeCtx = new NodeContext({
+        network: 'regtest',
         indexAddress: true,
         indexTX: true
       });
 
-      await node.open();
-
-      const {chain} = await nclient.getInfo();
+      await nodeCtx.open();
+      const {chain} = await nodeCtx.nclient.getInfo();
       assert.strictEqual(chain.indexers.indexTX, true);
       assert.strictEqual(chain.indexers.indexAddress, true);
     });
 
     it('should get fullnode chain info with pruning', async () => {
-      node = new FullNode({
-        network: network.type,
+      nodeCtx = new NodeContext({
+        network: 'regtest',
         prune: true
       });
 
-      await node.open();
+      await nodeCtx.open();
 
-      const {chain} = await nclient.getInfo();
+      const {chain} = await nodeCtx.nclient.getInfo();
       assert.strictEqual(chain.options.prune, true);
     });
 
     it('should get fullnode chain info with compact', async () => {
-      node = new FullNode({
-        network: network.type,
+      nodeCtx = new NodeContext({
+        network: 'regtest',
         compactTreeOnInit: true,
         compactTreeInitInterval: 20000
       });
 
-      await node.open();
+      await nodeCtx.open();
 
-      const {chain} = await nclient.getInfo();
+      const {chain} = await nodeCtx.nclient.getInfo();
       assert.strictEqual(chain.treeCompaction.compacted, false);
       assert.strictEqual(chain.treeCompaction.compactOnInit, true);
       assert.strictEqual(chain.treeCompaction.compactInterval, 20000);
@@ -109,24 +97,29 @@ describe('Node HTTP', function() {
     });
 
     it('should get spv node chain info', async () => {
-      node = new SPVNode({
-        network: network.type
+      nodeCtx = new NodeContext({
+        network: 'regtest',
+        spv: true
       });
 
-      await node.open();
+      await nodeCtx.open();
 
-      const {chain} = await nclient.getInfo();
+      const {chain} = await nodeCtx.nclient.getInfo();
       assert.strictEqual(chain.options.spv, true);
     });
 
     it('should get next tree update height', async () => {
       const someAddr = 'rs1q7q3h4chglps004u3yn79z0cp9ed24rfrhvrxnx';
-      node = new FullNode({
-        network: network.type
+      nodeCtx = new NodeContext({
+        network: 'regtest'
       });
-      const interval = network.names.treeInterval;
 
-      await node.open();
+      const interval = nodeCtx.network.names.treeInterval;
+
+      await nodeCtx.open();
+
+      const nclient = nodeCtx.nclient;
+      const node = nodeCtx.node;
 
       {
         // 0th block will be 0.
@@ -164,24 +157,15 @@ describe('Node HTTP', function() {
 
   describe('Networking info', function() {
     it('should not have public address: regtest', async () => {
-      const network = Network.get('regtest');
+      const nodeCtx = new NodeContext();
 
-      const node = new FullNode({
-        network: network.type
-      });
-
-      const nclient = new NodeClient({
-        port: network.rpcPort
-      });
-
-      await node.open();
-      await node.connect();
-      const {pool} = await nclient.getInfo();
-      await node.close();
+      await nodeCtx.open();
+      const {pool} = await nodeCtx.nclient.getInfo();
+      await nodeCtx.close();
 
       assert.strictEqual(pool.host, '0.0.0.0');
-      assert.strictEqual(pool.port, network.port);
-      assert.strictEqual(pool.brontidePort, network.brontidePort);
+      assert.strictEqual(pool.port, nodeCtx.network.port);
+      assert.strictEqual(pool.brontidePort, nodeCtx.network.brontidePort);
 
       const {public: pub} = pool;
 
@@ -194,19 +178,13 @@ describe('Node HTTP', function() {
     it('should not have public address: regtest, listen', async () => {
       const network = Network.get('regtest');
 
-      const node = new FullNode({
-        network: network.type,
+      const nodeCtx = new NodeContext({
         listen: true
       });
 
-      const nclient = new NodeClient({
-        port: network.rpcPort
-      });
-
-      await node.open();
-      await node.connect();
-      const {pool} = await nclient.getInfo();
-      await node.close();
+      await nodeCtx.open();
+      const {pool} = await nodeCtx.nclient.getInfo();
+      await nodeCtx.close();
 
       assert.strictEqual(pool.host, '0.0.0.0');
       assert.strictEqual(pool.port, network.port);
@@ -221,20 +199,15 @@ describe('Node HTTP', function() {
     });
 
     it('should not have public address: main', async () => {
-      const network = Network.get('main');
-
-      const node = new FullNode({
-        network: network.type
+      const nodeCtx = new NodeContext({
+        network: 'main'
       });
 
-      const nclient = new NodeClient({
-        port: network.rpcPort
-      });
+      const network = nodeCtx.network;
 
-      await node.open();
-      await node.connect();
-      const {pool} = await nclient.getInfo();
-      await node.close();
+      await nodeCtx.open();
+      const {pool} = await nodeCtx.nclient.getInfo();
+      await nodeCtx.close();
 
       assert.strictEqual(pool.host, '0.0.0.0');
       assert.strictEqual(pool.port, network.port);
@@ -249,21 +222,16 @@ describe('Node HTTP', function() {
     });
 
     it('should not have public address: main, listen', async () => {
-      const network = Network.get('main');
-
-      const node = new FullNode({
-        network: network.type,
+      const nodeCtx = new NodeContext({
+        network: 'main',
         listen: true
       });
 
-      const nclient = new NodeClient({
-        port: network.rpcPort
-      });
+      const network = nodeCtx.network;
 
-      await node.open();
-      await node.connect();
-      const {pool} = await nclient.getInfo();
-      await node.close();
+      await nodeCtx.open();
+      const {pool} = await nodeCtx.nclient.getInfo();
+      await nodeCtx.close();
 
       assert.strictEqual(pool.host, '0.0.0.0');
       assert.strictEqual(pool.port, network.port);
@@ -278,27 +246,23 @@ describe('Node HTTP', function() {
     });
 
     it('should have public address: main, listen, publicHost', async () => {
-      const network = Network.get('main');
       const publicHost = '100.200.11.22';
       const publicPort = 11111;
       const publicBrontidePort = 22222;
 
-      const node = new FullNode({
-        network: network.type,
+      const nodeCtx = new NodeContext({
+        network: 'main',
         listen: true,
         publicHost,
         publicPort,
         publicBrontidePort
       });
 
-      const nclient = new NodeClient({
-        port: network.rpcPort
-      });
+      const network =  nodeCtx.network;
 
-      await node.open();
-      await node.connect();
-      const {pool} = await nclient.getInfo();
-      await node.close();
+      await nodeCtx.open();
+      const {pool} = await nodeCtx.nclient.getInfo();
+      await nodeCtx.close();
 
       assert.strictEqual(pool.host, '0.0.0.0');
       assert.strictEqual(pool.port, network.port);
@@ -317,25 +281,18 @@ describe('Node HTTP', function() {
     this.timeout(15000);
 
     describe('tree commit', () => {
-      const network = Network.get('regtest');
       const {types} = rules;
 
-      const node = new FullNode({
-        network: 'regtest',
+      const nodeCtx = new NodeContext({
         apiKey: 'foo',
-        walletAuth: true,
-        memory: true,
         indexTx: true,
         indexAddress: true,
         rejectAbsurdFees: false
       });
-
-      const nclient = new NodeClient({
-        port: network.rpcPort,
-        apiKey: 'foo'
-      });
+      const network = nodeCtx.network;
 
       const {treeInterval} = network.names;
+      const nclient = nodeCtx.nclient;
 
       let privkey, pubkey;
       let socketData, mempoolData;
@@ -345,7 +302,7 @@ describe('Node HTTP', function() {
       async function mineBlocks(count, address) {
         for (let i = 0; i < count; i++) {
           const obj = { complete: false };
-          node.once('block', () => {
+          nodeCtx.node.once('block', () => {
             obj.complete = true;
           });
           await nclient.execute('generatetoaddress', [1, address]);
@@ -354,8 +311,7 @@ describe('Node HTTP', function() {
       }
 
       before(async () => {
-        await node.open();
-        await nclient.open();
+        await nodeCtx.open();
         await nclient.call('watch chain');
 
         const mnemonic = Mnemonic.fromPhrase(phrase);
@@ -379,14 +335,13 @@ describe('Node HTTP', function() {
           socketData.push({root, entry, block});
         });
 
-        node.mempool.on('tx', (tx) => {
+        nodeCtx.mempool.on('tx', (tx) => {
           mempoolData[tx.txid()] = true;
         });
       });
 
       after(async () => {
-        await nclient.close();
-        await node.close();
+        await nodeCtx.close();
       });
 
       beforeEach(() => {
@@ -423,7 +378,7 @@ describe('Node HTTP', function() {
         coins.sort((a, b) => a.height - b.height);
         const coin = Coin.fromJSON(coins[0]);
 
-        assert.ok(node.chain.height > coin.height + network.coinbaseMaturity);
+        assert.ok(nodeCtx.chain.height > coin.height + network.coinbaseMaturity);
         mtx.addCoin(coin);
 
         const addr = Address.fromPubkey(pubkey);
@@ -436,7 +391,7 @@ describe('Node HTTP', function() {
         assert.ok(valid);
 
         const tx = mtx.toTX();
-        await node.sendTX(tx);
+        await nodeCtx.node.sendTX(tx);
 
         await common.forValue(mempoolData, tx.txid(), true);
 
@@ -449,7 +404,7 @@ describe('Node HTTP', function() {
         assert.equal(socketData.length, 1);
 
         const {root, block, entry} = socketData[0];
-        assert.bufferEqual(node.chain.db.treeRoot(), root);
+        assert.bufferEqual(nodeCtx.chain.db.treeRoot(), root);
 
         const info = await nclient.getInfo();
         assert.notEqual(pre.chain.tip, info.chain.tip);

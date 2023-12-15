@@ -9,16 +9,16 @@ const {
   openChainBundle,
   closeChainBundle,
   syncChain,
-  chainTreeHas,
-  chainTxnHas
+  chainTreeHasName,
+  chainTxnHasName
 } = require('./util/chain');
 
 const network = Network.get('regtest');
 
 describe('Chain reorg/reset test', function() {
   let wallet;
-  let chainb1, chain, mainMiner;
-  let chainb2, altChain, altMiner;
+  let chainBundle1, chain, mainMiner;
+  let chainBundle2, altChain, altMiner;
   let tipHeight = 0;
 
   const mineBlocksOpens = async (miner, n) => {
@@ -58,38 +58,38 @@ describe('Chain reorg/reset test', function() {
 
     wallet = new MemWallet({ network });
 
-    chainb1 = getChainBundle({
+    chainBundle1 = getChainBundle({
       memory: true,
       workers: true,
       address: wallet.getReceive()
     });
 
-    chainb2 = getChainBundle({
+    chainBundle2 = getChainBundle({
       memory: true,
       workers: true,
       address: wallet.getReceive()
     });
 
-    chainb1.chain.on('connect', (entry, block) => {
+    chainBundle1.chain.on('connect', (entry, block) => {
       wallet.addBlock(entry, block.txs);
     });
 
-    chainb1.chain.on('disconnect', (entry, block) => {
+    chainBundle1.chain.on('disconnect', (entry, block) => {
       wallet.removeBlock(entry, block.txs);
     });
 
-    await openChainBundle(chainb1);
-    await openChainBundle(chainb2);
+    await openChainBundle(chainBundle1);
+    await openChainBundle(chainBundle2);
 
-    chain = chainb1.chain;
-    mainMiner = chainb1.miner;
-    altChain = chainb2.chain;
-    altMiner = chainb2.miner;
+    chain = chainBundle1.chain;
+    mainMiner = chainBundle1.miner;
+    altChain = chainBundle2.chain;
+    altMiner = chainBundle2.miner;
   };
 
   const afterHook = async () => {
-    await closeChainBundle(chainb1);
-    await closeChainBundle(chainb2);
+    await closeChainBundle(chainBundle1);
+    await closeChainBundle(chainBundle2);
   };
 
   describe('Chain reorg', function() {
@@ -124,8 +124,8 @@ describe('Chain reorg/reset test', function() {
       tipHeight++;
 
       for (const name of names0) {
-        assert.strictEqual(await chainTreeHas(chain, name), false);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), false);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
 
       const root = await chain.db.treeRoot();
@@ -136,8 +136,8 @@ describe('Chain reorg/reset test', function() {
       assert.bufferEqual(chain.db.treeRoot(), root);
 
       for (const name of [...names0, ...names1]) {
-        assert.strictEqual(await chainTreeHas(chain, name), false);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), false);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
 
       // mine 3 blocks on alt chain
@@ -148,14 +148,14 @@ describe('Chain reorg/reset test', function() {
       assert.bufferEqual(chain.db.treeRoot(), root);
 
       for (const name of [...names0, ...names2]) {
-        assert.strictEqual(await chainTreeHas(chain, name), false);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), false);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
 
       // these got reorged.
       for (const name of names1) {
-        assert.strictEqual(await chainTreeHas(chain, name), false);
-        assert.strictEqual(await chainTxnHas(chain, name), false);
+        assert.strictEqual(await chainTreeHasName(chain, name), false);
+        assert.strictEqual(await chainTxnHasName(chain, name), false);
       }
 
       assert.strictEqual(chain.tip.height, tipHeight);
@@ -167,13 +167,13 @@ describe('Chain reorg/reset test', function() {
       tipHeight++;
 
       for (const name of [...names0, ...names2, ...names3]) {
-        assert.strictEqual(await chainTreeHas(chain, name), true);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), true);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
 
       for (const name of names1) {
-        assert.strictEqual(await chainTreeHas(chain, name), false);
-        assert.strictEqual(await chainTxnHas(chain, name), false);
+        assert.strictEqual(await chainTreeHasName(chain, name), false);
+        assert.strictEqual(await chainTxnHasName(chain, name), false);
       }
 
       assert.notBufferEqual(chain.db.treeRoot(), root);
@@ -195,8 +195,8 @@ describe('Chain reorg/reset test', function() {
       tipHeight += 3;
 
       for (const name of names0) {
-        assert.strictEqual(await chainTreeHas(chain, name), false);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), false);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
 
       assert.notBufferEqual(chain.db.txn.rootHash(), root);
@@ -208,30 +208,30 @@ describe('Chain reorg/reset test', function() {
       assert.strictEqual(chain.tip.height, tipHeight + 3);
 
       for (const name of [...names0, ...names1.slice(0, -1)]) {
-        assert.strictEqual(await chainTreeHas(chain, name), true);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), true);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
 
-      assert.strictEqual(await chainTreeHas(chain, names1[names1.length - 1]), false);
-      assert.strictEqual(await chainTxnHas(chain, names1[names1.length - 1]), true);
+      assert.strictEqual(await chainTreeHasName(chain, names1[names1.length - 1]), false);
+      assert.strictEqual(await chainTxnHasName(chain, names1[names1.length - 1]), true);
 
       const names2 = await mineBlocksOpens(altMiner, 4);
       await syncChain(altChain, chain, tipHeight);
       tipHeight += 4;
 
       for (const name of [...names0, ...names2.slice(0, -2)]) {
-        assert.strictEqual(await chainTreeHas(chain, name), true);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), true);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
 
       for (const name of [...names2.slice(-2)]) {
-        assert.strictEqual(await chainTreeHas(chain, name), false);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), false);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
 
       for (const name of names1) {
-        assert.strictEqual(await chainTreeHas(chain, name), false);
-        assert.strictEqual(await chainTxnHas(chain, name), false);
+        assert.strictEqual(await chainTreeHasName(chain, name), false);
+        assert.strictEqual(await chainTxnHasName(chain, name), false);
       }
     });
 
@@ -244,13 +244,13 @@ describe('Chain reorg/reset test', function() {
       assert.strictEqual(chain.tip.height, tipHeight + 15);
 
       for (const name of [...names1.slice(0, -2)]) {
-        assert.strictEqual(await chainTreeHas(chain, name), true);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), true);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
 
       for (const name of [...names1.slice(-2)]) {
-        assert.strictEqual(await chainTreeHas(chain, name), false);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), false);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
 
       // mine 16 on alt chain.
@@ -262,18 +262,18 @@ describe('Chain reorg/reset test', function() {
       assert.strictEqual(chain.tip.height, tipHeight);
 
       for (const name of [...names2.slice(0, -3)]) {
-        assert.strictEqual(await chainTreeHas(chain, name), true);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), true);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
 
       for (const name of [...names2.slice(-3)]) {
-        assert.strictEqual(await chainTreeHas(chain, name), false);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), false);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
 
       for (const name of names1) {
-        assert.strictEqual(await chainTreeHas(chain, name), false);
-        assert.strictEqual(await chainTxnHas(chain, name), false);
+        assert.strictEqual(await chainTreeHasName(chain, name), false);
+        assert.strictEqual(await chainTxnHasName(chain, name), false);
       }
     });
   });
@@ -313,8 +313,8 @@ describe('Chain reorg/reset test', function() {
       tipHeight += 2;
 
       for (const name of names0) {
-        assert.strictEqual(await chainTreeHas(chain, name), false);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), false);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
 
       const root = await chain.db.treeRoot();
@@ -327,26 +327,26 @@ describe('Chain reorg/reset test', function() {
       assert.bufferEqual(chain.db.treeRoot(), root);
 
       for (const name of [...names0, ...resetNames]) {
-        assert.strictEqual(await chainTreeHas(chain, name), false);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), false);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
 
       await chain.reset(tipHeight - 2);
       for (const name of names0) {
-        assert.strictEqual(await chainTreeHas(chain, name), false);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), false);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
 
       for (const name of resetNames) {
-        assert.strictEqual(await chainTreeHas(chain, name), false);
-        assert.strictEqual(await chainTxnHas(chain, name), false);
+        assert.strictEqual(await chainTreeHasName(chain, name), false);
+        assert.strictEqual(await chainTxnHasName(chain, name), false);
       }
 
       await syncChain(altChain, chain, tipHeight - 2);
 
       for (const name of [...names0, ...resetNames]) {
-        assert.strictEqual(await chainTreeHas(chain, name), false);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), false);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
     });
 
@@ -358,8 +358,8 @@ describe('Chain reorg/reset test', function() {
       tipHeight += 3;
 
       for (const name of names0) {
-        assert.strictEqual(await chainTreeHas(chain, name), false);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), false);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
 
       const resetNames = await mineBlocksOpens(mainMiner, 3);
@@ -367,34 +367,34 @@ describe('Chain reorg/reset test', function() {
       tipHeight += 3;
 
       for (const name of [...names0, ...resetNames.slice(0, -1)]) {
-        assert.strictEqual(await chainTreeHas(chain, name), true);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), true);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
 
       const txnName = resetNames[resetNames.length - 1];
-      assert.strictEqual(await chainTreeHas(chain, txnName), false);
-      assert.strictEqual(await chainTxnHas(chain, txnName), true);
+      assert.strictEqual(await chainTreeHasName(chain, txnName), false);
+      assert.strictEqual(await chainTxnHasName(chain, txnName), true);
 
       await chain.reset(tipHeight - 3);
       for (const name of names0) {
-        assert.strictEqual(await chainTreeHas(chain, name), false);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), false);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
 
       for (const name of resetNames) {
-        assert.strictEqual(await chainTreeHas(chain, name), false);
-        assert.strictEqual(await chainTxnHas(chain, name), false);
+        assert.strictEqual(await chainTreeHasName(chain, name), false);
+        assert.strictEqual(await chainTxnHasName(chain, name), false);
       }
 
       await syncChain(altChain, chain, tipHeight - 3);
 
       for (const name of [...names0, ...resetNames.slice(0, -1)]) {
-        assert.strictEqual(await chainTreeHas(chain, name), true);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), true);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
 
-      assert.strictEqual(await chainTreeHas(chain, txnName), false);
-      assert.strictEqual(await chainTxnHas(chain, txnName), true);
+      assert.strictEqual(await chainTreeHasName(chain, txnName), false);
+      assert.strictEqual(await chainTxnHasName(chain, txnName), true);
     });
 
     it('should mine 18 blocks, reset and resync', async () => {
@@ -411,13 +411,13 @@ describe('Chain reorg/reset test', function() {
       const txnNames = names.slice(-3);
 
       for (const name of treeNames) {
-        assert.strictEqual(await chainTreeHas(chain, name), true);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), true);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
 
       for (const name of txnNames) {
-        assert.strictEqual(await chainTreeHas(chain, name), false);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), false);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
 
       await chain.reset(tipHeight - 18);
@@ -427,13 +427,13 @@ describe('Chain reorg/reset test', function() {
       assert.strictEqual(altChain.tip.height, tipHeight);
 
       for (const name of treeNames) {
-        assert.strictEqual(await chainTreeHas(chain, name), true);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), true);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
 
       for (const name of txnNames) {
-        assert.strictEqual(await chainTreeHas(chain, name), false);
-        assert.strictEqual(await chainTxnHas(chain, name), true);
+        assert.strictEqual(await chainTreeHasName(chain, name), false);
+        assert.strictEqual(await chainTxnHasName(chain, name), true);
       }
     });
   });

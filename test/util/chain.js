@@ -116,13 +116,32 @@ chainUtils.syncChain = async (fromChain,  toChain, startHeight) => {
   return endHeight - startHeight;
 };
 
-chainUtils.chainTreeHas = async (chain, name) => {
+chainUtils.mineBlock = async (chainObj, mtxs) => {
+  const tip = chainObj.chain.tip;
+  const job = await chainObj.miner.createJob(tip);
+
+  if (mtxs) {
+    for (const mtx of mtxs) {
+      const [tx, view] = mtx.commit();
+
+      job.addTX(tx, view);
+    }
+  }
+
+  job.refresh();
+
+  const block = await job.mineAsync();
+  const entry = await chainObj.chain.add(block);
+  return { block, entry };
+};
+
+chainUtils.chainTreeHasName = async (chain, name) => {
   assert(!chain.options.spv);
   const hash = rules.hashName(name);
   return await chain.db.tree.get(hash) != null;
 };
 
-chainUtils.chainTxnHas = async (chain, name) => {
+chainUtils.chainTxnHasName = async (chain, name) => {
   assert(!chain.options.spv);
   const hash = rules.hashName(name);
   return await chain.db.txn.get(hash) != null;
