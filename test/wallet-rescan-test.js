@@ -1,10 +1,26 @@
 'use strict';
 
 const assert = require('bsert');
-const FullNode = require('../lib/node/fullnode');
-const WalletPlugin = require('../lib/wallet/plugin');
 const Network = require('../lib/protocol/network');
-const {forEvent} = require('./util/common');
+const NodeContext = require('./util/node-context');
+
+// Setup:
+//  - Standalone Node (no wallet) responsible for progressing network.
+//  - Wallet Node (with wallet) responsible for rescanning.
+//  - Wallet SPV Node (with wallet) responsible for rescanning.
+//  - Wallet Standalone Node responsible for rescanning.
+//  - Wallet SPV Standalone Node responsible for rescanning.
+//
+// Test cases:
+//  - TX deeper depth -> TX shallower depth for derivation (Second tx is discovered first)
+//  - TX with outputs -> deeper, deep, shallow - derivation depths.
+//    (Outputs are discovered from shallower to deeper)
+//  - Replicate both transactions in the same block on rescan.
+//  - Replicate both transactions when receiving tip.
+//
+// If per block derivation lookahead is higher than wallet lookahed
+// recovery is impossible. This tests situation where in block
+// derivation depth is lower than wallet lookahead.
 
 // TODO: Rewrite using util/node from the interactive rescan test.
 // TODO: Add the standalone Wallet variation.
@@ -13,42 +29,26 @@ const {forEvent} = require('./util/common');
 describe('Wallet rescan', function() {
   const network = Network.get('regtest');
 
-  let node, wdb;
-
-  const beforeAll = async () => {
-    node = new FullNode({
+  describe('Deadlock', function() {
+    const nodeCtx = new NodeContext({
       memory: true,
       network: 'regtest',
-      plugins: [WalletPlugin]
+      wallet: true
     });
 
-    node.on('error', (err) => {
-      assert(false, err);
-    });
-
-    wdb = node.require('walletdb').wdb;
-    const wdbSynced = forEvent(wdb, 'sync done');
-
-    await node.open();
-    await wdbSynced;
-  };
-
-  const afterAll = async () => {
-    await node.close();
-    node = null;
-    wdb = null;
-  };
-
-  describe('Deadlock', function() {
-    let address;
+    let address, node, wdb;
 
     before(async () => {
-      await beforeAll();
+      node = nodeCtx.node;
+      wdb = nodeCtx.wdb;
 
+      await nodeCtx.open();
       address = await wdb.primary.receiveAddress();
     });
 
-    after(afterAll);
+    after(async () => {
+      await nodeCtx.close();
+    });
 
     it('should generate 10 blocks', async () => {
       await node.rpc.generateToAddress([10, address.toString(network)]);

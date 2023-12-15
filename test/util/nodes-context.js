@@ -1,60 +1,61 @@
 'use strict';
 
 const assert = require('assert');
-const FullNode = require('../../lib/node/fullnode');
 const Network = require('../../lib/protocol/network');
-const Logger = require('blgr');
+const NodeContext = require('./node-context');
 
 class NodesContext {
-  constructor(network, size) {
+  constructor(network, size = 1) {
     this.network = Network.get(network);
-    this.size = size || 4;
-    this.nodes = [];
+    this.size = size;
+    this.nodeCtxs = [];
 
-    this.init();
+    assert(this.size > 0);
   }
 
-  init() {
-    for (let i = 0; i < this.size; i++) {
-      const port = this.network.port + i;
+  init(options) {
+    for (let i = 0; i < this.size; i++)
+      this.addNode(options);
+  }
 
-      let last = port - 1;
+  addNode(options = {}) {
+    const index = this.nodeCtxs.length;
 
-      if (last < this.network.port)
-        last = port;
+    let seedPort = this.network.port + index - 1;
 
-      const node = new FullNode({
-        network: this.network,
-        memory: true,
-        logger: new Logger({
-          level: 'debug',
-          file: false,
-          console: false
-        }),
-        listen: true,
-        publicHost: '127.0.0.1',
-        publicPort: port,
-        httpPort: port + 100,
-        host: '127.0.0.1',
-        port: port,
-        seeds: [
-          `127.0.0.1:${last}`
-        ]
-      });
+    if (seedPort < this.network.port)
+      seedPort = this.network.port;
 
-      node.on('error', (err) => {
-        node.logger.error(err);
-      });
+    const port = this.network.port + index;
+    const brontidePort = this.network.brontidePort + index;
+    const httpPort = this.network.rpcPort + index + 100;
+    const walletHttpPort = this.network.walletPort + index + 200;
 
-      this.nodes.push(node);
-    }
+    const nodeCtx = new NodeContext({
+      ...options,
+
+      // override
+      name: `node-${index}`,
+      network: this.network,
+      listen: true,
+      publicHost: '127.0.0.1',
+      publicPort: port,
+      brontidePort: brontidePort,
+      httpPort: httpPort,
+      walletHttpPort: walletHttpPort,
+      seeds: [
+        `127.0.0.1:${seedPort}`
+      ]
+    });
+
+    this.nodeCtxs.push(nodeCtx);
   }
 
   open() {
     const jobs = [];
 
-    for (const node of this.nodes)
-      jobs.push(node.open());
+    for (const nodeCtx of this.nodeCtxs)
+      jobs.push(nodeCtx.open());
 
     return Promise.all(jobs);
   }
@@ -62,61 +63,61 @@ class NodesContext {
   close() {
     const jobs = [];
 
-    for (const node of this.nodes)
-      jobs.push(node.close());
+    for (const nodeCtx of this.nodeCtxs)
+      jobs.push(nodeCtx.close());
 
     return Promise.all(jobs);
   }
 
   async connect() {
-    for (const node of this.nodes) {
-      await node.connect();
+    for (const nodeCtx of this.nodeCtxs) {
+      await nodeCtx.node.connect();
       await new Promise(r => setTimeout(r, 1000));
     }
   }
 
   async disconnect() {
-    for (let i = this.nodes.length - 1; i >= 0; i--) {
-      const node = this.nodes[i];
+    for (let i = this.nodeCtxs.length - 1; i >= 0; i--) {
+      const node = this.nodeCtxs[i];
       await node.disconnect();
       await new Promise(r => setTimeout(r, 1000));
     }
   }
 
   startSync() {
-    for (const node of this.nodes) {
-      node.chain.synced = true;
-      node.chain.emit('full');
-      node.startSync();
+    for (const nodeCtx of this.nodeCtxs) {
+      nodeCtx.chain.synced = true;
+      nodeCtx.chain.emit('full');
+      nodeCtx.node.startSync();
     }
   }
 
   stopSync() {
-    for (const node of this.nodes)
-      node.stopSync();
+    for (const nodeCtx of this.nodeCtxs)
+      nodeCtx.stopSync();
   }
 
   async generate(index, blocks) {
-    const node = this.nodes[index];
+    const nodeCtx = this.nodeCtxs[index];
 
-    assert(node);
+    assert(nodeCtx);
 
     for (let i = 0; i < blocks; i++) {
-      const block = await node.miner.mineBlock();
-      await node.chain.add(block);
+      const block = await nodeCtx.miner.mineBlock();
+      await nodeCtx.chain.add(block);
     }
   }
 
-  height(index) {
-    const node = this.nodes[index];
-
+  context(index) {
+    const node = this.nodeCtxs[index];
     assert(node);
-
-    return node.chain.height;
+    return node;
   }
 
-  async sync() {
-    return new Promise(r => setTimeout(r, 3000));
+  height(index) {
+    const nodeCtx = this.nodeCtxs[index];
+    assert(nodeCtx);
+    return nodeCtx.height;
   }
 }
 

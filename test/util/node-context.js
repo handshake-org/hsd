@@ -35,7 +35,6 @@ class NodeContext {
     const fnodeOptions = {
       ...options,
       memory: true,
-      workers: true,
       network: 'regtest',
       listen: false,
       wallet: false,
@@ -128,6 +127,10 @@ class NodeContext {
     return this.node.chain;
   }
 
+  get nodeRPC() {
+    return this.node.rpc;
+  }
+
   get height() {
     return this.chain.tip.height;
   }
@@ -165,6 +168,9 @@ class NodeContext {
    */
 
   async open() {
+    if (this.opened)
+      return;
+
     if (this.prefix)
       await fs.mkdirp(this.prefix);
 
@@ -270,6 +276,7 @@ class NodeContext {
   walletClient(options = {}) {
     const client = new WalletClient({
       timeout: this.options.timeout,
+      apiKey: this.options.apiKey,
       port: this.options.walletHttpPort || this.network.walletPort,
       ...options
     });
