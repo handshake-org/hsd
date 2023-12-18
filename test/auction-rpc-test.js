@@ -12,7 +12,7 @@ const {
   Path
 } = require('..');
 const {forValue} = require('./util/common');
-const NodeContext = require('./util/node');
+const NodeContext = require('./util/node-context');
 
 class TestUtil {
   constructor() {
@@ -52,7 +52,7 @@ class TestUtil {
 
     await this.nodeCtx.open();
 
-    this.node.plugins.walletdb.wdb.on('confirmed', ((details, tx) => {
+    this.nodeCtx.wdb.on('confirmed', ((details, tx) => {
       const txid = tx.txid();
 
       if (!this.txs[txid])
@@ -416,8 +416,6 @@ describe('Auction RPCs', function() {
 
   describe('SPV', function () {
     const spvCtx = new NodeContext({
-      port: 10000,
-      brontidePort: 20000,
       httpPort: 30000,
       only: '127.0.0.1',
       noDns: true,

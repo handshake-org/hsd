@@ -9,7 +9,7 @@ const {states} = require('../lib/covenants/namestate');
 const {Resource} = require('../lib/dns/resource');
 const {forEvent} = require('./util/common');
 const {CachedStubResolver} = require('./util/stub');
-const NodeContext = require('./util/node');
+const NodeContext = require('./util/node-context');
 
 const network = Network.get('regtest');
 const {

@@ -2,7 +2,6 @@
 
 const assert = require('bsert');
 const bio = require('bufio');
-const Network = require('../lib/protocol/network');
 const Address = require('../lib/primitives/address');
 const Mnemonic = require('../lib/hd/mnemonic');
 const Witness = require('../lib/script/witness');
@@ -13,21 +12,167 @@ const Coin = require('../lib/primitives/coin');
 const MTX = require('../lib/primitives/mtx');
 const rules = require('../lib/covenants/rules');
 const common = require('./util/common');
-const NodeContext = require('./util/node');
+const NodeContext = require('./util/node-context');
+const pkg = require('../lib/pkg');
 const mnemonics = require('./data/mnemonic-english.json');
+const consensus = require('../lib/protocol/consensus');
+const Outpoint = require('../lib/primitives/outpoint');
+const {ZERO_HASH} = consensus;
 
 // Commonly used test mnemonic
 const phrase = mnemonics[0][1];
 
 describe('Node HTTP', function() {
+  describe('Mempool', function() {
+    let nodeCtx, nclient;
+
+    beforeEach(async () => {
+      nodeCtx = new NodeContext();
+      nclient = nodeCtx.nclient;
+
+      await nodeCtx.open();
+    });
+
+    afterEach(async () => {
+      await nodeCtx.close();
+      nodeCtx = null;
+    });
+
+    it('should get mempool rejection filter', async () => {
+      const filterInfo = await nclient.get('/mempool/invalid', { verbose: true });
+
+      assert.ok('items' in filterInfo);
+      assert.ok('filter' in filterInfo);
+      assert.ok('size' in filterInfo);
+      assert.ok('entries' in filterInfo);
+      assert.ok('n' in filterInfo);
+      assert.ok('limit' in filterInfo);
+      assert.ok('tweak' in filterInfo);
+
+      assert.equal(filterInfo.entries, 0);
+    });
+
+    it('should add an entry to the mempool rejection filter', async () => {
+      const mtx = new MTX();
+      mtx.addOutpoint(new Outpoint(consensus.ZERO_HASH, 0));
+
+      const raw = mtx.toHex();
+      const txid = await nclient.execute('sendrawtransaction', [raw]);
+
+      const json = await nclient.get(`/mempool/invalid/${txid}`);
+      assert.equal(json.invalid, true);
+
+      const filterInfo = await nclient.get('/mempool/invalid');
+      assert.equal(filterInfo.entries, 1);
+    });
+  });
+
+  describe('Blockheader', function() {
+    let nodeCtx, nclient;
+
+    beforeEach(async () => {
+      nodeCtx = new NodeContext();
+      nclient = nodeCtx.nclient;
+
+      await nodeCtx.open();
+    });
+
+    afterEach(async () => {
+      await nodeCtx.close();
+      nodeCtx = null;
+    });
+
+    it('should fetch block header by height', async () => {
+      await nclient.execute(
+        'generatetoaddress',
+        [8, 'rs1q7q3h4chglps004u3yn79z0cp9ed24rfrhvrxnx']
+      );
+
+      // fetch corresponding header and block
+      const height = 7;
+      const header = await nclient.get(`/header/${height}`);
+      assert.equal(header.height, height);
+
+      const properties = [
+        'hash', 'version', 'prevBlock',
+        'merkleRoot', 'time', 'bits',
+        'nonce', 'height', 'chainwork'
+      ];
+
+      for (const property of properties)
+        assert(property in header);
+
+      const block = await nclient.getBlock(height);
+
+      assert.equal(block.hash, header.hash);
+      assert.equal(block.height, header.height);
+      assert.equal(block.version, header.version);
+      assert.equal(block.prevBlock, header.prevBlock);
+      assert.equal(block.merkleRoot, header.merkleRoot);
+      assert.equal(block.time, header.time);
+      assert.equal(block.bits, header.bits);
+      assert.equal(block.nonce, header.nonce);
+    });
+
+    it('should fetch null for block header that does not exist', async () => {
+      // many blocks in the future
+      const header = await nclient.get(`/header/${40000}`);
+      assert.equal(header, null);
+    });
+
+    it('should have valid header chain', async () => {
+      await nclient.execute(
+        'generatetoaddress',
+        [10, 'rs1q7q3h4chglps004u3yn79z0cp9ed24rfrhvrxnx']
+      );
+
+      // starting at the genesis block
+      let prevBlock = '0000000000000000000000000000000000000000000000000000000000000000';
+
+      for (let i = 0; i < 10; i++) {
+        const header = await nclient.get(`/header/${i}`);
+
+        assert.equal(prevBlock, header.prevBlock);
+        prevBlock = header.hash;
+      }
+    });
+
+    it('should fetch block header by hash', async () => {
+      const info = await nclient.getInfo();
+
+      const headerByHash = await nclient.get(`/header/${info.chain.tip}`);
+      const headerByHeight = await nclient.get(`/header/${info.chain.height}`);
+
+      assert.deepEqual(headerByHash, headerByHeight);
+    });
+  });
+
   describe('Chain info', function() {
     let nodeCtx;
 
     afterEach(async () => {
-      if (nodeCtx && nodeCtx.opened)
-        await nodeCtx.close();
-
+      await nodeCtx.close();
       nodeCtx = null;
+    });
+
+    it('should get info', async () => {
+      nodeCtx = new NodeContext();
+      await nodeCtx.open();
+
+      const {node, nclient, network} = nodeCtx;
+
+      const info = await nclient.getInfo();
+      assert.strictEqual(info.network, network.type);
+      assert.strictEqual(info.version, pkg.version);
+      assert(info.pool);
+      assert.strictEqual(info.pool.agent, node.pool.options.agent);
+      assert(info.chain);
+      assert.strictEqual(info.chain.height, 0);
+      assert.strictEqual(info.chain.treeRoot, ZERO_HASH.toString('hex'));
+      // state comes from genesis block
+      assert.strictEqual(info.chain.state.tx, 1);
+      assert.strictEqual(info.chain.state.coin, 1);
+      assert.strictEqual(info.chain.state.burned, 0);
     });
 
     it('should get full node chain info', async () => {
@@ -156,16 +301,26 @@ describe('Node HTTP', function() {
   });
 
   describe('Networking info', function() {
+    let nodeCtx = null;
+
+    afterEach(async () => {
+      if (nodeCtx)
+        await nodeCtx.close();
+    });
+
     it('should not have public address: regtest', async () => {
-      const nodeCtx = new NodeContext();
+      nodeCtx = new NodeContext({
+        network: 'regtest'
+      });
+
+      const {network, nclient} = nodeCtx;
 
       await nodeCtx.open();
-      const {pool} = await nodeCtx.nclient.getInfo();
-      await nodeCtx.close();
+      const {pool} = await nclient.getInfo();
 
       assert.strictEqual(pool.host, '0.0.0.0');
-      assert.strictEqual(pool.port, nodeCtx.network.port);
-      assert.strictEqual(pool.brontidePort, nodeCtx.network.brontidePort);
+      assert.strictEqual(pool.port, network.port);
+      assert.strictEqual(pool.brontidePort, network.brontidePort);
 
       const {public: pub} = pool;
 
@@ -176,15 +331,14 @@ describe('Node HTTP', function() {
     });
 
     it('should not have public address: regtest, listen', async () => {
-      const network = Network.get('regtest');
-
-      const nodeCtx = new NodeContext({
+      nodeCtx = new NodeContext({
+        network: 'regtest',
         listen: true
       });
+      const {network, nclient} = nodeCtx;
 
       await nodeCtx.open();
-      const {pool} = await nodeCtx.nclient.getInfo();
-      await nodeCtx.close();
+      const {pool} = await nclient.getInfo();
 
       assert.strictEqual(pool.host, '0.0.0.0');
       assert.strictEqual(pool.port, network.port);
@@ -199,15 +353,14 @@ describe('Node HTTP', function() {
     });
 
     it('should not have public address: main', async () => {
-      const nodeCtx = new NodeContext({
+      nodeCtx = new NodeContext({
         network: 'main'
       });
 
-      const network = nodeCtx.network;
+      const {network, nclient} = nodeCtx;
 
       await nodeCtx.open();
-      const {pool} = await nodeCtx.nclient.getInfo();
-      await nodeCtx.close();
+      const {pool} = await nclient.getInfo();
 
       assert.strictEqual(pool.host, '0.0.0.0');
       assert.strictEqual(pool.port, network.port);
@@ -222,16 +375,15 @@ describe('Node HTTP', function() {
     });
 
     it('should not have public address: main, listen', async () => {
-      const nodeCtx = new NodeContext({
+      nodeCtx = new NodeContext({
         network: 'main',
         listen: true
       });
 
-      const network = nodeCtx.network;
+      const {network, nclient} = nodeCtx;
 
       await nodeCtx.open();
-      const {pool} = await nodeCtx.nclient.getInfo();
-      await nodeCtx.close();
+      const {pool} = await nclient.getInfo();
 
       assert.strictEqual(pool.host, '0.0.0.0');
       assert.strictEqual(pool.port, network.port);
@@ -250,7 +402,7 @@ describe('Node HTTP', function() {
       const publicPort = 11111;
       const publicBrontidePort = 22222;
 
-      const nodeCtx = new NodeContext({
+      nodeCtx = new NodeContext({
         network: 'main',
         listen: true,
         publicHost,
@@ -258,11 +410,10 @@ describe('Node HTTP', function() {
         publicBrontidePort
       });
 
-      const network =  nodeCtx.network;
+      const {network, nclient} = nodeCtx;
 
       await nodeCtx.open();
-      const {pool} = await nodeCtx.nclient.getInfo();
-      await nodeCtx.close();
+      const {pool} = await nclient.getInfo();
 
       assert.strictEqual(pool.host, '0.0.0.0');
       assert.strictEqual(pool.port, network.port);
@@ -289,10 +440,9 @@ describe('Node HTTP', function() {
         indexAddress: true,
         rejectAbsurdFees: false
       });
-      const network = nodeCtx.network;
 
+      const {network, nclient} = nodeCtx;
       const {treeInterval} = network.names;
-      const nclient = nodeCtx.nclient;
 
       let privkey, pubkey;
       let socketData, mempoolData;
@@ -300,14 +450,13 @@ describe('Node HTTP', function() {
 
       // take into account race conditions
       async function mineBlocks(count, address) {
-        for (let i = 0; i < count; i++) {
-          const obj = { complete: false };
-          nodeCtx.node.once('block', () => {
-            obj.complete = true;
-          });
-          await nclient.execute('generatetoaddress', [1, address]);
-          await common.forValue(obj, 'complete', true);
-        }
+        const blockEvents = common.forEvent(
+          nodeCtx.nclient.socket.events,
+          'block connect',
+          count
+        );
+        await nodeCtx.mineBlocks(count, address);
+        await blockEvents;
       }
 
       before(async () => {
