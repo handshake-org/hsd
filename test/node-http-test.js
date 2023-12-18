@@ -39,7 +39,9 @@ describe('Node HTTP', function() {
     });
 
     it('should get mempool rejection filter', async () => {
-      const filterInfo = await nclient.get('/mempool/invalid', { verbose: true });
+      const filterInfo = await nclient.getMempoolRejectionFilter({
+        verbose: true
+      });
 
       assert.ok('items' in filterInfo);
       assert.ok('filter' in filterInfo);
@@ -59,10 +61,10 @@ describe('Node HTTP', function() {
       const raw = mtx.toHex();
       const txid = await nclient.execute('sendrawtransaction', [raw]);
 
-      const json = await nclient.get(`/mempool/invalid/${txid}`);
+      const json = await nclient.checkMempoolRejectionFilter(txid);
       assert.equal(json.invalid, true);
 
-      const filterInfo = await nclient.get('/mempool/invalid');
+      const filterInfo = await nclient.getMempoolRejectionFilter();
       assert.equal(filterInfo.entries, 1);
     });
   });
@@ -90,7 +92,7 @@ describe('Node HTTP', function() {
 
       // fetch corresponding header and block
       const height = 7;
-      const header = await nclient.get(`/header/${height}`);
+      const header = await nclient.getBlockHeader(height);
       assert.equal(header.height, height);
 
       const properties = [
@@ -116,7 +118,7 @@ describe('Node HTTP', function() {
 
     it('should fetch null for block header that does not exist', async () => {
       // many blocks in the future
-      const header = await nclient.get(`/header/${40000}`);
+      const header = await nclient.getBlockHeader(40000);
       assert.equal(header, null);
     });
 
@@ -130,7 +132,7 @@ describe('Node HTTP', function() {
       let prevBlock = '0000000000000000000000000000000000000000000000000000000000000000';
 
       for (let i = 0; i < 10; i++) {
-        const header = await nclient.get(`/header/${i}`);
+        const header = await nclient.getBlockHeader(i);
 
         assert.equal(prevBlock, header.prevBlock);
         prevBlock = header.hash;
@@ -140,8 +142,8 @@ describe('Node HTTP', function() {
     it('should fetch block header by hash', async () => {
       const info = await nclient.getInfo();
 
-      const headerByHash = await nclient.get(`/header/${info.chain.tip}`);
-      const headerByHeight = await nclient.get(`/header/${info.chain.height}`);
+      const headerByHash = await nclient.getBlockHeader(info.chain.tip);
+      const headerByHeight = await nclient.getBlockHeader(info.chain.height);
 
       assert.deepEqual(headerByHash, headerByHeight);
     });
