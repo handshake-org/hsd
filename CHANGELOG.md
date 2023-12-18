@@ -38,6 +38,9 @@ process and allows parallel rescans.
     - expects ws hook for `block rescan interactive` params `rawEntry, rawTXs`
       that returns scanAction object.
     - expects ws hook for `block rescan interactive abort` param `message`.
+  - Add `getMempoolRejectionFilter` and `checkMempoolRejectionFilter` NodeClient
+  aliases.
+  - Add `getFee`, an HTTP alternative to estimateFee socket call.
 
 ### Wallet Changes
 #### Configuration
