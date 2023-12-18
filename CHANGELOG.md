@@ -61,11 +61,13 @@ process and allows parallel rescans.
   - `open()` no longer calls scan, instead only rollbacks and waits for
     sync to do the rescan.
   - emits events for: `open`, `close`, `connect`, `disconnect`, `sync done`.
-- HTTP Changes:
+
+### Wallet HTTP Client
   - All transaction creating endpoints now accept `hardFee` for specifying the
     exact fee.
   - All transaction sending endpoints now fundlock/queue tx creation. (no more
     conflicting transactions)
+  - Add options to `getNames` for passing `own`.
 
 ## v6.0.0
 

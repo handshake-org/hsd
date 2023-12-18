@@ -11,6 +11,15 @@ const {NodeClient, WalletClient} = require('../../lib/client');
 const Logger = require('blgr');
 
 class NodeContext {
+  /** @type {FullNode|SPVNode} */
+  node;
+
+  /** @type {WalletClient} */
+  wclient;
+
+  /** @type {NodeClient} */
+  nclient;
+
   constructor(options = {}) {
     this.name = 'node-test';
     this.options = {};

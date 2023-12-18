@@ -1787,9 +1787,7 @@ describe('Wallet HTTP', function() {
     });
 
     it('should only get wallet-owned names', async () => {
-      // TODO: convert to using hs-client method
-      // when wallet.getNames() allows `options`
-      const names = await wallet.client.get(`/wallet/${wallet.id}/name`, {own: true});
+      const names = await wallet.getNames({ own: true });
 
       assert.equal(names.length, ownedNames.length);
 
