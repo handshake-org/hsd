@@ -120,7 +120,7 @@ describe('RPC', function() {
       const address = 'rs1qjjpnmnrzfvxgqlqf5j48j50jmq9pyqjz0a7ytz';
 
       // Mine two blocks.
-      await nclient.execute('generatetoaddress', [2, address]);
+      await nodeCtx.mineBlocks(2, address);
 
       const {chain} = await nclient.getInfo();
       const info = await nclient.execute('getblock', [chain.tip]);

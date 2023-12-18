@@ -450,14 +450,13 @@ describe('Node HTTP', function() {
 
       // take into account race conditions
       async function mineBlocks(count, address) {
-        for (let i = 0; i < count; i++) {
-          const obj = { complete: false };
-          nodeCtx.node.once('block', () => {
-            obj.complete = true;
-          });
-          await nclient.execute('generatetoaddress', [1, address]);
-          await common.forValue(obj, 'complete', true);
-        }
+        const blockEvents = common.forEvent(
+          nodeCtx.nclient.socket.events,
+          'block connect',
+          count
+        );
+        await nodeCtx.mineBlocks(count, address);
+        await blockEvents;
       }
 
       before(async () => {

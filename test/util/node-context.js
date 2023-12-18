@@ -285,6 +285,23 @@ class NodeContext {
 
     return client;
   }
+
+  /**
+   * Mine blocks and wait for connect.
+   * @param {Number} count
+   * @param {Address} address
+   * @returns {Promise<Buffer[]>} - Block hashes
+   */
+
+  async mineBlocks(count, address) {
+    assert(this.open);
+
+    const blockEvents = common.forEvent(this.node, 'block', count);
+    const hashes = await this.nodeRPC.generateToAddress([count, address]);
+    await blockEvents;
+
+    return hashes;
+  }
 }
 
 module.exports = NodeContext;

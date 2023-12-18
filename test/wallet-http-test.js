@@ -36,15 +36,6 @@ describe('Wallet HTTP', function() {
   // primary wallet client.
   let wallet, cbAddress;
 
-  const mineBlocks = async (count, address) => {
-    const {node} = nodeCtx;
-    for (let i = 0; i < count; i++) {
-      const blockEvents = common.forEvent(node, 'block');
-      await nclient.execute('generatetoaddress', [1, address]);
-      await blockEvents;
-    }
-  };
-
   const beforeAll = async () => {
     nodeCtx = new NodeContext({
       apiKey: 'foo',
@@ -192,7 +183,7 @@ describe('Wallet HTTP', function() {
     it('should mine to the primary/default wallet', async () => {
       const height = 20;
 
-      await mineBlocks(height, cbAddress);
+      await nodeCtx.mineBlocks(height, cbAddress);
 
       const info = await nclient.getInfo();
       assert.equal(info.chain.height, height);
@@ -261,7 +252,7 @@ describe('Wallet HTTP', function() {
 
     before(async () => {
       await beforeAll();
-      await mineBlocks(20, cbAddress);
+      await nodeCtx.mineBlocks(20, cbAddress);
       await wclient.createWallet('secondary');
       wallet2 = wclient.wallet('secondary');
     });
@@ -405,7 +396,7 @@ describe('Wallet HTTP', function() {
       const height = 5;
 
       const {address} = await wallet2.createAddress('default');
-      await mineBlocks(height, address);
+      await nodeCtx.mineBlocks(height, address);
 
       const accountInfo = await wallet2.getAccount('default');
       assert.equal(accountInfo.balance.coin, height);
@@ -415,7 +406,7 @@ describe('Wallet HTTP', function() {
   describe('Get balance', function() {
     before(async () => {
       await beforeAll();
-      await mineBlocks(20, cbAddress);
+      await nodeCtx.mineBlocks(20, cbAddress);
     });
 
     after(afterAll);
@@ -433,7 +424,7 @@ describe('Wallet HTTP', function() {
     before(async () => {
       await beforeAll();
 
-      await mineBlocks(10, cbAddress);
+      await nodeCtx.mineBlocks(10, cbAddress);
       const {address} = await wallet.createAddress('default');
       const tx = await wallet.send({outputs: [{address, value: 1e4}]});
 
@@ -505,13 +496,13 @@ describe('Wallet HTTP', function() {
     before(async () => {
       await beforeAll();
 
-      await mineBlocks(20, cbAddress);
+      await nodeCtx.mineBlocks(20, cbAddress);
       await wallet.createAccount(accountTwo);
 
       await wclient.createWallet('secondary');
       wallet2 = wclient.wallet('secondary');
       const saddr = (await wallet2.createAddress('default')).address;
-      await mineBlocks(5, saddr);
+      await nodeCtx.mineBlocks(5, saddr);
     });
 
     after(afterAll);
@@ -673,7 +664,7 @@ describe('Wallet HTTP', function() {
 
       const {receiveAddress} = await wallet.getAccount(accountTwo);
 
-      await mineBlocks(height, receiveAddress);
+      await nodeCtx.mineBlocks(height, receiveAddress);
 
       const info = await wallet.getAccount(accountTwo);
       assert.equal(info.balance.tx, height);
@@ -703,7 +694,7 @@ describe('Wallet HTTP', function() {
       // save chain height for later comparison
       const info = await nclient.getInfo();
 
-      await mineBlocks(treeInterval + 1, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 1, cbAddress);
 
       // Confirmed OPEN adds name to wallet's namemap
       allNames.push(name);
@@ -818,7 +809,7 @@ describe('Wallet HTTP', function() {
         name: name
       });
 
-      await mineBlocks(treeInterval + 1, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 1, cbAddress);
 
       // Confirmed OPEN adds name to wallet's namemap
       allNames.push(name);
@@ -835,7 +826,7 @@ describe('Wallet HTTP', function() {
         name: name
       });
 
-      await mineBlocks(treeInterval + 1, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 1, cbAddress);
 
       // Confirmed OPEN adds name to wallet's namemap
       allNames.push(name);
@@ -854,7 +845,7 @@ describe('Wallet HTTP', function() {
         name: name
       });
 
-      await mineBlocks(treeInterval + 1, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 1, cbAddress);
 
       // Confirmed OPEN adds name to wallet's namemap
       allNames.push(name);
@@ -877,7 +868,7 @@ describe('Wallet HTTP', function() {
         lockup: 5000
       });
 
-      await mineBlocks(1, cbAddress);
+      await nodeCtx.mineBlocks(1, cbAddress);
 
       // this method gets all bids for all names
       const bids = await wallet.getBids();
@@ -914,7 +905,7 @@ describe('Wallet HTTP', function() {
         name: name
       });
 
-      await mineBlocks(treeInterval + 1, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 1, cbAddress);
 
       // Confirmed OPEN adds name to wallet's namemap
       allNames.push(name);
@@ -931,7 +922,7 @@ describe('Wallet HTTP', function() {
         lockup: 3000
       });
 
-      await mineBlocks(1, cbAddress);
+      await nodeCtx.mineBlocks(1, cbAddress);
 
       {
         await sleep(100);
@@ -966,7 +957,7 @@ describe('Wallet HTTP', function() {
         name: name
       });
 
-      await mineBlocks(treeInterval + 1, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 1, cbAddress);
 
       // Confirmed OPEN adds name to wallet's namemap
       allNames.push(name);
@@ -977,7 +968,7 @@ describe('Wallet HTTP', function() {
         lockup: 2000
       });
 
-      await mineBlocks(biddingPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(biddingPeriod + 1, cbAddress);
 
       const {info} = await nclient.execute('getnameinfo', [name]);
       assert.equal(info.name, name);
@@ -996,7 +987,7 @@ describe('Wallet HTTP', function() {
         name: name
       });
 
-      await mineBlocks(treeInterval + 1, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 1, cbAddress);
 
       // Confirmed OPEN adds name to wallet's namemap
       allNames.push(name);
@@ -1009,7 +1000,7 @@ describe('Wallet HTTP', function() {
         });
       }
 
-      await mineBlocks(biddingPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(biddingPeriod + 1, cbAddress);
 
       const {info} = await nclient.execute('getnameinfo', [name]);
       assert.equal(info.name, name);
@@ -1032,7 +1023,7 @@ describe('Wallet HTTP', function() {
         name: name2
       });
 
-      await mineBlocks(treeInterval + 1, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 1, cbAddress);
 
       // Confirmed OPEN adds name to wallet's namemap
       allNames.push(name);
@@ -1050,7 +1041,7 @@ describe('Wallet HTTP', function() {
         lockup: 3000
       });
 
-      await mineBlocks(biddingPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(biddingPeriod + 1, cbAddress);
 
       await wallet.createReveal({
         name: name
@@ -1060,7 +1051,7 @@ describe('Wallet HTTP', function() {
         name: name2
       });
 
-      await mineBlocks(revealPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(revealPeriod + 1, cbAddress);
 
       // Confirmed REVEAL with highest bid makes wallet the owner
       ownedNames.push(name);
@@ -1093,7 +1084,7 @@ describe('Wallet HTTP', function() {
         name: name
       });
 
-      await mineBlocks(treeInterval + 1, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 1, cbAddress);
 
       // Confirmed OPEN adds name to wallet's namemap
       allNames.push(name);
@@ -1113,7 +1104,7 @@ describe('Wallet HTTP', function() {
       state.bids.push(b1);
       state.bids.push(b2);
 
-      await mineBlocks(biddingPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(biddingPeriod + 1, cbAddress);
 
       const r1 = await wallet.createReveal({
         name: name
@@ -1126,7 +1117,7 @@ describe('Wallet HTTP', function() {
       state.reveals.push(r1);
       state.reveals.push(r2);
 
-      await mineBlocks(revealPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(revealPeriod + 1, cbAddress);
 
       // wallet did not win this auction so name is not pushed to ownedNames[]
 
@@ -1184,7 +1175,7 @@ describe('Wallet HTTP', function() {
 
       await wallet.createOpen({ name: name });
 
-      await mineBlocks(treeInterval + 2, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 2, cbAddress);
 
       // Confirmed OPEN adds name to wallet's namemap
       allNames.push(name);
@@ -1209,7 +1200,7 @@ describe('Wallet HTTP', function() {
         }
       );
 
-      await mineBlocks(biddingPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(biddingPeriod + 1, cbAddress);
 
       let walletAuction = await wallet.getAuctionByName(name);
       const bidFromWallet = walletAuction.bids.find(
@@ -1226,7 +1217,7 @@ describe('Wallet HTTP', function() {
       assert.equal(b5.lockedUnconfirmed - lockUnconfirmedBeforeTest, lockupValue);
 
       await nclient.broadcast(auctionTxs.reveal.hex);
-      await mineBlocks(1, cbAddress);
+      await nodeCtx.mineBlocks(1, cbAddress);
 
       // Confirmed REVEAL with highest bid makes wallet the owner
       ownedNames.push(name);
@@ -1241,7 +1232,7 @@ describe('Wallet HTTP', function() {
       assert.equal(b6.lockedConfirmed - lockConfirmedBeforeTest, bidValue);
       assert.equal(b6.lockedUnconfirmed - lockUnconfirmedBeforeTest, bidValue);
 
-      await mineBlocks(revealPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(revealPeriod + 1, cbAddress);
 
       const ns = await nclient.execute('getnameinfo', [name]);
       const coin = await wallet.getCoin(ns.info.owner.hash, ns.info.owner.index);
@@ -1253,7 +1244,7 @@ describe('Wallet HTTP', function() {
         name: name
       });
 
-      await mineBlocks(treeInterval + 1, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 1, cbAddress);
 
       // Confirmed OPEN adds name to wallet's namemap
       allNames.push(name);
@@ -1271,7 +1262,7 @@ describe('Wallet HTTP', function() {
         lockup: 3000
       });
 
-      await mineBlocks(biddingPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(biddingPeriod + 1, cbAddress);
 
       await wallet.createReveal({
         name: name
@@ -1281,7 +1272,7 @@ describe('Wallet HTTP', function() {
         name: name
       });
 
-      await mineBlocks(revealPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(revealPeriod + 1, cbAddress);
 
       // wallet did not win this auction so name is not pushed to ownedNames[]
 
@@ -1308,7 +1299,7 @@ describe('Wallet HTTP', function() {
         name: name
       });
 
-      await mineBlocks(treeInterval + 1, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 1, cbAddress);
 
       // Confirmed OPEN adds name to wallet's namemap
       allNames.push(name);
@@ -1319,13 +1310,13 @@ describe('Wallet HTTP', function() {
         lockup: 2000
       });
 
-      await mineBlocks(biddingPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(biddingPeriod + 1, cbAddress);
 
       await wallet.createReveal({
         name: name
       });
 
-      await mineBlocks(revealPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(revealPeriod + 1, cbAddress);
 
       // Confirmed REVEAL with highest bid makes wallet the owner
       ownedNames.push(name);
@@ -1349,7 +1340,7 @@ describe('Wallet HTTP', function() {
       }
 
       // mine a block
-      await mineBlocks(1, cbAddress);
+      await nodeCtx.mineBlocks(1, cbAddress);
 
       {
         const json = await wallet.createUpdate({
@@ -1398,7 +1389,7 @@ describe('Wallet HTTP', function() {
         name: name
       });
 
-      await mineBlocks(treeInterval + 1, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 1, cbAddress);
 
       // Confirmed OPEN adds name to wallet's namemap
       allNames.push(name);
@@ -1409,13 +1400,13 @@ describe('Wallet HTTP', function() {
         lockup: 2000
       });
 
-      await mineBlocks(biddingPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(biddingPeriod + 1, cbAddress);
 
       await wallet.createReveal({
         name: name
       });
 
-      await mineBlocks(revealPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(revealPeriod + 1, cbAddress);
 
       // Confirmed REVEAL with highest bid makes wallet the owner
       ownedNames.push(name);
@@ -1434,7 +1425,7 @@ describe('Wallet HTTP', function() {
 
       // mine up to the earliest point in which a renewal
       // can be submitted, a treeInterval into the future
-      await mineBlocks(treeInterval + 1, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 1, cbAddress);
 
       const json = await wallet.createRenewal({
         name
@@ -1449,7 +1440,7 @@ describe('Wallet HTTP', function() {
         name: name
       });
 
-      await mineBlocks(treeInterval + 1, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 1, cbAddress);
 
       // Confirmed OPEN adds name to wallet's namemap
       allNames.push(name);
@@ -1460,13 +1451,13 @@ describe('Wallet HTTP', function() {
         lockup: 2000
       });
 
-      await mineBlocks(biddingPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(biddingPeriod + 1, cbAddress);
 
       await wallet.createReveal({
         name: name
       });
 
-      await mineBlocks(revealPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(revealPeriod + 1, cbAddress);
 
       // Confirmed REVEAL with highest bid makes wallet the owner
       ownedNames.push(name);
@@ -1483,7 +1474,7 @@ describe('Wallet HTTP', function() {
         }
       });
 
-      await mineBlocks(treeInterval + 1, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 1, cbAddress);
 
       const {receiveAddress} = await wallet.getAccount(accountTwo);
 
@@ -1501,7 +1492,7 @@ describe('Wallet HTTP', function() {
         name: name
       });
 
-      await mineBlocks(treeInterval + 1, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 1, cbAddress);
 
       // Confirmed OPEN adds name to wallet's namemap
       allNames.push(name);
@@ -1512,13 +1503,13 @@ describe('Wallet HTTP', function() {
         lockup: 2000
       });
 
-      await mineBlocks(biddingPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(biddingPeriod + 1, cbAddress);
 
       await wallet.createReveal({
         name: name
       });
 
-      await mineBlocks(revealPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(revealPeriod + 1, cbAddress);
 
       // Confirmed REVEAL with highest bid makes wallet the owner
       ownedNames.push(name);
@@ -1535,7 +1526,7 @@ describe('Wallet HTTP', function() {
         }
       });
 
-      await mineBlocks(treeInterval + 1, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 1, cbAddress);
 
       const {receiveAddress} = await wallet2.getAccount('default');
 
@@ -1544,7 +1535,7 @@ describe('Wallet HTTP', function() {
         address: receiveAddress
       });
 
-      await mineBlocks(transferLockup + 1, cbAddress);
+      await nodeCtx.mineBlocks(transferLockup + 1, cbAddress);
 
       const json = await wallet.createFinalize({
         name
@@ -1553,7 +1544,7 @@ describe('Wallet HTTP', function() {
       const final = json.outputs.filter(({covenant}) => covenant.type === types.FINALIZE);
       assert.equal(final.length, 1);
 
-      await mineBlocks(1, cbAddress);
+      await nodeCtx.mineBlocks(1, cbAddress);
 
       // Confirmed FINALIZE means this wallet is not the owner anymore!
       ownedNames.splice(ownedNames.indexOf(name), 1);
@@ -1569,7 +1560,7 @@ describe('Wallet HTTP', function() {
         name: name
       });
 
-      await mineBlocks(treeInterval + 1, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 1, cbAddress);
 
       // Confirmed OPEN adds name to wallet's namemap
       allNames.push(name);
@@ -1580,13 +1571,13 @@ describe('Wallet HTTP', function() {
         lockup: 2000
       });
 
-      await mineBlocks(biddingPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(biddingPeriod + 1, cbAddress);
 
       await wallet.createReveal({
         name: name
       });
 
-      await mineBlocks(revealPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(revealPeriod + 1, cbAddress);
 
       // Confirmed REVEAL with highest bid makes wallet the owner
       ownedNames.push(name);
@@ -1603,7 +1594,7 @@ describe('Wallet HTTP', function() {
         }
       });
 
-      await mineBlocks(treeInterval + 1, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 1, cbAddress);
 
       const {receiveAddress} = await wallet.getAccount(accountTwo);
 
@@ -1612,14 +1603,14 @@ describe('Wallet HTTP', function() {
         address: receiveAddress
       });
 
-      await mineBlocks(transferLockup + 1, cbAddress);
+      await nodeCtx.mineBlocks(transferLockup + 1, cbAddress);
 
       const json = await wallet.createCancel({name});
 
       const cancel = json.outputs.filter(({covenant}) => covenant.type === types.UPDATE);
       assert.equal(cancel.length, 1);
 
-      await mineBlocks(1, cbAddress);
+      await nodeCtx.mineBlocks(1, cbAddress);
 
       const ns = await nclient.execute('getnameinfo', [name]);
       assert.equal(ns.info.name, name);
@@ -1636,7 +1627,7 @@ describe('Wallet HTTP', function() {
         name: name
       });
 
-      await mineBlocks(treeInterval + 1, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 1, cbAddress);
 
       // Confirmed OPEN adds name to wallet's namemap
       allNames.push(name);
@@ -1647,13 +1638,13 @@ describe('Wallet HTTP', function() {
         lockup: 2000
       });
 
-      await mineBlocks(biddingPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(biddingPeriod + 1, cbAddress);
 
       await wallet.createReveal({
         name: name
       });
 
-      await mineBlocks(revealPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(revealPeriod + 1, cbAddress);
 
       // Confirmed REVEAL with highest bid makes wallet the owner
       ownedNames.push(name);
@@ -1670,14 +1661,14 @@ describe('Wallet HTTP', function() {
         }
       });
 
-      await mineBlocks(treeInterval + 1, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 1, cbAddress);
 
       const json = await wallet.createRevoke({name});
 
       const final = json.outputs.filter(({covenant}) => covenant.type === types.REVOKE);
       assert.equal(final.length, 1);
 
-      await mineBlocks(1, cbAddress);
+      await nodeCtx.mineBlocks(1, cbAddress);
 
       // Confirmed REVOKE means no one owns this name anymore
       ownedNames.splice(ownedNames.indexOf(name), 1);
@@ -1706,7 +1697,7 @@ describe('Wallet HTTP', function() {
 
       // Fund
       const addr = await lockedWallet.createAddress('default');
-      await mineBlocks(10, addr.address);
+      await nodeCtx.mineBlocks(10, addr.address);
       await common.forValue(nodeCtx.wdb, 'height', nodeCtx.chain.height);
       const bal = await lockedWallet.getBalance();
       assert(bal.confirmed > 0);
@@ -1720,7 +1711,7 @@ describe('Wallet HTTP', function() {
       await lockedWallet.createOpen({name, passphrase});
       await lock();
 
-      await mineBlocks(treeInterval + 1, cbAddress);
+      await nodeCtx.mineBlocks(treeInterval + 1, cbAddress);
 
       // Bid
       await assert.rejects(
@@ -1736,7 +1727,7 @@ describe('Wallet HTTP', function() {
       await lockedWallet.createBid({name, lockup: 3000000, bid: 3000000});
       await lock();
 
-      await mineBlocks(biddingPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(biddingPeriod + 1, cbAddress);
 
       // Reveal
       await assert.rejects(
@@ -1752,7 +1743,7 @@ describe('Wallet HTTP', function() {
       );
       assert.equal(reveals.length, 3);
 
-      await mineBlocks(revealPeriod + 1, cbAddress);
+      await nodeCtx.mineBlocks(revealPeriod + 1, cbAddress);
 
       // Redeem all by not passing specific name
       await assert.rejects(
@@ -1837,7 +1828,7 @@ describe('Wallet HTTP', function() {
 
     const wMineBlocks = async (n = 1) => {
       const forConnect = common.forEvent(nodeCtx.wdb, 'block connect', n);
-      await mineBlocks(n, w1addr);
+      await nodeCtx.mineBlocks(n, w1addr);
       await forConnect;
     };
 
