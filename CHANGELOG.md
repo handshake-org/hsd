@@ -31,7 +31,7 @@ process and allows parallel rescans.
       - `compactInterval` - what is the current compaction interval config.
       - `nextCompaction` - when will the next compaction trigger after restart.
       - `lastCompaction` - when was the last compaction run.
-  - Introduce `scan interactive` hook (start, filter)
+  - Introduce `scan interactive` hook (start, filter, fullLock)
 
 ### Node HTTP Client:
   - Introduce `scanInteractive` method that starts interactive rescan.
