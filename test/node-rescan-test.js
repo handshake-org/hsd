@@ -66,11 +66,10 @@ describe('Node Rescan Interactive API', function() {
 
   before(async () => {
     nodeCtx = new NodeContext();
-    const {network} = nodeCtx;
-
-    funderWallet = new MemWallet({ network });
 
     await nodeCtx.open();
+    const {network} = nodeCtx;
+    funderWallet = new MemWallet({ network });
 
     nodeCtx.on('connect', (entry, block) => {
       funderWallet.addBlock(entry, block.txs);

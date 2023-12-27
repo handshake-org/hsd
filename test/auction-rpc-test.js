@@ -23,6 +23,9 @@ class TestUtil {
       bip37: true,
       wallet: true
     });
+
+    this.nodeCtx.init();
+
     this.network = this.nodeCtx.network;
     this.txs = {};
     this.blocks = {};

@@ -37,6 +37,7 @@ describe('RPC', function() {
 
   describe('getblockchaininfo', function() {
     const nodeCtx = new NodeContext(nodeOptions);
+    nodeCtx.init();
     const nclient = nodeCtx.nclient;
 
     before(async () => {
@@ -58,6 +59,7 @@ describe('RPC', function() {
 
   describe('getrawmempool', function() {
     const nodeCtx = new NodeContext(nodeOptions);
+    nodeCtx.init();
     const nclient = nodeCtx.nclient;
 
     before(async () => {
@@ -83,10 +85,9 @@ describe('RPC', function() {
         name: 'node-rpc-test'
       });
 
+      await nodeCtx.open();
       nclient = nodeCtx.nclient;
       node = nodeCtx.node;
-
-      await nodeCtx.open();
     });
 
     after(async () => {
@@ -221,6 +222,7 @@ describe('RPC', function() {
         ...nodeOptions,
         spv: true
       });
+
       await nodeCtx.open();
 
       await assert.rejects(async () => {
@@ -265,7 +267,6 @@ describe('RPC', function() {
       // default - prune: false
       nodeCtx = new NodeContext(nodeOptions);
       await nodeCtx.open();
-
       const {miner, nclient} = nodeCtx;
 
       const addr = 'rs1q4rvs9pp9496qawp2zyqpz3s90fjfk362q92vq8';
@@ -320,6 +321,7 @@ describe('RPC', function() {
 
   describe('mining', function() {
     const nodeCtx = new NodeContext(nodeOptions);
+    nodeCtx.init();
     const {
       miner,
       chain,
@@ -505,6 +507,7 @@ describe('RPC', function() {
       ...nodeOptions,
       indexTX: true
     });
+    nodeCtx.init();
 
     const {
       miner,
@@ -588,6 +591,7 @@ describe('RPC', function() {
 
   describe('networking', function() {
     const nodeCtx = new NodeContext({ ...nodeOptions, bip37: true });
+    nodeCtx.init();
     const nclient = nodeCtx.nclient;
 
     before(async () => {
@@ -607,6 +611,7 @@ describe('RPC', function() {
 
   describe('DNS Utility', function() {
     const nodeCtx = new NodeContext(nodeOptions);
+    nodeCtx.init();
     const nclient = nodeCtx.nclient;
 
     before(async () => {
@@ -761,6 +766,8 @@ describe('RPC', function() {
       ...nodeOptions,
       wallet: true
     });
+
+    nodeCtx.init();
 
     const {
       node,
