@@ -3,10 +3,11 @@
 const assert = require('bsert');
 const common = require('./common');
 const fs = require('bfile');
+const Network = require('../../lib/protocol/network');
 const SPVNode = require('../../lib/node/spvnode');
 const FullNode = require('../../lib/node/fullnode');
+const WalletNode = require('../../lib/wallet/node');
 const plugin = require('../../lib/wallet/plugin');
-const Network = require('../../lib/protocol/network');
 const {NodeClient, WalletClient} = require('../../lib/client');
 const Logger = require('blgr');
 
@@ -23,7 +24,7 @@ class NodeContext {
   constructor(options = {}) {
     this.name = 'node-test';
     this.options = {};
-    this.node = null;
+    this.prefix = null;
     this.opened = false;
     this.logger = new Logger({
       console: true,
@@ -31,13 +32,15 @@ class NodeContext {
       level: 'none'
     });
 
+    this.initted = false;
+    this.node = null;
+    this.walletNode = null;
     this.nclient = null;
     this.wclient = null;
 
     this.clients = [];
 
     this.fromOptions(options);
-    this.init();
   }
 
   fromOptions(options) {
@@ -54,6 +57,11 @@ class NodeContext {
       walletHttpPort: null
     };
 
+    if (options.name != null) {
+      assert(typeof options.name === 'string');
+      this.name = options.name;
+    }
+
     if (options.network != null)
       fnodeOptions.network = Network.get(options.network).type;
 
@@ -66,17 +74,23 @@ class NodeContext {
     }
 
     if (options.prefix != null) {
-      fnodeOptions.prefix = this.prefix;
+      fnodeOptions.prefix = options.prefix;
       fnodeOptions.memory = false;
+      this.prefix = fnodeOptions.prefix;
     }
 
     if (options.memory != null) {
-      assert(!fnodeOptions.prefix, 'Can not set prefix with memory.');
+      assert(typeof options.memory === 'boolean');
+      assert(!(options.memory && options.prefix),
+        'Can not set prefix with memory.');
+
       fnodeOptions.memory = options.memory;
     }
 
-    if (!this.memory && !this.prefix)
+    if (!fnodeOptions.memory && !fnodeOptions.prefix) {
       fnodeOptions.prefix = common.testdir(this.name);
+      this.prefix = fnodeOptions.prefix;
+    }
 
     if (options.wallet != null)
       fnodeOptions.wallet = options.wallet;
@@ -101,23 +115,45 @@ class NodeContext {
       fnodeOptions.timeout = options.timeout;
     }
 
+    if (options.standalone != null) {
+      assert(typeof options.standalone === 'boolean');
+      fnodeOptions.standalone = options.standalone;
+    }
+
     this.options = fnodeOptions;
   }
 
   init() {
+    if (this.initted)
+      return;
+
     if (this.options.spv)
       this.node = new SPVNode(this.options);
     else
       this.node = new FullNode(this.options);
 
-    if (this.options.wallet)
+    if (this.options.wallet && !this.options.standalone) {
       this.node.use(plugin);
+    } else if (this.options.wallet && this.options.standalone) {
+      this.walletNode = new WalletNode({
+        ...this.options,
+
+        nodeHost: '127.0.0.1',
+        nodePort: this.options.httpPort,
+        nodeApiKey: this.options.apiKey,
+
+        httpPort: this.options.walletHttpPort,
+        apiKey: this.options.apiKey
+      });
+    }
 
     // Initial wallets.
     this.nclient = this.nodeClient();
 
     if (this.options.wallet)
       this.wclient = this.walletClient();
+
+    this.initted = true;
   }
 
   get network() {
@@ -145,6 +181,12 @@ class NodeContext {
   }
 
   get wdb() {
+    if (!this.options.wallet)
+      return null;
+
+    if (this.walletNode)
+      return this.walletNode.wdb;
+
     return this.node.get('walletdb').wdb;
   }
 
@@ -177,16 +219,26 @@ class NodeContext {
    */
 
   async open() {
+    this.init();
+
     if (this.opened)
       return;
 
     if (this.prefix)
       await fs.mkdirp(this.prefix);
 
+    const open = common.forEvent(this.node, 'open');
     await this.node.ensure();
     await this.node.open();
     await this.node.connect();
     this.node.startSync();
+    await open;
+
+    if (this.walletNode) {
+      const walletOpen = common.forEvent(this.walletNode, 'open');
+      await this.walletNode.open();
+      await walletOpen;
+    }
 
     if (this.wclient)
       await this.wclient.open();
@@ -200,7 +252,6 @@ class NodeContext {
     if (!this.opened)
       return;
 
-    const close = common.forEvent(this.node, 'close');
     const closeClients = [];
 
     for (const client of this.clients) {
@@ -209,10 +260,22 @@ class NodeContext {
     }
 
     await Promise.all(closeClients);
+
+    if (this.walletNode) {
+      const walletClose = common.forEvent(this.walletNode, 'close');
+      await this.walletNode.close();
+      await walletClose;
+    }
+
+    const close = common.forEvent(this.node, 'close');
     await this.node.close();
     await close;
 
+    this.node = null;
+    this.wclient = null;
+    this.nclient = null;
     this.opened = false;
+    this.initted = false;
   }
 
   async destroy() {
@@ -224,8 +287,8 @@ class NodeContext {
    * Helpers
    */
 
-  enableLogging() {
-    this.logger.setLevel('debug');
+  enableLogging(level = 'debug') {
+    this.logger.setLevel(level);
   }
 
   disableLogging() {
@@ -299,17 +362,20 @@ class NodeContext {
    * Mine blocks and wait for connect.
    * @param {Number} count
    * @param {Address} address
+   * @param {ChainEntry} [tip=chain.tip] - Tip to mine on
    * @returns {Promise<Buffer[]>} - Block hashes
    */
 
-  async mineBlocks(count, address) {
+  async mineBlocks(count, address, tip) {
     assert(this.open);
 
-    const blockEvents = common.forEvent(this.node, 'block', count);
-    const hashes = await this.nodeRPC.generateToAddress([count, address]);
-    await blockEvents;
+    if (!tip)
+      tip = this.chain.tip;
 
-    return hashes;
+    for (let i = 0; i < count; i++) {
+      const block = await this.miner.mineBlock(tip, address);
+      tip = await this.chain.add(block);
+    }
   }
 }
 
