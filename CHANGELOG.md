@@ -55,6 +55,7 @@ process and allows parallel rescans.
 #### Wallet API
 
 - Add migration that recalculates txdb balances to fix any inconsistencies.
+- WalletNode now emits `open` and `close` events.
 - WalletDB Now emits events for: `open`, `close`, `connect`, `disconnect`.
 - WalletDB
   - `open()` no longer calls `connect` and needs separate call `connect`.
