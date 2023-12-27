@@ -399,17 +399,54 @@ describe('Node Rescan Interactive API', function() {
       node.scanInteractive(startHeight, null, getIter(counter2))
     ]);
 
-    assert.strictEqual(counter1.count, 10);
-    assert.strictEqual(counter2.count, 10);
+    assert.strictEqual(counter1.count, RESCAN_DEPTH);
+    assert.strictEqual(counter2.count, RESCAN_DEPTH);
 
-    // Chain gets locked per block, so we should see alternating events.
+    // Chain gets locked per block by default, so we should see alternating events.
     // Because they start in parallel, but id1 starts first they will be
     // getting events in alternating older (first one gets lock, second waits,
     // second gets lock, first waits, etc.)
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < RESCAN_DEPTH; i++) {
       assert.strictEqual(events[i].id, 1);
       assert.strictEqual(events[i + 1].id, 2);
       i++;
+    }
+  });
+
+  it('should rescan in series', async () => {
+    const {node} = nodeCtx;
+    const startHeight = nodeCtx.height - RESCAN_DEPTH + 1;
+
+    const events = [];
+    const getIter = (counterObj) => {
+      return async (entry, txs) => {
+        assert.strictEqual(entry.height, startHeight + counterObj.count);
+        assert.strictEqual(txs.length, 4);
+
+        events.push({ ...counterObj });
+        counterObj.count++;
+
+        return {
+          type: scanActions.NEXT
+        };
+      };
+    };
+
+    const counter1 = { id: 1, count: 0 };
+    const counter2 = { id: 2, count: 0 };
+    await Promise.all([
+      node.scanInteractive(startHeight, null, getIter(counter1), true),
+      node.scanInteractive(startHeight, null, getIter(counter2), true)
+    ]);
+
+    assert.strictEqual(counter1.count, RESCAN_DEPTH);
+    assert.strictEqual(counter2.count, RESCAN_DEPTH);
+
+    // We lock the whole chain for this test, so we should see events
+    // from one to other.
+    for (let i = 0; i < RESCAN_DEPTH; i++) {
+      assert.strictEqual(events[i].id, 1);
+      assert.strictEqual(events[i + RESCAN_DEPTH].id, 2);
     }
   });
 
@@ -456,7 +493,7 @@ describe('Node Rescan Interactive API', function() {
           filter = test.filter.encode();
 
         await client.rescanInteractive(startHeight, filter);
-        assert.strictEqual(count, 10);
+        assert.strictEqual(count, RESCAN_DEPTH);
 
         count = 0;
         if (test.filter)
@@ -757,17 +794,60 @@ describe('Node Rescan Interactive API', function() {
         client2.rescanInteractive(startHeight)
       ]);
 
-      assert.strictEqual(counter1.count, 10);
-      assert.strictEqual(counter2.count, 10);
+      assert.strictEqual(counter1.count, RESCAN_DEPTH);
+      assert.strictEqual(counter2.count, RESCAN_DEPTH);
 
       // Chain gets locked per block, so we should see alternating events.
       // Because they start in parallel, but id1 starts first they will be
       // getting events in alternating older (first one gets lock, second waits,
       // second gets lock, first waits, etc.)
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < RESCAN_DEPTH; i++) {
         assert.strictEqual(events[i].id, 1);
         assert.strictEqual(events[i + 1].id, 2);
         i++;
+      }
+    });
+
+    it('should rescan in series', async () => {
+      const client2 = nodeCtx.nodeClient();
+      await client2.open();
+
+      const startHeight = nodeCtx.height - RESCAN_DEPTH + 1;
+      const events = [];
+      const counter1 = { id: 1, count: 0 };
+      const counter2 = { id: 2, count: 0 };
+
+      const getIter = (counterObj) => {
+        return async (rawEntry, rawTXs) => {
+          const [entry, txs] = parseBlock(rawEntry, rawTXs);
+          assert.strictEqual(entry.height, startHeight + counterObj.count);
+          assert.strictEqual(txs.length, 4);
+
+          events.push({ ...counterObj });
+          counterObj.count++;
+
+          return {
+            type: scanActions.NEXT
+          };
+        };
+      };
+
+      client.hook('block rescan interactive', getIter(counter1));
+      client2.hook('block rescan interactive', getIter(counter2));
+
+      await Promise.all([
+        client.rescanInteractive(startHeight, null, true),
+        client2.rescanInteractive(startHeight, null, true)
+      ]);
+
+      assert.strictEqual(counter1.count, RESCAN_DEPTH);
+      assert.strictEqual(counter2.count, RESCAN_DEPTH);
+
+      // We lock the whole chain for this test, so we should see events
+      // from one to other.
+      for (let i = 0; i < RESCAN_DEPTH; i++) {
+        assert.strictEqual(events[i].id, 1);
+        assert.strictEqual(events[i + RESCAN_DEPTH].id, 2);
       }
     });
 
