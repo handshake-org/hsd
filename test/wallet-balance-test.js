@@ -11,6 +11,7 @@ const Output = require('../lib/primitives/output');
 const {Resource} = require('../lib/dns/resource');
 const {types, grindName} = require('../lib/covenants/rules');
 const {forEventCondition} = require('./util/common');
+const {Balance, assertBalanceEquals} = require('./util/balance');
 
 /**
  * Wallet balance tracking tests.
@@ -68,65 +69,9 @@ const DEFAULT_ACCOUNT = 'default';
 const ALT_ACCOUNT = 'alt';
 
 // Balances
-/**
- * @property {Number} tx
- * @property {Number} coin
- * @property {Number} confirmed
- * @property {Number} unconfirmed
- * @property {Number} ulocked - unconfirmed locked
- * @property {Number} clocked - confirmed locked
- */
-
-class BalanceObj {
-  constructor(options) {
-    options = options || {};
-
-    this.tx = options.tx || 0;
-    this.coin = options.coin || 0;
-    this.confirmed = options.confirmed || 0;
-    this.unconfirmed = options.unconfirmed || 0;
-    this.ulocked = options.ulocked || 0;
-    this.clocked = options.clocked || 0;
-  }
-
-  clone() {
-    return new BalanceObj(this);
-  }
-
-  cloneWithDelta(obj) {
-    return this.clone().apply(obj);
-  }
-
-  fromBalance(obj) {
-    this.tx = obj.tx;
-    this.coin = obj.coin;
-    this.confirmed = obj.confirmed;
-    this.unconfirmed = obj.unconfirmed;
-    this.ulocked = obj.lockedUnconfirmed;
-    this.clocked = obj.lockedConfirmed;
-
-    return this;
-  }
-
-  apply(balance) {
-    this.tx += balance.tx || 0;
-    this.coin += balance.coin || 0;
-    this.confirmed += balance.confirmed || 0;
-    this.unconfirmed += balance.unconfirmed || 0;
-    this.ulocked += balance.ulocked || 0;
-    this.clocked += balance.clocked || 0;
-
-    return this;
-  }
-
-  static fromBalance(wbalance) {
-    return new this().fromBalance(wbalance);
-  }
-}
-
 const INIT_BLOCKS = treeInterval;
 const INIT_FUND = 10e6;
-const NULL_BALANCE = new BalanceObj({
+const NULL_BALANCE = new Balance({
   tx: 0,
   coin: 0,
   unconfirmed: 0,
@@ -135,7 +80,7 @@ const NULL_BALANCE = new BalanceObj({
   clocked: 0
 });
 
-const INIT_BALANCE = new BalanceObj({
+const INIT_BALANCE = new Balance({
   tx: 1,
   coin: 1,
   unconfirmed: INIT_FUND,
@@ -202,38 +147,22 @@ async function resign(wallet, mtx) {
  */
 
 /**
- * @returns {Promise<BalanceObj>}
+ * @returns {Promise<Balance>}
  */
 
-async function getBalanceObj(wallet, accountName) {
-  const balance = await wallet.getBalance(accountName);
-  return BalanceObj.fromBalance(balance.getJSON(true));
-}
-
-async function assertBalance(wallet, accountName, expected, message) {
-  const balance = await getBalanceObj(wallet, accountName);
-  assert.deepStrictEqual(balance, expected, message);
-
-  // recalculate balance test
+async function assertRecalcBalanceEquals(wallet, accountName, expected, message) {
   await wallet.recalculateBalances();
-  const balance2 = await getBalanceObj(wallet, accountName);
-  assert.deepStrictEqual(balance2, expected, message);
-}
-
-async function assertRecalcBalance(wallet, accountName, expected, message) {
-  await wallet.recalculateBalances();
-  const balance = await getBalanceObj(wallet, accountName);
-  assert.deepStrictEqual(balance, expected, message);
+  assertBalanceEquals(wallet, accountName, expected, message);
 }
 
 /**
- * @param {BalanceObj} balance
- * @param {BalanceObj} delta
- * @returns {BalanceObj}
+ * @param {Balance} balance
+ * @param {Balance} delta
+ * @returns {Balance}
  */
 
 function applyDelta(balance, delta) {
-  return balance.clone().apply(delta);
+  return balance.cloneWithDelta(delta);
 }
 
 describe('Wallet Balance', function() {
@@ -364,14 +293,14 @@ describe('Wallet Balance', function() {
 
   /**
    * @typedef {Object} TestBalances
-   * @property {BalanceObj} TestBalances.initialBalance
-   * @property {BalanceObj} TestBalances.sentBalance
-   * @property {BalanceObj} TestBalances.confirmedBalance
-   * @property {BalanceObj} TestBalances.unconfirmedBalance
-   * @property {BalanceObj} TestBalances.eraseBalance
-   * @property {BalanceObj} TestBalances.blockConfirmedBalance
-   * @property {BalanceObj} TestBalances.blockUnconfirmedBalance
-   * @property {BalanceObj} [TestBalances.blockFinalConfirmedBalance]
+   * @property {Balance} TestBalances.initialBalance
+   * @property {Balance} TestBalances.sentBalance
+   * @property {Balance} TestBalances.confirmedBalance
+   * @property {Balance} TestBalances.unconfirmedBalance
+   * @property {Balance} TestBalances.eraseBalance
+   * @property {Balance} TestBalances.blockConfirmedBalance
+   * @property {Balance} TestBalances.blockUnconfirmedBalance
+   * @property {Balance} [TestBalances.blockFinalConfirmedBalance]
    */
 
   /**
@@ -481,14 +410,14 @@ describe('Wallet Balance', function() {
 
     for (const [key, [balanceName, name]] of Object.entries(BALANCE_CHECK_MAP)) {
       checks[key] = async (wallet) => {
-        await assertBalance(
+        await assertBalanceEquals(
           wallet,
           DEFAULT_ACCOUNT,
           defBalances[balanceName],
           `${name} balance is incorrect in the account ${DEFAULT_ACCOUNT}.`
         );
 
-        await assertRecalcBalance(
+        await assertRecalcBalanceEquals(
           wallet,
           DEFAULT_ACCOUNT,
           defBalances[balanceName],
@@ -497,14 +426,14 @@ describe('Wallet Balance', function() {
         );
 
         if (altBalances != null) {
-          await assertBalance(
+          await assertBalanceEquals(
             wallet,
             ALT_ACCOUNT,
             altBalances[balanceName],
             `${name} balance is incorrect in the account ${ALT_ACCOUNT}.`
           );
 
-          await assertRecalcBalance(
+          await assertRecalcBalanceEquals(
             wallet,
             ALT_ACCOUNT,
             altBalances[balanceName],
@@ -513,14 +442,14 @@ describe('Wallet Balance', function() {
           );
         }
 
-        await assertBalance(
+        await assertBalanceEquals(
           wallet,
           -1,
           walletBalances[balanceName],
           `${name} balance is incorrect for the wallet.`
         );
 
-        await assertRecalcBalance(
+        await assertRecalcBalanceEquals(
           wallet,
           -1,
           walletBalances[balanceName],
