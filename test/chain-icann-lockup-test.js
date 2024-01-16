@@ -204,6 +204,8 @@ describe('BIP9 - ICANN lockup (integration)', function() {
       node = new FullNode({
         memory: true,
         network: network.type,
+        // We don't want wallet to check lockup names for this test.
+        walletIcannlockup: false,
         plugins: [require('../lib/wallet/plugin')]
       });
 
@@ -617,6 +619,8 @@ describe('BIP9 - ICANN lockup (integration)', function() {
       node = new FullNode({
         memory: true,
         network: network.type,
+        // We don't want wallet to check lockup names for this test.
+        walletIcannlockup: false,
         plugins: [require('../lib/wallet/plugin')]
       });
 
