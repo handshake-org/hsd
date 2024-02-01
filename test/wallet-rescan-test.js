@@ -3,7 +3,6 @@
 const assert = require('bsert');
 const Network = require('../lib/protocol/network');
 const NodesContext = require('./util/nodes-context');
-const NodeContext = require('./util/node-context');
 const {forEvent, forEventCondition} = require('./util/common');
 const {Balance, getWClientBalance} = require('./util/balance');
 
@@ -293,54 +292,96 @@ describe('Wallet rescan', function() {
   }
 
   describe('Deadlock', function() {
-    const nodeCtx = new NodeContext({
-      memory: true,
-      network: 'regtest',
-      wallet: true
-    });
-
-    let address, node, wdb;
+    const nodes = new NodesContext(network, 1);
+    let minerCtx;
+    let nodeCtx, address, node, wdb;
 
     before(async () => {
-      nodeCtx.init();
+      nodes.init({
+        memory: true,
+        wallet: false
+      });
 
+      nodes.addNode({
+        memory: true,
+        wallet: true
+      });
+
+      await nodes.open();
+
+      minerCtx = nodes.context(0);
+      nodeCtx = nodes.context(1);
       node = nodeCtx.node;
       wdb = nodeCtx.wdb;
 
-      await nodeCtx.open();
       address = await wdb.primary.receiveAddress();
     });
 
     after(async () => {
-      await nodeCtx.close();
+      await nodes.close();
     });
 
-    it('should generate 10 blocks', async () => {
-      await nodeCtx.mineBlocks(10, address);
+    it('should generate 20 blocks', async () => {
+      await minerCtx.mineBlocks(20, address);
+      await forEventCondition(nodeCtx.chain, 'connect', (entry) => {
+        return entry.height === 20;
+      });
     });
 
     it('should rescan when receiving a block', async () => {
       const preTip = await wdb.getTip();
 
       await Promise.all([
-        node.rpc.generateToAddress([1, address.toString(network)]),
+        minerCtx.mineBlocks(5, address),
         wdb.rescan(0)
       ]);
 
       const wdbTip = await wdb.getTip();
-      assert.strictEqual(wdbTip.height, preTip.height + 1);
+      assert.strictEqual(wdbTip.height, preTip.height + 5);
     });
 
-    it('should rescan when receiving a block', async () => {
+    it('should rescan when receiving blocks', async () => {
       const preTip = await wdb.getTip();
+      const minerHeight = minerCtx.height;
+      const BLOCKS = 50;
+
+      const blocks = forEventCondition(node.chain, 'connect', (entry) => {
+        return entry.height === minerHeight + BLOCKS;
+      });
 
       await Promise.all([
         wdb.rescan(0),
-        node.rpc.generateToAddress([1, address.toString(network)])
+        minerCtx.mineBlocks(BLOCKS, address)
       ]);
 
+      await blocks;
+
       const tip = await wdb.getTip();
-      assert.strictEqual(tip.height, preTip.height + 1);
+
+      assert.strictEqual(tip.height, preTip.height + BLOCKS);
+    });
+
+    it('should rescan when chain is reorging', async () => {
+      const minerHeight = minerCtx.height;
+      const BLOCKS = 50;
+      const reorgHeight = minerHeight - 10;
+      const newHeight = minerHeight + 40;
+
+      const blocks = forEventCondition(node.chain, 'connect', (entry) => {
+        return entry.height === newHeight;
+      }, 10000);
+
+      const reorgEntry = await minerCtx.chain.getEntry(reorgHeight);
+
+      await Promise.all([
+        wdb.rescan(0),
+        minerCtx.mineBlocks(BLOCKS, address, reorgEntry)
+      ]);
+
+      await blocks;
+
+      const tip = await wdb.getTip();
+      assert.strictEqual(tip.height, newHeight);
     });
   });
 });
