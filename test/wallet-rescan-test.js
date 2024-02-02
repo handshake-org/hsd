@@ -38,6 +38,8 @@ const combinations = [
   // { SPV: true, STANDALONE: true, name: 'SPV/Standalone' }
 ];
 
+const noSPVcombinations = combinations.filter(c => !c.SPV);
+
 describe('Wallet rescan', function() {
   const network = Network.get('regtest');
 
@@ -291,20 +293,23 @@ describe('Wallet rescan', function() {
   });
   }
 
-  describe('Deadlock', function() {
+  for (const {STANDALONE, name} of noSPVcombinations) {
+  describe(`Deadlock (${name} Integration)`, function() {
+    this.timeout(10000);
     const nodes = new NodesContext(network, 1);
     let minerCtx;
     let nodeCtx, address, node, wdb;
 
     before(async () => {
       nodes.init({
-        memory: true,
+        memory: false,
         wallet: false
       });
 
       nodes.addNode({
-        memory: true,
-        wallet: true
+        memory: false,
+        wallet: true,
+        standalone: STANDALONE
       });
 
       await nodes.open();
@@ -322,19 +327,36 @@ describe('Wallet rescan', function() {
     });
 
     it('should generate 20 blocks', async () => {
-      await minerCtx.mineBlocks(20, address);
-      await forEventCondition(nodeCtx.chain, 'connect', (entry) => {
-        return entry.height === 20;
+      const BLOCKS = 20;
+      const chainBlocks = forEventCondition(node.chain, 'connect', (entry) => {
+        return entry.height === BLOCKS;
       });
+
+      const wdbBlocks = forEventCondition(wdb, 'block connect', (entry) => {
+        return entry.height === BLOCKS;
+      });
+
+      await minerCtx.mineBlocks(BLOCKS, address);
+      await chainBlocks;
+      await wdbBlocks;
     });
 
     it('should rescan when receiving a block', async () => {
       const preTip = await wdb.getTip();
+      const blocks = forEventCondition(node.chain, 'connect', (entry) => {
+        return entry.height === preTip.height + 5;
+      });
+      const wdbBlocks = forEventCondition(wdb, 'block connect', (entry) => {
+        return entry.height === preTip.height + 5;
+      });
 
       await Promise.all([
         minerCtx.mineBlocks(5, address),
         wdb.rescan(0)
       ]);
+
+      await blocks;
+      await wdbBlocks;
 
       const wdbTip = await wdb.getTip();
       assert.strictEqual(wdbTip.height, preTip.height + 5);
@@ -349,12 +371,20 @@ describe('Wallet rescan', function() {
         return entry.height === minerHeight + BLOCKS;
       });
 
-      await Promise.all([
-        wdb.rescan(0),
+      const wdbBlocks = forEventCondition(wdb, 'block connect', (entry) => {
+        return entry.height === minerHeight + BLOCKS;
+      });
+
+      const promises = [
         minerCtx.mineBlocks(BLOCKS, address)
-      ]);
+      ];
+
+      await forEvent(node.chain, 'connect');
+      promises.push(wdb.rescan(0));
+      await Promise.all(promises);
 
       await blocks;
+      await wdbBlocks;
 
       const tip = await wdb.getTip();
 
@@ -371,17 +401,56 @@ describe('Wallet rescan', function() {
         return entry.height === newHeight;
       }, 10000);
 
+      const walletBlocks = forEventCondition(wdb, 'block connect', (entry) => {
+        return entry.height === newHeight;
+      }, 10000);
+
       const reorgEntry = await minerCtx.chain.getEntry(reorgHeight);
 
-      await Promise.all([
-        wdb.rescan(0),
+      const promises = [
         minerCtx.mineBlocks(BLOCKS, address, reorgEntry)
-      ]);
+      ];
+
+      // We start rescan only after first disconnect is detected to ensure
+      // wallet guard is set.
+      await forEvent(node.chain, 'disconnect');
+      promises.push(wdb.rescan(0));
+      await Promise.all(promises);
 
       await blocks;
+      await walletBlocks;
 
       const tip = await wdb.getTip();
       assert.strictEqual(tip.height, newHeight);
     });
+
+    // Rescanning alternate chain.
+    it('should rescan when chain is reorging (alternate chain)', async () => {
+      const minerHeight = minerCtx.height;
+      const BLOCKS = 50;
+      const reorgHeight = minerHeight - 20;
+
+      const reorgEntry = await minerCtx.chain.getEntry(reorgHeight);
+      const mineBlocks = minerCtx.mineBlocks(BLOCKS, address, reorgEntry);
+
+      // We start rescan only after first disconnect is detected to ensure
+      // wallet guard is set.
+      await forEvent(node.chain, 'disconnect');
+      let err;
+      try {
+        // Because we are rescanning within the rescan blocks,
+        // these blocks will end up in alternate chain, resulting
+        // in error.
+        await wdb.rescan(minerHeight - 5);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message, 'Cannot rescan an alternate chain.');
+
+      await mineBlocks;
+    });
   });
+  }
 });
