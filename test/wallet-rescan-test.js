@@ -2,9 +2,11 @@
 
 const assert = require('bsert');
 const Network = require('../lib/protocol/network');
+const Address = require('../lib/primitives/address');
+const HDPublicKey = require('../lib/hd/public');
 const NodesContext = require('./util/nodes-context');
 const {forEvent, forEventCondition} = require('./util/common');
-const {Balance, getWClientBalance} = require('./util/balance');
+const {Balance, getWClientBalance, getBalance} = require('./util/balance');
 
 // Definitions:
 //  Gapped txs/addresses - addresses with lookahead + 1 gap when deriving.
@@ -27,9 +29,6 @@ const {Balance, getWClientBalance} = require('./util/balance');
 // recovery is impossible. This tests situation where in block
 // derivation depth is lower than wallet lookahead.
 
-// TODO: Add the standalone Wallet variation.
-// TODO: Add initial rescan test.
-
 const combinations = [
   { SPV: false, STANDALONE: false, name: 'Full/Plugin' },
   { SPV: false, STANDALONE: true, name: 'Full/Standalone' },
@@ -40,8 +39,340 @@ const combinations = [
 
 const noSPVcombinations = combinations.filter(c => !c.SPV);
 
-describe('Wallet rescan', function() {
+describe('Wallet rescan/addBlock', function() {
   const network = Network.get('regtest');
+
+  // TODO: Add SPV tests.
+  for (const {SPV, STANDALONE, name} of noSPVcombinations) {
+  describe(`rescan/addBlock gapped addresses (${name} Integration)`, function() {
+    const TEST_LOOKAHEAD = 20;
+
+    const MAIN = 0;
+    const TEST_ADDBLOCK = 1;
+    const TEST_RESCAN = 2;
+
+    const WALLET_NAME = 'test';
+    const ACCOUNT = 'default';
+
+    const network = Network.get('regtest');
+
+    /** @type {NodesContext} */
+    let nodes;
+    let minerWallet, minerAddress;
+    let main, addBlock, rescan;
+
+    const deriveAddresses = async (wallet, depth) => {
+      const accInfo = await wallet.getAccount('default');
+      let currentDepth = accInfo.receiveDepth;
+
+      if (depth <= currentDepth)
+        return;
+
+      while (currentDepth !== depth) {
+        const addr = await wallet.createAddress('default');
+        currentDepth = addr.index;
+      }
+    };
+
+    const getAddress = async (wallet, depth = -1) => {
+      const accInfo = await wallet.getAccount('default');
+      const {accountKey, lookahead} = accInfo;
+
+      if (depth === -1)
+        depth = accInfo.receiveDepth;
+
+      const XPUBKey = HDPublicKey.fromBase58(accountKey, network);
+      const key = XPUBKey.derive(0).derive(depth).publicKey;
+      const address = Address.fromPubkey(key);
+
+      const gappedDepth = depth + lookahead + 1;
+      return {address, depth, gappedDepth};
+    };
+
+    const generateGappedAddresses = async (wallet, count) => {
+      let depth = -1;
+
+      const addresses = [];
+
+      // generate gapped addresses.
+      for (let i = 0; i < count; i++) {
+        const addrInfo = await getAddress(wallet, depth);
+
+        addresses.push({
+          address: addrInfo.address,
+          depth: addrInfo.depth,
+          gappedDepth: addrInfo.gappedDepth
+        });
+
+        await deriveAddresses(wallet, depth);
+        depth = addrInfo.gappedDepth;
+      }
+
+      return addresses;
+    };
+
+    before(async () => {
+      // Initial node is the one that progresses the network.
+      nodes = new NodesContext(network, 1);
+      // MAIN_WALLET = 0
+      nodes.init({
+        wallet: true,
+        standalone: true,
+        memory: true,
+        noDNS: true
+      });
+
+      // Add the testing node.
+      // TEST_ADDBLOCK = 1
+      nodes.addNode({
+        spv: SPV,
+        wallet: true,
+        memory: true,
+        standalone: STANDALONE,
+        noDNS: true
+      });
+
+      // Add the rescan test node.
+      // TEST_RESCAN = 2
+      nodes.addNode({
+        spv: SPV,
+        wallet: true,
+        memory: true,
+        standalone: STANDALONE,
+        noDNS: true
+      });
+
+      await nodes.open();
+
+      const mainWClient = nodes.context(MAIN).wclient;
+      minerWallet = nodes.context(MAIN).wclient.wallet('primary');
+      minerAddress = (await minerWallet.createAddress('default')).address;
+
+      const mainWallet = await mainWClient.createWallet(WALLET_NAME, {
+        lookahead: TEST_LOOKAHEAD
+      });
+      assert(mainWallet);
+
+      const master = await mainWClient.getMaster(WALLET_NAME);
+
+      const addBlockWClient = nodes.context(TEST_ADDBLOCK).wclient;
+      const addBlockWalletResult = await addBlockWClient.createWallet(WALLET_NAME, {
+        lookahead: TEST_LOOKAHEAD,
+        mnemonic: master.mnemonic.phrase
+      });
+      assert(addBlockWalletResult);
+
+      const rescanWClient = nodes.context(TEST_RESCAN).wclient;
+      const rescanWalletResult = await rescanWClient.createWallet(WALLET_NAME, {
+        lookahead: TEST_LOOKAHEAD,
+        mnemonic: master.mnemonic.phrase
+      });
+      assert(rescanWalletResult);
+
+      main = {};
+      main.client = mainWClient.wallet(WALLET_NAME);
+      await main.client.open();
+      main.wdb = nodes.context(MAIN).wdb;
+
+      addBlock = {};
+      addBlock.client = addBlockWClient.wallet(WALLET_NAME);
+      await addBlock.client.open();
+      addBlock.wdb = nodes.context(TEST_ADDBLOCK).wdb;
+
+      rescan = {};
+      rescan.client = rescanWClient.wallet(WALLET_NAME);
+      await rescan.client.open();
+      rescan.wdb = nodes.context(TEST_RESCAN).wdb;
+
+      await nodes.generate(MAIN, 10, minerAddress);
+    });
+
+    after(async () => {
+      await nodes.close();
+      await nodes.destroy();
+    });
+
+    // Prepare for the rescan and addBlock tests.
+    it('should send gapped txs on each block', async () => {
+      const expectedRescanBalance = await getBalance(main.client, ACCOUNT);
+      const blocks = 5;
+
+      // 1 address per block, all of them gapped.
+      // Start after first gap, make sure rescan has no clue.
+      const all = await generateGappedAddresses(main.client, blocks + 1);
+      const addresses = all.slice(1);
+      // give addBlock first address.
+      await deriveAddresses(addBlock.client, addresses[0].depth - TEST_LOOKAHEAD);
+
+      const mainWalletBlocks = forEvent(main.wdb, 'block connect', blocks);
+      const addBlockWalletBlocks = forEvent(addBlock.wdb, 'block connect', blocks);
+      const rescanWalletBlocks = forEvent(rescan.wdb, 'block connect', blocks);
+
+      for (let i = 0; i < blocks; i++) {
+        await minerWallet.send({
+          outputs: [{
+            address: addresses[i].address.toString(network),
+            value: 1e6
+          }]
+        });
+
+        await nodes.generate(MAIN, 1, minerAddress);
+      }
+
+      await Promise.all([
+        mainWalletBlocks,
+        addBlockWalletBlocks,
+        rescanWalletBlocks
+      ]);
+
+      const rescanBalance = await getBalance(rescan.client, ACCOUNT);
+      assert.deepStrictEqual(rescanBalance, expectedRescanBalance);
+      // before the rescan test.
+      await deriveAddresses(rescan.client, addresses[0].depth - TEST_LOOKAHEAD);
+    });
+
+    it('should receive gapped txs on each block (addBlock)', async () => {
+      const expectedBalance = await getBalance(main.client, ACCOUNT);
+      const addBlockBalance = await getBalance(addBlock.client, ACCOUNT);
+      assert.deepStrictEqual(addBlockBalance, expectedBalance);
+
+      const mainInfo = await main.client.getAccount(ACCOUNT);
+      const addBlockInfo = await addBlock.client.getAccount(ACCOUNT);
+      assert.deepStrictEqual(addBlockInfo, mainInfo);
+    });
+
+    it('should receive gapped txs on each block (rescan)', async () => {
+      const expectedBalance = await getBalance(main.client, ACCOUNT);
+      const expectedInfo = await main.client.getAccount(ACCOUNT);
+
+      // give rescan first address.
+      await rescan.wdb.rescan(0);
+
+      const rescanBalance = await getBalance(rescan.client, ACCOUNT);
+      assert.deepStrictEqual(rescanBalance, expectedBalance);
+
+      const rescanInfo = await rescan.client.getAccount(ACCOUNT);
+      assert.deepStrictEqual(rescanInfo, expectedInfo);
+    });
+
+    it('should send gapped txs in the same block', async () => {
+      const expectedRescanBalance = await getBalance(rescan.client, ACCOUNT);
+      const txCount = 5;
+
+      const all = await generateGappedAddresses(main.client, txCount + 1);
+      const addresses = all.slice(1);
+
+      // give addBlock first address.
+      await deriveAddresses(addBlock.client, addresses[0].depth - TEST_LOOKAHEAD);
+
+      const mainWalletBlocks = forEvent(main.wdb, 'block connect');
+      const addBlockWalletBlocks = forEvent(addBlock.wdb, 'block connect');
+      const rescanWalletBlocks = forEvent(rescan.wdb, 'block connect');
+
+      for (const {address} of addresses) {
+        await minerWallet.send({
+          outputs: [{
+            address: address.toString(network),
+            value: 1e6
+          }]
+        });
+      }
+
+      await nodes.generate(MAIN, 1, minerAddress);
+
+      await Promise.all([
+        mainWalletBlocks,
+        addBlockWalletBlocks,
+        rescanWalletBlocks
+      ]);
+
+      const rescanBalance = await getBalance(rescan.client, ACCOUNT);
+      assert.deepStrictEqual(rescanBalance, expectedRescanBalance);
+
+      await deriveAddresses(rescan.client, addresses[0].depth - TEST_LOOKAHEAD);
+    });
+
+    it.skip('should receive gapped txs in the same block (addBlock)', async () => {
+      const expectedBalance = await getBalance(main.client, ACCOUNT);
+      const addBlockBalance = await getBalance(addBlock.client, ACCOUNT);
+      assert.deepStrictEqual(addBlockBalance, expectedBalance);
+
+      const mainInfo = await main.client.getAccount(ACCOUNT);
+      const addBlockInfo = await addBlock.client.getAccount(ACCOUNT);
+      assert.deepStrictEqual(addBlockInfo, mainInfo);
+    });
+
+    it.skip('should receive gapped txs in the same block (rescan)', async () => {
+      const expectedBalance = await getBalance(main.client, ACCOUNT);
+      const expectedInfo = await main.client.getAccount(ACCOUNT);
+
+      await rescan.wdb.rescan(0);
+
+      const rescanBalance = await getBalance(rescan.client, ACCOUNT);
+      assert.deepStrictEqual(rescanBalance, expectedBalance);
+
+      const rescanInfo = await rescan.client.getAccount(ACCOUNT);
+      assert.deepStrictEqual(rescanInfo, expectedInfo);
+    });
+
+    it('should send gapped outputs in the same tx', async () => {
+      const expectedRescanBalance = await getBalance(rescan.client, ACCOUNT);
+      const outCount = 5;
+
+      const all = await generateGappedAddresses(main.client, outCount + 1);
+      const addresses = all.slice(1);
+
+      // give addBlock first address.
+      await deriveAddresses(addBlock.client, addresses[0].depth - TEST_LOOKAHEAD);
+
+      const mainWalletBlocks = forEvent(main.wdb, 'block connect');
+      const addBlockWalletBlocks = forEvent(addBlock.wdb, 'block connect');
+      const rescanWalletBlocks = forEvent(rescan.wdb, 'block connect');
+
+      const outputs = addresses.map(({address}) => ({
+        address: address.toString(network),
+        value: 1e6
+      }));
+
+      await minerWallet.send({outputs});
+      await nodes.generate(MAIN, 1, minerAddress);
+
+      await Promise.all([
+        mainWalletBlocks,
+        addBlockWalletBlocks,
+        rescanWalletBlocks
+      ]);
+
+      const rescanBalance = await getBalance(rescan.client, ACCOUNT);
+      assert.deepStrictEqual(rescanBalance, expectedRescanBalance);
+
+      await deriveAddresses(rescan.client, addresses[0].depth - TEST_LOOKAHEAD);
+    });
+
+    it.skip('should receive gapped outputs in the same tx (addBlock)', async () => {
+      const expectedBalance = await getBalance(main.client, ACCOUNT);
+      const addBlockBalance = await getBalance(addBlock.client, ACCOUNT);
+      assert.deepStrictEqual(addBlockBalance, expectedBalance);
+
+      const mainInfo = await main.client.getAccount(ACCOUNT);
+      const addBlockInfo = await addBlock.client.getAccount(ACCOUNT);
+      assert.deepStrictEqual(addBlockInfo, mainInfo);
+    });
+
+    it.skip('should receive gapped outputs in the same tx (rescan)', async () => {
+      const expectedBalance = await getBalance(main.client, ACCOUNT);
+      const expectedInfo = await main.client.getAccount(ACCOUNT);
+
+      await rescan.wdb.rescan(0);
+
+      const rescanBalance = await getBalance(rescan.client, ACCOUNT);
+      assert.deepStrictEqual(rescanBalance, expectedBalance);
+
+      const rescanInfo = await rescan.client.getAccount(ACCOUNT);
+      assert.deepStrictEqual(rescanInfo, expectedInfo);
+    });
+  });
+  }
 
   for (const {SPV, STANDALONE, name} of combinations) {
   describe(`Initial sync/rescan (${name} Integration)`, function() {
