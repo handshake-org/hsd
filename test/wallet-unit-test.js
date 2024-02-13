@@ -5,18 +5,18 @@ const blake2b = require('bcrypto/lib/blake2b');
 const base58 = require('bcrypto/lib/encoding/base58');
 const random = require('bcrypto/lib/random');
 const bio = require('bufio');
-const {
-  HDPrivateKey,
-  Mnemonic,
-  WalletDB,
-  Network,
-  wallet: { Wallet },
-  MTX
-} = require('../lib/hsd');
+const Network = require('../lib/protocol/network');
+const MTX = require('../lib/primitives/mtx');
+const HDPrivateKey = require('../lib/hd/private');
+const Mnemonic = require('../lib/hd/mnemonic');
+const WalletDB = require('../lib/wallet/walletdb');
+const Wallet = require('../lib/wallet/wallet');
 const Account = require('../lib/wallet/account');
 const wutils = require('./util/wallet');
 const {nextEntry, fakeEntry} = require('./util/wallet');
 const MemWallet = require('./util/memwallet');
+
+/** @typedef {import('../lib/primitives/tx')} TX */
 
 const mnemonics = require('./data/mnemonic-english.json');
 const network = Network.get('main');
@@ -354,7 +354,12 @@ describe('Wallet Unit Tests', () => {
   describe('addBlock', function() {
     const ALT_SEED = 0xdeadbeef;
 
-    let wdb, wallet, memwallet;
+    /** @type {WalletDB} */
+    let wdb;
+    /** @type {Wallet} */
+    let wallet;
+    /** @type {MemWallet} */
+    let memwallet;
 
     beforeEach(async () => {
       wdb = new WalletDB({
@@ -387,7 +392,9 @@ describe('Wallet Unit Tests', () => {
       for (let i = 0; i < 10; i++) {
         const entry = nextEntry(wdb);
         const added = await wdb.addBlock(entry, []);
-        assert.strictEqual(added, 0);
+        assert.ok(added);
+        assert.strictEqual(added.txs, 0);
+        assert.strictEqual(added.filterUpdated, false);
         assert.equal(wdb.height, entry.height);
       }
 
@@ -400,7 +407,9 @@ describe('Wallet Unit Tests', () => {
       const entry = nextEntry(wdb);
       const added = await wdb.addBlock(entry, [wtx]);
 
-      assert.strictEqual(added, 1);
+      assert.ok(added);
+      assert.strictEqual(added.txs, 1);
+      assert.strictEqual(added.filterUpdated, true);
       assert.equal(wdb.height, tip.height + 1);
     });
 
@@ -409,7 +418,9 @@ describe('Wallet Unit Tests', () => {
       const entry = nextEntry(wdb);
       const added = await wdb.addBlock(entry, []);
 
-      assert.strictEqual(added, 0);
+      assert.ok(added);
+      assert.strictEqual(added.txs, 0);
+      assert.strictEqual(added.filterUpdated, false);
       assert.equal(wdb.height, tip.height + 1);
     });
 
@@ -419,7 +430,7 @@ describe('Wallet Unit Tests', () => {
 
       // TODO: Detect sync chain is correct.
       const added = await wdb.addBlock(entry, []);
-      assert.strictEqual(added, -1);
+      assert.strictEqual(added, null);
       assert.strictEqual(wdb.height, tip.height);
     });
 
@@ -431,16 +442,23 @@ describe('Wallet Unit Tests', () => {
       const wtx2 = await fakeWTX(wallet);
 
       const added1 = await wdb.addBlock(entry, [wtx1]);
-      assert.strictEqual(added1, 1);
+      assert.ok(added1);
+      assert.strictEqual(added1.txs, 1);
+      assert.strictEqual(added1.filterUpdated, true);
       assert.equal(wdb.height, tip.height + 1);
 
       // Same TX wont show up second time.
       const added2 = await wdb.addBlock(entry, [wtx1]);
-      assert.strictEqual(added2, 0);
+      assert.ok(added2);
+      assert.strictEqual(added2.txs, 0);
+      assert.strictEqual(added2.filterUpdated, false);
       assert.equal(wdb.height, tip.height + 1);
 
       const added3 = await wdb.addBlock(entry, [wtx1, wtx2]);
-      assert.strictEqual(added3, 1);
+      assert.ok(added3);
+      assert.strictEqual(added3.txs, 1);
+      // Both txs are using the same address.
+      assert.strictEqual(added3.filterUpdated, false);
       assert.equal(wdb.height, tip.height + 1);
     });
 
@@ -451,7 +469,9 @@ describe('Wallet Unit Tests', () => {
 
       const entry = nextEntry(wdb);
       const added = await wdb.addBlock(entry, [tx]);
-      assert.strictEqual(added, 0);
+      assert.ok(added);
+      assert.strictEqual(added.txs, 0);
+      assert.strictEqual(added.filterUpdated, false);
 
       assert.strictEqual(wdb.height, tip.height + 1);
     });
@@ -463,7 +483,7 @@ describe('Wallet Unit Tests', () => {
 
       // TODO: Detect sync chain is correct.
       const added = await wdb.addBlock(entry, []);
-      assert.strictEqual(added, -1);
+      assert.strictEqual(added, null);
     });
 
     // LOW BLOCKS
@@ -474,7 +494,7 @@ describe('Wallet Unit Tests', () => {
 
       // ignore low blocks.
       const added = await wdb.addBlock(entry, [wtx]);
-      assert.strictEqual(added, -1);
+      assert.strictEqual(added, null);
       assert.strictEqual(wdb.height, tip.height);
     });
 
@@ -487,7 +507,7 @@ describe('Wallet Unit Tests', () => {
 
       // ignore low blocks.
       const added = await wdb.addBlock(entry, [wtx]);
-      assert.strictEqual(added, -1);
+      assert.strictEqual(added, null);
       assert.strictEqual(wdb.height, tip.height);
     });
 
@@ -506,13 +526,18 @@ describe('Wallet Unit Tests', () => {
       };
 
       const added = await wdb.addBlock(entry, []);
-      assert.strictEqual(added, -1);
+      assert.strictEqual(added, null);
 
       assert.strictEqual(rescan, true);
       assert.bufferEqual(rescanHash, tip.hash);
     });
   });
 });
+
+/**
+ * @param {String} addr
+ * @returns {TX}
+ */
 
 function fakeTX(addr) {
   const tx = new MTX();
@@ -523,6 +548,11 @@ function fakeTX(addr) {
   });
   return tx.toTX();
 }
+
+/**
+ * @param {Wallet} wallet
+ * @returns {Promise<TX>}
+ */
 
 async function fakeWTX(wallet) {
   const addr = await wallet.receiveAddress();
