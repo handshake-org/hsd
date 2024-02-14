@@ -38,10 +38,9 @@ const combinations = [
 ];
 
 const noSPVcombinations = combinations.filter(c => !c.SPV);
+const regtest = Network.get('regtest');
 
 describe('Wallet rescan/addBlock', function() {
-  const network = Network.get('regtest');
-
   // TODO: Add SPV tests.
   for (const {SPV, STANDALONE, name} of noSPVcombinations) {
   describe(`rescan/addBlock gapped addresses (${name} Integration)`, function() {
@@ -54,66 +53,16 @@ describe('Wallet rescan/addBlock', function() {
     const WALLET_NAME = 'test';
     const ACCOUNT = 'default';
 
-    const network = Network.get('regtest');
+    const regtest = Network.get('regtest');
 
     /** @type {NodesContext} */
     let nodes;
     let minerWallet, minerAddress;
     let main, addBlock, rescan;
 
-    const deriveAddresses = async (wallet, depth) => {
-      const accInfo = await wallet.getAccount('default');
-      let currentDepth = accInfo.receiveDepth;
-
-      if (depth <= currentDepth)
-        return;
-
-      while (currentDepth !== depth) {
-        const addr = await wallet.createAddress('default');
-        currentDepth = addr.index;
-      }
-    };
-
-    const getAddress = async (wallet, depth = -1) => {
-      const accInfo = await wallet.getAccount('default');
-      const {accountKey, lookahead} = accInfo;
-
-      if (depth === -1)
-        depth = accInfo.receiveDepth;
-
-      const XPUBKey = HDPublicKey.fromBase58(accountKey, network);
-      const key = XPUBKey.derive(0).derive(depth).publicKey;
-      const address = Address.fromPubkey(key);
-
-      const gappedDepth = depth + lookahead + 1;
-      return {address, depth, gappedDepth};
-    };
-
-    const generateGappedAddresses = async (wallet, count) => {
-      let depth = -1;
-
-      const addresses = [];
-
-      // generate gapped addresses.
-      for (let i = 0; i < count; i++) {
-        const addrInfo = await getAddress(wallet, depth);
-
-        addresses.push({
-          address: addrInfo.address,
-          depth: addrInfo.depth,
-          gappedDepth: addrInfo.gappedDepth
-        });
-
-        await deriveAddresses(wallet, depth);
-        depth = addrInfo.gappedDepth;
-      }
-
-      return addresses;
-    };
-
     before(async () => {
       // Initial node is the one that progresses the network.
-      nodes = new NodesContext(network, 1);
+      nodes = new NodesContext(regtest, 1);
       // MAIN_WALLET = 0
       nodes.init({
         wallet: true,
@@ -199,7 +148,8 @@ describe('Wallet rescan/addBlock', function() {
 
       // 1 address per block, all of them gapped.
       // Start after first gap, make sure rescan has no clue.
-      const all = await generateGappedAddresses(main.client, blocks + 1);
+      const all = await generateGappedAddresses(main.client, blocks + 1, regtest);
+      await deriveAddresses(main.client, all[all.length - 1].depth);
       const addresses = all.slice(1);
       // give addBlock first address.
       await deriveAddresses(addBlock.client, addresses[0].depth - TEST_LOOKAHEAD);
@@ -211,7 +161,7 @@ describe('Wallet rescan/addBlock', function() {
       for (let i = 0; i < blocks; i++) {
         await minerWallet.send({
           outputs: [{
-            address: addresses[i].address.toString(network),
+            address: addresses[i].address.toString(regtest),
             value: 1e6
           }]
         });
@@ -259,7 +209,8 @@ describe('Wallet rescan/addBlock', function() {
       const expectedRescanBalance = await getBalance(rescan.client, ACCOUNT);
       const txCount = 5;
 
-      const all = await generateGappedAddresses(main.client, txCount + 1);
+      const all = await generateGappedAddresses(main.client, txCount + 1, regtest);
+      await deriveAddresses(main.client, all[all.length - 1].depth);
       const addresses = all.slice(1);
 
       // give addBlock first address.
@@ -272,7 +223,7 @@ describe('Wallet rescan/addBlock', function() {
       for (const {address} of addresses) {
         await minerWallet.send({
           outputs: [{
-            address: address.toString(network),
+            address: address.toString(regtest),
             value: 1e6
           }]
         });
@@ -302,7 +253,7 @@ describe('Wallet rescan/addBlock', function() {
       assert.deepStrictEqual(addBlockInfo, mainInfo);
     });
 
-    it.skip('should receive gapped txs in the same block (rescan)', async () => {
+    it('should receive gapped txs in the same block (rescan)', async () => {
       const expectedBalance = await getBalance(main.client, ACCOUNT);
       const expectedInfo = await main.client.getAccount(ACCOUNT);
 
@@ -319,7 +270,8 @@ describe('Wallet rescan/addBlock', function() {
       const expectedRescanBalance = await getBalance(rescan.client, ACCOUNT);
       const outCount = 5;
 
-      const all = await generateGappedAddresses(main.client, outCount + 1);
+      const all = await generateGappedAddresses(main.client, outCount + 1, regtest);
+      await deriveAddresses(main.client, all[all.length - 1].depth);
       const addresses = all.slice(1);
 
       // give addBlock first address.
@@ -330,7 +282,7 @@ describe('Wallet rescan/addBlock', function() {
       const rescanWalletBlocks = forEvent(rescan.wdb, 'block connect');
 
       const outputs = addresses.map(({address}) => ({
-        address: address.toString(network),
+        address: address.toString(regtest),
         value: 1e6
       }));
 
@@ -359,7 +311,7 @@ describe('Wallet rescan/addBlock', function() {
       assert.deepStrictEqual(addBlockInfo, mainInfo);
     });
 
-    it.skip('should receive gapped outputs in the same tx (rescan)', async () => {
+    it('should receive gapped outputs in the same tx (rescan)', async () => {
       const expectedBalance = await getBalance(main.client, ACCOUNT);
       const expectedInfo = await main.client.getAccount(ACCOUNT);
 
@@ -389,10 +341,10 @@ describe('Wallet rescan/addBlock', function() {
     let nodes;
     let wnodeCtx, noWnodeCtx;
     let minerWallet, minerAddress;
-    let testAddress;
+    let testWallet, testAddress;
 
     before(async () => {
-      nodes = new NodesContext(network, 1);
+      nodes = new NodesContext(regtest, 1);
 
       // MINER = 0
       nodes.init({
@@ -432,7 +384,7 @@ describe('Wallet rescan/addBlock', function() {
       minerWallet = nodes.context(MINER).wclient.wallet('primary');
       minerAddress = (await minerWallet.createAddress('default')).address;
 
-      const testWallet = wnodeCtx.wclient.wallet('primary');
+      testWallet = wnodeCtx.wclient.wallet('primary');
       testAddress = (await testWallet.createAddress('default')).address;
 
       await nodes.close(WALLET);
@@ -501,29 +453,23 @@ describe('Wallet rescan/addBlock', function() {
       // Disable wallet
       await noWnodeCtx.close();
 
-      // sync node.
-      let eventsToWait;
-
       wnodeCtx.init();
 
+      const eventsToWait = [];
       // For spv we don't wait for sync done, as it will do the full rescan
       // and reset the SPVNode as well. It does not depend on the accumulated
       // blocks.
       if (SPV) {
-        eventsToWait = [
-          // This will happen right away, as scan will just call reset
-          forEvent(wnodeCtx.wdb, 'sync done'),
-          // This is what matters for the rescan.
-          forEventCondition(wnodeCtx.wdb, 'block connect', (entry) => {
-            return entry.height === nodes.height(MINER);
-          }),
+        // This will happen right away, as scan will just call reset
+        eventsToWait.push(forEvent(wnodeCtx.wdb, 'sync done'));
+        // This is what matters for the rescan.
+        eventsToWait.push(forEventCondition(wnodeCtx.wdb, 'block connect', (entry) => {
+          return entry.height === nodes.height(MINER);
+        }));
           // Make sure node gets resets.
-          forEvent(wnodeCtx.node, 'reset')
-        ];
+        eventsToWait.push(forEvent(wnodeCtx.node, 'reset'));
       } else {
-        eventsToWait = [
-          forEvent(wnodeCtx.wdb, 'sync done')
-        ];
+        eventsToWait.push(forEvent(wnodeCtx.wdb, 'sync done'));
       }
 
       await wnodeCtx.open();
@@ -584,24 +530,23 @@ describe('Wallet rescan/addBlock', function() {
       wnodeCtx.init();
 
       // initial sync
-      let eventsToWait;
+      const eventsToWait = [];
+
       if (SPV) {
-        eventsToWait = [
-          // This will happen right away, as scan will just call reset
-          forEvent(wnodeCtx.wdb, 'sync done'),
-          // This is what matters for the rescan.
-          forEventCondition(wnodeCtx.wdb, 'block connect', (entry) => {
-            return entry.height === nodes.height(MINER);
-          }),
-          // Make sure node gets resets.
-          forEvent(wnodeCtx.node, 'reset'),
-          forEvent(wnodeCtx.wdb, 'unconfirmed')
-        ];
+        // This will happen right away, as scan will just call reset
+        eventsToWait.push(forEvent(wnodeCtx.wdb, 'sync done'));
+
+        // This is what matters for the rescan.
+        eventsToWait.push(forEventCondition(wnodeCtx.wdb, 'block connect', (entry) => {
+          return entry.height === nodes.height(MINER);
+        }));
+
+        // Make sure node gets resets.
+        eventsToWait.push(forEvent(wnodeCtx.node, 'reset'));
+        eventsToWait.push(forEvent(wnodeCtx.wdb, 'unconfirmed'));
       } else {
-        eventsToWait = [
-          forEvent(wnodeCtx.wdb, 'sync done'),
-          forEvent(wnodeCtx.wdb, 'unconfirmed')
-        ];
+        eventsToWait.push(forEvent(wnodeCtx.wdb, 'sync done'));
+        eventsToWait.push(forEvent(wnodeCtx.wdb, 'unconfirmed'));
       }
       await wnodeCtx.open();
       await Promise.all(eventsToWait);
@@ -621,13 +566,111 @@ describe('Wallet rescan/addBlock', function() {
 
       await wnodeCtx.close();
     });
+
+    it('should rescan/resync after wallet was off and received gapped txs in the same block', async () => {
+      if (SPV)
+        this.skip();
+
+      const txCount = 5;
+      await wnodeCtx.open();
+      const startingBalance = await getBalance(testWallet, 'default');
+      const all = await generateGappedAddresses(testWallet, txCount, regtest);
+      await wnodeCtx.close();
+
+      await noWnodeCtx.open();
+
+      for (const {address} of all) {
+        await minerWallet.send({
+          outputs: [{
+            address: address.toString(regtest),
+            value: 1e6
+          }]
+        });
+      }
+
+      const waitHeight = nodes.height(MINER) + 1;
+      const nodeSync = forEventCondition(noWnodeCtx.node, 'connect', (entry) => {
+        return entry.height === waitHeight;
+      });
+
+      await nodes.generate(MINER, 1, minerAddress);
+
+      await nodeSync;
+      await noWnodeCtx.close();
+
+      wnodeCtx.init();
+
+      const syncDone = forEvent(wnodeCtx.wdb, 'sync done');
+      await wnodeCtx.open();
+      await syncDone;
+      assert.strictEqual(wnodeCtx.wdb.height, nodes.height(MINER));
+
+      const balance = await getBalance(testWallet, 'default');
+      const diff = balance.diff(startingBalance);
+      assert.deepStrictEqual(diff, new Balance({
+        tx: txCount,
+        coin: txCount,
+        confirmed: 1e6 * txCount,
+        unconfirmed: 1e6 * txCount
+      }));
+
+      await wnodeCtx.close();
+    });
+
+    it('should rescan/resync after wallet was off and received gapped coins in the same tx', async () => {
+      if (SPV)
+        this.skip();
+
+      const outCount = 5;
+      await wnodeCtx.open();
+      const startingBalance = await getBalance(testWallet, 'default');
+      const all = await generateGappedAddresses(testWallet, outCount, regtest);
+      await wnodeCtx.close();
+
+      await noWnodeCtx.open();
+
+      const outputs = all.map(({address}) => ({
+        address: address.toString(regtest),
+        value: 1e6
+      }));
+
+      await minerWallet.send({outputs});
+
+      const waitHeight = nodes.height(MINER) + 1;
+      const nodeSync = forEventCondition(noWnodeCtx.node, 'connect', (entry) => {
+        return entry.height === waitHeight;
+      });
+
+      await nodes.generate(MINER, 1, minerAddress);
+
+      await nodeSync;
+      await noWnodeCtx.close();
+
+      wnodeCtx.init();
+
+      const syncDone = forEvent(wnodeCtx.wdb, 'sync done');
+      await wnodeCtx.open();
+      await syncDone;
+      assert.strictEqual(wnodeCtx.wdb.height, nodes.height(MINER));
+
+      const balance = await getBalance(testWallet, 'default');
+      const diff = balance.diff(startingBalance);
+      assert.deepStrictEqual(diff, new Balance({
+        tx: 1,
+        coin: outCount,
+        confirmed: 1e6 * outCount,
+        unconfirmed: 1e6 * outCount
+      }));
+
+      await wnodeCtx.close();
+    });
   });
   }
 
   for (const {STANDALONE, name} of noSPVcombinations) {
   describe(`Deadlock (${name} Integration)`, function() {
     this.timeout(10000);
-    const nodes = new NodesContext(network, 1);
+    const nodes = new NodesContext(regtest, 1);
     let minerCtx;
     let nodeCtx, address, node, wdb;
 
@@ -767,6 +810,10 @@ describe('Wallet rescan/addBlock', function() {
       // We start rescan only after first disconnect is detected to ensure
       // wallet guard is set.
       await forEvent(node.chain, 'disconnect');
+
+      // abort should also report reason as an error.
+      const errorEvents = forEvent(wdb, 'error', 1);
+
       let err;
       try {
         // Because we are rescanning within the rescan blocks,
@@ -780,8 +827,63 @@ describe('Wallet rescan/addBlock', function() {
       assert(err);
       assert.strictEqual(err.message, 'Cannot rescan an alternate chain.');
 
+      const errors = await errorEvents;
+      assert.strictEqual(errors.length, 1);
+      const errEv = errors[0].values[0];
+      assert(errEv);
+      assert.strictEqual(errEv.message, 'Cannot rescan an alternate chain.');
+
       await mineBlocks;
     });
   });
   }
 });
+
+async function deriveAddresses(walletClient, depth) {
+  const accInfo = await walletClient.getAccount('default');
+  let currentDepth = accInfo.receiveDepth;
+
+  if (depth <= currentDepth)
+    return;
+
+  while (currentDepth !== depth) {
+    const addr = await walletClient.createAddress('default');
+    currentDepth = addr.index;
+  }
+}
+
+async function getAddress(walletClient, depth = -1, network = regtest) {
+  const accInfo = await walletClient.getAccount('default');
+  const {accountKey, lookahead} = accInfo;
+
+  if (depth === -1)
+    depth = accInfo.receiveDepth;
+
+  const XPUBKey = HDPublicKey.fromBase58(accountKey, network);
+  const key = XPUBKey.derive(0).derive(depth).publicKey;
+  const address = Address.fromPubkey(key);
+
+  const gappedDepth = depth + lookahead + 1;
+  return {address, depth, gappedDepth};
+}
+
+async function generateGappedAddresses(walletClient, count, network = regtest) {
+  let depth = -1;
+
+  const addresses = [];
+
+  // generate gapped addresses.
+  for (let i = 0; i < count; i++) {
+    const addrInfo = await getAddress(walletClient, depth, network);
+
+    addresses.push({
+      address: addrInfo.address,
+      depth: addrInfo.depth,
+      gappedDepth: addrInfo.gappedDepth
+    });
+
+    depth = addrInfo.gappedDepth;
+  }
+
+  return addresses;
+}
