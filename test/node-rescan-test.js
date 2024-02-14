@@ -543,7 +543,14 @@ describe('Node Rescan Interactive API', function() {
         if (test.filter)
           filter = test.filter.encode();
 
-        await client.rescanInteractive(startHeight, filter);
+        let err;
+        try {
+          await client.rescanInteractive(startHeight, filter);
+        } catch (e) {
+          err = e;
+        }
+        assert(err);
+        assert.strictEqual(err.message, 'scan request aborted.');
         assert.strictEqual(count, 5);
         assert.strictEqual(aborted, true);
 
@@ -554,7 +561,15 @@ describe('Node Rescan Interactive API', function() {
         if (test.filter)
           await client.setFilter(test.filter.encode());
 
-        await client.rescanInteractive(startHeight, null);
+        err = null;
+        try {
+          await client.rescanInteractive(startHeight, null);
+        } catch (e) {
+          err = e;
+        }
+
+        assert(err);
+        assert.strictEqual(err.message, 'scan request aborted.');
         assert.strictEqual(count, 5);
         assert.strictEqual(aborted, true);
       });
@@ -596,7 +611,14 @@ describe('Node Rescan Interactive API', function() {
         if (test.filter)
           filter = test.filter.encode();
 
-        await client.rescanInteractive(startHeight, filter);
+        let err;
+        try {
+          await client.rescanInteractive(startHeight, filter);
+        } catch (e) {
+          err = e;
+        }
+        assert(err);
+        assert.strictEqual(err.message, 'scan request aborted.');
         assert.strictEqual(count, 5);
         assert.strictEqual(aborted, true);
 
@@ -606,7 +628,14 @@ describe('Node Rescan Interactive API', function() {
         if (test.filter)
           await client.setFilter(test.filter.encode());
 
-        await client.rescanInteractive(startHeight);
+        err = null;
+        try {
+          await client.rescanInteractive(startHeight);
+        } catch (e) {
+          err = e;
+        }
+        assert(err);
+        assert.strictEqual(err.message, 'scan request aborted.');
         assert.strictEqual(count, 5);
         assert.strictEqual(aborted, true);
       });
@@ -648,7 +677,14 @@ describe('Node Rescan Interactive API', function() {
         if (test.filter)
           filter = test.filter.encode();
 
-        await client.rescanInteractive(startHeight, filter);
+        let err;
+        try {
+          await client.rescanInteractive(startHeight, filter);
+        } catch (e) {
+          err = e;
+        }
+        assert(err);
+        assert.strictEqual(err.message, 'scan request aborted.');
         assert.strictEqual(count, 5);
         assert.strictEqual(aborted, true);
 
@@ -658,7 +694,14 @@ describe('Node Rescan Interactive API', function() {
         if (test.filter)
           await client.setFilter(test.filter.encode());
 
-        await client.rescanInteractive(startHeight);
+        err = null;
+        try {
+          await client.rescanInteractive(startHeight);
+        } catch (e) {
+          err = e;
+        }
+        assert(err);
+        assert.strictEqual(err.message, 'scan request aborted.');
         assert.strictEqual(count, 5);
         assert.strictEqual(aborted, true);
       });
@@ -705,7 +748,15 @@ describe('Node Rescan Interactive API', function() {
       if (test.filter)
         filter = test.filter.encode();
 
-      await client.rescanInteractive(startHeight, filter);
+      let err;
+      try {
+        await client.rescanInteractive(startHeight, filter);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message, 'scan request aborted.');
       assert.strictEqual(count, tests.length);
       assert.strictEqual(aborted, true);
     });
@@ -748,17 +799,33 @@ describe('Node Rescan Interactive API', function() {
         aborted = true;
       });
 
-      await client.rescanInteractive(startHeight, filter.encode());
+      let err;
+      try {
+        await client.rescanInteractive(startHeight, filter.encode());
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message, 'scan request aborted.');
       assert.strictEqual(aborted, true);
 
       // Now try using client.filter
+      err = null;
       aborted = false;
       filter = BloomFilter.fromRate(10000, 0.001);
       testTXs = allTXs[startHeight].slice();
       expected = 0;
 
       await client.setFilter(filter.encode());
-      await client.rescanInteractive(startHeight);
+      try {
+        await client.rescanInteractive(startHeight);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message, 'scan request aborted.');
       assert.strictEqual(aborted, true);
     });
 
