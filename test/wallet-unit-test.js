@@ -520,7 +520,7 @@ describe('Wallet Unit Tests', () => {
       let rescan = false;
       let rescanHash = null;
 
-      wdb.client.rescan = async (hash) => {
+      wdb.client.rescanInteractive = async (hash) => {
         rescan = true;
         rescanHash = hash;
       };

@@ -40,6 +40,9 @@ process and allows parallel rescans.
     - expects ws hook for `block rescan interactive abort` param `message`.
 
 ### Wallet Changes
+- Add migration that recalculates txdb balances to fix any inconsistencies.
+- Wallet will now use `interactive scan` for initial sync(on open) and rescan.
+
 #### Configuration
 - Wallet now has option `wallet-migrate-no-rescan`/`migrate-no-rescan` if you
   want to disable rescan when migration recommends it. It may result in the
@@ -51,7 +54,6 @@ process and allows parallel rescans.
 
 #### Wallet API
 
-- Add migration that recalculates txdb balances to fix any inconsistencies.
 - WalletNode now emits `open` and `close` events.
 - WalletDB Now emits events for: `open`, `close`, `connect`, `disconnect`.
 - WalletDB
@@ -59,11 +61,13 @@ process and allows parallel rescans.
   - `open()` no longer calls scan, instead only rollbacks and waits for
     sync to do the rescan.
   - emits events for: `open`, `close`, `connect`, `disconnect`, `sync done`.
-- HTTP Changes:
+
+#### Wallet HTTP
   - All transaction creating endpoints now accept `hardFee` for specifying the
     exact fee.
   - All transaction sending endpoints now fundlock/queue tx creation. (no more
     conflicting transactions)
+
 
 ## v6.0.0
 
