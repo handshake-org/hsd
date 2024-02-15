@@ -41,9 +41,9 @@ const noSPVcombinations = combinations.filter(c => !c.SPV);
 const regtest = Network.get('regtest');
 
 describe('Wallet rescan/addBlock', function() {
-  // TODO: Add SPV tests.
   for (const {SPV, STANDALONE, name} of noSPVcombinations) {
   describe(`rescan/addBlock gapped addresses (${name} Integration)`, function() {
+    this.timeout(5000);
     const TEST_LOOKAHEAD = 20;
 
     const MAIN = 0;
@@ -144,6 +144,7 @@ describe('Wallet rescan/addBlock', function() {
     // Prepare for the rescan and addBlock tests.
     it('should send gapped txs on each block', async () => {
       const expectedRescanBalance = await getBalance(main.client, ACCOUNT);
+      const height = nodes.height(MAIN);
       const blocks = 5;
 
       // 1 address per block, all of them gapped.
@@ -154,9 +155,10 @@ describe('Wallet rescan/addBlock', function() {
       // give addBlock first address.
       await deriveAddresses(addBlock.client, addresses[0].depth - TEST_LOOKAHEAD);
 
-      const mainWalletBlocks = forEvent(main.wdb, 'block connect', blocks);
-      const addBlockWalletBlocks = forEvent(addBlock.wdb, 'block connect', blocks);
-      const rescanWalletBlocks = forEvent(rescan.wdb, 'block connect', blocks);
+      const condFn = entry => entry.height === blocks + height;
+      const mainWalletBlocks = forEventCondition(main.wdb, 'block connect', condFn);
+      const addBlockWalletBlocks = forEventCondition(addBlock.wdb, 'block connect', condFn);
+      const rescanWalletBlocks = forEventCondition(rescan.wdb, 'block connect', condFn);
 
       for (let i = 0; i < blocks; i++) {
         await minerWallet.send({
@@ -704,15 +706,17 @@ describe('Wallet rescan/addBlock', function() {
       const BLOCKS = 20;
       const chainBlocks = forEventCondition(node.chain, 'connect', (entry) => {
         return entry.height === BLOCKS;
-      });
+      }, 5000);
 
       const wdbBlocks = forEventCondition(wdb, 'block connect', (entry) => {
         return entry.height === BLOCKS;
-      });
+      }, 5000);
 
       await minerCtx.mineBlocks(BLOCKS, address);
-      await chainBlocks;
-      await wdbBlocks;
+      await Promise.all([
+        chainBlocks,
+        wdbBlocks
+      ]);
     });
 
     it('should rescan when receiving a block', async () => {

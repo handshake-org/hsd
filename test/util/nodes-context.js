@@ -19,12 +19,12 @@ class NodesContext {
   }
 
   addNode(options = {}) {
-    const index = this.nodeCtxs.length + 1;
+    const index = this.nodeCtxs.length;
 
-    let seedPort = this.network.port + index - 1;
+    let seedPort = getPort(this.network, index - 1);
 
-    if (seedPort < this.network.port)
-      seedPort = this.network.port;
+    if (options.seedNodeIndex != null)
+      seedPort = getPort(this.network, options.seedNodeIndex);
 
     const port = this.network.port + index;
     const brontidePort = this.network.brontidePort + index;
@@ -32,6 +32,11 @@ class NodesContext {
     const walletHttpPort = this.network.walletPort + index + 200;
     const nsPort = this.network.nsPort + index;
     const rsPort = this.network.rsPort + index + 100;
+
+    const seeds = [];
+
+    if (options.seedNodeIndex != null || index > 0)
+      seeds.push(`127.0.0.1:${seedPort}`);
 
     const nodeCtx = new NodeContext({
       listen: true,
@@ -47,9 +52,8 @@ class NodesContext {
       nsPort: nsPort,
       httpPort: httpPort,
       walletHttpPort: walletHttpPort,
-      seeds: [
-        `127.0.0.1:${seedPort}`
-      ]
+
+      seeds: seeds
     });
 
     this.nodeCtxs.push(nodeCtx);
@@ -189,6 +193,10 @@ class NodesContext {
   height(index) {
     return this.context(index).height;
   }
+}
+
+function getPort(network, index) {
+  return Math.max(network.port + index, network.port);
 }
 
 module.exports = NodesContext;
