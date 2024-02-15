@@ -158,7 +158,7 @@ describe('SPV Node Sync', function() {
   });
 
   it('should send a tx from chain 1 to SPV node', async () => {
-    const balanceEvent = forEvent(spvwallet, 'balance');
+    const balanceEvent = forEvent(spvwallet, 'balance', 1, 9000);
     await wallet.send({
       outputs: [{
         value: 1012345678,
