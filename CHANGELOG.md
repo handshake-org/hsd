@@ -38,6 +38,7 @@ process and allows parallel rescans.
     - expects ws hook for `block rescan interactive` params `rawEntry, rawTXs`
       that returns scanAction object.
     - expects ws hook for `block rescan interactive abort` param `message`.
+  - Move all `websocket` APIs under `.ws` namespace.
 
 ### Wallet Changes
 #### Configuration
@@ -63,6 +64,8 @@ process and allows parallel rescans.
     exact fee.
   - All transaction sending endpoints now fundlock/queue tx creation. (no more
     conflicting transactions)
+  - Move all `websocket` APIs under `.ws` namespace.
+
 
 ## v6.0.0
 
