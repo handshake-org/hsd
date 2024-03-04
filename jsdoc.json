@@ -8,7 +8,10 @@
     "includePattern": ".+\\.js(doc)?$",
     "excludePattern": "(^|\\/|\\\\)_"
   },
-  "plugins": ["plugins/markdown"],
+  "plugins": [
+    "plugins/markdown",
+    "plugins/rm-imports"
+  ],
   "templates": {
     "cleverLinks": false,
     "monospaceLinks": false
