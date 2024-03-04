@@ -32,12 +32,14 @@ process and allows parallel rescans.
       - `nextCompaction` - when will the next compaction trigger after restart.
       - `lastCompaction` - when was the last compaction run.
   - Introduce `scan interactive` hook (start, filter)
+  - Add `get median time` hook to get median time past for a blockhash.
 
-### Node HTTP Client:
+### hs-client Node
   - Introduce `scanInteractive` method that starts interactive rescan.
     - expects ws hook for `block rescan interactive` params `rawEntry, rawTXs`
       that returns scanAction object.
     - expects ws hook for `block rescan interactive abort` param `message`.
+  - Adds `getMedianTime(blockhash)` that returns median time past of the block.
 
 ### Wallet Changes
 #### Configuration
