@@ -17,6 +17,8 @@ const pkg = require('../lib/pkg');
 const mnemonics = require('./data/mnemonic-english.json');
 const consensus = require('../lib/protocol/consensus');
 const Outpoint = require('../lib/primitives/outpoint');
+const ChainEntry = require('../lib/blockchain/chainentry');
+const util = require('../lib/utils/util');
 const {ZERO_HASH} = consensus;
 
 // Commonly used test mnemonic
@@ -431,6 +433,99 @@ describe('Node HTTP', function() {
   describe('Websockets', function () {
     this.timeout(15000);
 
+    describe('Get entry and mtp', () => {
+      const nodeCtx = new NodeContext({
+        wallet: true
+      });
+
+      const {nclient} = nodeCtx;
+
+      before(async () => {
+        await nodeCtx.open();
+
+        const {address} = await nodeCtx.wclient.createAddress('primary', 'default');
+        await mineBlocks(nodeCtx, 15, address);
+      });
+
+      after(async () => {
+        await nodeCtx.close();
+      });
+
+      it('should get entry by height', async () => {
+        const rawEntry = await nclient.getEntry(0);
+        assert(rawEntry && rawEntry.length > 0);
+
+        const entry = ChainEntry.decode(rawEntry);
+        assert(entry);
+        assert.strictEqual(entry.height, 0);
+      });
+
+      it('should get genesis mtp by height', async () => {
+        const mtp = await nclient.getMedianTime(0);
+        assert(mtp);
+      });
+
+      it('should get last entry by height', async () => {
+        const rawTip = await nclient.getTip();
+        assert(rawTip);
+        const tip = ChainEntry.decode(rawTip);
+        assert(tip);
+        assert.strictEqual(tip.height, 15);
+
+        const rawEntry = await nclient.getEntry(tip.height);
+        assert(rawEntry && rawEntry.length > 0);
+        const entry = ChainEntry.decode(rawEntry);
+        assert(entry);
+        assert.strictEqual(entry.height, 15);
+        assert.bufferEqual(entry.hash, tip.hash);
+      });
+
+      it('should get last mtp by height', async () => {
+        const tip = ChainEntry.decode(await nclient.getTip());
+        assert(tip);
+
+        const mtp = await nclient.getMedianTime(tip.height);
+        assert(mtp);
+      });
+
+      it('should get all entries by hash', async () => {
+        const tip = ChainEntry.decode(await nclient.getTip());
+        assert(tip);
+
+        let entry;
+        let hash = tip.hash;
+        let height = tip.height;
+        do {
+          const rawEntry = await nclient.getEntry(hash);
+          assert(rawEntry);
+
+          entry = ChainEntry.decode(rawEntry);
+          assert.strictEqual(entry.height, height--);
+
+          hash = entry.prevBlock;
+        } while (entry.height > 0);
+      });
+
+      it('should get all mtps by hash', async () => {
+        const tip = ChainEntry.decode(await nclient.getTip());
+
+        let entry;
+        let hash = tip.hash;
+        let lastMTP = util.now() + 1e8;
+        do {
+          entry = ChainEntry.decode(await nclient.getEntry(hash));
+          assert(entry);
+
+          const mtp = await nclient.getMedianTime(entry.hash);
+          assert(mtp);
+          assert(mtp <= lastMTP);
+          lastMTP = mtp;
+
+          hash = entry.prevBlock;
+        } while (entry.height > 0);
+      });
+    });
+
     describe('tree commit', () => {
       const {types} = rules;
 
@@ -449,17 +544,6 @@ describe('Node HTTP', function() {
       let privkey, pubkey;
       let socketData, mempoolData;
       let cbAddress;
-
-      // take into account race conditions
-      async function mineBlocks(count, address) {
-        const blockEvents = common.forEvent(
-          nodeCtx.nclient.socket.events,
-          'block connect',
-          count
-        );
-        await nodeCtx.mineBlocks(count, address);
-        await blockEvents;
-      }
 
       before(async () => {
         await nodeCtx.open();
@@ -501,7 +585,7 @@ describe('Node HTTP', function() {
       });
 
       it('should mine 1 tree interval', async () => {
-        await mineBlocks(treeInterval, cbAddress);
+        await mineBlocks(nodeCtx, treeInterval, cbAddress);
         assert.equal(socketData.length, 1);
       });
 
@@ -551,7 +635,7 @@ describe('Node HTTP', function() {
         const mempool = await nclient.getMempool();
         assert.equal(mempool[0], mtx.txid());
 
-        await mineBlocks(treeInterval, cbAddress);
+        await mineBlocks(nodeCtx, treeInterval, cbAddress);
         assert.equal(socketData.length, 1);
 
         const {root, block, entry} = socketData[0];
@@ -567,3 +651,12 @@ describe('Node HTTP', function() {
   });
 });
 
+async function mineBlocks(nodeCtx, count, address) {
+  const blockEvents = common.forEvent(
+    nodeCtx.nclient.socket.events,
+    'block connect',
+    count
+  );
+  await nodeCtx.mineBlocks(count, address);
+  await blockEvents;
+}

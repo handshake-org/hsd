@@ -32,8 +32,9 @@ process and allows parallel rescans.
       - `nextCompaction` - when will the next compaction trigger after restart.
       - `lastCompaction` - when was the last compaction run.
   - Introduce `scan interactive` hook (start, filter, fullLock)
+  - Add `get median time` hook to get median time past for a blockhash.
 
-### Node HTTP Client:
+### hs-client Node
   - Introduce `scanInteractive` method that starts interactive rescan.
     - expects ws hook for `block rescan interactive` params `rawEntry, rawTXs`
       that returns scanAction object.
@@ -41,6 +42,7 @@ process and allows parallel rescans.
   - Add `getMempoolRejectionFilter` and `checkMempoolRejectionFilter` NodeClient
   aliases.
   - Add `getFee`, an HTTP alternative to estimateFee socket call.
+  - Adds `getMedianTime(blockhash)` that returns median time past of the block.
 
 ### Wallet Changes
 - Add migration that recalculates txdb balances to fix any inconsistencies.
