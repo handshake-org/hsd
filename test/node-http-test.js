@@ -28,9 +28,9 @@ describe('Node HTTP', function() {
 
     beforeEach(async () => {
       nodeCtx = new NodeContext();
-      nclient = nodeCtx.nclient;
 
       await nodeCtx.open();
+      nclient = nodeCtx.nclient;
     });
 
     afterEach(async () => {
@@ -72,9 +72,8 @@ describe('Node HTTP', function() {
 
     beforeEach(async () => {
       nodeCtx = new NodeContext();
-      nclient = nodeCtx.nclient;
-
       await nodeCtx.open();
+      nclient = nodeCtx.nclient;
     });
 
     afterEach(async () => {
@@ -259,9 +258,8 @@ describe('Node HTTP', function() {
         network: 'regtest'
       });
 
-      const interval = nodeCtx.network.names.treeInterval;
-
       await nodeCtx.open();
+      const interval = nodeCtx.network.names.treeInterval;
 
       const nclient = nodeCtx.nclient;
       const node = nodeCtx.node;
@@ -313,9 +311,9 @@ describe('Node HTTP', function() {
         network: 'regtest'
       });
 
+      await nodeCtx.open();
       const {network, nclient} = nodeCtx;
 
-      await nodeCtx.open();
       const {pool} = await nclient.getInfo();
 
       assert.strictEqual(pool.host, '0.0.0.0');
@@ -335,9 +333,9 @@ describe('Node HTTP', function() {
         network: 'regtest',
         listen: true
       });
-      const {network, nclient} = nodeCtx;
 
       await nodeCtx.open();
+      const {network, nclient} = nodeCtx;
       const {pool} = await nclient.getInfo();
 
       assert.strictEqual(pool.host, '0.0.0.0');
@@ -357,9 +355,9 @@ describe('Node HTTP', function() {
         network: 'main'
       });
 
+      await nodeCtx.open();
       const {network, nclient} = nodeCtx;
 
-      await nodeCtx.open();
       const {pool} = await nclient.getInfo();
 
       assert.strictEqual(pool.host, '0.0.0.0');
@@ -380,9 +378,9 @@ describe('Node HTTP', function() {
         listen: true
       });
 
+      await nodeCtx.open();
       const {network, nclient} = nodeCtx;
 
-      await nodeCtx.open();
       const {pool} = await nclient.getInfo();
 
       assert.strictEqual(pool.host, '0.0.0.0');
@@ -410,9 +408,9 @@ describe('Node HTTP', function() {
         publicBrontidePort
       });
 
+      await nodeCtx.open();
       const {network, nclient} = nodeCtx;
 
-      await nodeCtx.open();
       const {pool} = await nclient.getInfo();
 
       assert.strictEqual(pool.host, '0.0.0.0');
@@ -440,6 +438,8 @@ describe('Node HTTP', function() {
         indexAddress: true,
         rejectAbsurdFees: false
       });
+
+      nodeCtx.init();
 
       const {network, nclient} = nodeCtx;
       const {treeInterval} = network.names;
