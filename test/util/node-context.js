@@ -182,7 +182,7 @@ class NodeContext {
     if (this.wclient)
       await this.wclient.open();
 
-    await this.nclient.open();
+    await this.nclient.ws.open();
 
     this.opened = true;
   }

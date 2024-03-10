@@ -420,12 +420,12 @@ describe('Node Rescan Interactive API', function() {
     beforeEach(async () => {
       client = nodeCtx.nodeClient();
 
-      await client.open();
+      await client.ws.open();
     });
 
     afterEach(async () => {
-      if (client.opened)
-        await client.close();
+      if (client.ws.opened)
+        await client.ws.close();
     });
 
     for (const test of tests) {
@@ -433,7 +433,7 @@ describe('Node Rescan Interactive API', function() {
         const startHeight = nodeCtx.height - RESCAN_DEPTH + 1;
         let count = 0;
 
-        client.hook('block rescan interactive', (rawEntry, rawTXs) => {
+        client.ws.hook('block rescan interactive', (rawEntry, rawTXs) => {
           const [entry, txs] = parseBlock(rawEntry, rawTXs);
           assert.strictEqual(entry.height, startHeight + count);
           count++;
@@ -456,21 +456,21 @@ describe('Node Rescan Interactive API', function() {
         if (test.filter)
           filter = test.filter.encode();
 
-        await client.rescanInteractive(startHeight, filter);
+        await client.ws.rescanInteractive(startHeight, filter);
         assert.strictEqual(count, 10);
 
         count = 0;
         if (test.filter)
-          await client.setFilter(test.filter.encode());
+          await client.ws.setFilter(test.filter.encode());
 
-        await client.rescanInteractive(startHeight);
+        await client.ws.rescanInteractive(startHeight);
       });
 
       it(`should rescan only 5 blocks and stop with ${test.name} filter`, async () => {
         const startHeight = nodeCtx.height - RESCAN_DEPTH + 1;
         let count = 0;
 
-        client.hook('block rescan interactive', (rawEntry, rawTXs) => {
+        client.ws.hook('block rescan interactive', (rawEntry, rawTXs) => {
           const [entry, txs] = parseBlock(rawEntry, rawTXs);
           assert.strictEqual(entry.height, startHeight + count);
 
@@ -497,7 +497,7 @@ describe('Node Rescan Interactive API', function() {
 
         let aborted = false;
 
-        client.hook('block rescan interactive abort', (message) => {
+        client.ws.hook('block rescan interactive abort', (message) => {
           assert.strictEqual(message, 'scan request aborted.');
           aborted = true;
         });
@@ -507,7 +507,7 @@ describe('Node Rescan Interactive API', function() {
         if (test.filter)
           filter = test.filter.encode();
 
-        await client.rescanInteractive(startHeight, filter);
+        await client.ws.rescanInteractive(startHeight, filter);
         assert.strictEqual(count, 5);
         assert.strictEqual(aborted, true);
 
@@ -516,9 +516,9 @@ describe('Node Rescan Interactive API', function() {
         aborted = false;
 
         if (test.filter)
-          await client.setFilter(test.filter.encode());
+          await client.ws.setFilter(test.filter.encode());
 
-        await client.rescanInteractive(startHeight, null);
+        await client.ws.rescanInteractive(startHeight, null);
         assert.strictEqual(count, 5);
         assert.strictEqual(aborted, true);
       });
@@ -527,7 +527,7 @@ describe('Node Rescan Interactive API', function() {
         const startHeight = nodeCtx.height - RESCAN_DEPTH + 1;
 
         let count = 0;
-        client.hook('block rescan interactive', (rawEntry, rawTXs) => {
+        client.ws.hook('block rescan interactive', (rawEntry, rawTXs) => {
           const [entry, txs] = parseBlock(rawEntry, rawTXs);
 
           // we are repeating same block.
@@ -550,7 +550,7 @@ describe('Node Rescan Interactive API', function() {
 
         let aborted = false;
 
-        client.hook('block rescan interactive abort', (message) => {
+        client.ws.hook('block rescan interactive abort', (message) => {
           assert.strictEqual(message, 'scan request aborted.');
           aborted = true;
         });
@@ -560,7 +560,7 @@ describe('Node Rescan Interactive API', function() {
         if (test.filter)
           filter = test.filter.encode();
 
-        await client.rescanInteractive(startHeight, filter);
+        await client.ws.rescanInteractive(startHeight, filter);
         assert.strictEqual(count, 5);
         assert.strictEqual(aborted, true);
 
@@ -568,9 +568,9 @@ describe('Node Rescan Interactive API', function() {
         aborted = false;
 
         if (test.filter)
-          await client.setFilter(test.filter.encode());
+          await client.ws.setFilter(test.filter.encode());
 
-        await client.rescanInteractive(startHeight);
+        await client.ws.rescanInteractive(startHeight);
         assert.strictEqual(count, 5);
         assert.strictEqual(aborted, true);
       });
@@ -579,7 +579,7 @@ describe('Node Rescan Interactive API', function() {
         const startHeight = nodeCtx.height - RESCAN_DEPTH + 1;
 
         let count = 0;
-        client.hook('block rescan interactive', (rawEntry, rawTXs) => {
+        client.ws.hook('block rescan interactive', (rawEntry, rawTXs) => {
           const [entry, txs] = parseBlock(rawEntry, rawTXs);
 
           // we are repeating same block.
@@ -602,7 +602,7 @@ describe('Node Rescan Interactive API', function() {
 
         let aborted = false;
 
-        client.hook('block rescan interactive abort', (message) => {
+        client.ws.hook('block rescan interactive abort', (message) => {
           assert.strictEqual(message, 'scan request aborted.');
           aborted = true;
         });
@@ -612,7 +612,7 @@ describe('Node Rescan Interactive API', function() {
         if (test.filter)
           filter = test.filter.encode();
 
-        await client.rescanInteractive(startHeight, filter);
+        await client.ws.rescanInteractive(startHeight, filter);
         assert.strictEqual(count, 5);
         assert.strictEqual(aborted, true);
 
@@ -620,9 +620,9 @@ describe('Node Rescan Interactive API', function() {
         aborted = false;
 
         if (test.filter)
-          await client.setFilter(test.filter.encode());
+          await client.ws.setFilter(test.filter.encode());
 
-        await client.rescanInteractive(startHeight);
+        await client.ws.rescanInteractive(startHeight);
         assert.strictEqual(count, 5);
         assert.strictEqual(aborted, true);
       });
@@ -636,7 +636,7 @@ describe('Node Rescan Interactive API', function() {
 
       let count = 0;
 
-      client.hook('block rescan interactive', (rawEntry, rawTXs) => {
+      client.ws.hook('block rescan interactive', (rawEntry, rawTXs) => {
         count++;
 
         const [entry, txs] = parseBlock(rawEntry, rawTXs);
@@ -659,7 +659,7 @@ describe('Node Rescan Interactive API', function() {
       });
 
       let aborted = false;
-      client.hook('block rescan interactive abort', (message) => {
+      client.ws.hook('block rescan interactive abort', (message) => {
         assert.strictEqual(message, 'scan request aborted.');
         aborted = true;
       });
@@ -669,7 +669,7 @@ describe('Node Rescan Interactive API', function() {
       if (test.filter)
         filter = test.filter.encode();
 
-      await client.rescanInteractive(startHeight, filter);
+      await client.ws.rescanInteractive(startHeight, filter);
       assert.strictEqual(count, tests.length);
       assert.strictEqual(aborted, true);
     });
@@ -681,7 +681,7 @@ describe('Node Rescan Interactive API', function() {
       let filter = BloomFilter.fromRate(10000, 0.001);
       let expected = 0;
 
-      client.hook('block rescan interactive', (rawEntry, rawTXs) => {
+      client.ws.hook('block rescan interactive', (rawEntry, rawTXs) => {
         const [entry, txs] = parseBlock(rawEntry, rawTXs);
 
         // we are repeating same block.
@@ -707,12 +707,12 @@ describe('Node Rescan Interactive API', function() {
       });
 
       let aborted = false;
-      client.hook('block rescan interactive abort', (message) => {
+      client.ws.hook('block rescan interactive abort', (message) => {
         assert.strictEqual(message, 'scan request aborted.');
         aborted = true;
       });
 
-      await client.rescanInteractive(startHeight, filter.encode());
+      await client.ws.rescanInteractive(startHeight, filter.encode());
       assert.strictEqual(aborted, true);
 
       // Now try using client.filter
@@ -721,8 +721,8 @@ describe('Node Rescan Interactive API', function() {
       testTXs = allTXs[startHeight].slice();
       expected = 0;
 
-      await client.setFilter(filter.encode());
-      await client.rescanInteractive(startHeight);
+      await client.ws.setFilter(filter.encode());
+      await client.ws.rescanInteractive(startHeight);
       assert.strictEqual(aborted, true);
     });
 
@@ -750,12 +750,12 @@ describe('Node Rescan Interactive API', function() {
         };
       };
 
-      client.hook('block rescan interactive', getIter(counter1));
-      client2.hook('block rescan interactive', getIter(counter2));
+      client.ws.hook('block rescan interactive', getIter(counter1));
+      client2.ws.hook('block rescan interactive', getIter(counter2));
 
       await Promise.all([
-        client.rescanInteractive(startHeight),
-        client2.rescanInteractive(startHeight)
+        client.ws.rescanInteractive(startHeight),
+        client2.ws.rescanInteractive(startHeight)
       ]);
 
       assert.strictEqual(counter1.count, 10);
@@ -785,7 +785,7 @@ describe('Node Rescan Interactive API', function() {
       // We simulate this by acquiring chain lock before we
       // call rescan and then closing the client.
       const unlock = await nodeCtx.chain.locker.lock();
-      const rescan = client.rescanInteractive(0);
+      const rescan = client.ws.rescanInteractive(0);
       let err = null;
       rescan.catch(e => err = e);
 
