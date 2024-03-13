@@ -8,6 +8,7 @@ const Witness = require('../lib/script/witness');
 const Script = require('../lib/script/script');
 const HDPrivateKey = require('../lib/hd/private');
 const Output = require('../lib/primitives/output');
+const Block = require('../lib/primitives/block');
 const Coin = require('../lib/primitives/coin');
 const MTX = require('../lib/primitives/mtx');
 const rules = require('../lib/covenants/rules');
@@ -430,10 +431,10 @@ describe('Node HTTP', function() {
     });
   });
 
-  describe('Websockets', function () {
+  describe('Websockets', function() {
     this.timeout(15000);
 
-    describe('Get entry and mtp', () => {
+    describe('Get entry and mtp', function() {
       const nodeCtx = new NodeContext({
         wallet: true
       });
@@ -523,6 +524,52 @@ describe('Node HTTP', function() {
 
           hash = entry.prevBlock;
         } while (entry.height > 0);
+      });
+    });
+
+    describe('get hashes and entries', function() {
+      const nodeCtx = new NodeContext({
+        wallet: true
+      });
+
+      const {nclient, network} = nodeCtx;
+      const genesisBlock = Block.decode(network.genesisBlock);
+      let minedHashes;
+
+      before(async () => {
+        await nodeCtx.open();
+
+        const {address} = await nodeCtx.wclient.createAddress('primary', 'default');
+        minedHashes = await mineBlocks(nodeCtx, 15, address);
+      });
+
+      after(async () => {
+        await nodeCtx.close();
+      });
+
+      it('should get hashes by range', async () => {
+        const hashes = await nclient.getHashes(0, 15);
+        assert(hashes && hashes.length === 16);
+
+        for (const [index, hash] of hashes.entries()) {
+          if (index === 0) {
+            assert.bufferEqual(hash, genesisBlock.hash());
+            continue;
+          }
+
+          assert.bufferEqual(hash, minedHashes[index - 1]);
+        }
+      });
+
+      it('should get entries by range', async () => {
+        const entries = await nclient.getEntries(0, 15);
+        assert(entries && entries.length === 16);
+
+        for (const rawEntry of entries) {
+          const entry = ChainEntry.decode(rawEntry);
+          const gotEntry = await nclient.getEntry(entry.hash);
+          assert.bufferEqual(rawEntry, gotEntry);
+        }
       });
     });
 
@@ -657,6 +704,8 @@ async function mineBlocks(nodeCtx, count, address) {
     'block connect',
     count
   );
-  await nodeCtx.mineBlocks(count, address);
+
+  const hashes = await nodeCtx.mineBlocks(count, address);
   await blockEvents;
+  return hashes;
 }

@@ -33,6 +33,8 @@ process and allows parallel rescans.
       - `lastCompaction` - when was the last compaction run.
   - Introduce `scan interactive` hook (start, filter, fullLock)
   - Add `get median time` hook to get median time past for a blockhash.
+  - Add `get entries` hook to get entries. Similar to `get hashes`, but returns
+    encoded entries.
 
 ### hs-client Node
   - Introduce `scanInteractive` method that starts interactive rescan.
@@ -43,6 +45,7 @@ process and allows parallel rescans.
   aliases.
   - Add `getFee`, an HTTP alternative to estimateFee socket call.
   - Adds `getMedianTime(blockhash)` that returns median time past of the block.
+  - Adds `getEntries(start, end)` that returns encoded chain entries.
 
 ### Wallet Changes
 - Add migration that recalculates txdb balances to fix any inconsistencies.
