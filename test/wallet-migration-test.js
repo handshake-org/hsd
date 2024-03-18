@@ -6,6 +6,7 @@ const random = require('bcrypto/lib/random');
 const Network = require('../lib/protocol/network');
 const rules = require('../lib/covenants/rules');
 const Coin = require('../lib/primitives/coin');
+const MTX = require('../lib/primitives/mtx');
 const WalletDB = require('../lib/wallet/walletdb');
 const layouts = require('../lib/wallet/layout');
 const TXDB = require('../lib/wallet/txdb');
@@ -20,6 +21,7 @@ const {
 } = require('../lib/migrations/migrator');
 const {migrationError} = require('./util/migrations');
 const {rimraf, testdir} = require('./util/common');
+const wutil = require('./util/wallet');
 
 const NETWORK = 'regtest';
 const network = Network.get(NETWORK);
@@ -703,7 +705,7 @@ describe('Wallet Migrations', function() {
     });
   });
 
-  describe('Migrate txdb  (integration)', function() {
+  describe('Migrate txdb balances (integration)', function() {
     const location = testdir('walet-txdb-refresh');
     const migrationsBAK = WalletMigrator.migrations;
 
@@ -945,6 +947,227 @@ describe('Wallet Migrations', function() {
       balanceEquals(defBalance, expectedDefault);
       balanceEquals(altBalance, expectedAlt);
       balanceEquals(balance, expecteBalance);
+
+      await walletDB.close();
+    });
+  });
+
+  describe('Migrate WDB to v3', function() {
+    const location = testdir('wallet-migrate-v3');
+    const migrationsBAK = WalletMigrator.migrations;
+
+    const walletOptions = {
+      prefix: location,
+      memory: false,
+      network
+    };
+
+    const NAME = rules.grindName(10, 1, network);
+    const wallets = new Set();
+    const accounts = new Map();
+    const blocks = [];
+
+    let walletDB, ldb;
+    before(async () => {
+      WalletMigrator.migrations = {};
+      await fs.mkdirp(location);
+    });
+
+    after(async () => {
+      WalletMigrator.migrations = migrationsBAK;
+      await rimraf(location);
+    });
+
+    beforeEach(async () => {
+      walletDB = new WalletDB(walletOptions);
+      ldb = walletDB.db;
+    });
+
+    afterEach(async () => {
+      if (ldb.opened)
+        await ldb.close();
+    });
+
+    it('should have db entries', async () => {
+      // Faking old entries is not necessary, as the migration
+      // will reset most of the db entries.
+      await walletDB.open();
+
+      const wallet1 = walletDB.primary;
+      const wallet2 = await walletDB.create({
+        id: 'wallet2'
+      });
+
+      wallets.add('primary');
+      wallets.add('wallet2');
+
+      await wallet1.createAccount({ name: 'account1' });
+      await wallet2.createAccount({ name: 'account2' });
+
+      // write older version.
+      const b = ldb.batch();
+      writeVersion(b, 'wallet', 2);
+      await b.write();
+
+      // fund first wallet.
+      const derAddr = await wallet1.receiveAddress();
+      const mtx = new MTX();
+      mtx.addInput(wutil.dummyInput());
+      for (let i = 0; i < 20; i++)
+        mtx.addOutput(derAddr, 5e6);
+
+      const addrs = [];
+
+      addrs.push((await wallet1.receiveAddress(0)));
+      addrs.push((await wallet1.receiveAddress(1)));
+      addrs.push((await wallet2.receiveAddress(0)));
+      addrs.push((await wallet2.receiveAddress(1)));
+
+      const block1 = wutil.fakeBlock(1);
+      await walletDB.addBlock(block1, [mtx.toTX()]);
+      blocks.push([block1, [mtx.toTX()]]);
+
+      const fundMTX = await wallet1.createTX({
+        outputs: addrs.map(addr => ({ address: addr, value: 3e6 }))
+      });
+      await wallet1.sign(fundMTX);
+
+      const block2 = wutil.fakeBlock(2);
+      await walletDB.addBlock(block2, [fundMTX.toTX()]);
+      blocks.push([block2, [fundMTX.toTX()]]);
+
+      // create open
+      const openMTX = await wallet1.createOpen(NAME);
+      await wallet1.sign(openMTX);
+      const block3 = wutil.fakeBlock(3);
+      await walletDB.addBlock(block3, [openMTX.toTX()]);
+      blocks.push([block3, [openMTX.toTX()]]);
+
+      for (let i = 0; i < network.names.treeInterval + 1; i++) {
+        const block = wutil.fakeBlock(walletDB.state.height + 1);
+        await walletDB.addBlock(block, []);
+        blocks.push([block, []]);
+      }
+
+      // create bid
+      const bidMTX = await wallet2.createBid(NAME, 1e6, 2e6);
+      await wallet2.sign(bidMTX);
+      const bidBlock = wutil.fakeBlock(walletDB.state.height + 1);
+      await walletDB.addBlock(bidBlock, [bidMTX.toTX()]);
+      blocks.push([bidBlock, [bidMTX.toTX()]]);
+
+      // Collect info
+      const w1def = await wallet1.getAccount(0);
+      const w1acc = await wallet1.getAccount(1);
+
+      const w2def = await wallet2.getAccount(0);
+      const w2acc = await wallet2.getAccount(1);
+
+      accounts.set('primary', [w1def.getJSON(), w1acc.getJSON()]);
+      accounts.set('wallet2', [w2def.getJSON(), w2acc.getJSON()]);
+
+      const bidsAfter = await wallet2.getBids(rules.hashName(NAME));
+      assert.strictEqual(bidsAfter.length, 1);
+
+      // blind value should have recovered.
+      const bid = bidsAfter[0];
+      assert.strictEqual(bid.value, 1e6);
+      assert.strictEqual(bid.own, true);
+
+      await walletDB.close();
+    });
+
+    it('should enable migration to WDB v3.', async () => {
+      WalletMigrator.migrations = {
+        0: WalletMigrator.MigrateWDBv3
+      };
+    });
+
+    it('should migrate', async () => {
+      walletDB.options.walletMigrate = 0;
+
+      await walletDB.open();
+
+      // chain sync was reset.
+      assert.strictEqual(walletDB.state.height, 0);
+      const lastTip = blocks[blocks.length - 1][0].height;
+      for (let i = 0; i < lastTip; i++) {
+        const block = await walletDB.getBlock(i);
+        assert.strictEqual(block, null);
+      }
+
+      // Wallet information should be the same.
+      const wids = await walletDB.getWallets();
+      assert.strictEqual(wallets.size, wids.length);
+
+      for (const wid of wids) {
+        assert(wallets.has(wid));
+        const wallet = await walletDB.get(wid);
+        const accs = await wallet.getAccounts();
+
+        const testAccounts = accounts.get(wid);
+        assert.strictEqual(accs.length, testAccounts.length);
+
+        for (const testAcc of testAccounts) {
+          const name = testAcc.name;
+          const acc = await wallet.getAccount(name);
+
+          assert.deepStrictEqual(acc.getJSON(), testAcc);
+        }
+      }
+
+      const assertBalanceEmpty = (balance) => {
+        assert.strictEqual(balance.tx, 0);
+        assert.strictEqual(balance.coin, 0);
+        assert.strictEqual(balance.confirmed, 0);
+        assert.strictEqual(balance.unconfirmed, 0);
+        assert.strictEqual(balance.clocked, 0);
+        assert.strictEqual(balance.ulocked, 0);
+      };
+
+      // balances should be reset.
+      for (const wid of wids) {
+        const wallet = await walletDB.get(wid);
+        const balance = await wallet.getBalance();
+        assertBalanceEmpty(balance);
+
+        for (const name of await wallet.getAccounts()) {
+          const balance = await wallet.getBalance(name);
+          assertBalanceEmpty(balance);
+        }
+      }
+
+      const wallet1 = walletDB.primary;
+      const wallet2 = await walletDB.get('wallet2');
+
+      for (const wallet of [wallet1, wallet2]) {
+        assert.strictEqual((await wallet.getHistory()).length, 0);
+        assert.strictEqual((await wallet.getCoins()).length, 0);
+        assert.strictEqual((await wallet.getCredits()).length, 0);
+        assert.strictEqual((await wallet.getPending()).length, 0);
+        assert.strictEqual((await wallet.getRange(-1, {
+          start: 0
+        })).length, 0);
+        assert.strictEqual((await wallet.getBlocks()).length, 0);
+      }
+
+      // no bids
+      const nameHash = rules.hashName(NAME);
+      const bids = await wallet2.getBids(nameHash);
+      assert.strictEqual(bids.length, 0);
+
+      // resend blocks
+      for (const [block, txs] of blocks) {
+        await walletDB.addBlock(block, txs);
+      }
+
+      const bidsAfter = await wallet2.getBids(nameHash);
+      assert.strictEqual(bidsAfter.length, 1);
+
+      // blind value should have recovered.
+      const bid = bidsAfter[0];
+      assert.strictEqual(bid.value, 1e6);
+      assert.strictEqual(bid.own, true);
 
       await walletDB.close();
     });
