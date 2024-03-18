@@ -396,7 +396,7 @@ describe('WalletDB ChainState', function() {
     }
 
     assert.strictEqual(wdb.state.startHeight, firstBlock.height);
-    assert.strictEqual(wdb.state.startHash, firstBlock.hash);
+    assert.bufferEqual(wdb.state.startHash, firstBlock.hash);
     assert.strictEqual(wdb.height, noTXBuffer + blocksPerAction * 2);
     assert.strictEqual(wdb.state.height, noTXBuffer + blocksPerAction * 2);
     assert.strictEqual(wdb.state.marked, true);
@@ -407,7 +407,7 @@ describe('WalletDB ChainState', function() {
 
     const tip = await wdb.getTip();
     assert.strictEqual(wdb.state.startHeight, tip.height);
-    assert.strictEqual(wdb.state.startHash, tip.hash);
+    assert.bufferEqual(wdb.state.startHash, tip.hash);
     assert.strictEqual(wdb.height, noTXBuffer);
     assert.strictEqual(wdb.state.height, noTXBuffer);
     assert.strictEqual(wdb.state.marked, false);
@@ -422,14 +422,14 @@ describe('WalletDB ChainState', function() {
         firstBlock = blockAndTXs.block;
 
       assert.strictEqual(wdb.state.startHeight, firstBlock.height);
-      assert.strictEqual(wdb.state.startHash, firstBlock.hash);
+      assert.bufferEqual(wdb.state.startHash, firstBlock.hash);
       assert.strictEqual(wdb.height, noTXBuffer + i + 1);
       assert.strictEqual(wdb.state.height, noTXBuffer + i + 1);
       assert.strictEqual(wdb.state.marked, true);
     }
 
     assert.strictEqual(wdb.state.startHeight, firstBlock.height);
-    assert.strictEqual(wdb.state.startHash, firstBlock.hash);
+    assert.bufferEqual(wdb.state.startHash, firstBlock.hash);
     assert.strictEqual(wdb.height, noTXBuffer + blocksPerAction);
     assert.strictEqual(wdb.state.height, noTXBuffer + blocksPerAction);
     assert.strictEqual(wdb.state.marked, true);
@@ -452,7 +452,7 @@ describe('WalletDB ChainState', function() {
     }
 
     assert.strictEqual(wdb.state.startHeight, firstBlock.height);
-    assert.strictEqual(wdb.state.startHash, firstBlock.hash);
+    assert.bufferEqual(wdb.state.startHash, firstBlock.hash);
     assert.strictEqual(wdb.height, noTXBuffer + blocksPerAction * 2);
     assert.strictEqual(wdb.state.height, noTXBuffer + blocksPerAction * 2);
     assert.strictEqual(wdb.state.marked, true);
@@ -463,7 +463,7 @@ describe('WalletDB ChainState', function() {
 
     const tip = await wdb.getTip();
     assert.strictEqual(wdb.state.startHeight, tip.height);
-    assert.strictEqual(wdb.state.startHash, tip.hash);
+    assert.bufferEqual(wdb.state.startHash, tip.hash);
     assert.strictEqual(wdb.height, noTXBuffer);
     assert.strictEqual(wdb.state.height, noTXBuffer);
     assert.strictEqual(wdb.state.marked, false);
@@ -472,14 +472,14 @@ describe('WalletDB ChainState', function() {
       await progressWithNoTX(wdb);
 
       assert.strictEqual(wdb.state.startHeight, tip.height);
-      assert.strictEqual(wdb.state.startHash, tip.hash);
+      assert.bufferEqual(wdb.state.startHash, tip.hash);
       assert.strictEqual(wdb.height, noTXBuffer + i + 1);
       assert.strictEqual(wdb.state.height, noTXBuffer + i + 1);
       assert.strictEqual(wdb.state.marked, false);
     }
 
     assert.strictEqual(wdb.state.startHeight, tip.height);
-    assert.strictEqual(wdb.state.startHash, tip.hash);
+    assert.bufferEqual(wdb.state.startHash, tip.hash);
     assert.strictEqual(wdb.height, noTXBuffer + blocksPerAction);
     assert.strictEqual(wdb.state.height, noTXBuffer + blocksPerAction);
     assert.strictEqual(wdb.state.marked, false);
@@ -493,14 +493,14 @@ describe('WalletDB ChainState', function() {
       removeBlocks.push(blockAndTXs);
 
       assert.strictEqual(wdb.state.startHeight, firstBlock.height);
-      assert.strictEqual(wdb.state.startHash, firstBlock.hash);
+      assert.bufferEqual(wdb.state.startHash, firstBlock.hash);
       assert.strictEqual(wdb.height, noTXBuffer + blocksPerAction + i + 1);
       assert.strictEqual(wdb.state.height, noTXBuffer + blocksPerAction + i + 1);
       assert.strictEqual(wdb.state.marked, true);
     }
 
     assert.strictEqual(wdb.state.startHeight, firstBlock.height);
-    assert.strictEqual(wdb.state.startHash, firstBlock.hash);
+    assert.bufferEqual(wdb.state.startHash, firstBlock.hash);
     assert.strictEqual(wdb.height, noTXBuffer + blocksPerAction * 2);
     assert.strictEqual(wdb.state.height, noTXBuffer + blocksPerAction * 2);
     assert.strictEqual(wdb.state.marked, true);
@@ -517,7 +517,7 @@ describe('WalletDB ChainState', function() {
       await progressWithNoTX(wdb);
 
     assert.strictEqual(wdb.state.startHeight, 0);
-    assert.strictEqual(wdb.state.startHash, consensus.ZERO_HASH);
+    assert.bufferEqual(wdb.state.startHash, consensus.ZERO_HASH);
     assert.strictEqual(wdb.height, noTXBuffer);
     assert.strictEqual(wdb.state.height, noTXBuffer);
     assert.strictEqual(wdb.state.marked, false);
@@ -539,7 +539,7 @@ describe('WalletDB ChainState', function() {
     assert.strictEqual(err.message, 'Corruption');
 
     assert.strictEqual(wdb.state.startHeight, 0);
-    assert.strictEqual(wdb.state.startHash, consensus.ZERO_HASH);
+    assert.bufferEqual(wdb.state.startHash, consensus.ZERO_HASH);
     assert.strictEqual(wdb.height, noTXBuffer);
     assert.strictEqual(wdb.state.height, noTXBuffer);
     assert.strictEqual(wdb.state.marked, false);
@@ -551,7 +551,7 @@ describe('WalletDB ChainState', function() {
       await progressWithNoTX(wdb);
 
       assert.strictEqual(wdb.state.startHeight, 0);
-      assert.strictEqual(wdb.state.startHash, consensus.ZERO_HASH);
+      assert.bufferEqual(wdb.state.startHash, consensus.ZERO_HASH);
       assert.strictEqual(wdb.height, noTXBuffer + i + 1);
       assert.strictEqual(wdb.state.height, noTXBuffer + i + 1);
       assert.strictEqual(wdb.state.marked, false);
@@ -559,7 +559,7 @@ describe('WalletDB ChainState', function() {
 
     const {block} = await progressWithTX(wdb);
     assert.strictEqual(wdb.state.startHeight, block.height);
-    assert.strictEqual(wdb.state.startHash, block.hash);
+    assert.bufferEqual(wdb.state.startHash, block.hash);
     assert.strictEqual(wdb.height, noTXBuffer + blocksPerAction + 1);
     assert.strictEqual(wdb.state.height, noTXBuffer + blocksPerAction + 1);
     assert.strictEqual(wdb.state.marked, true);

@@ -227,12 +227,13 @@ describe('Wallet Records', function() {
       compareBlockMeta(decoded, data);
     });
 
-    it('should return block hash', () => {
+    it('should return block hash and time and decode', () => {
       const data = getRandomBlockMetaData();
-      const meta = new BlockMeta();
-      meta.inject(data);
+      const meta = BlockMeta.fromEntry(data);
 
-      assert.bufferEqual(meta.toHash(), data.hash);
+      const hashAndTime = meta.toHashAndTime();
+      const meta2 = BlockMeta.fromHashAndTime(hashAndTime, data.height);
+      compareBlockMeta(meta, meta2);
     });
 
     it('should be created from ChainEntry', () => {
