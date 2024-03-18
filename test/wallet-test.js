@@ -2861,9 +2861,14 @@ describe('Wallet', function() {
       await node.close();
     });
 
-    async function mineBlock(tip) {
+    async function createBlock(tip) {
       const job = await miner.createJob(tip);
       const block = await job.mineAsync();
+      return block;
+    }
+
+    async function mineBlock(tip) {
+      const block = await createBlock(tip);
       return chain.add(block);
     }
 
@@ -2969,6 +2974,45 @@ describe('Wallet', function() {
         assert.strictEqual((await wallet.getBalance()).unconfirmed, 49000);
       } finally {
         await wclient.close();
+      }
+    });
+
+    it('should get same mtp for chain and wallet', async () => {
+      const assertSameMTP = async (mtp) => {
+        assert.strictEqual(wdb.state.height, chain.tip.height);
+
+        const chainMTP = await node.chain.getMedianTime(chain.tip);
+        const walletMTP = await wdb.getMedianTime(wdb.state.height);
+
+        assert.strictEqual(walletMTP, chainMTP);
+        if (mtp)
+          assert.strictEqual(mtp, chainMTP);
+      };
+
+      await assertSameMTP();
+
+      const times = [];
+      const mtp = await node.chain.getMedianTime(chain.tip);
+      times[chain.tip.height] = mtp;
+      for (let i = 0; i < 40; i++) {
+        const block = await createBlock(chain.tip);
+        const futureMTP = await wdb.getMedianTimeTip(chain.tip.height, block.time);
+        await chain.add(block);
+        await assertSameMTP(futureMTP);
+        const mtp = await node.chain.getMedianTime(chain.tip);
+        times[chain.tip.height] = mtp;
+      }
+
+      // revert all
+      for (let i = 0; i < 40; i++) {
+        const entry = chain.tip;
+        const mtp = await chain.getMedianTime(entry);
+        const tipMtp = await wdb.getMedianTimeTip(entry.height - 1, entry.time);
+        await assertSameMTP(times[entry.height]);
+        assert.strictEqual(tipMtp, times[entry.height]);
+        assert.strictEqual(tipMtp, mtp);
+
+        await chain.disconnect(entry);
       }
     });
   });
