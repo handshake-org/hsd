@@ -1773,10 +1773,13 @@ describe('Wallet', function() {
     const block100 = {
       height: 100,
       hash: Buffer.alloc(32, 0),
-      time: Date.now()
+      time: util.now()
     };
     const wtx0 = await wallet.txdb.getTX(tx0.hash());
-    await wallet.txdb.confirm(wtx0, block100);
+    await wallet.txdb.confirm(wtx0, block100, {
+      medianTime: await wdb.getMedianTimeTip(99, block100.time),
+      txIndex: 0
+    });
 
     ancs = await wallet.getPendingAncestors(tx2);
     assert.strictEqual(ancs.size, 1);
@@ -1785,10 +1788,13 @@ describe('Wallet', function() {
     const block101 = {
       height: 101,
       hash: Buffer.alloc(32, 1),
-      time: Date.now()
+      time: util.now()
     };
     const wtx1 = await wallet.txdb.getTX(tx1.hash());
-    await wallet.txdb.confirm(wtx1, block101);
+    await wallet.txdb.confirm(wtx1, block101, {
+      medianTime: await wdb.getMedianTimeTip(100, block101.time),
+      txIndex: 0
+    });
 
     ancs = await wallet.getPendingAncestors(tx2);
     assert.strictEqual(ancs.size, 0);
@@ -1876,14 +1882,16 @@ describe('Wallet', function() {
     const block = {
       height: 100,
       hash: Buffer.alloc(32),
-      time: Date.now()
+      time: util.now()
     };
 
     // Get TX from txdb
     const wtx = await wallet.txdb.getTX(hash);
-
     // Confirm TX with dummy block in txdb
-    const details = await wallet.txdb.confirm(wtx, block);
+    const details = await wallet.txdb.confirm(wtx, block, {
+      medianTime: await wdb.getMedianTimeTip(99, block.time),
+      txIndex: 0
+    });
     assert.bufferEqual(details.tx.hash(), hash);
 
     // Check balance
@@ -1932,13 +1940,16 @@ describe('Wallet', function() {
     const block1 = {
       height: 99,
       hash: Buffer.alloc(32),
-      time: Date.now()
+      time: util.now()
     };
     // Get TX from txdb
     const wtx1 = await wallet.txdb.getTX(tx1.hash());
 
     // Confirm TX with dummy block in txdb
-    await wallet.txdb.confirm(wtx1, block1);
+    await wallet.txdb.confirm(wtx1, block1, {
+      medianTime: await wdb.getMedianTimeTip(98, block1.time),
+      txIndex: 0
+    });
 
     // Build TX to both addresses, known and unknown
     const mtx2 = new MTX();
@@ -1968,14 +1979,17 @@ describe('Wallet', function() {
     const block2 = {
       height: 100,
       hash: Buffer.alloc(32),
-      time: Date.now()
+      time: util.now()
     };
 
     // Get TX from txdb
     const wtx2 = await wallet.txdb.getTX(hash);
 
     // Confirm TX with dummy block in txdb
-    const details = await wallet.txdb.confirm(wtx2, block2);
+    const details = await wallet.txdb.confirm(wtx2, block2, {
+      medianTime: await wdb.getMedianTimeTip(99, block2.time),
+      txIndex: 0
+    });
     assert.bufferEqual(details.tx.hash(), hash);
 
     // Check balance
@@ -2209,11 +2223,11 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
 
       // Add confirmed funding TX to wallet
-      await wallet.txdb.add(tx, block);
+      await txdbAdd(wallet, tx, block);
 
       // Check
       const bal = await wallet.getBalance();
@@ -2242,9 +2256,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(open, block);
+      await txdbAdd(wallet, open, block);
       start = wdb.height;
       cTXCount++;
 
@@ -2278,9 +2292,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(bid, block);
+      await txdbAdd(wallet, bid, block);
       cTXCount++;
 
       // Check
@@ -2313,9 +2327,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(reveal, block);
+      await txdbAdd(wallet, reveal, block);
       cTXCount++;
 
       // Check
@@ -2349,9 +2363,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(mtx.toTX(), block);
+      await txdbAdd(wallet, mtx.toTX(), block);
     });
 
     it('should send and confirm REGISTER', async () => {
@@ -2377,9 +2391,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(register, block);
+      await txdbAdd(wallet, register, block);
       cTXCount++;
 
       // Check
@@ -2418,9 +2432,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(transfer, block);
+      await txdbAdd(wallet, transfer, block);
       cTXCount++;
 
       // Check
@@ -2471,10 +2485,12 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(finalize, block);
-      await recip.txdb.add(finalize, block);
+
+      await txdbAdd(wallet, finalize, block);
+      await txdbAdd(recip, finalize, block);
+
       finalizeBlock = block.height;
       cTXCount++;
 
@@ -2507,8 +2523,21 @@ describe('Wallet', function() {
     });
 
     it('should disconnect FINALIZE', async () => {
-      await wallet.txdb.revert(finalizeBlock);
-      await recip.txdb.revert(finalizeBlock);
+      const walletBlock = await wallet.txdb.getBlock(finalizeBlock);
+      const walletHashes = walletBlock.toArray();
+      assert.strictEqual(walletHashes.length, 1);
+      await wallet.txdb.unconfirm(walletHashes[0], finalizeBlock, {
+        medianTime: walletBlock.time,
+        txIndex: 0
+      });
+
+      const recipBlock = await recip.txdb.getBlock(finalizeBlock);
+      const recipHashes = recipBlock.toArray();
+      assert.strictEqual(recipHashes.length, 1);
+      await recip.txdb.unconfirm(recipHashes[0], finalizeBlock, {
+        medianTime: recipBlock.time,
+        txIndex: 0
+      });
       cTXCount--;
 
       // Check
@@ -2577,11 +2606,11 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
 
       // Add confirmed funding TX to wallet
-      await wallet.txdb.add(tx, block);
+      await txdbAdd(wallet, tx, block);
 
       // Check
       const bal = await wallet.getBalance();
@@ -2609,9 +2638,10 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(open.toTX(), block);
+
+      await txdbAdd(wallet, open.toTX(), block);
       start = wdb.height;
       uTXCount++;
       cTXCount++;
@@ -2645,9 +2675,10 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(bid.toTX(), block);
+
+      await txdbAdd(wallet, bid.toTX(), block);
       uTXCount++;
       cTXCount++;
 
@@ -2680,9 +2711,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(reveal.toTX(), block);
+      await txdbAdd(wallet, reveal.toTX(), block);
       uTXCount++;
       cTXCount++;
 
@@ -2717,9 +2748,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(mtx.toTX(), block);
+      await txdbAdd(wallet, mtx.toTX(), block);
     });
 
     it('should confirm new REGISTER', async () => {
@@ -2742,9 +2773,10 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(register.toTX(), block);
+
+      await txdbAdd(wallet, register.toTX(), block);
       uTXCount++;
       cTXCount++;
 
@@ -2780,9 +2812,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(transfer.toTX(), block);
+      await txdbAdd(wallet, transfer.toTX(), block);
       uTXCount++;
       cTXCount++;
 
@@ -2815,9 +2847,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(finalize.toTX(), block);
+      await txdbAdd(wallet, finalize.toTX(), block);
       uTXCount++;
       cTXCount++;
 
@@ -3257,11 +3289,11 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
 
       // Add confirmed funding TX to wallet
-      await wallet.txdb.add(tx, block);
+      await txdbAdd(wallet, tx, block);
 
       // Check
       const bal = await wallet.getBalance();
@@ -3290,9 +3322,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(open, block);
+      await txdbAdd(wallet, open, block);
       cTXCount++;
 
       // Check
@@ -3326,9 +3358,9 @@ describe('Wallet', function() {
       let block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(losingBid, block);
+      await txdbAdd(wallet, losingBid, block);
       cTXCount++;
 
       const losingBlindFromMtx = losingBid.outputs
@@ -3371,9 +3403,10 @@ describe('Wallet', function() {
       block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(winningBid, block);
+
+      await txdbAdd(wallet, winningBid, block);
       cTXCount++;
 
       const winningBlindFromMtx = winningBid.outputs
@@ -3415,9 +3448,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(reveal, block);
+      await txdbAdd(wallet, reveal, block);
       cTXCount++;
 
       const revealValueFromMtx = reveal.outputs.find(o => o.covenant.isReveal())
@@ -3445,9 +3478,9 @@ describe('Wallet', function() {
       const block2 = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(reveal2, block2);
+      await txdbAdd(wallet, reveal2, block2);
       cTXCount++;
 
       const reveal2ValueFromMtx = reveal.outputs.find(o =>
@@ -3491,9 +3524,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(redeem, block);
+      await txdbAdd(wallet, redeem, block);
       cTXCount++;
 
       // Check
@@ -3528,9 +3561,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(register, block);
+      await txdbAdd(wallet, register, block);
       cTXCount++;
 
       // Check
@@ -3807,3 +3840,10 @@ describe('Wallet', function() {
     });
   });
 });
+
+async function txdbAdd(wallet, tx, block, txIndex = 0) {
+  return wallet.txdb.add(tx, block, {
+    medianTime: block.time,
+    txIndex
+  });
+};
