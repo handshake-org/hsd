@@ -1997,7 +1997,9 @@ describe('Wallet', function() {
   });
 
   it('should throw error with missing outputs', async () => {
-    const wallet = new Wallet({});
+    const wallet = new Wallet({
+      options: {}
+    });
 
     let err = null;
 
