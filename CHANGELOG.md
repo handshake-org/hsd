@@ -59,6 +59,8 @@ process and allows parallel rescans.
 - Add `--wallet-preload-all` (or `--preload-all` for standalone wallet node)
   that will open all wallets before starting other services (e.g. HTTP).
   By default this is set to `false`.
+- Add `--wallet-max-history-txs` (or `--max-history-txs` for standalone wallet
+  node) that will be the hard limit of confirmed and unconfirmed histories.
 
 #### Wallet API
 
@@ -69,6 +71,24 @@ process and allows parallel rescans.
   - `open()` no longer calls scan, instead only rollbacks and waits for
     sync to do the rescan.
   - emits events for: `open`, `close`, `connect`, `disconnect`, `sync done`.
+  - Wallet now has additional methods for quering history:
+    - `listUnconfirmed(acc, { limit, reverse })` - Get first or last `limit`
+      unconfirmed transactions.
+    - `listUnconfirmedAfter(acc, { hash, limit, reverse })` - Get first or last `limit`
+      unconfirmed transactions after/before tx with hash: `hash`.
+    - `listUnconfirmedFrom(acc, { hash, limit, reverse })` - Get first or last `limit`
+      unconfirmed transactions after/before tx with hash `hash`, inclusive.
+    - `listUnconfirmedByTime(acc, { time, limit, reverse })` - Get first or last
+      `limit` unconfirmed transactions after/before `time`, inclusive.
+    - `listHistory(acc, { limit, reverse })` - Get first or last `limit`
+      unconfirmed/confirmed transactions.
+    - `listHistoryAfter(acc, { hash, limit, reverse })` - Get first or last `limit`
+      unconfirmed/confirmed transactions after/before tx with hash `hash`.
+    - `listHistoryFrom(acc, { hash, limit, reverse })` - Get first or last `limit`
+      confirmed/unconfirmed transactions after/before tx with hash `hash`, inclusive.
+    - `listUnconfirmedByTime(acc, { time, limit, reverse })` - Get first or last
+      `limit` confirmed/unconfirmed transactions after/before `time`, inclusive.
+    - NOTE: Default is ascending order, from the oldest.
 
 #### Wallet HTTP
   - All transaction creating endpoints now accept `hardFee` for specifying the
