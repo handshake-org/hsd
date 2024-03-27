@@ -56,15 +56,18 @@ function getRandomTXRecordData(genTX = false, genBlock = false) {
   if (genTX)
     tx = getRandomTX();
 
+  const mtime = random.randomInt();
+
   const data = {
     height: block ? block.height : -1,
     time: block ? block.time : 0,
     block: block ? block.hash : null,
     tx: tx,
-    hash: tx ? tx.hash() : null
+    hash: tx ? tx.hash() : null,
+    mtime: mtime
   };
 
-  return {data, tx, block};
+  return {data, tx, block, mtime};
 }
 
 /*
@@ -114,6 +117,7 @@ function compareTXRecord(actual, expected) {
 
   assert(typeof actual.mtime === 'number');
   assert(actual.mtime > 0);
+  assert.strictEqual(actual.mtime, expected.mtime);
   assert.strictEqual(actual.index, -1);
 }
 
@@ -268,16 +272,21 @@ describe('Wallet Records', function() {
       });
     });
 
-    it('should initialize w/ tx', () => {
-      const {data, tx} = getRandomTXRecordData(true);
-      const wtx = new TXRecord(tx);
+    it('should initialize w/ time', () => {
+      const {mtime} = getRandomTXRecordData(false, false, true);
+      const wtx = new TXRecord(mtime);
 
-      compareTXRecord(wtx, data);
+      compareTXRecord(wtx, {
+        index: -1,
+        mtime: mtime,
+        ...emptyTX,
+        ...emptyBlock
+      });
     });
 
     it('should initialize w/ tx and block', () => {
-      const {data, block, tx} = getRandomTXRecordData(true, true);
-      const wtx = new TXRecord(tx, block);
+      const {data, block, tx, mtime} = getRandomTXRecordData(true, true, true);
+      const wtx = new TXRecord(mtime).fromTX(tx, block);
 
       compareTXRecord(wtx, data);
     });
@@ -295,9 +304,9 @@ describe('Wallet Records', function() {
     });
 
     it('should encode/decode w/ tx', () => {
-      const {data, tx} = getRandomTXRecordData(true);
+      const {data, tx, mtime} = getRandomTXRecordData(true, false, true);
 
-      const wtx = new TXRecord(tx);
+      const wtx = new TXRecord(mtime).fromTX(tx);
       const encoded = wtx.encode();
       const decoded = TXRecord.decode(encoded);
 
@@ -306,9 +315,9 @@ describe('Wallet Records', function() {
     });
 
     it('should encode/decode w/ tx and block', () => {
-      const {data, tx, block} = getRandomTXRecordData(true, true);
+      const {data, tx, block, mtime} = getRandomTXRecordData(true, true);
 
-      const wtx = new TXRecord(tx, block);
+      const wtx = new TXRecord(mtime).fromTX(tx, block);
       const encoded = wtx.encode();
       const decoded = TXRecord.decode(encoded);
 
@@ -317,20 +326,20 @@ describe('Wallet Records', function() {
     });
 
     it('should initialize from TX', () => {
-      const {data, tx} = getRandomTXRecordData(true);
-      const wtx = TXRecord.fromTX(tx);
+      const {data, tx, mtime} = getRandomTXRecordData(true);
+      const wtx = TXRecord.fromTX(mtime, tx);
       compareTXRecord(wtx, data);
     });
 
     it('should initialize from TX and Block', () => {
-      const {data, tx, block} = getRandomTXRecordData(true, true);
-      const wtx = TXRecord.fromTX(tx, block);
+      const {data, tx, block, mtime} = getRandomTXRecordData(true, true);
+      const wtx = TXRecord.fromTX(mtime, tx, block);
       compareTXRecord(wtx, data);
     });
 
     it('should set and unset block', () => {
-      const {data, tx, block} = getRandomTXRecordData(true, true);
-      const wtx = TXRecord.fromTX(tx);
+      const {data, tx, block, mtime} = getRandomTXRecordData(true, true);
+      const wtx = TXRecord.fromTX(mtime, tx);
 
       assert.strictEqual(wtx.getBlock(), null);
       assert.strictEqual(wtx.getDepth(random.randomInt()), 0);
