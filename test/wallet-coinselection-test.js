@@ -1,12 +1,11 @@
 'use strict';
 
 const assert = require('bsert');
-const {
-  MTX,
-  Network,
-  WalletDB,
-  policy
-} = require('..');
+const util = require('../lib/utils/util');
+const Network = require('../lib/protocol/network');
+const MTX = require('../lib/primitives/mtx');
+const WalletDB = require('../lib/wallet/walletdb');
+const policy = require('../lib/protocol/policy');
 
 // Use main instead of regtest because (deprecated)
 // CoinSelector.MAX_FEE was network agnostic
@@ -27,7 +26,7 @@ async function fundWallet(wallet, amounts) {
   const dummyBlock = {
     hash,
     height,
-    time: Date.now()
+    time: util.now()
   };
   await wallet.wdb.addBlock(dummyBlock, [mtx.toTX()]);
 }
