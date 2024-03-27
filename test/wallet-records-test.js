@@ -312,8 +312,8 @@ describe('Wallet Records', function() {
 
     it('should encode/decode w/ tx', () => {
       const {data, tx, mtime} = getRandomTXRecordData(true);
-
       const wtx = new TXRecord(mtime, tx);
+
       const encoded = wtx.encode();
       const decoded = TXRecord.decode(encoded);
 
@@ -323,7 +323,6 @@ describe('Wallet Records', function() {
 
     it('should encode/decode w/ tx and block', () => {
       const {data, tx, block, mtime} = getRandomTXRecordData(true, true);
-
       const wtx = new TXRecord(mtime, tx, block);
       const encoded = wtx.encode();
       const decoded = TXRecord.decode(encoded);

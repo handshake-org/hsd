@@ -3839,6 +3839,158 @@ describe('Wallet', function() {
       }
     });
   });
+
+  describe('Zap Wallet', function () {
+    const DEFAULT = 'default';
+    const ALT = 'alt';
+
+    let workers = null;
+    /** @type {WalletDB} */
+    let wdb = null;
+    /** @type {Wallet} */
+    let wallet;
+
+    beforeEach(async () => {
+      workers = new WorkerPool({ enabled, size });
+      wdb = new WalletDB({ workers });
+      await workers.open();
+      await wdb.open();
+
+      wallet = wdb.primary;
+
+      const altAccount = await wallet.createAccount({
+        name: ALT
+      });
+
+      assert(altAccount);
+    });
+
+    afterEach(async () => {
+      await wdb.close();
+      await workers.close();
+    });
+
+    it('should zap all txs (wallet)', async () => {
+      const hashes = [];
+
+      for (const account of [DEFAULT, ALT]) {
+        for (let i = 0; i < 5; i++) {
+          const mtx = await dummyTX(wallet, account);
+          await wdb.addTX(mtx.toTX());
+          hashes.push(mtx.hash());
+        }
+      }
+
+      const txs = await wallet.listUnconfirmed(-1, {
+        limit: 20,
+        reverse: false
+      });
+
+      assert.strictEqual(txs.length, hashes.length);
+
+      // zap all
+      await wallet.zap(-1, 0);
+
+      const txsAfterZap = await wallet.listUnconfirmed(-1, {
+        limit: 20,
+        reverse: false
+      });
+
+      assert.strictEqual(txsAfterZap.length, 0);
+    });
+
+    it('should zap all txs (account)', async () => {
+      for (const account of [DEFAULT, ALT]) {
+        for (let i = 0; i < 5; i++) {
+          const mtx = await dummyTX(wallet, account);
+          await wdb.addTX(mtx.toTX());
+        }
+      }
+
+      const txs = await wallet.listUnconfirmed(-1, {
+        limit: 20,
+        reverse: false
+      });
+
+      assert.strictEqual(txs.length, 10);
+
+      // zap all
+      await wallet.zap(DEFAULT, 0);
+
+      const txsAfterZapAll = await wallet.listUnconfirmed(-1, {
+        limit: 20,
+        reverse: false
+      });
+
+      assert.strictEqual(txsAfterZapAll.length, 5);
+
+      const txsAfterZapAlt = await wallet.listUnconfirmed(ALT, {
+        limit: 20,
+        reverse: false
+      });
+
+      assert.strictEqual(txsAfterZapAlt.length, 5);
+    });
+
+    it('should zap last 2 txs (all)', async () => {
+      let time = 0;
+      wallet.txdb.nowFn = () => time++;
+      const hashes = [];
+
+      for (let i = 0; i < 2; i++) {
+        for (const account of [DEFAULT, ALT]) {
+          const mtx = await dummyTX(wallet, account);
+          // this increments/calls nowFn twice. One for
+          // wtx creation and another for unconfirmed index.
+          await wdb.addTX(mtx.toTX());
+          hashes.push(mtx.hash());
+        }
+      }
+
+      // zap will also call nowFn once. (0 - 3 time is incremented by first two)
+      const zapped = await wallet.zap(-1, time - 3);
+      assert.strictEqual(zapped.length, 2);
+
+      const txsAfterZap = await wallet.listUnconfirmed(-1, {
+        limit: 20,
+        reverse: false
+      });
+
+      assert.strictEqual(txsAfterZap.length, 2);
+      assert.deepStrictEqual(txsAfterZap.map(tx => tx.hash), hashes.slice(2));
+    });
+
+    it('should zap last 2 txs (account)', async () => {
+      let time = 0;
+      wallet.txdb.nowFn = () => time++;
+      const hashes = [];
+
+      for (let i = 0; i < 4; i++) {
+        for (const account of [DEFAULT, ALT]) {
+          const mtx = await dummyTX(wallet, account);
+          await wdb.addTX(mtx.toTX());
+          hashes.push(mtx.hash());
+        }
+      }
+
+      // two transactions from default
+      const zapped = await wallet.zap(DEFAULT, time - 5);
+      assert.strictEqual(zapped.length, 2);
+
+      const txsAfterZap = await wallet.listUnconfirmed(DEFAULT, {
+        limit: 20,
+        reverse: false
+      });
+
+      const txsAfterZapAll = await wallet.listUnconfirmed(-1, {
+        limit: 20,
+        reverse: false
+      });
+
+      assert.strictEqual(txsAfterZap.length, 2);
+      assert.strictEqual(txsAfterZapAll.length, 6);
+    });
+  });
 });
 
 async function txdbAdd(wallet, tx, block, txIndex = 0) {
@@ -3846,4 +3998,19 @@ async function txdbAdd(wallet, tx, block, txIndex = 0) {
     medianTime: block.time,
     txIndex
   });
+};
+
+/**
+ * @param {Wallet} wallet
+ * @param {(String|Number)} [account]
+ * @param {Number} [value=10000]
+ * @returns {Promise<MTX>}
+ */
+
+async function dummyTX(wallet, account = 'default', value = 10000) {
+  const addr = await wallet.receiveAddress(account);
+  const mtx = new MTX();
+  mtx.addInput(dummyInput());
+  mtx.addOutput(addr, value);
+  return mtx;
 };

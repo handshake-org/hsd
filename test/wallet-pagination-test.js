@@ -22,7 +22,7 @@ const ALT_ACCOUNT = 'alt';
 
 const UNCONFIRMED_HEIGHT = 0xffffffff;
 const MAX_TIME = 0xffffffff;
-const INITIAL_TIME = 500000000;
+const INITIAL_TIME = 1580745078;
 
 describe('WalletDB Pagination', function() {
   /** @type {WalletDB} */
@@ -125,12 +125,16 @@ describe('WalletDB Pagination', function() {
       const totalTXs = totalConfirmed + totalUnconfirmed;
       const entries = [];
       const mtxs = [];
+      const times = [];
 
       // 5 directly confirmed
       for (let i = 0; i < totalConfirmed; i++) {
         const mtx = await dummyTX(wallet);
         const entry = nextEntry(wdb);
         await wdb.addBlock(entry, [mtx.toTX()]);
+        // timeCounter is incremented twice, once for wdb.add/txrecord
+        // creation and another on time index creation.
+        times.push(timeCounter - 1);
         entries.push(entry);
         mtxs.push(mtx);
       }
@@ -141,6 +145,9 @@ describe('WalletDB Pagination', function() {
         await wdb.addTX(mtx.toTX());
         const entry = nextEntry(wdb);
         await wdb.addBlock(entry, [mtx.toTX()]);
+        // timeCounter is incremented twice, once for wdb.add/txrecord
+        // creation and another on time index creation.
+        times.push(timeCounter - 1);
         entries.push(entry);
         mtxs.push(mtx);
       }
@@ -161,13 +168,13 @@ describe('WalletDB Pagination', function() {
 
         const txByTime = await wallet.listUnconfirmedByTime(-1, {
           limit: 1,
-          time: INITIAL_TIME + index,
+          time: times[index],
           reverse: false
         });
 
         const txByTimeRev = await wallet.listUnconfirmedByTime(-1, {
           limit: 1,
-          time: INITIAL_TIME + index,
+          time: times[index],
           reverse: true
         });
 
