@@ -3840,7 +3840,7 @@ describe('Wallet', function() {
     });
   });
 
-  describe('Zap Wallet', function () {
+  describe('Wallet Zap', function () {
     const DEFAULT = 'default';
     const ALT = 'alt';
 
