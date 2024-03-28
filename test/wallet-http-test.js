@@ -18,6 +18,7 @@ const common = require('./util/common');
 const Outpoint = require('../lib/primitives/outpoint');
 const consensus = require('../lib/protocol/consensus');
 const NodeContext = require('./util/node-context');
+const {forEvent, forEventCondition, sleep} = require('./util/common');
 
 const {
   treeInterval,
@@ -2324,11 +2325,237 @@ describe('Wallet HTTP', function() {
       await forMemTX;
     });
   });
-});
 
-async function sleep(time) {
-  return new Promise(resolve => setTimeout(resolve, time));
-}
+  describe('Wallet TX pagination', function() {
+    const BLOCK_INTERVAL = 3200;
+    const GENESIS_TIME = 1580745078;
+    const TIME_WARP = 3200;
+    const START_TIME = GENESIS_TIME + BLOCK_INTERVAL;
+
+    // account to receive single tx per block.
+    const SINGLE_ACCOUNT = 'single';
+
+    let fundWallet, testWallet;
+
+    async function sendTXs(count, account = 'default') {
+      const mempoolTXs = forEvent(nodeCtx.mempool, 'tx', count);
+
+      for (let i = 0; i < count; i++) {
+        const {address} = await testWallet.createAddress(account);
+        await fundWallet.send({ outputs: [{address, value: 1e6}] });
+      }
+
+      await mempoolTXs;
+    }
+
+    async function mineBlock(coinbase, wrap = false) {
+      const height = nodeCtx.height;
+      let blocktime = START_TIME + height * BLOCK_INTERVAL;
+
+      if (wrap && height % 5)
+        blocktime -= TIME_WARP;
+
+      await nclient.execute('setmocktime', [blocktime]);
+
+      const blocks = await nodeCtx.mineBlocks(1, coinbase);
+      const block = await nclient.execute('getblock', [blocks[0]]);
+
+      assert(block.time <= blocktime + 1);
+      assert(block.time >= blocktime);
+
+      return block;
+    }
+
+    before(async () => {
+      await beforeAll();
+
+      await wclient.createWallet('test');
+      fundWallet = wclient.wallet('primary');
+      testWallet = wclient.wallet('test');
+
+      await testWallet.createAccount(SINGLE_ACCOUNT);
+
+      const fundAddress = (await fundWallet.createAddress('default')).address;
+
+      let c = 0;
+
+      // Establish baseline block interval for a median time
+      for (; c < 11; c++)
+        await mineBlock(fundAddress);
+
+      const walletEvents = forEventCondition(nodeCtx.wdb, 'block connect', (entry) => {
+        return entry.height === 20;
+      });
+
+      // Mature coinbase transactions
+      for (; c < 20; c++)
+        await mineBlock(fundAddress, true);
+
+      await walletEvents;
+
+      // 20 blocks * (20 txs per wallet, 19 default + 1 single account)
+      for (; c < 40; c++) {
+        await sendTXs(19);
+        await sendTXs(1, SINGLE_ACCOUNT);
+        await mineBlock(fundAddress, true);
+      }
+
+      // 20 txs unconfirmed
+      const all = forEvent(nodeCtx.wdb, 'tx', 20);
+      await sendTXs(20);
+      await all;
+    });
+
+    after(async () => {
+      await afterAll();
+    });
+
+    describe('confirmed and unconfirmed txs (dsc)', function() {
+      it('first page', async () => {
+        const history = await testWallet.getHistory({
+          limit: 100,
+          reverse: true
+        });
+
+        assert.strictEqual(history.length, 100);
+        assert.strictEqual(history[0].confirmations, 0);
+        assert.strictEqual(history[19].confirmations, 0);
+        assert.strictEqual(history[20].confirmations, 1);
+        assert.strictEqual(history[39].confirmations, 1);
+        assert.strictEqual(history[40].confirmations, 2);
+        assert.strictEqual(history[99].confirmations, 4);
+      });
+
+      it('second page', async () => {
+        const one = await testWallet.getHistory({
+          limit: 100,
+          reverse: true
+        });
+
+        assert.strictEqual(one.length, 100);
+        assert.strictEqual(one[0].confirmations, 0);
+        assert.strictEqual(one[19].confirmations, 0);
+        assert.strictEqual(one[20].confirmations, 1);
+        assert.strictEqual(one[99].confirmations, 4);
+
+        const after = one[99].hash;
+
+        const two = await testWallet.getHistory({
+          after,
+          limit: 100,
+          reverse: true
+        });
+
+        assert.strictEqual(two.length, 100);
+        assert.strictEqual(two[0].confirmations, 5);
+        assert.strictEqual(two[19].confirmations, 5);
+        assert.strictEqual(two[20].confirmations, 6);
+        assert.strictEqual(two[99].confirmations, 9);
+        assert.notStrictEqual(two[0].hash, one[11].hash);
+      });
+
+      it('first page (w/ account)', async () => {
+        const history = await testWallet.getHistory({
+          account: SINGLE_ACCOUNT,
+          limit: 100,
+          reverse: true
+        });
+
+        // we are sending txs from coinbase.
+        assert.strictEqual(history.length, 20);
+        assert.strictEqual(history[0].confirmations, 1);
+        assert.strictEqual(history[1].confirmations, 2);
+        assert.strictEqual(history[19].confirmations, 20);
+      });
+
+      it('second page (w/ account)', async () => {
+        const one = await testWallet.getHistory({
+          account: SINGLE_ACCOUNT,
+          limit: 10,
+          reverse: true
+        });
+
+        assert.strictEqual(one.length, 10);
+
+        const after = one[9].hash;
+
+        const two = await testWallet.getHistory({
+          account: SINGLE_ACCOUNT,
+          after: after,
+          limit: 10,
+          reverse: true
+        });
+
+        assert.strictEqual(two.length, 10);
+        assert.strictEqual(two[0].confirmations, 11);
+        assert.strictEqual(two[9].confirmations, 20);
+        assert.notStrictEqual(two[0].hash, one[9].hash);
+      });
+
+      it('with datetime (MTP in epoch seconds)', async () => {
+        const history = await testWallet.getHistory({
+          limit: 100,
+          time: Math.ceil(Date.now() / 1000),
+          reverse: true
+        });
+
+        assert.strictEqual(history.length, 100);
+        assert(history[0].confirmations < history[99].confirmations);
+      });
+    });
+
+    describe('confirmed txs (asc)', function() {
+      it('first page', async () => {
+        const history = await testWallet.getHistory({
+          account: SINGLE_ACCOUNT,
+          limit: 12,
+          reverse: false
+        });
+
+        assert.strictEqual(history.length, 12);
+        assert.strictEqual(history[0].confirmations, 20);
+        assert.strictEqual(history[11].confirmations, 9);
+      });
+
+      it('second page', async () => {
+        const one = await testWallet.getHistory({
+          account: SINGLE_ACCOUNT,
+          limit: 12,
+          reverse: false
+        });
+
+        assert.strictEqual(one.length, 12);
+        assert.strictEqual(one[0].confirmations, 20);
+        assert.strictEqual(one[11].confirmations, 9);
+
+        const after = one[11].hash;
+
+        const two = await testWallet.getHistory({
+          account: SINGLE_ACCOUNT,
+          after: after,
+          limit: 10,
+          reverse: false
+        });
+
+        assert.strictEqual(two.length, 8);
+        assert.strictEqual(two[0].confirmations, 8);
+        assert.strictEqual(two[7].confirmations, 1);
+        assert.notStrictEqual(two[0].hash, one[7].hash);
+      });
+
+      it('with datetime (MTP in epoch seconds)', async () => {
+        const history = await testWallet.getHistory({
+          limit: 100,
+          time: GENESIS_TIME,
+          reverse: false
+        });
+
+        assert.strictEqual(history.length, 100);
+        assert(history[0].confirmations > history[99].confirmations);
+      });
+    });
+  });
+});
 
 // create an OPEN output
 function openOutput(name, address) {

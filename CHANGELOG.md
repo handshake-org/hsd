@@ -109,6 +109,15 @@ process and allows parallel rescans.
     - `GET /wallet/:id/auction/:name` (`getAuctionByName`)
     - `GET /wallet/:id/reveal` (`getReveals`)
     - `GET /wallet/:id/reveal/:name` (`getRevealsByName`)
+  - `GET /wallet/:id/tx/history` - The params are now `time`, `after`,
+  `limit`, and `reverse`.
+
+### Client changes
+#### Wallet HTTP Client
+
+  - `getHistory` and `Wallet.getHistory` no longer accept `account`,
+    instead accepts object with properties: `account`, `time`, `after`,
+    `limit`, and `reverse`.
 
 ## v6.0.0
 
