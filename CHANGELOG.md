@@ -88,6 +88,15 @@ process and allows parallel rescans.
     exact fee.
   - All transaction sending endpoints now fundlock/queue tx creation. (no more
     conflicting transactions)
+  - `GET /wallet/:id/tx/history` - The params are now `time`, `after`,
+  `limit`, and `reverse`.
+
+### Client changes
+#### Wallet HTTP Client
+
+  - `getHistory` and `Wallet.getHistory` no longer accept `account`,
+    instead accepts object with properties: `account`, `time`, `after`,
+    `limit`, and `reverse`.
 
 ## v6.0.0
 
