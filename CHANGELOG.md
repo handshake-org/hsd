@@ -90,7 +90,7 @@ process and allows parallel rescans.
       `limit` confirmed/unconfirmed transactions after/before `time`, inclusive.
     - NOTE: Default is ascending order, from the oldest.
 
-#### Wallet HTTP
+##### Wallet HTTP API
   - All transaction creating endpoints now accept `hardFee` for specifying the
     exact fee.
   - All transaction sending endpoints now fundlock/queue tx creation. (no more
@@ -111,6 +111,38 @@ process and allows parallel rescans.
     - `GET /wallet/:id/reveal/:name` (`getRevealsByName`)
   - `GET /wallet/:id/tx/history` - The params are now `time`, `after`,
   `limit`, and `reverse`.
+  - `GET /wallet/:id/tx/unconfirmed` - The params are are same as above.
+  These endpoints have been deprecated:
+
+##### Examples
+
+```
+GET /wallet/:id/tx/history?after=<txid>&limit=50&reverse=false
+GET /wallet/:id/tx/history?after=<txid>&limit=50&reverse=true
+```
+By using `after=<txid>` we can anchor pages so that results will not shift
+when new blocks and transactions arrive. With `reverse=true` we can change
+the order the transactions are returned as _latest to genesis_. The
+`limit=<number>` specifies the maximum number of transactions to return
+in the result.
+
+```
+GET /wallet/:id/tx/history?time=<median-time-past>&limit=50&reverse=false
+GET /wallet/:id/tx/history?time=<median-time-past>&limit=50&reverse=true
+```
+The param `time` is in epoch seconds and indexed based on median-time-past
+(MTP) and `date` is ISO 8601 format. Because multiple transactions can share
+the same time, this can function as an initial query, and then switch to the
+above `after` format for the following pages.
+
+```
+GET /wallet/:id/tx/unconfirmed?after=<txid>&limit=50&reverse=false
+GET /wallet/:id/tx/unconfirmed?after=<txid>&limit=50&reverse=true
+GET /wallet/:id/tx/unconfirmed?time=<time-received>&limit=50&reverse=false
+```
+The same will apply to unconfirmed transactions. The `time` is in epoch
+seconds and indexed based on when the transaction was added to the wallet.
+
 
 ### Client changes
 #### Wallet HTTP Client
@@ -118,6 +150,8 @@ process and allows parallel rescans.
   - `getHistory` and `Wallet.getHistory` no longer accept `account`,
     instead accepts object with properties: `account`, `time`, `after`,
     `limit`, and `reverse`.
+  - `getPending` and `Wallet.getPending` have the same changes as
+    `getHistory` above.
 
 ## v6.0.0
 

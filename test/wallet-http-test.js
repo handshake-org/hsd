@@ -2334,10 +2334,11 @@ describe('Wallet HTTP', function() {
 
     // account to receive single tx per block.
     const SINGLE_ACCOUNT = 'single';
+    const DEFAULT_ACCOUNT = 'default';
 
-    let fundWallet, testWallet;
+    let fundWallet, testWallet, unconfirmedTime;
 
-    async function sendTXs(count, account = 'default') {
+    async function sendTXs(count, account = DEFAULT_ACCOUNT) {
       const mempoolTXs = forEvent(nodeCtx.mempool, 'tx', count);
 
       for (let i = 0; i < count; i++) {
@@ -2399,6 +2400,8 @@ describe('Wallet HTTP', function() {
         await sendTXs(1, SINGLE_ACCOUNT);
         await mineBlock(fundAddress, true);
       }
+
+      unconfirmedTime = Math.floor(Date.now() / 1000);
 
       // 20 txs unconfirmed
       const all = forEvent(nodeCtx.wdb, 'tx', 20);
@@ -2552,6 +2555,185 @@ describe('Wallet HTTP', function() {
 
         assert.strictEqual(history.length, 100);
         assert(history[0].confirmations > history[99].confirmations);
+      });
+    });
+
+    describe('unconfirmed txs (dsc)', function() {
+      it('first page', async () => {
+        const history = await testWallet.getPending({
+          limit: 50,
+          reverse: true
+        });
+
+        assert.strictEqual(history.length, 20);
+        assert.strictEqual(history[0].confirmations, 0);
+        const a = history[0].mtime;
+        assert.strictEqual(Number.isInteger(a), true);
+        assert.strictEqual(history[19].confirmations, 0);
+        const b = history[19].mtime;
+        assert.strictEqual(Number.isInteger(b), true);
+        assert.strictEqual(a >= b, true);
+
+        const historyAccount = await testWallet.getPending({
+          account: DEFAULT_ACCOUNT,
+          limit: 50,
+          reverse: true
+        });
+
+        assert.deepStrictEqual(historyAccount, history);
+      });
+
+      it('second page', async () => {
+        const one = await testWallet.getPending({
+          limit: 5,
+          reverse: true
+        });
+
+        const oneAccount = await testWallet.getPending({
+          account: DEFAULT_ACCOUNT,
+          limit: 5,
+          reverse: true
+        });
+
+        assert.deepStrictEqual(oneAccount, one);
+
+        const after = one[4].hash;
+
+        const two = await testWallet.getPending({
+          after: after,
+          limit: 40,
+          reverse: true
+        });
+
+        const twoAccount = await testWallet.getPending({
+          after: after,
+          account: DEFAULT_ACCOUNT,
+          limit: 40,
+          reverse: true
+        });
+
+        assert.deepStrictEqual(twoAccount, two);
+
+        assert.strictEqual(two.length, 15);
+        assert.strictEqual(two[0].confirmations, 0);
+        const a = two[0].mtime;
+        assert.strictEqual(Number.isInteger(a), true);
+        assert.strictEqual(two[14].confirmations, 0);
+        const b = two[14].mtime;
+        assert.strictEqual(Number.isInteger(b), true);
+        assert.strictEqual(a >= b, true);
+
+        assert.notStrictEqual(two[0].hash, one[4].hash);
+      });
+
+      it('with datetime (MTP in epoch seconds)', async () => {
+        const history = await testWallet.getPending({
+          limit: 20,
+          time: Math.ceil((Date.now() + 2000) / 1000),
+          reverse: true
+        });
+
+        assert.strictEqual(history.length, 20);
+        assert(history[0].mtime >= history[19].mtime);
+
+        const historyAccount = await testWallet.getPending({
+          account: DEFAULT_ACCOUNT,
+          limit: 20,
+          time: Math.ceil((Date.now() + 2000) / 1000),
+          reverse: true
+        });
+
+        assert.deepStrictEqual(historyAccount, history);
+      });
+    });
+
+    describe('unconfirmed txs (asc)', function() {
+      it('first page', async () => {
+        const history = await testWallet.getPending({
+          limit: 50,
+          reverse: false
+        });
+
+        const historyAccount = await testWallet.getPending({
+          account: DEFAULT_ACCOUNT,
+          limit: 50,
+          reverse: false
+        });
+
+        assert.deepStrictEqual(historyAccount, history);
+
+        assert.strictEqual(history.length, 20);
+        assert.strictEqual(history[0].confirmations, 0);
+        const a = history[0].mtime;
+        assert.strictEqual(Number.isInteger(a), true);
+        assert.strictEqual(history[19].confirmations, 0);
+        const b = history[19].mtime;
+        assert.strictEqual(Number.isInteger(b), true);
+        assert.strictEqual(a <= b, true);
+      });
+
+      it('second page', async () => {
+        const one = await testWallet.getPending({
+          limit: 5,
+          reverse: false
+        });
+
+        const oneAccount = await testWallet.getPending({
+          account: DEFAULT_ACCOUNT,
+          limit: 5,
+          reverse: false
+        });
+
+        assert.deepStrictEqual(oneAccount, one);
+
+        assert.strictEqual(one.length, 5);
+        const after = one[4].hash;
+
+        const two = await testWallet.getPending({
+          after: after,
+          limit: 15,
+          reverse: false
+        });
+
+        const twoAccount = await testWallet.getPending({
+          after: after,
+          account: DEFAULT_ACCOUNT,
+          limit: 15,
+          reverse: false
+        });
+
+        assert.deepStrictEqual(twoAccount, two);
+
+        assert.strictEqual(two.length, 15);
+        assert.strictEqual(two[0].confirmations, 0);
+        const a = two[0].mtime;
+        assert.strictEqual(Number.isInteger(a), true);
+        assert.strictEqual(two[14].confirmations, 0);
+        const b = two[14].mtime;
+        assert.strictEqual(Number.isInteger(b), true);
+        assert.strictEqual(a <= b, true);
+
+        assert.notStrictEqual(two[0].hash, one[4].hash);
+      });
+
+      it('with datetime (MTP in epoch seconds)', async () => {
+        const history = await testWallet.getPending({
+          limit: 20,
+          time: unconfirmedTime,
+          reverse: false
+        });
+
+        assert.strictEqual(history.length, 20);
+        assert(history[0].mtime <= history[19].mtime);
+
+        const historyAccount = await testWallet.getPending({
+          account: DEFAULT_ACCOUNT,
+          limit: 20,
+          time: unconfirmedTime,
+          reverse: false
+        });
+
+        assert.deepStrictEqual(historyAccount, history);
       });
     });
   });
