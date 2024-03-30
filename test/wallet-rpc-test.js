@@ -1,8 +1,6 @@
 'use strict';
 
 const assert = require('bsert');
-const {NodeClient, WalletClient} = require('../lib/client');
-const FullNode = require('../lib/node/fullnode');
 const Network = require('../lib/protocol/network');
 const Mnemonic = require('../lib/hd/mnemonic');
 const HDPrivateKey = require('../lib/hd/private');
@@ -10,6 +8,7 @@ const Script = require('../lib/script/script');
 const Address = require('../lib/primitives/address');
 const rules = require('../lib/covenants/rules');
 const Amount = require('../lib/ui/amount');
+const NodeContext = require('./util/node-context');
 
 const {types} = rules;
 const {forValue} = require('./util/common');
@@ -21,55 +20,42 @@ const phrase = mnemonics[0][1];
 const addresses = require('./data/addresses.json');
 
 const network = Network.get('regtest');
+
 const {
   treeInterval,
   biddingPeriod,
   revealPeriod
 } = network.names;
 
-const ports = {
-  p2p: 14331,
-  node: 14332,
-  wallet: 14333
-};
-
-const node = new FullNode({
-  network: network.type,
-  apiKey: 'bar',
-  walletAuth: true,
-  memory: true,
-  port: ports.p2p,
-  httpPort: ports.node,
-  workers: true,
-  plugins: [require('../lib/wallet/plugin')],
-  env: {
-    'HSD_WALLET_HTTP_PORT': ports.wallet.toString()
-  }
-});
-
-const nclient = new NodeClient({
-  port: ports.node,
-  apiKey: 'bar'
-});
-
-const wclient = new WalletClient({
-  port: ports.wallet,
-  apiKey: 'bar'
-});
-
-const {wdb} = node.require('walletdb');
-
 const GNAME_SIZE = 10;
 
 describe('Wallet RPC Methods', function() {
   this.timeout(15000);
 
+  /** @type {NodeContext} */
+  let nodeCtx;
+  /** @type {import('../lib/client/node')} */
+  let nclient;
+  /** @type {import('../lib/client/wallet')} */
+  let wclient;
+  /** @type {WalletDB} */
+  let wdb;
+
   let xpub;
 
   before(async () => {
-    await node.open();
-    await nclient.open();
-    await wclient.open();
+    nodeCtx = new NodeContext({
+      network: network.type,
+      apiKey: 'bar',
+      walletAuth: true,
+      wallet: true
+    });
+
+    wclient = nodeCtx.wclient;
+    nclient = nodeCtx.nclient;
+    wdb = nodeCtx.wdb;
+
+    await nodeCtx.open();
 
     // Derive the xpub using the well known
     // mnemonic and network's coin type
@@ -88,9 +74,7 @@ describe('Wallet RPC Methods', function() {
   });
 
   after(async () => {
-    await nclient.close();
-    await wclient.close();
-    await node.close();
+    await nodeCtx.close();
   });
 
   describe('getaddressinfo', () => {
@@ -324,7 +308,7 @@ describe('Wallet RPC Methods', function() {
     it('should get wallet info', async () => {
       const info = await wclient.execute('getwalletinfo', []);
       assert.strictEqual(info.walletid, 'primary');
-      assert.strictEqual(info.height, node.chain.height);
+      assert.strictEqual(info.height, nodeCtx.height);
     });
 
     describe('multisig', () => {
@@ -376,10 +360,7 @@ describe('Wallet RPC Methods', function() {
 
     async function mineBlocks(n, addr) {
       addr = addr ? addr : new Address().toString('regtest');
-      for (let i = 0; i < n; i++) {
-        const block = await node.miner.mineBlock(null, addr);
-        await node.chain.add(block);
-      }
+      await nodeCtx.mineBlocks(n, addr);
     }
 
     before(async () => {
@@ -584,13 +565,14 @@ describe('Wallet RPC Methods', function() {
   });
 
   describe('auction RPC', () => {
-    // Prevent mempool from sending duplicate TXs back to the walletDB and txdb.
-    // This will prevent a race condition when we need to remove spent (but
-    // unconfirmed) outputs from the wallet so they can be reused in other tests.
-    node.mempool.emit = () => {};
-
     let wallet;
+
     before(async () => {
+      // Prevent mempool from sending duplicate TXs back to the walletDB and txdb.
+      // This will prevent a race condition when we need to remove spent (but
+      // unconfirmed) outputs from the wallet so they can be reused in other tests.
+      nodeCtx.mempool.emit = () => {};
+
       await wclient.createWallet('auctionRPCWallet');
       wallet = wclient.wallet('auctionRPCWallet');
       await wclient.execute('selectwallet', ['auctionRPCWallet']);
@@ -603,12 +585,12 @@ describe('Wallet RPC Methods', function() {
       const NAME2 = rules.grindName(GNAME_SIZE, 3, network);
       const addr = await wclient.execute('getnewaddress', []);
       await nclient.execute('generatetoaddress', [10, addr]);
-      await forValue(wdb, 'height', node.chain.height);
+      await forValue(wdb, 'height', nodeCtx.height);
 
       await wclient.execute('sendopen', [NAME1]);
       await wclient.execute('sendopen', [NAME2]);
       await nclient.execute('generatetoaddress', [treeInterval + 1, addr]);
-      await forValue(wdb, 'height', node.chain.height);
+      await forValue(wdb, 'height', nodeCtx.height);
 
       // NAME1 gets 3 bids, NAME2 gets 4.
       await wclient.execute('sendbid', [NAME1, 1, 2]);
@@ -620,7 +602,7 @@ describe('Wallet RPC Methods', function() {
       await wclient.execute('sendbid', [NAME2, 5, 6]);
       await wclient.execute('sendbid', [NAME2, 7, 8]);
       await nclient.execute('generatetoaddress', [biddingPeriod, addr]);
-      await forValue(wdb, 'height', node.chain.height);
+      await forValue(wdb, 'height', nodeCtx.height);
 
       // Works with and without specifying name.
       const createRevealName = await wclient.execute('createreveal', [NAME1]);
@@ -628,7 +610,7 @@ describe('Wallet RPC Methods', function() {
       const sendRevealName = await wclient.execute('sendreveal', [NAME1]);
 
       // Un-send so we can try again.
-      await node.mempool.reset();
+      await nodeCtx.mempool.reset();
       await wallet.abandon(sendRevealName.hash);
       const sendRevealAll = await wclient.execute('sendreveal', []);
 
@@ -660,7 +642,7 @@ describe('Wallet RPC Methods', function() {
       );
 
       await nclient.execute('generatetoaddress', [revealPeriod, addr]);
-      await forValue(wdb, 'height', node.chain.height);
+      await forValue(wdb, 'height', nodeCtx.height);
 
       // Works with and without specifying name.
       const createRedeemName = await wclient.execute('createredeem', [NAME1]);
@@ -668,7 +650,7 @@ describe('Wallet RPC Methods', function() {
       const sendRedeemName = await wclient.execute('sendredeem', [NAME1]);
 
       // Un-send so we can try again.
-      await node.mempool.reset();
+      await nodeCtx.mempool.reset();
       await wallet.abandon(sendRedeemName.hash);
       const sendRedeemAll = await wclient.execute('sendredeem', []);
 
