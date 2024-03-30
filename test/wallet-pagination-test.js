@@ -22,14 +22,14 @@ const ALT_ACCOUNT = 'alt';
 
 const UNCONFIRMED_HEIGHT = 0xffffffff;
 const MAX_TIME = 0xffffffff;
-const INITIAL_TIME = 1580745078;
+const GENESIS_TIME = 1580745078;
 
 describe('WalletDB Pagination', function() {
   /** @type {WalletDB} */
   let wdb;
   /** @type {Wallet} */
   let wallet;
-  let timeCounter = INITIAL_TIME;
+  let timeCounter = GENESIS_TIME;
 
   const setupWDB = async () => {
     wdb = new WalletDB({
@@ -51,7 +51,7 @@ describe('WalletDB Pagination', function() {
   };
 
   const cleanupWDB = async () => {
-    timeCounter = INITIAL_TIME;
+    timeCounter = GENESIS_TIME;
     await wdb.wipe();
   };
 
@@ -755,7 +755,7 @@ describe('WalletDB Pagination', function() {
         args: [-1, {
           limit: N,
           reverse: false,
-          time: INITIAL_TIME
+          time: GENESIS_TIME
         }]
       }, {
         method: wallet.listHistoryAfter,
@@ -782,7 +782,7 @@ describe('WalletDB Pagination', function() {
         args: [-1, {
           limit: N,
           reverse: false,
-          time: INITIAL_TIME
+          time: GENESIS_TIME
         }]
       }, {
         method: wallet.listUnconfirmedAfter,
@@ -836,7 +836,7 @@ describe('WalletDB Pagination', function() {
       const ucTXs = await wallet.listUnconfirmedByTime(-1, {
         limit: MAX_HISTORY,
         reverse: false,
-        time: INITIAL_TIME
+        time: GENESIS_TIME
       });
 
       assert.strictEqual(ucTXs.length, 0);
@@ -846,7 +846,7 @@ describe('WalletDB Pagination', function() {
       const cTXs = await wallet.listHistoryByTime(-1, {
         limit: MAX_HISTORY,
         reverse: false,
-        time: INITIAL_TIME
+        time: GENESIS_TIME
       });
 
       assert.strictEqual(cTXs.length, 0);
