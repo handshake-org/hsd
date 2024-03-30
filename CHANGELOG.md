@@ -119,11 +119,6 @@ These endpoints have been deprecated:
   - `GET /wallet/:id/tx/last` - Instead use `reverse` param for the history and
     unconfirmed endpoints.
 
-##### Wallet CLI (hsw-cli)
-  - `history` now accepts new args on top of `--account`: `--reverse`,
-    `--limit`, `--after`, `--after`.
-  - `pending` now accepts new args, same as above.
-
 ##### Examples
 
 ```
@@ -152,6 +147,30 @@ GET /wallet/:id/tx/unconfirmed?time=<time-received>&limit=50&reverse=false
 ```
 The same will apply to unconfirmed transactions. The `time` is in epoch
 seconds and indexed based on when the transaction was added to the wallet.
+
+##### Wallet RPC
+
+The following new methods have been added:
+  - `listhistory` - List history with a limit and in reverse order.
+  - `listhistoryafter` - List history after a txid _(subsequent pages)_.
+  - `listhistorybytime` - List history by giving a timestamp in epoch seconds
+    _(block median time past)_.
+  - `listunconfirmed` - List unconfirmed transactions with a limit and in
+    reverse order.
+  - `listunconfirmedafter` - List unconfirmed transactions after a txid
+    _(subsequent pages)_.
+  - `listunconfirmedbytime` - List unconfirmed transactions by time they
+    where added.
+
+The following methods have been deprecated:
+
+- `listtransactions` - Use `listhistory` and the related methods and the
+  `after` argument for results that do not shift when new blocks arrive.
+
+##### Wallet CLI (hsw-cli)
+  - `history` now accepts new args on top of `--account`: `--reverse`,
+    `--limit`, `--after`, `--after`.
+  - `pending` now accepts new args, same as above.
 
 
 ### Client changes

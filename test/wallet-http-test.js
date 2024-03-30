@@ -18,7 +18,8 @@ const common = require('./util/common');
 const Outpoint = require('../lib/primitives/outpoint');
 const consensus = require('../lib/protocol/consensus');
 const NodeContext = require('./util/node-context');
-const {forEvent, forEventCondition, sleep} = require('./util/common');
+const {forEvent, sleep} = require('./util/common');
+const {generateInitialBlocks} = require('./util/pagination');
 
 const {
   treeInterval,
@@ -2327,10 +2328,7 @@ describe('Wallet HTTP', function() {
   });
 
   describe('Wallet TX pagination', function() {
-    const BLOCK_INTERVAL = 3200;
     const GENESIS_TIME = 1580745078;
-    const TIME_WARP = 3200;
-    const START_TIME = GENESIS_TIME + BLOCK_INTERVAL;
 
     // account to receive single tx per block.
     const SINGLE_ACCOUNT = 'single';
@@ -2349,24 +2347,6 @@ describe('Wallet HTTP', function() {
       await mempoolTXs;
     }
 
-    async function mineBlock(coinbase, wrap = false) {
-      const height = nodeCtx.height;
-      let blocktime = START_TIME + height * BLOCK_INTERVAL;
-
-      if (wrap && height % 5)
-        blocktime -= TIME_WARP;
-
-      await nclient.execute('setmocktime', [blocktime]);
-
-      const blocks = await nodeCtx.mineBlocks(1, coinbase);
-      const block = await nclient.execute('getblock', [blocks[0]]);
-
-      assert(block.time <= blocktime + 1);
-      assert(block.time >= blocktime);
-
-      return block;
-    }
-
     before(async () => {
       await beforeAll();
 
@@ -2378,28 +2358,13 @@ describe('Wallet HTTP', function() {
 
       const fundAddress = (await fundWallet.createAddress('default')).address;
 
-      let c = 0;
-
-      // Establish baseline block interval for a median time
-      for (; c < 11; c++)
-        await mineBlock(fundAddress);
-
-      const walletEvents = forEventCondition(nodeCtx.wdb, 'block connect', (entry) => {
-        return entry.height === 20;
+      await generateInitialBlocks({
+        nodeCtx,
+        sendTXs,
+        singleAccount: SINGLE_ACCOUNT,
+        coinbase: fundAddress,
+        genesisTime: GENESIS_TIME
       });
-
-      // Mature coinbase transactions
-      for (; c < 20; c++)
-        await mineBlock(fundAddress, true);
-
-      await walletEvents;
-
-      // 20 blocks * (20 txs per wallet, 19 default + 1 single account)
-      for (; c < 40; c++) {
-        await sendTXs(19);
-        await sendTXs(1, SINGLE_ACCOUNT);
-        await mineBlock(fundAddress, true);
-      }
 
       unconfirmedTime = Math.floor(Date.now() / 1000);
 
@@ -2454,7 +2419,7 @@ describe('Wallet HTTP', function() {
         assert.strictEqual(two[19].confirmations, 5);
         assert.strictEqual(two[20].confirmations, 6);
         assert.strictEqual(two[99].confirmations, 9);
-        assert.notStrictEqual(two[0].hash, one[11].hash);
+        assert.notStrictEqual(two[0].hash, one[99].hash);
       });
 
       it('first page (w/ account)', async () => {

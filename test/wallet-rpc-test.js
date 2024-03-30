@@ -9,6 +9,8 @@ const Address = require('../lib/primitives/address');
 const rules = require('../lib/covenants/rules');
 const Amount = require('../lib/ui/amount');
 const NodeContext = require('./util/node-context');
+const {forEvent} = require('./util/common');
+const {generateInitialBlocks} = require('./util/pagination');
 
 const {types} = rules;
 const {forValue} = require('./util/common');
@@ -43,7 +45,7 @@ describe('Wallet RPC Methods', function() {
 
   let xpub;
 
-  before(async () => {
+  const beforeAll = async () => {
     nodeCtx = new NodeContext({
       network: network.type,
       apiKey: 'bar',
@@ -71,11 +73,11 @@ describe('Wallet RPC Methods', function() {
       'abandon', 'abandon', 'abandon', 'abandon',
       'abandon', 'abandon', 'abandon', 'about'
     ].join(' '));
-  });
+  };
 
-  after(async () => {
+  const afterAll = async () => {
     await nodeCtx.close();
-  });
+  };
 
   describe('getaddressinfo', () => {
     const watchOnlyWalletId = 'foo';
@@ -91,6 +93,8 @@ describe('Wallet RPC Methods', function() {
 
     // set up the initial testing state
     before(async () => {
+      await beforeAll();
+
       {
         // Set up the testing environment
         // by creating a wallet and a watch
@@ -126,6 +130,8 @@ describe('Wallet RPC Methods', function() {
         assert.equal(info.watchOnly, false);
       };
     });
+
+    after(afterAll);
 
     // the rpc interface requires the wallet to be selected first
     it('should return iswatchonly correctly', async () => {
@@ -243,6 +249,9 @@ describe('Wallet RPC Methods', function() {
   });
 
   describe('signmessage', function() {
+    before(beforeAll);
+    after(afterAll);
+
     const nonWalletAddress = 'rs1q7q3h4chglps004u3yn79z0cp9ed24rfrhvrxnx';
     const message = 'This is just a test message';
 
@@ -364,6 +373,8 @@ describe('Wallet RPC Methods', function() {
     }
 
     before(async () => {
+      await beforeAll();
+
       // Create new wallets
       await wclient.createWallet('alice');
       await wclient.createWallet('bob');
@@ -404,6 +415,8 @@ describe('Wallet RPC Methods', function() {
 
       // Still in reveal phase
     });
+
+    after(afterAll);
 
     it('should fail to sign before auction is closed', async () => {
       await wclient.execute('selectwallet', ['alice']);
@@ -568,6 +581,7 @@ describe('Wallet RPC Methods', function() {
     let wallet;
 
     before(async () => {
+      await beforeAll();
       // Prevent mempool from sending duplicate TXs back to the walletDB and txdb.
       // This will prevent a race condition when we need to remove spent (but
       // unconfirmed) outputs from the wallet so they can be reused in other tests.
@@ -579,6 +593,8 @@ describe('Wallet RPC Methods', function() {
       const addr = await wclient.execute('getnewaddress', []);
       await nclient.execute('generatetoaddress', [10, addr]);
     });
+
+    after(afterAll);
 
     it('should do an auction', async () => {
       const NAME1 = rules.grindName(GNAME_SIZE, 2, network);
@@ -689,6 +705,9 @@ describe('Wallet RPC Methods', function() {
   });
 
   describe('Wallet RPC Auction', function() {
+    before(beforeAll);
+    after(afterAll);
+
     let addr1, addr2, name1, name2;
 
     it('should create wallets', async () => {
@@ -775,12 +794,15 @@ describe('Wallet RPC Methods', function() {
     let addr;
 
     before(async () => {
+      await beforeAll();
       await wclient.createWallet('batchWallet');
       wclient.wallet('batchWallet');
       await wclient.execute('selectwallet', ['batchWallet']);
       addr = await wclient.execute('getnewaddress', []);
       await nclient.execute('generatetoaddress', [100, addr]);
     });
+
+    after(afterAll);
 
     it('should have paths when creating batch', async () => {
       const json = await wclient.execute(
@@ -940,6 +962,7 @@ describe('Wallet RPC Methods', function() {
     let alexAddr, barrieAddr;
 
     before(async () => {
+      await beforeAll();
       await wclient.createWallet('alex');
       await wclient.createWallet('barrie');
       await wclient.execute('selectwallet', ['alex']);
@@ -947,6 +970,8 @@ describe('Wallet RPC Methods', function() {
       await wclient.execute('selectwallet', ['barrie']);
       barrieAddr = await wclient.execute('getnewaddress', []);
     });
+
+    after(afterAll);
 
     async function getCoinbaseTXID(height) {
       const block = await nclient.execute('getblockbyheight', [height]);
@@ -1026,6 +1051,7 @@ describe('Wallet RPC Methods', function() {
     }
 
     before(async () => {
+      await beforeAll();
       await wclient.createWallet('msAlice', {
         type: 'multisig',
         m: 2,
@@ -1053,6 +1079,8 @@ describe('Wallet RPC Methods', function() {
       const addr = await wclient.execute('getnewaddress', []);
       await nclient.execute('generatetoaddress', [100, addr]);
     });
+
+    after(afterAll);
 
     it('(alice) should open name for auction', async () => {
       await wclient.execute('selectwallet', ['msAlice']);
@@ -1120,6 +1148,415 @@ describe('Wallet RPC Methods', function() {
       // Ensure name is owned
       const ownedNames = await wclient.execute('getnames', [true]);
       assert.strictEqual(ownedNames.length, 1);
+    });
+  });
+
+  describe('transactions', function() {
+    const GENESIS_TIME = 1580745078;
+
+    // account to receive single tx per block.
+    const SINGLE_ACCOUNT = 'single';
+    const DEFAULT_ACCOUNT = 'default';
+
+    let fundWallet, testWallet, unconfirmedTime;
+    let fundAddress;
+
+    async function sendTXs(count, account = DEFAULT_ACCOUNT) {
+      const mempoolTXs = forEvent(nodeCtx.mempool, 'tx', count);
+
+      for (let i = 0; i < count; i++) {
+        const {address} = await testWallet.createAddress(account);
+        await fundWallet.send({ outputs: [{address, value: 1e6}] });
+      }
+
+      await mempoolTXs;
+    }
+
+    before(async () => {
+      await beforeAll();
+      await wclient.createWallet('test');
+      fundWallet = wclient.wallet('primary');
+      testWallet = wclient.wallet('test');
+
+      await testWallet.createAccount(SINGLE_ACCOUNT);
+
+      fundAddress = (await fundWallet.createAddress('default')).address;
+
+      await generateInitialBlocks({
+        nodeCtx,
+        sendTXs,
+        singleAccount: SINGLE_ACCOUNT,
+        coinbase: fundAddress,
+        genesisTime: GENESIS_TIME
+      });
+
+      unconfirmedTime = Math.floor(Date.now() / 1000);
+
+      // 20 txs unconfirmed
+      const all = forEvent(nodeCtx.wdb, 'tx', 20);
+      await sendTXs(20);
+      await all;
+    });
+
+    after(afterAll);
+
+    beforeEach(async () => {
+      await wclient.execute('selectwallet', ['test']);
+    });
+
+    describe('getreceivedbyaccount', function() {
+      it('should get the correct balance', async () => {
+        const bal = await wclient.execute('getreceivedbyaccount',
+                                          [SINGLE_ACCOUNT]);
+        assert.strictEqual(bal, 20);
+      });
+    });
+
+    describe('listreceivedbyaccount', function() {
+      it('should get expected number of results', async () => {
+        const res = await wclient.execute('listreceivedbyaccount');
+        assert.strictEqual(res.length, 2);
+      });
+    });
+
+    describe('getreceivedbyaddress', function() {
+      it('should get the correct balance', async () => {
+        await wclient.execute('selectwallet', ['primary']);
+        const bal = await wclient.execute('getreceivedbyaddress',
+                                          [fundAddress]);
+        assert.strictEqual(bal, 80001.12);
+      });
+    });
+
+    describe('listreceivedbyaddress', function() {
+      it('should get expected number of results', async () => {
+        const res = await wclient.execute('listreceivedbyaddress');
+        assert.strictEqual(res.length, 420);
+      });
+    });
+
+    describe('listsinceblock', function() {
+      it('should get expected number of results', async () => {
+        const res = await wclient.execute('listsinceblock');
+        assert.strictEqual(res.transactions.length, 20);
+      });
+    });
+
+    describe('listhistory', function() {
+      it('should get wallet history (desc)', async () => {
+        const history = await wclient.execute('listhistory', ['*', 100, true]);;
+        assert.strictEqual(history.length, 100);
+        assert.strictEqual(history[0].confirmations, 0);
+        assert.strictEqual(history[19].confirmations, 0);
+        assert.strictEqual(history[20].confirmations, 1);
+        assert.strictEqual(history[39].confirmations, 1);
+        assert.strictEqual(history[40].confirmations, 2);
+        assert.strictEqual(history[99].confirmations, 4);
+      });
+
+      it('should get wallet history (desc w/ account)', async () => {
+        const history = await wclient.execute('listhistory',
+          [SINGLE_ACCOUNT, 100, true]);
+
+        assert.strictEqual(history.length, 20);
+        assert.strictEqual(history[0].confirmations, 1);
+        assert.strictEqual(history[1].confirmations, 2);
+        assert.strictEqual(history[2].confirmations, 3);
+      });
+
+      it('should get wallet history (asc)', async () => {
+        const history = await wclient.execute('listhistory', ['*', 100, false]);
+        assert.strictEqual(history.length, 100);
+
+        assert.strictEqual(history[0].confirmations, 20);
+        assert.strictEqual(history[19].confirmations, 20);
+        assert.strictEqual(history[20].confirmations, 19);
+        assert.strictEqual(history[39].confirmations, 19);
+        assert.strictEqual(history[40].confirmations, 18);
+        assert.strictEqual(history[99].confirmations, 16);
+      });
+
+      it('should get wallet history (asc w/ account)', async () => {
+        const history = await wclient.execute('listhistory',
+          [SINGLE_ACCOUNT, 100, false]);
+
+        assert.strictEqual(history.length, 20);
+        assert.strictEqual(history[0].confirmations, 20);
+        assert.strictEqual(history[1].confirmations, 19);
+        assert.strictEqual(history[19].confirmations, 1);
+      });
+    });
+
+    describe('listhistoryafter', function() {
+      it('should get wallet history after (desc)', async () => {
+        const history = await wclient.execute('listhistory', ['*', 100, true]);
+        const historyAfter = await wclient.execute('listhistoryafter',
+          ['*', history[99].txid, 100, true]);
+
+        assert.strictEqual(historyAfter.length, 100);
+        assert.strictEqual(historyAfter[0].confirmations, 5);
+        assert.strictEqual(historyAfter[19].confirmations, 5);
+        assert.strictEqual(historyAfter[20].confirmations, 6);
+        assert.strictEqual(historyAfter[99].confirmations, 9);
+        assert.notStrictEqual(historyAfter[0].txid, history[99].txid);
+      });
+
+      it('should get wallet history after (desc w/ account)', async () => {
+        const history = await wclient.execute('listhistory',
+          [SINGLE_ACCOUNT, 10, true]);
+
+        const historyAfter = await wclient.execute('listhistoryafter',
+          [SINGLE_ACCOUNT, history[9].txid, 10, true]);
+
+        assert.strictEqual(historyAfter.length, 10);
+        assert.strictEqual(historyAfter[0].confirmations, 11);
+        assert.strictEqual(historyAfter[9].confirmations, 20);
+        assert.notStrictEqual(historyAfter[0].txid, history[9].txid);
+      });
+
+      it('should get wallet history after (asc)', async () => {
+        const history = await wclient.execute('listhistory', ['*', 100, false]);
+        const historyAfter = await wclient.execute('listhistoryafter',
+          ['*', history[99].txid, 100, false]);
+
+        assert.strictEqual(historyAfter.length, 100);
+        assert.strictEqual(historyAfter[0].confirmations, 15);
+        assert.strictEqual(historyAfter[19].confirmations, 15);
+        assert.strictEqual(historyAfter[20].confirmations, 14);
+        assert.strictEqual(historyAfter[99].confirmations, 11);
+        assert.notStrictEqual(historyAfter[0].txid, history[99].txid);
+      });
+
+      it('should get wallet history after (asc w/ account)', async () => {
+        const history = await wclient.execute('listhistory',
+          [SINGLE_ACCOUNT, 10, false]);
+        const historyAfter = await wclient.execute('listhistoryafter',
+          [SINGLE_ACCOUNT, history[9].txid, 10, false]);
+
+        assert.strictEqual(historyAfter.length, 10);
+        assert.strictEqual(historyAfter[0].confirmations, 10);
+        assert.strictEqual(historyAfter[9].confirmations, 1);
+        assert.notStrictEqual(historyAfter[0].txid, history[9].txid);
+      });
+    });
+
+    describe('listhistorybytime', function() {
+      it('should get wallet history by time (desc)', async () => {
+        const time = Math.ceil(Date.now() / 1000);
+        // This will look latest first confirmed. (does not include unconfirmed)
+        const history = await wclient.execute('listhistorybytime',
+          ['*', time, 100, true]);
+
+        assert.strictEqual(history.length, 100);
+        assert.strictEqual(history[0].confirmations, 1);
+        assert.strictEqual(history[19].confirmations, 1);
+        assert.strictEqual(history[20].confirmations, 2);
+        assert.strictEqual(history[99].confirmations, 5);
+        assert(history[0].confirmations <= history[99].confirmations);
+      });
+
+      it('should get wallet history by time (desc w/ account)', async () => {
+        const time = Math.ceil(Date.now() / 1000);
+        const history = await wclient.execute('listhistorybytime',
+          [SINGLE_ACCOUNT, time, 100, true]);
+
+        assert.strictEqual(history.length, 20);
+        assert.strictEqual(history[0].confirmations, 1);
+        assert.strictEqual(history[19].confirmations, 20);
+        assert(history[0].confirmations <= history[19].confirmations);
+      });
+
+      it('should get wallet history by time (asc)', async () => {
+        const time = GENESIS_TIME;
+        const history = await wclient.execute('listhistorybytime',
+          ['*', time, 100, false]);
+
+        assert.strictEqual(history.length, 100);
+        assert.strictEqual(history[0].confirmations, 20);
+        assert.strictEqual(history[19].confirmations, 20);
+        assert.strictEqual(history[20].confirmations, 19);
+        assert.strictEqual(history[99].confirmations, 16);
+        assert(history[0].confirmations >= history[99].confirmations);
+      });
+
+      it('should get wallet history by time (asc w/ account)', async () => {
+        const time = GENESIS_TIME;
+        const history = await wclient.execute('listhistorybytime',
+          [SINGLE_ACCOUNT, time, 100, false]);
+
+        assert.strictEqual(history.length, 20);
+        assert.strictEqual(history[0].confirmations, 20);
+        assert.strictEqual(history[19].confirmations, 1);
+        assert(history[0].confirmations >= history[19].confirmations);
+      });
+    });
+
+    describe('listunconfirmed', function() {
+      it('should get wallet unconfirmed txs (desc)', async () => {
+        const unconfirmed = await wclient.execute('listunconfirmed',
+          ['*', 100, true]);
+
+        assert.strictEqual(unconfirmed.length, 20);
+        assert.strictEqual(unconfirmed[0].confirmations, 0);
+        assert.strictEqual(unconfirmed[19].confirmations, 0);
+        const a = unconfirmed[0].time;
+        const b = unconfirmed[19].time;
+        assert(a >= b);
+      });
+
+      it('should get wallet unconfirmed txs (desc w/ account)', async () => {
+        const unconfirmed = await wclient.execute('listunconfirmed',
+          [DEFAULT_ACCOUNT, 100, true]);
+
+        assert.strictEqual(unconfirmed.length, 20);
+        assert.strictEqual(unconfirmed[0].confirmations, 0);
+        assert.strictEqual(unconfirmed[19].confirmations, 0);
+        const a = unconfirmed[0].time;
+        const b = unconfirmed[19].time;
+        assert(a >= b);
+      });
+
+      it('should get wallet unconfirmed txs (asc)', async () => {
+        const unconfirmed = await wclient.execute('listunconfirmed',
+          ['*', 100, false]);
+
+        assert.strictEqual(unconfirmed.length, 20);
+        assert.strictEqual(unconfirmed[0].confirmations, 0);
+        assert.strictEqual(unconfirmed[19].confirmations, 0);
+        const a = unconfirmed[0].time;
+        const b = unconfirmed[19].time;
+        assert(a <= b);
+      });
+
+      it('should get wallet unconfirmed txs (asc w/ account)', async () => {
+        const unconfirmed = await wclient.execute('listunconfirmed',
+          [DEFAULT_ACCOUNT, 100, false]);
+
+        assert.strictEqual(unconfirmed.length, 20);
+        assert.strictEqual(unconfirmed[0].confirmations, 0);
+        assert.strictEqual(unconfirmed[19].confirmations, 0);
+        const a = unconfirmed[0].time;
+        const b = unconfirmed[19].time;
+        assert(a <= b);
+      });
+    });
+
+    describe('listunconfirmedafter', function() {
+      it('should get wallet unconfirmed txs after (desc)', async () => {
+        const unconfirmed = await wclient.execute('listunconfirmed',
+          ['*', 10, true]);
+        const unconfirmedAfter = await wclient.execute('listunconfirmedafter',
+          ['*', unconfirmed[9].txid, 10, true]);
+
+        assert.strictEqual(unconfirmedAfter.length, 10);
+        assert.strictEqual(unconfirmedAfter[0].confirmations, 0);
+        assert.strictEqual(unconfirmedAfter[9].confirmations, 0);
+        assert.notStrictEqual(unconfirmedAfter[0].txid, unconfirmed[9].txid);
+
+        const a = unconfirmedAfter[0].time;
+        const b = unconfirmedAfter[9].time;
+        assert(a >= b);
+      });
+
+      it('should get wallet unconfirmed txs after (desc w/ account)', async () => {
+        const unconfirmed = await wclient.execute('listunconfirmed',
+          [DEFAULT_ACCOUNT, 10, true]);
+        const unconfirmedAfter = await wclient.execute('listunconfirmedafter',
+          [DEFAULT_ACCOUNT, unconfirmed[9].txid, 10, true]);
+
+        assert.strictEqual(unconfirmedAfter.length, 10);
+        assert.strictEqual(unconfirmedAfter[0].confirmations, 0);
+        assert.strictEqual(unconfirmedAfter[9].confirmations, 0);
+        assert.notStrictEqual(unconfirmedAfter[0].txid, unconfirmed[9].txid);
+
+        const a = unconfirmedAfter[0].time;
+        const b = unconfirmedAfter[9].time;
+        assert(a >= b);
+      });
+
+      it('should get wallet unconfirmed txs after (asc)', async () => {
+        const unconfirmed = await wclient.execute('listunconfirmed',
+          ['*', 10, false]);
+        const unconfirmedAfter = await wclient.execute('listunconfirmedafter',
+          ['*', unconfirmed[9].txid, 10, false]);
+
+        assert.strictEqual(unconfirmedAfter.length, 10);
+        assert.strictEqual(unconfirmedAfter[0].confirmations, 0);
+        assert.strictEqual(unconfirmedAfter[9].confirmations, 0);
+        assert.notStrictEqual(unconfirmedAfter[0].txid, unconfirmed[9].txid);
+
+        const a = unconfirmedAfter[0].time;
+        const b = unconfirmedAfter[9].time;
+        assert(a <= b);
+      });
+
+      it('should get wallet unconfirmed txs after (asc w/ account)', async () => {
+        const unconfirmed = await wclient.execute('listunconfirmed',
+          [DEFAULT_ACCOUNT, 10, false]);
+        const unconfirmedAfter = await wclient.execute('listunconfirmedafter',
+          [DEFAULT_ACCOUNT, unconfirmed[9].txid, 10, false]);
+
+        assert.strictEqual(unconfirmedAfter.length, 10);
+        assert.strictEqual(unconfirmedAfter[0].confirmations, 0);
+        assert.strictEqual(unconfirmedAfter[9].confirmations, 0);
+        assert.notStrictEqual(unconfirmedAfter[0].txid, unconfirmed[9].txid);
+
+        const a = unconfirmedAfter[0].time;
+        const b = unconfirmedAfter[9].time;
+        assert(a <= b);
+      });
+    });
+
+    describe('listunconfirmedbytime', function() {
+      it('should get wallet unconfirmed txs by time (desc)', async () => {
+        const time = Math.ceil((Date.now() + 2000) / 1000);
+        const unconfirmed = await wclient.execute('listunconfirmedbytime',
+          ['*', time, 20, true]);
+
+        assert.strictEqual(unconfirmed.length, 20);
+        assert.strictEqual(unconfirmed[0].confirmations, 0);
+        assert.strictEqual(unconfirmed[19].confirmations, 0);
+        const a = unconfirmed[0].time;
+        const b = unconfirmed[19].time;
+        assert(a >= b);
+      });
+
+      it('should get wallet unconfirmed txs by time (desc w/ account)', async () => {
+        const time = Math.ceil((Date.now() + 2000) / 1000);
+        const unconfirmed = await wclient.execute('listunconfirmedbytime',
+          [DEFAULT_ACCOUNT, time, 20, true]);
+
+        assert.strictEqual(unconfirmed.length, 20);
+        assert.strictEqual(unconfirmed[0].confirmations, 0);
+        assert.strictEqual(unconfirmed[19].confirmations, 0);
+        const a = unconfirmed[0].time;
+        const b = unconfirmed[19].time;
+        assert(a >= b);
+      });
+
+      it('should get wallet unconfirmed txs by time (asc)', async () => {
+        const unconfirmed = await wclient.execute('listunconfirmedbytime',
+          ['*', unconfirmedTime, 20, false]);
+
+        assert.strictEqual(unconfirmed.length, 20);
+        assert.strictEqual(unconfirmed[0].confirmations, 0);
+        assert.strictEqual(unconfirmed[19].confirmations, 0);
+        const a = unconfirmed[0].time;
+        const b = unconfirmed[19].time;
+        assert(a <= b);
+      });
+
+      it('should get wallet unconfirmed txs by time (asc w/ account)', async () => {
+        const unconfirmed = await wclient.execute('listunconfirmedbytime',
+          [DEFAULT_ACCOUNT, unconfirmedTime, 20, false]);
+
+        assert.strictEqual(unconfirmed.length, 20);
+        assert.strictEqual(unconfirmed[0].confirmations, 0);
+        assert.strictEqual(unconfirmed[19].confirmations, 0);
+        const a = unconfirmed[0].time;
+        const b = unconfirmed[19].time;
+        assert(a <= b);
+      });
     });
   });
 });
