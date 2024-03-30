@@ -112,7 +112,17 @@ process and allows parallel rescans.
   - `GET /wallet/:id/tx/history` - The params are now `time`, `after`,
   `limit`, and `reverse`.
   - `GET /wallet/:id/tx/unconfirmed` - The params are are same as above.
-  These endpoints have been deprecated:
+
+These endpoints have been deprecated:
+  - `GET /wallet/:id/tx/range` - Instead use the `time` param for the history and
+    unconfirmed endpoints.
+  - `GET /wallet/:id/tx/last` - Instead use `reverse` param for the history and
+    unconfirmed endpoints.
+
+##### Wallet CLI (hsw-cli)
+  - `history` now accepts new args on top of `--account`: `--reverse`,
+    `--limit`, `--after`, `--after`.
+  - `pending` now accepts new args, same as above.
 
 ##### Examples
 

@@ -257,7 +257,10 @@ describe('Wallet', function() {
       const balance = await alice.getBalance();
       assert.strictEqual(balance.unconfirmed, 11000);
 
-      const txs = await alice.getHistory();
+      const txs = await alice.listHistory(-1, {
+        reverse: false,
+        limit: 100
+      });
       assert(txs.some((wtx) => {
         return wtx.hash.equals(f1.hash());
       }));
@@ -267,7 +270,10 @@ describe('Wallet', function() {
       const balance = await bob.getBalance();
       assert.strictEqual(balance.unconfirmed, 10000);
 
-      const txs = await bob.getHistory();
+      const txs = await bob.listHistory(-1, {
+        reverse: false,
+        limit: 100
+      });
       assert(txs.some((wtx) => {
         return wtx.tx.hash().equals(f1.hash());
       }));
@@ -287,7 +293,10 @@ describe('Wallet', function() {
       assert.strictEqual(balance.unconfirmed, 11000);
       assert.strictEqual(balance.confirmed, 11000);
 
-      const txs = await alice.getHistory();
+      const txs = await alice.listHistory(-1, {
+        limit: 100,
+        reverse: false
+      });
       assert(txs.some((wtx) => {
         return wtx.hash.equals(f1.hash());
       }));
@@ -298,7 +307,10 @@ describe('Wallet', function() {
       assert.strictEqual(balance.unconfirmed, 10000);
       assert.strictEqual(balance.confirmed, 10000);
 
-      const txs = await bob.getHistory();
+      const txs = await bob.listHistory(-1, {
+        limit: 100,
+        reverse: false
+      });
       assert(txs.some((wtx) => {
         return wtx.tx.hash().equals(f1.hash());
       }));
@@ -312,7 +324,10 @@ describe('Wallet', function() {
     await wdb.removeBlock(curBlock(wdb));
 
     {
-      const txs = await wallet.getHistory();
+      const txs = await wallet.listHistory(-1, {
+        limit: 100,
+        reverse: false
+      });
       assert.strictEqual(txs.length, 5);
 
       const total = txs.reduce((t, wtx) => {
@@ -341,7 +356,10 @@ describe('Wallet', function() {
     }
 
     {
-      const txs = await wallet.getHistory();
+      const txs = await wallet.listHistory(-1, {
+        limit: 100,
+        reverse: false
+      });
       assert.strictEqual(txs.length, 2);
 
       const total = txs.reduce((t, wtx) => {
@@ -642,7 +660,10 @@ describe('Wallet', function() {
       const balance = await alice.getBalance();
       assert.strictEqual(balance.unconfirmed, 11000);
 
-      const txs = await alice.getHistory();
+      const txs = await alice.listHistory(-1, {
+        limit: 100,
+        reverse: false
+      });
       assert(txs.some((wtx) => {
         return wtx.tx.hash().equals(f1.hash());
       }));
@@ -652,7 +673,11 @@ describe('Wallet', function() {
       const balance = await bob.getBalance();
       assert.strictEqual(balance.unconfirmed, 10000);
 
-      const txs = await bob.getHistory();
+      const txs = await bob.listHistory(-1, {
+        limit: 100,
+        reverse: false
+      });
+
       assert(txs.some((wtx) => {
         return wtx.tx.hash().equals(f1.hash());
       }));
@@ -1336,18 +1361,20 @@ describe('Wallet', function() {
     assert(t3.verify());
   });
 
-  it('should get range of txs', async () => {
+  it('should get pending range of txs', async () => {
     const wallet = currentWallet;
-    const txs = await wallet.getRange(null, {
-      start: util.now() - 1000
+    const txs = await wallet.listUnconfirmed(null, {
+      limit: 100,
+      reverse: false
     });
     assert.strictEqual(txs.length, 2);
   });
 
-  it('should get range of txs from account', async () => {
+  it('should get penidng range of txs from account', async () => {
     const wallet = currentWallet;
-    const txs = await wallet.getRange('foo', {
-      start: util.now() - 1000
+    const txs = await wallet.listUnconfirmed('foo', {
+      limit: 100,
+      reverse: false
     });
     assert.strictEqual(txs.length, 2);
   });
@@ -1357,8 +1384,9 @@ describe('Wallet', function() {
 
     let txs, err;
     try {
-      txs = await wallet.getRange('bad', {
-        start: 0xdeadbeef - 1000
+      txs = await wallet.listUnconfirmed('bad', {
+        limit: 100,
+        reverse: false
       });
     } catch (e) {
       err = e;
@@ -1471,8 +1499,9 @@ describe('Wallet', function() {
   it('should get details', async () => {
     const wallet = currentWallet;
 
-    const txs = await wallet.getRange('foo', {
-      start: util.now() - 1000
+    const txs = await wallet.listUnconfirmed('foo', {
+      limit: 100,
+      reverse: false
     });
 
     const details = await wallet.toDetails(txs);
@@ -1487,8 +1516,9 @@ describe('Wallet', function() {
 
     await wallet.rename('test');
 
-    const txs = await wallet.getRange('foo', {
-      start: util.now() - 1000
+    const txs = await wallet.listUnconfirmed('foo', {
+      limit: 100,
+      reverse: false
     });
 
     const details = await wallet.toDetails(txs);
@@ -1906,7 +1936,11 @@ describe('Wallet', function() {
     assert.strictEqual(pending.length, 0);
 
     // Check history for TX
-    const history = await wallet.getHistory();
+    const history = await wallet.listHistory(-1, {
+      limit: 100,
+      reverse: false
+    });
+
     const wtxs = await wallet.toDetails(history);
     assert.strictEqual(wtxs.length, 1);
     assert.bufferEqual(wtxs[0].hash, hash);

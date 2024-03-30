@@ -271,15 +271,29 @@ class CLI {
   }
 
   async getWalletHistory() {
-    const account = this.config.str('account');
-    const txs = await this.wallet.getHistory(account);
+    const options = {
+      account: this.config.str('account'),
+      limit: this.config.uint('limit'),
+      reverse: this.config.bool('reverse'),
+      after: this.config.str('after'),
+      time: this.config.uint('time')
+    };
+
+    const txs = await this.wallet.getHistory(options);
 
     this.log(txs);
   }
 
   async getWalletPending() {
-    const account = this.config.str('account');
-    const txs = await this.wallet.getPending(account);
+    const options = {
+      account: this.config.str('account'),
+      limit: this.config.uint('limit'),
+      reverse: this.config.bool('reverse'),
+      after: this.config.str('after'),
+      time: this.config.uint('time')
+    };
+
+    const txs = await this.wallet.getPending(options);
 
     this.log(txs);
   }
