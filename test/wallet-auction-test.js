@@ -846,7 +846,6 @@ describe('Wallet Auction', function() {
           ...historyOptions
         }));
 
-        console.log(txs.length);
         const wtxs = await wallet.toDetails(txs);
         for (const wtx of wtxs) {
           for (const output of wtx.outputs)
