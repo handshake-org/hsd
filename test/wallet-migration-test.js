@@ -1086,6 +1086,7 @@ describe('Wallet Migrations', function() {
     it('should migrate', async () => {
       walletDB.options.walletMigrate = 0;
 
+      walletDB.version = 3;
       await walletDB.open();
 
       // chain sync was reset.
