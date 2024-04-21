@@ -113,7 +113,7 @@ $ docker run --name hsd \
     --publish 12037:12037 \
     --volume $HOME/.hsd:/root/.hsd \
     hsd:$VERSION-$COMMIT \
-    --http-host 0.0.0.0 \
+    --http-host=0.0.0.0 \
     --api-key=foo
 ```
 
