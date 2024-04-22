@@ -117,6 +117,23 @@ $ docker run --name hsd \
     --api-key=foo
 ```
 
+If using Docker Compose, the `hsd` service should look something like this:
+
+```yaml
+services:
+  hsd:
+    image: ghcr.io/handshake-org/hsd:latest
+    restart: unless-stopped
+    container_name: hsd
+    volumes:
+      - $HOME/.hsd:/root/.hsd
+    ports:
+      - 12037:12037
+    command: >
+      --http-host=0.0.0.0
+      --api-key=foo
+```
+
 To test connectivity, curl the info endpoint:
 ```bash
 $ curl http://x:foo@localhost:12037/
@@ -138,3 +155,8 @@ To stop a container named `hsd`, run:
 $ docker stop hsd
 ```
 
+If using Docker Compose, run:
+
+```bash
+docker compose stop hsd
+```
