@@ -9,6 +9,8 @@ const Outpoint = require('../../lib/primitives/outpoint');
 
 const walletUtils = exports;
 
+const regtestTime = 1580745078;
+
 walletUtils.fakeBlock = (height) => {
   const prev = blake2b.digest(fromU32((height - 1) >>> 0));
   const hash = blake2b.digest(fromU32(height >>> 0));
@@ -18,7 +20,7 @@ walletUtils.fakeBlock = (height) => {
     hash: hash,
     prevBlock: prev,
     merkleRoot: root,
-    time: 500000000 + (height * (10 * 60)),
+    time: regtestTime + (height * (10 * 60)),
     bits: 0,
     nonce: 0,
     height: height,

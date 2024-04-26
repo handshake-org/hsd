@@ -242,7 +242,10 @@ describe('Wallet', function() {
       const balance = await alice.getBalance();
       assert.strictEqual(balance.unconfirmed, 11000);
 
-      const txs = await alice.getHistory();
+      const txs = await alice.listHistory(-1, {
+        reverse: false,
+        limit: 100
+      });
       assert(txs.some((wtx) => {
         return wtx.hash.equals(f1.hash());
       }));
@@ -252,7 +255,10 @@ describe('Wallet', function() {
       const balance = await bob.getBalance();
       assert.strictEqual(balance.unconfirmed, 10000);
 
-      const txs = await bob.getHistory();
+      const txs = await bob.listHistory(-1, {
+        reverse: false,
+        limit: 100
+      });
       assert(txs.some((wtx) => {
         return wtx.tx.hash().equals(f1.hash());
       }));
@@ -272,7 +278,10 @@ describe('Wallet', function() {
       assert.strictEqual(balance.unconfirmed, 11000);
       assert.strictEqual(balance.confirmed, 11000);
 
-      const txs = await alice.getHistory();
+      const txs = await alice.listHistory(-1, {
+        limit: 100,
+        reverse: false
+      });
       assert(txs.some((wtx) => {
         return wtx.hash.equals(f1.hash());
       }));
@@ -283,7 +292,10 @@ describe('Wallet', function() {
       assert.strictEqual(balance.unconfirmed, 10000);
       assert.strictEqual(balance.confirmed, 10000);
 
-      const txs = await bob.getHistory();
+      const txs = await bob.listHistory(-1, {
+        limit: 100,
+        reverse: false
+      });
       assert(txs.some((wtx) => {
         return wtx.tx.hash().equals(f1.hash());
       }));
@@ -297,7 +309,10 @@ describe('Wallet', function() {
     await wdb.removeBlock(curBlock(wdb));
 
     {
-      const txs = await wallet.getHistory();
+      const txs = await wallet.listHistory(-1, {
+        limit: 100,
+        reverse: false
+      });
       assert.strictEqual(txs.length, 5);
 
       const total = txs.reduce((t, wtx) => {
@@ -326,7 +341,10 @@ describe('Wallet', function() {
     }
 
     {
-      const txs = await wallet.getHistory();
+      const txs = await wallet.listHistory(-1, {
+        limit: 100,
+        reverse: false
+      });
       assert.strictEqual(txs.length, 2);
 
       const total = txs.reduce((t, wtx) => {
@@ -627,7 +645,10 @@ describe('Wallet', function() {
       const balance = await alice.getBalance();
       assert.strictEqual(balance.unconfirmed, 11000);
 
-      const txs = await alice.getHistory();
+      const txs = await alice.listHistory(-1, {
+        limit: 100,
+        reverse: false
+      });
       assert(txs.some((wtx) => {
         return wtx.tx.hash().equals(f1.hash());
       }));
@@ -637,7 +658,11 @@ describe('Wallet', function() {
       const balance = await bob.getBalance();
       assert.strictEqual(balance.unconfirmed, 10000);
 
-      const txs = await bob.getHistory();
+      const txs = await bob.listHistory(-1, {
+        limit: 100,
+        reverse: false
+      });
+
       assert(txs.some((wtx) => {
         return wtx.tx.hash().equals(f1.hash());
       }));
@@ -1321,18 +1346,20 @@ describe('Wallet', function() {
     assert(t3.verify());
   });
 
-  it('should get range of txs', async () => {
+  it('should get pending range of txs', async () => {
     const wallet = currentWallet;
-    const txs = await wallet.getRange(null, {
-      start: util.now() - 1000
+    const txs = await wallet.listUnconfirmed(null, {
+      limit: 100,
+      reverse: false
     });
     assert.strictEqual(txs.length, 2);
   });
 
-  it('should get range of txs from account', async () => {
+  it('should get penidng range of txs from account', async () => {
     const wallet = currentWallet;
-    const txs = await wallet.getRange('foo', {
-      start: util.now() - 1000
+    const txs = await wallet.listUnconfirmed('foo', {
+      limit: 100,
+      reverse: false
     });
     assert.strictEqual(txs.length, 2);
   });
@@ -1342,8 +1369,9 @@ describe('Wallet', function() {
 
     let txs, err;
     try {
-      txs = await wallet.getRange('bad', {
-        start: 0xdeadbeef - 1000
+      txs = await wallet.listUnconfirmed('bad', {
+        limit: 100,
+        reverse: false
       });
     } catch (e) {
       err = e;
@@ -1456,8 +1484,9 @@ describe('Wallet', function() {
   it('should get details', async () => {
     const wallet = currentWallet;
 
-    const txs = await wallet.getRange('foo', {
-      start: util.now() - 1000
+    const txs = await wallet.listUnconfirmed('foo', {
+      limit: 100,
+      reverse: false
     });
 
     const details = await wallet.toDetails(txs);
@@ -1472,8 +1501,9 @@ describe('Wallet', function() {
 
     await wallet.rename('test');
 
-    const txs = await wallet.getRange('foo', {
-      start: util.now() - 1000
+    const txs = await wallet.listUnconfirmed('foo', {
+      limit: 100,
+      reverse: false
     });
 
     const details = await wallet.toDetails(txs);
@@ -1758,10 +1788,13 @@ describe('Wallet', function() {
     const block100 = {
       height: 100,
       hash: Buffer.alloc(32, 0),
-      time: Date.now()
+      time: util.now()
     };
     const wtx0 = await wallet.txdb.getTX(tx0.hash());
-    await wallet.txdb.confirm(wtx0, block100);
+    await wallet.txdb.confirm(wtx0, block100, {
+      medianTime: await wdb.getMedianTimeTip(99, block100.time),
+      txIndex: 0
+    });
 
     ancs = await wallet.getPendingAncestors(tx2);
     assert.strictEqual(ancs.size, 1);
@@ -1770,10 +1803,13 @@ describe('Wallet', function() {
     const block101 = {
       height: 101,
       hash: Buffer.alloc(32, 1),
-      time: Date.now()
+      time: util.now()
     };
     const wtx1 = await wallet.txdb.getTX(tx1.hash());
-    await wallet.txdb.confirm(wtx1, block101);
+    await wallet.txdb.confirm(wtx1, block101, {
+      medianTime: await wdb.getMedianTimeTip(100, block101.time),
+      txIndex: 0
+    });
 
     ancs = await wallet.getPendingAncestors(tx2);
     assert.strictEqual(ancs.size, 0);
@@ -1861,14 +1897,16 @@ describe('Wallet', function() {
     const block = {
       height: 100,
       hash: Buffer.alloc(32),
-      time: Date.now()
+      time: util.now()
     };
 
     // Get TX from txdb
     const wtx = await wallet.txdb.getTX(hash);
-
     // Confirm TX with dummy block in txdb
-    const details = await wallet.txdb.confirm(wtx, block);
+    const details = await wallet.txdb.confirm(wtx, block, {
+      medianTime: await wdb.getMedianTimeTip(99, block.time),
+      txIndex: 0
+    });
     assert.bufferEqual(details.tx.hash(), hash);
 
     // Check balance
@@ -1883,7 +1921,11 @@ describe('Wallet', function() {
     assert.strictEqual(pending.length, 0);
 
     // Check history for TX
-    const history = await wallet.getHistory();
+    const history = await wallet.listHistory(-1, {
+      limit: 100,
+      reverse: false
+    });
+
     const wtxs = await wallet.toDetails(history);
     assert.strictEqual(wtxs.length, 1);
     assert.bufferEqual(wtxs[0].hash, hash);
@@ -1917,13 +1959,16 @@ describe('Wallet', function() {
     const block1 = {
       height: 99,
       hash: Buffer.alloc(32),
-      time: Date.now()
+      time: util.now()
     };
     // Get TX from txdb
     const wtx1 = await wallet.txdb.getTX(tx1.hash());
 
     // Confirm TX with dummy block in txdb
-    await wallet.txdb.confirm(wtx1, block1);
+    await wallet.txdb.confirm(wtx1, block1, {
+      medianTime: await wdb.getMedianTimeTip(98, block1.time),
+      txIndex: 0
+    });
 
     // Build TX to both addresses, known and unknown
     const mtx2 = new MTX();
@@ -1953,14 +1998,17 @@ describe('Wallet', function() {
     const block2 = {
       height: 100,
       hash: Buffer.alloc(32),
-      time: Date.now()
+      time: util.now()
     };
 
     // Get TX from txdb
     const wtx2 = await wallet.txdb.getTX(hash);
 
     // Confirm TX with dummy block in txdb
-    const details = await wallet.txdb.confirm(wtx2, block2);
+    const details = await wallet.txdb.confirm(wtx2, block2, {
+      medianTime: await wdb.getMedianTimeTip(99, block2.time),
+      txIndex: 0
+    });
     assert.bufferEqual(details.tx.hash(), hash);
 
     // Check balance
@@ -1983,7 +2031,9 @@ describe('Wallet', function() {
   });
 
   it('should throw error with missing outputs', async () => {
-    const wallet = new Wallet({});
+    const wallet = new Wallet({
+      options: {}
+    });
 
     let err = null;
 
@@ -2182,11 +2232,11 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
 
       // Add confirmed funding TX to wallet
-      await wallet.txdb.add(tx, block);
+      await txdbAdd(wallet, tx, block);
 
       // Check
       const bal = await wallet.getBalance();
@@ -2215,9 +2265,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(open, block);
+      await txdbAdd(wallet, open, block);
       start = wdb.height;
       cTXCount++;
 
@@ -2251,9 +2301,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(bid, block);
+      await txdbAdd(wallet, bid, block);
       cTXCount++;
 
       // Check
@@ -2286,9 +2336,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(reveal, block);
+      await txdbAdd(wallet, reveal, block);
       cTXCount++;
 
       // Check
@@ -2321,9 +2371,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(mtx.toTX(), block);
+      await txdbAdd(wallet, mtx.toTX(), block);
     });
 
     it('should send and confirm REGISTER', async () => {
@@ -2349,9 +2399,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(register, block);
+      await txdbAdd(wallet, register, block);
       cTXCount++;
 
       // Check
@@ -2390,9 +2440,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(transfer, block);
+      await txdbAdd(wallet, transfer, block);
       cTXCount++;
 
       // Check
@@ -2443,10 +2493,12 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(finalize, block);
-      await recip.txdb.add(finalize, block);
+
+      await txdbAdd(wallet, finalize, block);
+      await txdbAdd(recip, finalize, block);
+
       finalizeBlock = block.height;
       cTXCount++;
 
@@ -2479,8 +2531,21 @@ describe('Wallet', function() {
     });
 
     it('should disconnect FINALIZE', async () => {
-      await wallet.txdb.revert(finalizeBlock);
-      await recip.txdb.revert(finalizeBlock);
+      const walletBlock = await wallet.txdb.getBlock(finalizeBlock);
+      const walletHashes = walletBlock.toArray();
+      assert.strictEqual(walletHashes.length, 1);
+      await wallet.txdb.unconfirm(walletHashes[0], finalizeBlock, {
+        medianTime: walletBlock.time,
+        txIndex: 0
+      });
+
+      const recipBlock = await recip.txdb.getBlock(finalizeBlock);
+      const recipHashes = recipBlock.toArray();
+      assert.strictEqual(recipHashes.length, 1);
+      await recip.txdb.unconfirm(recipHashes[0], finalizeBlock, {
+        medianTime: recipBlock.time,
+        txIndex: 0
+      });
       cTXCount--;
 
       // Check
@@ -2548,11 +2613,11 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
 
       // Add confirmed funding TX to wallet
-      await wallet.txdb.add(tx, block);
+      await txdbAdd(wallet, tx, block);
 
       // Check
       const bal = await wallet.getBalance();
@@ -2580,9 +2645,10 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(open.toTX(), block);
+
+      await txdbAdd(wallet, open.toTX(), block);
       start = wdb.height;
       uTXCount++;
       cTXCount++;
@@ -2616,9 +2682,10 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(bid.toTX(), block);
+
+      await txdbAdd(wallet, bid.toTX(), block);
       uTXCount++;
       cTXCount++;
 
@@ -2651,9 +2718,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(reveal.toTX(), block);
+      await txdbAdd(wallet, reveal.toTX(), block);
       uTXCount++;
       cTXCount++;
 
@@ -2687,9 +2754,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(mtx.toTX(), block);
+      await txdbAdd(wallet, mtx.toTX(), block);
     });
 
     it('should confirm new REGISTER', async () => {
@@ -2712,9 +2779,10 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(register.toTX(), block);
+
+      await txdbAdd(wallet, register.toTX(), block);
       uTXCount++;
       cTXCount++;
 
@@ -2750,9 +2818,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(transfer.toTX(), block);
+      await txdbAdd(wallet, transfer.toTX(), block);
       uTXCount++;
       cTXCount++;
 
@@ -2785,9 +2853,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(finalize.toTX(), block);
+      await txdbAdd(wallet, finalize.toTX(), block);
       uTXCount++;
       cTXCount++;
 
@@ -2831,9 +2899,14 @@ describe('Wallet', function() {
       await node.close();
     });
 
-    async function mineBlock(tip) {
+    async function createBlock(tip) {
       const job = await miner.createJob(tip);
       const block = await job.mineAsync();
+      return block;
+    }
+
+    async function mineBlock(tip) {
+      const block = await createBlock(tip);
       return chain.add(block);
     }
 
@@ -2939,6 +3012,45 @@ describe('Wallet', function() {
         assert.strictEqual((await wallet.getBalance()).unconfirmed, 49000);
       } finally {
         await wclient.close();
+      }
+    });
+
+    it('should get same mtp for chain and wallet', async () => {
+      const assertSameMTP = async (mtp) => {
+        assert.strictEqual(wdb.state.height, chain.tip.height);
+
+        const chainMTP = await node.chain.getMedianTime(chain.tip);
+        const walletMTP = await wdb.getMedianTime(wdb.state.height);
+
+        assert.strictEqual(walletMTP, chainMTP);
+        if (mtp)
+          assert.strictEqual(mtp, chainMTP);
+      };
+
+      await assertSameMTP();
+
+      const times = [];
+      const mtp = await node.chain.getMedianTime(chain.tip);
+      times[chain.tip.height] = mtp;
+      for (let i = 0; i < 40; i++) {
+        const block = await createBlock(chain.tip);
+        const futureMTP = await wdb.getMedianTimeTip(chain.tip.height, block.time);
+        await chain.add(block);
+        await assertSameMTP(futureMTP);
+        const mtp = await node.chain.getMedianTime(chain.tip);
+        times[chain.tip.height] = mtp;
+      }
+
+      // revert all
+      for (let i = 0; i < 40; i++) {
+        const entry = chain.tip;
+        const mtp = await chain.getMedianTime(entry);
+        const tipMtp = await wdb.getMedianTimeTip(entry.height - 1, entry.time);
+        await assertSameMTP(times[entry.height]);
+        assert.strictEqual(tipMtp, times[entry.height]);
+        assert.strictEqual(tipMtp, mtp);
+
+        await chain.disconnect(entry);
       }
     });
   });
@@ -3182,11 +3294,11 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
 
       // Add confirmed funding TX to wallet
-      await wallet.txdb.add(tx, block);
+      await txdbAdd(wallet, tx, block);
 
       // Check
       const bal = await wallet.getBalance();
@@ -3215,9 +3327,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(open, block);
+      await txdbAdd(wallet, open, block);
       cTXCount++;
 
       // Check
@@ -3251,9 +3363,9 @@ describe('Wallet', function() {
       let block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(losingBid, block);
+      await txdbAdd(wallet, losingBid, block);
       cTXCount++;
 
       const losingBlindFromMtx = losingBid.outputs
@@ -3296,9 +3408,10 @@ describe('Wallet', function() {
       block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(winningBid, block);
+
+      await txdbAdd(wallet, winningBid, block);
       cTXCount++;
 
       const winningBlindFromMtx = winningBid.outputs
@@ -3340,9 +3453,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(reveal, block);
+      await txdbAdd(wallet, reveal, block);
       cTXCount++;
 
       const revealValueFromMtx = reveal.outputs.find(o => o.covenant.isReveal())
@@ -3370,9 +3483,9 @@ describe('Wallet', function() {
       const block2 = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(reveal2, block2);
+      await txdbAdd(wallet, reveal2, block2);
       cTXCount++;
 
       const reveal2ValueFromMtx = reveal.outputs.find(o =>
@@ -3416,9 +3529,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(redeem, block);
+      await txdbAdd(wallet, redeem, block);
       cTXCount++;
 
       // Check
@@ -3453,9 +3566,9 @@ describe('Wallet', function() {
       const block = {
         height: wdb.height + 1,
         hash: Buffer.alloc(32),
-        time: Date.now()
+        time: util.now()
       };
-      await wallet.txdb.add(register, block);
+      await txdbAdd(wallet, register, block);
       cTXCount++;
 
       // Check
@@ -3600,4 +3713,178 @@ describe('Wallet', function() {
       assert.strictEqual(await bob.txdb.hasBlind(expectedBlinds.bob), true);
     });
   });
+
+  describe('Wallet Zap', function () {
+    const DEFAULT = 'default';
+    const ALT = 'alt';
+
+    let workers = null;
+    /** @type {WalletDB} */
+    let wdb = null;
+    /** @type {Wallet} */
+    let wallet;
+
+    beforeEach(async () => {
+      workers = new WorkerPool({ enabled, size });
+      wdb = new WalletDB({ workers });
+      await workers.open();
+      await wdb.open();
+
+      wallet = wdb.primary;
+
+      const altAccount = await wallet.createAccount({
+        name: ALT
+      });
+
+      assert(altAccount);
+    });
+
+    afterEach(async () => {
+      await wdb.close();
+      await workers.close();
+    });
+
+    it('should zap all txs (wallet)', async () => {
+      const hashes = [];
+
+      for (const account of [DEFAULT, ALT]) {
+        for (let i = 0; i < 5; i++) {
+          const mtx = await dummyTX(wallet, account);
+          await wdb.addTX(mtx.toTX());
+          hashes.push(mtx.hash());
+        }
+      }
+
+      const txs = await wallet.listUnconfirmed(-1, {
+        limit: 20,
+        reverse: false
+      });
+
+      assert.strictEqual(txs.length, hashes.length);
+
+      // zap all
+      await wallet.zap(-1, 0);
+
+      const txsAfterZap = await wallet.listUnconfirmed(-1, {
+        limit: 20,
+        reverse: false
+      });
+
+      assert.strictEqual(txsAfterZap.length, 0);
+    });
+
+    it('should zap all txs (account)', async () => {
+      for (const account of [DEFAULT, ALT]) {
+        for (let i = 0; i < 5; i++) {
+          const mtx = await dummyTX(wallet, account);
+          await wdb.addTX(mtx.toTX());
+        }
+      }
+
+      const txs = await wallet.listUnconfirmed(-1, {
+        limit: 20,
+        reverse: false
+      });
+
+      assert.strictEqual(txs.length, 10);
+
+      // zap all
+      await wallet.zap(DEFAULT, 0);
+
+      const txsAfterZapAll = await wallet.listUnconfirmed(-1, {
+        limit: 20,
+        reverse: false
+      });
+
+      assert.strictEqual(txsAfterZapAll.length, 5);
+
+      const txsAfterZapAlt = await wallet.listUnconfirmed(ALT, {
+        limit: 20,
+        reverse: false
+      });
+
+      assert.strictEqual(txsAfterZapAlt.length, 5);
+    });
+
+    it('should zap last 2 txs (all)', async () => {
+      let time = 0;
+      wallet.txdb.nowFn = () => time++;
+      const hashes = [];
+
+      for (let i = 0; i < 2; i++) {
+        for (const account of [DEFAULT, ALT]) {
+          const mtx = await dummyTX(wallet, account);
+          // this increments/calls nowFn twice. One for
+          // wtx creation and another for unconfirmed index.
+          await wdb.addTX(mtx.toTX());
+          hashes.push(mtx.hash());
+        }
+      }
+
+      // zap will also call nowFn once. (0 - 3 time is incremented by first two)
+      const zapped = await wallet.zap(-1, time - 3);
+      assert.strictEqual(zapped.length, 2);
+
+      const txsAfterZap = await wallet.listUnconfirmed(-1, {
+        limit: 20,
+        reverse: false
+      });
+
+      assert.strictEqual(txsAfterZap.length, 2);
+      assert.deepStrictEqual(txsAfterZap.map(tx => tx.hash), hashes.slice(2));
+    });
+
+    it('should zap last 2 txs (account)', async () => {
+      let time = 0;
+      wallet.txdb.nowFn = () => time++;
+      const hashes = [];
+
+      for (let i = 0; i < 4; i++) {
+        for (const account of [DEFAULT, ALT]) {
+          const mtx = await dummyTX(wallet, account);
+          await wdb.addTX(mtx.toTX());
+          hashes.push(mtx.hash());
+        }
+      }
+
+      // two transactions from default
+      const zapped = await wallet.zap(DEFAULT, time - 5);
+      assert.strictEqual(zapped.length, 2);
+
+      const txsAfterZap = await wallet.listUnconfirmed(DEFAULT, {
+        limit: 20,
+        reverse: false
+      });
+
+      const txsAfterZapAll = await wallet.listUnconfirmed(-1, {
+        limit: 20,
+        reverse: false
+      });
+
+      assert.strictEqual(txsAfterZap.length, 2);
+      assert.strictEqual(txsAfterZapAll.length, 6);
+    });
+  });
 });
+
+async function txdbAdd(wallet, tx, block, txIndex = 0) {
+  return wallet.txdb.add(tx, block, {
+    medianTime: block.time,
+    txIndex
+  });
+};
+
+/**
+ * @param {Wallet} wallet
+ * @param {(String|Number)} [account]
+ * @param {Number} [value=10000]
+ * @returns {Promise<MTX>}
+ */
+
+async function dummyTX(wallet, account = 'default', value = 10000) {
+  const addr = await wallet.receiveAddress(account);
+  const mtx = new MTX();
+  mtx.addInput(dummyInput());
+  mtx.addOutput(addr, value);
+  return mtx;
+};
