@@ -2177,6 +2177,7 @@ describe('Wallet', function() {
 
     // Hack required to focus test on txdb mechanics.
     // We don't otherwise need WalletDB or Blockchain
+    // TODO: Remove this after #888 is merged.
     wdb.getRenewalBlock = () => {
       return network.genesis.hash;
     };
@@ -2341,6 +2342,7 @@ describe('Wallet', function() {
       );
 
       const mtx = new MTX();
+      mtx.addInput(dummyInput());
       mtx.outputs.push(output);
 
       // Confirm external REVEAL
@@ -2546,6 +2548,7 @@ describe('Wallet', function() {
 
     // Hack required to focus test on txdb mechanics.
     // We don't otherwise need WalletDB or Blockchain
+    // TODO: Remove this after #888 is merged.
     wdb.getRenewalBlock = () => {
       return network.genesis.hash;
     };
@@ -2707,6 +2710,7 @@ describe('Wallet', function() {
       );
 
       const mtx = new MTX();
+      mtx.addInput(dummyInput());
       mtx.outputs.push(output);
 
       // Confirm external REVEAL
@@ -3180,6 +3184,7 @@ describe('Wallet', function() {
 
     // Hack required to focus test on txdb mechanics.
     // We don't otherwise need WalletDB or Blockchain
+    // TODO: Remove this after #888 is merged.
     wdb.getRenewalBlock = () => {
       return network.genesis.hash;
     };
@@ -3624,6 +3629,141 @@ describe('Wallet', function() {
       // but blinds for all keys are saved in db
       assert.strictEqual(await bob.txdb.hasBlind(expectedBlinds.alice), true);
       assert.strictEqual(await bob.txdb.hasBlind(expectedBlinds.bob), true);
+    });
+  });
+
+  describe('Bid and Reveal by Reveal and Bid', function () {
+    const network = Network.get('regtest');
+    const wdb = new WalletDB({ network });
+
+    // Hack required to focus test on txdb mechanics.
+    // We don't otherwise need WalletDB or Blockchain
+    // TODO: Remove this after #888 is merged.
+    wdb.getRenewalBlock = () => {
+      return network.genesis.hash;
+    };
+
+    const mineBlocks = async (count) => {
+      for (let i = 0; i < count; i++) {
+        await wdb.addBlock(nextEntry(wdb), []);
+      }
+    };
+
+    const NAME = 'testname';
+    const NAMEHASH = rules.hashString(NAME);
+    let wallet;
+
+    const BASE_BID = 1e6;
+    const BASE_LOCKUP = 2e6;
+    const BID_COUNT = 5;
+    const bids = [];
+    let revealMTX;
+
+    before(async () => {
+      await wdb.open();
+      await wdb.connect();
+
+      wallet = await wdb.create();
+
+      // rollout all names
+      wdb.height = 52 * 144 * 7;
+      wdb.state.height = 52 * 144 * 7;
+    });
+
+    after(async () => {
+      await wdb.disconnect();
+      await wdb.close();
+    });
+
+    it('should fund wallet', async () => {
+      const addr = await wallet.receiveAddress();
+
+      const txs = [];
+      for (let i = 0; i < BID_COUNT; i++) {
+        const mtx = new MTX();
+        mtx.addOutpoint(new Outpoint(Buffer.alloc(32), 0));
+        mtx.addOutput(addr, 20e6);
+        txs.push(mtx.toTX());
+      }
+
+      await wdb.addBlock(nextEntry(wdb), txs);
+    });
+
+    it('should open names', async () => {
+      const open = await wallet.createOpen(NAME);
+      await wdb.addBlock(nextEntry(wdb), [open.toTX()]);
+      await mineBlocks(network.names.treeInterval + 1);
+    });
+
+    it('should create and get bid', async () => {
+      for (let i = 0; i < BID_COUNT; i++) {
+        const bid = await wallet.createBid(NAME, BASE_BID + i, BASE_LOCKUP + i);
+        await wdb.addTX(bid.toTX());
+        bids.push(bid);
+      }
+
+      const txs = bids.map(b => b.toTX());
+      await wdb.addBlock(nextEntry(wdb), txs);
+
+      for (const [index, bid] of bids.entries()) {
+        const bidOut = bid.outpoint(0);
+        const blindBid = await wallet.getBid(NAMEHASH, bidOut);
+        assert.ok(blindBid);
+        assert.bufferEqual(blindBid.nameHash, NAMEHASH);
+        assert.bufferEqual(blindBid.prevout.hash, bid.hash());
+        assert.strictEqual(blindBid.prevout.index, 0);
+        assert.strictEqual(blindBid.lockup, BASE_LOCKUP + index);
+        assert.strictEqual(blindBid.height, wdb.state.height);
+        assert.strictEqual(blindBid.own, true);
+      }
+
+      await mineBlocks(network.names.biddingPeriod);
+    });
+
+    it('should create and get reveal', async () => {
+      revealMTX = await wallet.createReveal(NAME);
+      await wdb.addBlock(nextEntry(wdb), [revealMTX.toTX()]);
+
+      for (const [index, out] of revealMTX.outputs.entries()) {
+        if (!out.covenant.isReveal())
+          continue;
+
+        const revealOut = revealMTX.outpoint(index);
+        const bidReveal = await wallet.getReveal(NAMEHASH, revealOut);
+
+        assert.ok(bidReveal);
+        assert.bufferEqual(bidReveal.prevout.hash, revealMTX.hash());
+        assert.strictEqual(bidReveal.prevout.index, index);
+        assert.bufferEqual(bidReveal.nameHash, NAMEHASH);
+        assert.strictEqual(bidReveal.height, wdb.state.height);
+        assert.strictEqual(bidReveal.own, true);
+      }
+    });
+
+    it('should get reveal by bid', async () => {
+      for (const [index, bidTX] of bids.entries()) {
+        const bidOut = bidTX.outpoint(0);
+        const bidReveal = await wallet.getRevealByBid(NAMEHASH, bidOut);
+        assert.ok(bidReveal);
+
+        assert.bufferEqual(bidReveal.bidPrevout.hash, bidOut.hash);
+        assert.strictEqual(bidReveal.bidPrevout.index, bidOut.index);
+        assert.strictEqual(bidReveal.value, BASE_BID + index);
+      }
+    });
+
+    it('should get bid by reveal', async () => {
+      for (const bidTX of bids) {
+        const bidOut = bidTX.outpoint(0);
+        const bidReveal = await wallet.getRevealByBid(NAMEHASH, bidOut);
+        assert.ok(bidReveal);
+
+        const origBlindBid = await wallet.getBid(NAMEHASH, bidOut);
+        const blindBid = await wallet.getBidByReveal(NAMEHASH,
+          new Outpoint(bidReveal.prevout.hash, bidReveal.prevout.index));
+
+        assert.deepStrictEqual(blindBid, origBlindBid);
+      }
     });
   });
 });
