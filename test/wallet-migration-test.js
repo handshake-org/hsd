@@ -572,6 +572,7 @@ describe('Wallet Migrations', function() {
       };
 
       walletDB.options.walletMigrate = 0;
+      walletDB.version = 2;
 
       await walletDB.open();
       const wallet = walletDB.primary;

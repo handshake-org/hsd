@@ -877,6 +877,7 @@ describe('Wallet HTTP', function() {
       // the first bids of this test suite
       assert.equal(bids.length, 3);
       assert.ok(bids.every(bid => bid.name === name));
+      assert.ok(bids.every(bid => bid.height === nodeCtx.height));
 
       // tx1
       assert.ok(bids.find(bid =>
@@ -930,6 +931,8 @@ describe('Wallet HTTP', function() {
         const bids = await wallet.getBidsByName(name);
         assert.equal(bids.length, 2);
 
+        assert.ok(bids.every(bid => bid.height === nodeCtx.height));
+
         // there is no value property on bids
         // from other wallets
         assert.ok(bids.find(bid =>
@@ -949,6 +952,7 @@ describe('Wallet HTTP', function() {
         assert.equal(bids.length, 1);
         const [bid] = bids;
         assert.equal(bid.prevout.hash, tx1.hash);
+        assert.strictEqual(bid.height, nodeCtx.height);
       }
     });
 
@@ -1010,6 +1014,20 @@ describe('Wallet HTTP', function() {
 
       const reveals = json.outputs.filter(output => output.covenant.type === types.REVEAL);
       assert.equal(reveals.length, 3);
+
+      ownedNames.push(name);
+
+      await nodeCtx.mineBlocks(1, cbAddress);
+
+      const allReveals = await wallet.getReveals();
+      assert.strictEqual(allReveals.length, 3);
+      assert.ok(allReveals.every(reveal => reveal.name === name));
+      assert.ok(allReveals.every(reveal => reveal.height === nodeCtx.height));
+
+      const revealsByName = await wallet.getRevealsByName(name);
+      assert.strictEqual(revealsByName.length, 3);
+      assert.ok(revealsByName.every(reveal => reveal.name === name));
+      assert.ok(revealsByName.every(reveal => reveal.height === nodeCtx.height));
     });
 
     it('should get all reveals (single player)', async () => {
@@ -1059,12 +1077,14 @@ describe('Wallet HTTP', function() {
 
       {
         const reveals = await wallet.getReveals();
-        assert.equal(reveals.length, 2);
+        assert.equal(reveals.length, 5);
       }
 
       {
         // a single reveal per name
         const reveals = await wallet.getRevealsByName(name);
+        const [reveal] = reveals;
+        assert.strictEqual(reveal.height + revealPeriod, nodeCtx.height);
         assert.equal(reveals.length, 1);
       }
     });
@@ -1123,23 +1143,31 @@ describe('Wallet HTTP', function() {
 
       {
         const reveals = await wallet.getRevealsByName(name, {own: true});
-        assert.equal(reveals.length, 1);
+        assert.strictEqual(reveals.length, 1);
         const [reveal] = reveals;
-        assert.equal(reveal.own, true);
-        assert.equal(reveal.prevout.hash, r1.hash);
+        assert.strictEqual(reveal.bidPrevout.hash, state.bids[0].hash);
+        assert.strictEqual(reveal.bidPrevout.index, 0);
+        assert.strictEqual(reveal.own, true);
+        assert.strictEqual(reveal.prevout.hash, r1.hash);
       }
 
       {
         const reveals = await wallet.getRevealsByName(name);
-        assert.equal(reveals.length, 2);
+        assert.strictEqual(reveals.length, 2);
 
-        assert.ok(reveals.find(reveal =>
-          reveal.prevout.hash === r1.hash
-        ));
+        const r1 = reveals.find(reveal =>
+          reveal.prevout.hash === state.reveals[0].hash);
+        const r2 = reveals.find(reveal =>
+          reveal.prevout.hash === state.reveals[1].hash);
 
-        assert.ok(reveals.find(reveal =>
-          reveal.prevout.hash === r2.hash
-        ));
+        assert.ok(r1);
+        assert.ok(r2);
+
+        assert.strictEqual(r1.bidPrevout.hash, state.bids[0].hash);
+        assert.strictEqual(r1.bidPrevout.index, 0);
+
+        assert.strictEqual(r2.bidPrevout.hash, state.bids[1].hash);
+        assert.strictEqual(r2.bidPrevout.index, 0);
       }
     });
 
