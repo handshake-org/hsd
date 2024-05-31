@@ -25,6 +25,8 @@ const Wallet = require('../lib/wallet/wallet');
 const rules = require('../lib/covenants/rules');
 const {forValue} = require('./util/common');
 const wutils = require('./util/wallet');
+const {ownership} = require('../lib/covenants/ownership');
+const {CachedStubResolver, STUB_SERVERS} = require('./util/stub');
 const {
   dummyInput,
   curBlock,
@@ -54,6 +56,19 @@ let watchWallet = null;
 
 describe('Wallet', function() {
   this.timeout(5000);
+
+  const originalResolver = ownership.Resolver;
+  const originalServers = ownership.servers;
+
+  before(() => {
+    ownership.Resolver = CachedStubResolver;
+    ownership.servers = STUB_SERVERS;
+  });
+
+  after(() => {
+    ownership.Resolver = originalResolver;
+    ownership.servers = originalServers;
+  });
 
   it('should open walletdb', async () => {
     network.coinbaseMaturity = 1;
