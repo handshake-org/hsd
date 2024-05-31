@@ -33,7 +33,7 @@ const rules = require('../lib/covenants/rules');
 const NameState = require('../lib/covenants/namestate');
 const {states} = NameState;
 const {ownership} = require('../lib/covenants/ownership');
-const {CachedStubResolver} = require('./util/stub');
+const {CachedStubResolver, STUB_SERVERS} = require('./util/stub');
 
 const ONE_HASH = Buffer.alloc(32, 0x00);
 ONE_HASH[0] = 0x01;
@@ -77,13 +77,16 @@ describe('Mempool', function() {
   this.timeout(5000);
 
   const originalResolver = ownership.Resolver;
+  const originalServers = ownership.servers;
 
   before(() => {
     ownership.Resolver = CachedStubResolver;
+    ownership.servers = STUB_SERVERS;
   });
 
   after(() => {
     ownership.Resolver = originalResolver;
+    ownership.servers = originalServers;
   });
 
   describe('Mempool TXs', function() {

@@ -8,7 +8,7 @@ const rules = require('../lib/covenants/rules');
 const {states} = require('../lib/covenants/namestate');
 const {Resource} = require('../lib/dns/resource');
 const {forEvent} = require('./util/common');
-const {CachedStubResolver} = require('./util/stub');
+const {CachedStubResolver, STUB_SERVERS} = require('./util/stub');
 const NodeContext = require('./util/node-context');
 
 const network = Network.get('regtest');
@@ -23,13 +23,16 @@ const ACTUAL_RENEWAL_WINDOW = renewalWindow;
 
 describe('Mempool Invalidation', function() {
   const originalResolver = ownership.Resolver;
+  const originalServers = ownership.servers;
 
   before(() => {
     ownership.Resolver = CachedStubResolver;
+    ownership.servers = STUB_SERVERS;
   });
 
   after(() => {
     ownership.Resolver = originalResolver;
+    ownership.servers = originalServers;
   });
 
   const NAMES = [

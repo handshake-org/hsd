@@ -10,7 +10,7 @@ const chainCommon = require('../lib/blockchain/common');
 const {BufferMap} = require('buffer-map');
 const {thresholdStates} = chainCommon;
 const {isReserved, isLockedUp, hashName} = require('../lib/covenants/rules');
-const {CachedStubResolver} = require('./util/stub');
+const {CachedStubResolver, STUB_SERVERS} = require('./util/stub');
 
 const SOFT_FORK_NAME = 'icannlockup';
 
@@ -54,13 +54,16 @@ describe('BIP9 - ICANN lockup (integration)', function() {
   this.timeout(20000);
 
   const originalResolver = ownership.Resolver;
+  const originalServers = ownership.servers;
 
   before(() => {
     ownership.Resolver = CachedStubResolver;
+    ownership.servers = STUB_SERVERS;
   });
 
   after(() => {
     ownership.Resolver = originalResolver;
+    ownership.servers = originalServers;
   });
 
   const CUSTOM = [

@@ -14,7 +14,7 @@ const Address = require('../lib/primitives/address');
 const Script = require('../lib/script/script');
 const common = require('../lib/blockchain/common');
 const {ownership} = require('../lib/covenants/ownership');
-const {CachedStubResolver} = require('./util/stub');
+const {CachedStubResolver, STUB_SERVERS} = require('./util/stub');
 const VERIFY_NONE = common.flags.VERIFY_NONE;
 
 const node = new FullNode({
@@ -51,21 +51,24 @@ describe('Disable TXs', function() {
   let utxo, lastTX;
 
   const originalResolver = ownership.Resolver;
+  const originalServers = ownership.servers;
 
   before(async () => {
+    ownership.Resolver = CachedStubResolver;
+    ownership.servers = STUB_SERVERS;
     node.network.txStart = 5;
     await node.open();
 
     // Start with one block for the fakeClaim
     const block = await node.miner.mineBlock();
     assert(await node.chain.add(block));
-    ownership.Resolver = CachedStubResolver;
   });
 
   after(async () => {
-    await node.close();
     node.network.txStart = RESET_TXSTART;
     ownership.Resolver = originalResolver;
+    ownership.servers = originalServers;
+    await node.close();
   });
 
   it('should reject tx from mempool before txStart', async () => {
