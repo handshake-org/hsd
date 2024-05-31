@@ -1,6 +1,6 @@
 {
   "env": {
-    "es2022": true,
+    "es2024": true,
     "node": true
   },
   "extends": "eslint:recommended",
@@ -35,7 +35,7 @@
     }
   ],
   "parserOptions": {
-    "ecmaVersion": 13,
+    "ecmaVersion": "latest",
     "ecmaFeatures": {
       "globalReturn": true
     },

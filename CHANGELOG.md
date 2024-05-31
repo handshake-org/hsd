@@ -38,6 +38,9 @@ process and allows parallel rescans.
     - expects ws hook for `block rescan interactive` params `rawEntry, rawTXs`
       that returns scanAction object.
     - expects ws hook for `block rescan interactive abort` param `message`.
+  - Add `getMempoolRejectionFilter` and `checkMempoolRejectionFilter` NodeClient
+  aliases.
+  - Add `getFee`, an HTTP alternative to estimateFee socket call.
 
 ### Wallet Changes
 #### Configuration
@@ -58,11 +61,13 @@ process and allows parallel rescans.
   - `open()` no longer calls scan, instead only rollbacks and waits for
     sync to do the rescan.
   - emits events for: `open`, `close`, `connect`, `disconnect`, `sync done`.
-- HTTP Changes:
+
+### Wallet HTTP Client
   - All transaction creating endpoints now accept `hardFee` for specifying the
     exact fee.
   - All transaction sending endpoints now fundlock/queue tx creation. (no more
     conflicting transactions)
+  - Add options to `getNames` for passing `own`.
 
 ## v6.0.0
 
