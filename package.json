@@ -20,27 +20,27 @@
     "node": ">=14.0.0"
   },
   "dependencies": {
-    "bcfg": "~0.2.1",
+    "bcfg": "~0.2.2",
     "bcrypto": "~5.4.0",
-    "bcurl": "^0.2.0",
-    "bdb": "~1.5.1",
+    "bcurl": "~0.2.1",
+    "bdb": "~1.6.0",
     "bdns": "~0.1.5",
-    "bevent": "~0.1.5",
+    "bevent": "~0.1.6",
     "bfile": "~0.2.3",
     "@handshake-org/bfilter": "~2.3.0",
-    "bheep": "~0.1.5",
-    "binet": "~0.3.7",
-    "blgr": "~0.2.0",
-    "blru": "~0.1.6",
-    "blst": "~0.1.5",
-    "bmutex": "~0.1.6",
+    "bheep": "~0.1.6",
+    "binet": "~0.3.9",
+    "blgr": "~0.2.1",
+    "blru": "~0.1.7",
+    "blst": "~0.1.6",
+    "bmutex": "~0.1.7",
     "bns": "~0.15.0",
-    "bsert": "~0.0.12",
+    "bsert": "~0.0.13",
     "bsock": "~0.1.11",
     "bsocks": "~0.2.6",
     "btcp": "~0.1.5",
     "buffer-map": "~0.0.7",
-    "bufio": "~1.2.0",
+    "bufio": "~1.2.1",
     "bupnp": "~0.2.6",
     "bval": "~0.1.8",
     "bweb": "~0.2.0",
@@ -49,7 +49,7 @@
     "urkel": "~1.0.3"
   },
   "devDependencies": {
-    "bmocha": "^2.1.8"
+    "bmocha": "^2.2.0"
   },
   "main": "./lib/hsd.js",
   "bin": {
