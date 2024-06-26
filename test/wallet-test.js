@@ -1998,7 +1998,7 @@ describe('Wallet', function() {
   });
 
   it('should throw error with missing outputs', async () => {
-    const wallet = new Wallet({});
+    const wallet = new Wallet({ options: {} });
 
     let err = null;
 
@@ -2010,6 +2010,17 @@ describe('Wallet', function() {
 
     assert(err);
     assert.equal(err.message, 'At least one output is required.');
+  });
+
+  it('should pass nowFn to the txdb', async () => {
+    const nowFn = () => 1;
+    const wallet = new Wallet({
+      options: {
+        nowFn
+      }
+    });
+
+    assert.strictEqual(wallet.txdb.nowFn(), nowFn());
   });
 
   it('should cleanup', async () => {
