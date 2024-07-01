@@ -950,6 +950,93 @@ describe('Wallet Migrations', function() {
       await walletDB.close();
     });
   });
+
+  describe('Bid Reveal Migration (integration)', function() {
+    const location = testdir('wallet-bid-reveal');
+    const migrationsBAK = WalletMigrator.migrations;
+    const data = require('./data/migrations/wallet-4-bid-reveal.json');
+    const Migration = WalletMigrator.MigrateBidRevealEntries;
+    const layout = Migration.layout();
+
+    const walletOptions = {
+      prefix: location,
+      memory: false,
+      network
+    };
+
+    let walletDB, ldb;
+    before(async () => {
+      WalletMigrator.migrations = {};
+      await fs.mkdirp(location);
+
+      walletDB = new WalletDB(walletOptions);
+      ldb = walletDB.db;
+
+      await ldb.open();
+
+      const b = ldb.batch();
+      for (const [key, value] of Object.entries(data.before)) {
+        const bkey = Buffer.from(key, 'hex');
+        const bvalue = Buffer.from(value, 'hex');
+
+        b.put(bkey, bvalue);
+      }
+      await b.write();
+
+      await ldb.close();
+    });
+
+    after(async () => {
+      WalletMigrator.migrations = migrationsBAK;
+      await rimraf(location);
+    });
+
+    beforeEach(async () => {
+      walletDB = new WalletDB(walletOptions);
+      ldb = walletDB.db;
+    });
+
+    afterEach(async () => {
+      if (ldb.opened)
+        await ldb.close();
+    });
+
+    it('should have before entries', async () => {
+      walletDB.version = 2;
+      await walletDB.open();
+      await checkVersion(ldb, layout.wdb.V.encode(), 2);
+      await checkEntries(ldb, data.before);
+      await walletDB.close();
+    });
+
+    it('should enable wallet migration', () => {
+      WalletMigrator.migrations = {
+        0: Migration
+      };
+    });
+
+    it('should fail without migrate flag', async () => {
+      const expectedError = migrationError(WalletMigrator.migrations, [0],
+          wdbFlagError(0));
+
+      await assert.rejects(async () => {
+        await walletDB.open();
+      }, {
+        message: expectedError
+      });
+
+      await ldb.close();
+    });
+
+    it('should migrate', async () => {
+      walletDB.options.walletMigrate = 0;
+
+      await walletDB.open();
+      // check we have migrated entries.
+      await checkEntries(ldb, data.after);
+      await walletDB.close();
+    });
+  });
 });
 
 function writeVersion(b, name, version) {
@@ -971,4 +1058,25 @@ function getVersion(data, name) {
     throw new Error(error);
 
   return data.readUInt32LE(name.length);
+}
+
+async function checkVersion(db, versionDBKey, expectedVersion) {
+  const data = await db.get(versionDBKey);
+  const version = getVersion(data, 'wallet');
+
+  assert.strictEqual(version, expectedVersion);
+}
+
+async function checkEntries(db, data) {
+  for (const [key, value] of Object.entries(data)) {
+    const bkey = Buffer.from(key, 'hex');
+    const bvalue = Buffer.from(value, 'hex');
+
+    const stored = await db.get(bkey);
+
+    assert(stored,
+      `Value for ${key} not found in db, expected: ${value}`);
+    assert.bufferEqual(stored, bvalue,
+      `Value for ${key}: ${stored.toString('hex')} does not match expected: ${value}`);
+  }
 }

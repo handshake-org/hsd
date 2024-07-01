@@ -1169,6 +1169,26 @@ describe('Wallet HTTP', function() {
         assert.strictEqual(r2.bidPrevout.hash, state.bids[1].hash);
         assert.strictEqual(r2.bidPrevout.index, 0);
       }
+
+      const dump = await nodeCtx.wdb.dump();
+      const dumpSlice = {};
+
+      Object.keys(dump).filter((key) => {
+        const wid1 = '7400000001';
+        // txdblayout.t
+        if (key.startsWith(wid1 + '74'))
+          dumpSlice[key] = dump[key];
+
+        // txdblayout.i
+        if (key.startsWith(wid1 + '69'))
+          dumpSlice[key] = dump[key];
+
+        // txdblayout.B
+        if (key.startsWith(wid1 + '42'))
+          dumpSlice[key] = dump[key];
+      });
+
+      console.log(dumpSlice);
     });
 
     it('should get auction info', async () => {
