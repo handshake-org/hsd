@@ -71,6 +71,7 @@ process and allows parallel rescans.
   - All transaction sending endpoints now fundlock/queue tx creation. (no more
     conflicting transactions)
   - Add options to `getNames` for passing `own`.
+  - Rename `createAuctionTxs` to `createAuctionTXs`.
 
 
 ## v6.0.0
