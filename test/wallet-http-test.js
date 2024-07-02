@@ -1190,7 +1190,7 @@ describe('Wallet HTTP', function() {
       const bidValue = 1000000;
       const lockupValue = 5000000;
 
-      const auctionTxs = await wallet.client.post(
+      const auctionTXs = await wallet.client.post(
         `/wallet/${wallet.id}/auction`,
         {
           name: name,
@@ -1204,7 +1204,7 @@ describe('Wallet HTTP', function() {
 
       let walletAuction = await wallet.getAuctionByName(name);
       const bidFromWallet = walletAuction.bids.find(
-        b => b.prevout.hash === auctionTxs.bid.hash
+        b => b.prevout.hash === auctionTXs.bid.hash
       );
       assert(bidFromWallet);
 
@@ -1216,7 +1216,7 @@ describe('Wallet HTTP', function() {
       assert.equal(b5.lockedConfirmed - lockConfirmedBeforeTest, lockupValue);
       assert.equal(b5.lockedUnconfirmed - lockUnconfirmedBeforeTest, lockupValue);
 
-      await nclient.broadcast(auctionTxs.reveal.hex);
+      await nclient.broadcast(auctionTXs.reveal.hex);
       await nodeCtx.mineBlocks(1, cbAddress);
 
       // Confirmed REVEAL with highest bid makes wallet the owner
@@ -1224,7 +1224,7 @@ describe('Wallet HTTP', function() {
 
       walletAuction = await wallet.getAuctionByName(name);
       const revealFromWallet = walletAuction.reveals.find(
-        b => b.prevout.hash === auctionTxs.reveal.hash
+        b => b.prevout.hash === auctionTXs.reveal.hash
       );
       assert(revealFromWallet);
 
