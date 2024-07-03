@@ -60,6 +60,22 @@ walletUtils.curEntry = (wdb, prevSeed = 0, seed = prevSeed) => {
   return walletUtils.fakeEntry(wdb.state.height, seed);
 };
 
+walletUtils.dumpWDB = async (wdb, prefixes) => {
+  const data = await wdb.dump();
+  const filtered = {};
+
+  for (const [key, value] of Object.entries(data)) {
+    for (const prefix of prefixes) {
+      if (key.startsWith(prefix)) {
+        filtered[key] = value;
+        break;
+      }
+    }
+  }
+
+  return filtered;
+};
+
 function fromU32(num) {
   const data = Buffer.allocUnsafe(4);
   data.writeUInt32LE(num, 0, true);

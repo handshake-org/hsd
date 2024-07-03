@@ -64,6 +64,24 @@ migration to run specific to that db.
 incremented from there. (Currently, wallet and chain both have one migration)
 
 ## Writing migrations
+### Migration requirements
+  1. Migration must not depend on the methods, but instead interact
+  with the database directly. This makes sure that future code changes
+  to the chain/wallet db do not affect old migrations. Especially if someone
+  is upgrading multiple versions at once.
+  2. Migration must allow for interruption. Using batch provided to the migration
+  is useful for this purpose. If migration does not utilize the provided batch,
+  it should be possible to stop the migration and resume or restart it later.
+  This makes sure that interruption by user or the system does not corrupt
+  the database.
+  3. Each migration should copy the existing db keys and use those
+  in the migration, instead of depending on layout. Future updates may modify
+  the layout and break old migrations.
+  4. Migration Tests should also follow the same 3 rules.
+
+NOTE: Migration tests can use database dumps from the previous/current versions.
+NOTE: Migration test db generation must be deterministic.
+
 ### Databases and migrations
   HSD has two separate databases with their own migrations: ChainDB and
 WalletDB. Depending which database your migration affects, you will need to

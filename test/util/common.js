@@ -237,6 +237,10 @@ common.enableLogger = () => {
   Logger.global.closed = false;
 };
 
+common.prefix2hex = function prefix2hex(prefix) {
+  return Buffer.from(prefix, 'ascii').toString('hex');
+};
+
 function parseUndo(data) {
   const br = bio.read(data);
   const items = [];

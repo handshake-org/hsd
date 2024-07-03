@@ -473,6 +473,70 @@ describe('Wallet Migrations', function() {
     });
   });
 
+  describe('Migrations #0 & #1 (data)', function() {
+    const location = testdir('migrate-wallet-0-1-int');
+    const migrationBAK = WalletMigrator.migrations;
+    const data = require('./data/migrations/wallet-0-migrate-migrations.json');
+    const Migration = WalletMigrator.MigrateMigrations;
+    const layout = Migration.layout();
+
+    const walletOptions = {
+      prefix: location,
+      memory: false,
+      network
+    };
+
+    let wdb, ldb;
+    beforeEach(async () => {
+      WalletMigrator.migrations = {};
+      await fs.mkdirp(location);
+
+      wdb = new WalletDB(walletOptions);
+      ldb = wdb.db;
+    });
+
+    afterEach(async () => {
+      WalletMigrator.migrations = migrationBAK;
+      await rimraf(location);
+    });
+
+    for (let i = 0; i < data.cases.length; i++) {
+      it(`should migrate ${data.cases[i].description}`, async () => {
+        const before = data.cases[i].before;
+        const after = data.cases[i].after;
+        await ldb.open();
+        const b = ldb.batch();
+
+        for (const [key, value] of Object.entries(before)) {
+          const bkey = Buffer.from(key, 'hex');
+          const bvalue = Buffer.from(value, 'hex');
+
+          b.put(bkey, bvalue);
+        }
+
+        writeVersion(b, 'wallet', 0);
+
+        await b.write();
+        await ldb.close();
+
+        WalletMigrator.migrations = {
+          0: Migration,
+          1: WalletMigrator.MigrateChangeAddress
+        };
+
+        wdb.options.walletMigrate = 1;
+        wdb.version = 1;
+
+        await wdb.open();
+        await checkVersion(ldb, layouts.wdb.V.encode(), 1);
+        await checkEntries(ldb, after);
+        const oldM = await ldb.get(layout.oldLayout.wdb.M.encode(0));
+        assert.strictEqual(oldM, null);
+        await wdb.close();
+      });
+    }
+  });
+
   describe('Migrate change address (integration)', function() {
     const location = testdir('wallet-change');
     const migrationsBAK = WalletMigrator.migrations;
@@ -970,4 +1034,25 @@ function getVersion(data, name) {
     throw new Error(error);
 
   return data.readUInt32LE(name.length);
+}
+
+async function checkVersion(db, versionDBKey, expectedVersion) {
+  const data = await db.get(versionDBKey);
+  const version = getVersion(data, 'wallet');
+
+  assert.strictEqual(version, expectedVersion);
+}
+
+async function checkEntries(db, data) {
+  for (const [key, value] of Object.entries(data)) {
+    const bkey = Buffer.from(key, 'hex');
+    const bvalue = Buffer.from(value, 'hex');
+
+    const stored = await db.get(bkey);
+
+    assert(stored,
+      `Value for ${key} not found in db, expected: ${value}`);
+    assert.bufferEqual(stored, bvalue,
+      `Value for ${key}: ${stored.toString('hex')} does not match expected: ${value}`);
+  }
 }
