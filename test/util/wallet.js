@@ -38,6 +38,11 @@ walletUtils.dummyInput = () => {
   return Input.fromOutpoint(new Outpoint(hash, 0));
 };
 
+walletUtils.determinsticInput = (id) => {
+  const hash = blake2b.digest(fromU32(id));
+  return Input.fromOutpoint(new Outpoint(hash, 0));
+};
+
 walletUtils.nextBlock = (wdb, prevSeed = 0, seed = prevSeed) => {
   return walletUtils.fakeBlock(wdb.state.height + 1, prevSeed, seed);
 };
@@ -58,22 +63,6 @@ walletUtils.nextEntry = (wdb, curSeed = 0, nextSeed = curSeed) => {
 
 walletUtils.curEntry = (wdb, prevSeed = 0, seed = prevSeed) => {
   return walletUtils.fakeEntry(wdb.state.height, seed);
-};
-
-walletUtils.dumpWDB = async (wdb, prefixes) => {
-  const data = await wdb.dump();
-  const filtered = {};
-
-  for (const [key, value] of Object.entries(data)) {
-    for (const prefix of prefixes) {
-      if (key.startsWith(prefix)) {
-        filtered[key] = value;
-        break;
-      }
-    }
-  }
-
-  return filtered;
 };
 
 function fromU32(num) {

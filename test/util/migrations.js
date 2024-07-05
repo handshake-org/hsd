@@ -26,9 +26,9 @@ const mockLayout = {
 
   // data for testing
   a: bdb.key('a'),
-  b: bdb.key('a'),
-  c: bdb.key('a'),
-  d: bdb.key('a')
+  b: bdb.key('b'),
+  c: bdb.key('c'),
+  d: bdb.key('d')
 };
 
 const DB_FLAG_ERROR = 'mock chain needs migration';
@@ -194,4 +194,24 @@ exports.migrationError = (migrations, ids, flagError) => {
   error += flagError;
 
   return error;
+};
+
+exports.prefix2hex = function prefix2hex(prefix) {
+  return Buffer.from(prefix, 'ascii').toString('hex');
+};
+
+exports.dumpWDB = async (wdb, prefixes) => {
+  const data = await wdb.dump();
+  const filtered = {};
+
+  for (const [key, value] of Object.entries(data)) {
+    for (const prefix of prefixes) {
+      if (key.startsWith(prefix)) {
+        filtered[key] = value;
+        break;
+      }
+    }
+  }
+
+  return filtered;
 };

@@ -1,11 +1,14 @@
 'use strict';
 
-// walletdb version 0 to 1 migration.
+/**
+ * walletdb version 0 to 1 migration.
+ * Final migration data needs modifications for
+ * the correct next migration value.
+ */
 
 const Network = require('../../../lib/protocol/network');
 const WalletDB = require('../../../lib/wallet/walletdb');
-const cutil = require('../../util/common');
-const wutils = require('../../util/wallet');
+const mutils = require('../../util/migrations');
 
 const NETWORK = Network.get('regtest');
 
@@ -31,5 +34,5 @@ async function getMigrationDump(wdb) {
     'M'
   ];
 
-  return wutils.dumpWDB(wdb, prefixes.map(cutil.prefix2hex));
+  return mutils.dumpWDB(wdb, prefixes.map(mutils.prefix2hex));
 }
