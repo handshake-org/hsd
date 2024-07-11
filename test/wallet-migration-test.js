@@ -372,8 +372,87 @@ describe('Wallet Migrations', function() {
     });
   });
 
+  describe('Migrate change address (data)', function() {
+    const location = testdir('wallet-lookahead-data');
+    const migrationsBAK = WalletMigrator.migrations;
+    const data = require('./data/migrations/wallet-2-account-lookahead-gen.json');
+    const Migration = WalletMigrator.MigrateAccountLookahead;
+
+    const walletOptions = {
+      prefix: location,
+      memory: false,
+      network
+    };
+
+    let wdb, ldb;
+    before(async () => {
+      WalletMigrator.migrations = {};
+      await fs.mkdirp(location);
+
+      wdb = new WalletDB(walletOptions);
+      ldb = wdb.db;
+
+      await ldb.open();
+      await fillEntries(ldb, data.before);
+      await ldb.close();
+    });
+
+    after(async () => {
+      WalletMigrator.migrations = migrationsBAK;
+      await rimraf(location);
+    });
+
+    it('should have before entries', async () => {
+      wdb.version = 1;
+      try {
+        // We don't care that new wallet can't decode old data.
+        // It will still run migrations.
+        await wdb.open();
+      } catch (e) {
+        ;
+      }
+      await checkVersion(ldb, layouts.wdb.V.encode(), 1);
+      await checkEntries(ldb, data.before);
+      await wdb.close();
+    });
+
+    it('should enable wallet migration', () => {
+      WalletMigrator.migrations = {
+        0: Migration
+      };
+    });
+
+    it('should fail without migrate flag', async () => {
+      const expectedError = migrationError(WalletMigrator.migrations, [0],
+          wdbFlagError(0));
+
+      await assert.rejects(async () => {
+        await wdb.open();
+      }, {
+        message: expectedError
+      });
+
+      await ldb.close();
+    });
+
+    it('should migrate', async () => {
+      wdb.options.walletMigrate = 0;
+
+      try {
+        // We don't care that new wallet can't decode old data.
+        // It will still run migrations.
+        await wdb.open();
+      } catch (e) {
+        ;
+      }
+      await checkVersion(ldb, layouts.wdb.V.encode(), 2);
+      await checkEntries(ldb, data.after);
+      await wdb.close();
+    });
+  });
+
   describe('Migrate account lookahead (integration)', function () {
-    const location = testdir('wallet-change');
+    const location = testdir('wallet-lookahead');
     const migrationsBAK = WalletMigrator.migrations;
     const TEST_LOOKAHEAD = 150;
 
