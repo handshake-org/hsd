@@ -34,5 +34,5 @@ async function getMigrationDump(wdb) {
     'M'
   ];
 
-  return mutils.dumpWDB(wdb, prefixes.map(mutils.prefix2hex));
+  return mutils.dumpDB(wdb, prefixes.map(mutils.prefix2hex));
 }

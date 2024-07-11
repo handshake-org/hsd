@@ -375,7 +375,7 @@ describe('Wallet Migrations', function() {
   describe('Migrate change address (data)', function() {
     const location = testdir('wallet-lookahead-data');
     const migrationsBAK = WalletMigrator.migrations;
-    const data = require('./data/migrations/wallet-2-account-lookahead-gen.json');
+    const data = require('./data/migrations/wallet-2-account-lookahead.json');
     const Migration = WalletMigrator.MigrateAccountLookahead;
 
     const walletOptions = {

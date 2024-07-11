@@ -162,8 +162,8 @@ async function getMigrationDump(wdb) {
   beforeOnlyPrefixes.push(layout.wdb.W.encode(0).toString('hex'));
   beforeOnlyPrefixes.push(layout.wdb.w.encode(0).toString('hex'));
 
-  const dump = await mutils.dumpWDB(wdb, prefixes);
-  const dumpBeforeOnly = await mutils.dumpWDB(wdb, beforeOnlyPrefixes);
+  const dump = await mutils.dumpDB(wdb, prefixes);
+  const dumpBeforeOnly = await mutils.dumpDB(wdb, beforeOnlyPrefixes);
   const beforeOnly = dumpBeforeOnly;
 
   const filtered = {};

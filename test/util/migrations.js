@@ -200,8 +200,8 @@ exports.prefix2hex = function prefix2hex(prefix) {
   return Buffer.from(prefix, 'ascii').toString('hex');
 };
 
-exports.dumpWDB = async (wdb, prefixes) => {
-  const data = await wdb.dump();
+exports.dumpDB = async (db, prefixes) => {
+  const data = await db.dump();
   const filtered = {};
 
   for (const [key, value] of Object.entries(data)) {
@@ -214,4 +214,8 @@ exports.dumpWDB = async (wdb, prefixes) => {
   }
 
   return filtered;
+};
+
+exports.dumpChainDB = async (chaindb, prefixes) => {
+  return exports.dumpDB(chaindb.db, prefixes);
 };

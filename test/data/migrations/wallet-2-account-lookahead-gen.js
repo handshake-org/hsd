@@ -83,5 +83,5 @@ async function getMigrationDump(wdb) {
     prefixes.push(layout.wdb.a.encode(i, 0).slice(0, 5).toString('hex'));
   }
 
-  return await mutils.dumpWDB(wdb, prefixes);
+  return await mutils.dumpDB(wdb, prefixes);
 }
