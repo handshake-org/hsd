@@ -575,7 +575,7 @@ describe('Wallet Migrations', function() {
     });
   });
 
-  describe('Migrate txdb  (integration)', function() {
+  describe('Migrate txdb balances (integration)', function() {
     const location = testdir('walet-txdb-refresh');
     const migrationsBAK = WalletMigrator.migrations;
 
