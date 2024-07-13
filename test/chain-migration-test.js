@@ -3,13 +3,14 @@
 const assert = require('bsert');
 const fs = require('bfile');
 const {encoding} = require('bufio');
+const Logger = require('blgr');
 const {ZERO_HASH} = require('../lib/protocol/consensus');
 const Network = require('../lib/protocol/network');
 const WorkerPool = require('../lib/workers/workerpool');
 const Miner = require('../lib/mining/miner');
 const Chain = require('../lib/blockchain/chain');
 const BlockStore = require('../lib/blockstore');
-const layout = require('../lib/blockchain/layout');
+const chLayout = require('../lib/blockchain/layout');
 const ChainMigrator = require('../lib/blockchain/migrations');
 const MigrationState = require('../lib/migrations/state');
 const AbstractMigration = require('../lib/migrations/migration');
@@ -17,8 +18,15 @@ const {
   types,
   oldLayout
 } = require('../lib/migrations/migrator');
-const {migrationError} = require('./util/migrations');
-const {rimraf, testdir} = require('./util/common');
+const {
+  migrationError,
+  writeVersion,
+  getVersion,
+  fillEntries,
+  checkEntries
+} = require('./util/migrations');
+const common = require('./util/common');
+const {rimraf, testdir} = common;
 
 const network = Network.get('regtest');
 
@@ -80,7 +88,7 @@ describe('Chain Migrations', function() {
     });
 
     it('should initialize fresh chain migration state', async () => {
-      const rawState = await ldb.get(layout.M.encode());
+      const rawState = await ldb.get(chLayout.M.encode());
       const state = MigrationState.decode(rawState);
 
       assert.strictEqual(state.lastMigration, lastMigrationID);
@@ -96,10 +104,10 @@ describe('Chain Migrations', function() {
       const genesisUndo = await chainDB.getUndoCoins(genesisHash);
 
       const b = ldb.batch();
-      b.del(layout.M.encode());
-      b.put(layout.b.encode(genesisHash), genesisBlock.encode());
-      b.put(layout.u.encode(genesisHash), genesisUndo.encode());
-      writeVersion(b, 'chain', 1);
+      b.del(chLayout.M.encode());
+      b.put(chLayout.b.encode(genesisHash), genesisBlock.encode());
+      b.put(chLayout.u.encode(genesisHash), genesisUndo.encode());
+      writeVersion(b, chLayout.V.encode(), 'chain', 1);
       await b.write();
 
       await chain.close();
@@ -117,11 +125,11 @@ describe('Chain Migrations', function() {
         chainFlagError(lastMigrationID));
       assert.strictEqual(error.message, expected);
 
-      const versionData = await ldb.get(layout.V.encode());
+      const versionData = await ldb.get(chLayout.V.encode());
       const version = getVersion(versionData, 'chain');
       assert.strictEqual(version, 1);
 
-      const rawState = await ldb.get(layout.M.encode());
+      const rawState = await ldb.get(chLayout.M.encode());
       const state = MigrationState.decode(rawState);
 
       assert.strictEqual(state.lastMigration, -1);
@@ -133,10 +141,10 @@ describe('Chain Migrations', function() {
     // special case in migrations
     it('should not migrate last old migration state w/o flag', async () => {
       const b = ldb.batch();
-      b.del(layout.M.encode());
+      b.del(chLayout.M.encode());
       b.put(oldLayout.M.encode(0), null);
       b.put(oldLayout.M.encode(1), null);
-      writeVersion(b, 'chain', 1);
+      writeVersion(b, chLayout.V.encode(), 'chain', 1);
       await b.write();
       await chain.close();
 
@@ -154,11 +162,11 @@ describe('Chain Migrations', function() {
         chainFlagError(lastMigrationID));
       assert.strictEqual(error.message, expected);
 
-      const versionData = await ldb.get(layout.V.encode());
+      const versionData = await ldb.get(chLayout.V.encode());
       const version = getVersion(versionData, 'chain');
       assert.strictEqual(version, 1);
 
-      const rawState = await ldb.get(layout.M.encode());
+      const rawState = await ldb.get(chLayout.M.encode());
       const state = MigrationState.decode(rawState);
 
       assert.strictEqual(state.nextMigration, 0);
@@ -175,27 +183,27 @@ describe('Chain Migrations', function() {
       const genesisUndo = await chainDB.getUndoCoins(genesisHash);
 
       const b = ldb.batch();
-      b.del(layout.M.encode());
+      b.del(chLayout.M.encode());
 
       // Migration blockstore
-      b.put(layout.b.encode(genesisHash), genesisBlock.encode());
-      b.put(layout.u.encode(genesisHash), genesisUndo.encode());
+      b.put(chLayout.b.encode(genesisHash), genesisBlock.encode());
+      b.put(chLayout.u.encode(genesisHash), genesisUndo.encode());
 
       // migration 3 - MigrateTreeState
-      b.put(layout.s.encode(), Buffer.alloc(32, 0));
+      b.put(chLayout.s.encode(), Buffer.alloc(32, 0));
 
-      writeVersion(b, 'chain', 1);
+      writeVersion(b, chLayout.V.encode(), 'chain', 1);
       await b.write();
 
       await chain.close();
 
       chain.options.chainMigrate = lastMigrationID;
       await chain.open();
-      const versionData = await ldb.get(layout.V.encode());
+      const versionData = await ldb.get(chLayout.V.encode());
       const version = getVersion(versionData, 'chain');
       assert.strictEqual(version, chainDB.version);
 
-      const rawState = await ldb.get(layout.M.encode());
+      const rawState = await ldb.get(chLayout.M.encode());
       const state = MigrationState.decode(rawState);
 
       assert.strictEqual(state.lastMigration, lastMigrationID);
@@ -205,10 +213,10 @@ describe('Chain Migrations', function() {
     });
 
     it('should check chaindb flags if there are migrations', async () => {
-      const rawState = await ldb.get(layout.M.encode());
+      const rawState = await ldb.get(chLayout.M.encode());
       const state = MigrationState.decode(rawState);
       state.nextMigration -= 1;
-      await ldb.put(layout.M.encode(), state.encode());
+      await ldb.put(chLayout.M.encode(), state.encode());
       await chain.close();
 
       chain.options.spv = true;
@@ -307,7 +315,7 @@ describe('Chain Migrations', function() {
     it('should initialize fresh chain migration state', async () => {
       await chain.open();
 
-      const rawState = await ldb.get(layout.M.encode());
+      const rawState = await ldb.get(chLayout.M.encode());
       const state = MigrationState.decode(rawState);
 
       assert.strictEqual(state.lastMigration, 1);
@@ -324,10 +332,10 @@ describe('Chain Migrations', function() {
       const genesisUndo = await chainDB.getUndoCoins(genesisHash);
 
       const b = ldb.batch();
-      b.del(layout.M.encode());
-      b.put(layout.b.encode(genesisHash), genesisBlock.encode());
-      b.put(layout.u.encode(genesisHash), genesisUndo.encode());
-      writeVersion(b, 'chain', 1);
+      b.del(chLayout.M.encode());
+      b.put(chLayout.b.encode(genesisHash), genesisBlock.encode());
+      b.put(chLayout.u.encode(genesisHash), genesisUndo.encode());
+      writeVersion(b, chLayout.V.encode(), 'chain', 1);
       await b.write();
 
       await chain.close();
@@ -344,11 +352,11 @@ describe('Chain Migrations', function() {
         chainFlagError(1));
       assert.strictEqual(error.message, expected);
 
-      const versionData = await ldb.get(layout.V.encode());
+      const versionData = await ldb.get(chLayout.V.encode());
       const version = getVersion(versionData, 'chain');
       assert.strictEqual(version, 1);
 
-      const rawState = await ldb.get(layout.M.encode());
+      const rawState = await ldb.get(chLayout.M.encode());
       const state = MigrationState.decode(rawState);
 
       assert.strictEqual(state.lastMigration, -1);
@@ -366,22 +374,22 @@ describe('Chain Migrations', function() {
       const genesisUndo = await chainDB.getUndoCoins(genesisHash);
 
       const b = ldb.batch();
-      b.del(layout.M.encode());
+      b.del(chLayout.M.encode());
       b.put(oldLayout.M.encode(0), null);
-      b.put(layout.b.encode(genesisHash), genesisBlock.encode());
-      b.put(layout.u.encode(genesisHash), genesisUndo.encode());
-      writeVersion(b, 'chain', 1);
+      b.put(chLayout.b.encode(genesisHash), genesisBlock.encode());
+      b.put(chLayout.u.encode(genesisHash), genesisUndo.encode());
+      writeVersion(b, chLayout.V.encode(), 'chain', 1);
       await b.write();
 
       await chain.close();
 
       chain.options.chainMigrate = 1;
       await chain.open();
-      const versionData = await ldb.get(layout.V.encode());
+      const versionData = await ldb.get(chLayout.V.encode());
       const version = getVersion(versionData, 'chain');
       assert.strictEqual(version, 2);
 
-      const rawState = await ldb.get(layout.M.encode());
+      const rawState = await ldb.get(chLayout.M.encode());
       const state = MigrationState.decode(rawState);
 
       assert.strictEqual(state.lastMigration, 1);
@@ -394,10 +402,10 @@ describe('Chain Migrations', function() {
       await chain.open();
 
       const b = ldb.batch();
-      b.del(layout.M.encode());
+      b.del(chLayout.M.encode());
       b.put(oldLayout.M.encode(0), null);
       b.put(oldLayout.M.encode(1), null);
-      writeVersion(b, 'chain', 1);
+      writeVersion(b, chLayout.V.encode(), 'chain', 1);
       await b.write();
       await chain.close();
 
@@ -413,11 +421,11 @@ describe('Chain Migrations', function() {
         chainFlagError(1));
       assert.strictEqual(error.message, expected);
 
-      const versionData = await ldb.get(layout.V.encode());
+      const versionData = await ldb.get(chLayout.V.encode());
       const version = getVersion(versionData, 'chain');
       assert.strictEqual(version, 1);
 
-      const rawState = await ldb.get(layout.M.encode());
+      const rawState = await ldb.get(chLayout.M.encode());
       const state = MigrationState.decode(rawState);
 
       assert.strictEqual(state.nextMigration, 0);
@@ -430,20 +438,20 @@ describe('Chain Migrations', function() {
       await chain.open();
 
       const b = ldb.batch();
-      b.del(layout.M.encode());
+      b.del(chLayout.M.encode());
       b.put(oldLayout.M.encode(0), null);
       b.put(oldLayout.M.encode(1), null);
-      writeVersion(b, 'chain', 1);
+      writeVersion(b, chLayout.V.encode(), 'chain', 1);
       await b.write();
       await chain.close();
 
       chain.options.chainMigrate = 1;
       await chain.open();
-      const versionData = await ldb.get(layout.V.encode());
+      const versionData = await ldb.get(chLayout.V.encode());
       const version = getVersion(versionData, 'chain');
       assert.strictEqual(version, 2);
 
-      const rawState = await ldb.get(layout.M.encode());
+      const rawState = await ldb.get(chLayout.M.encode());
       const state = MigrationState.decode(rawState);
 
       assert.strictEqual(state.nextMigration, 2);
@@ -484,7 +492,7 @@ describe('Chain Migrations', function() {
       await chain.open();
 
       const b = ldb.batch();
-      b.del(layout.M.encode());
+      b.del(chLayout.M.encode());
       b.put(oldLayout.M.encode(0), null);
       b.put(oldLayout.M.encode(1), null);
       await b.write();
@@ -502,7 +510,7 @@ describe('Chain Migrations', function() {
         chainFlagError(2));
       assert.strictEqual(error.message, expected);
 
-      const rawState = await ldb.get(layout.M.encode());
+      const rawState = await ldb.get(chLayout.M.encode());
       const state = MigrationState.decode(rawState);
 
       assert.strictEqual(state.nextMigration, 0);
@@ -538,7 +546,7 @@ describe('Chain Migrations', function() {
 
       await chain.open();
       const b = ldb.batch();
-      b.del(layout.M.encode());
+      b.del(chLayout.M.encode());
       b.put(oldLayout.M.encode(0), null);
       b.put(oldLayout.M.encode(1), null);
       await b.write();
@@ -550,7 +558,7 @@ describe('Chain Migrations', function() {
       assert.strictEqual(migrated1, false);
       assert.strictEqual(migrated2, true);
 
-      const rawState = await ldb.get(layout.M.encode());
+      const rawState = await ldb.get(chLayout.M.encode());
       const state = MigrationState.decode(rawState);
 
       assert.strictEqual(state.nextMigration, 3);
@@ -564,7 +572,7 @@ describe('Chain Migrations', function() {
 
       await chain.open();
       const b = ldb.batch();
-      b.del(layout.M.encode());
+      b.del(chLayout.M.encode());
       b.put(oldLayout.M.encode(0), null);
       b.put(oldLayout.M.encode(1), null);
       await b.write();
@@ -573,7 +581,7 @@ describe('Chain Migrations', function() {
       chain.options.chainMigrate = 1;
       await chain.open();
 
-      const rawState = await ldb.get(layout.M.encode());
+      const rawState = await ldb.get(chLayout.M.encode());
       const state = MigrationState.decode(rawState);
 
       assert.strictEqual(state.lastMigration, 1);
@@ -581,6 +589,101 @@ describe('Chain Migrations', function() {
       assert.strictEqual(state.skipped[0], 1);
       assert.strictEqual(state.inProgress, false);
     });
+  });
+
+  describe('Migration #0 & #1 (data)', function() {
+    const location = testdir('migrate-chain-0-1-data');
+    const data = require('./data/migrations/chain-0-migrate-migrations.json');
+    const migrationsBAK = ChainMigrator.migrations;
+    const Migration = ChainMigrator.MigrateMigrations;
+    const store = BlockStore.create({
+      memory: true,
+      network
+    });
+
+    const chainOptions = {
+      prefix: location,
+      memory: false,
+      blocks: store,
+      logger: Logger.global,
+      network
+    };
+
+    let chain;
+    beforeEach(async () => {
+      await fs.mkdirp(location);
+      await store.open();
+    });
+
+    afterEach(async () => {
+      ChainMigrator.migrations = migrationsBAK;
+      await store.close();
+
+      if (chain.opened) {
+        await chain.close();
+      }
+
+      await rimraf(location);
+    });
+
+    for (const tcase of data.cases) {
+      it(`should migrate ${tcase.description}`, async () => {
+        const before = tcase.before;
+        const after = tcase.after;
+        const version = tcase.dbVersion;
+        const mustMigrate1 = tcase.migrate1;
+        assert(typeof version === 'number');
+        assert(typeof mustMigrate1 === 'boolean');
+
+        chain = new Chain({
+          ...chainOptions,
+          ...tcase.options
+        });
+        let ldb = chain.db.db;
+
+        await ldb.open();
+        await fillEntries(ldb, before);
+        const batch = ldb.batch();
+        writeVersion(batch, chLayout.V.encode(), 'chain', version);
+        await batch.write();
+        await ldb.close();
+
+        let migrated = false;
+        ChainMigrator.migrations = {
+          0: Migration,
+          1: class extends AbstractMigration {
+            async check() {
+              if (tcase.options.spv)
+                return types.FAKE_MIGRATE;
+
+              if (tcase.options.prune)
+                return types.SKIP;
+
+              return types.MIGRATE;
+            }
+
+            async migrate() {
+              migrated = true;
+            }
+          }
+        };
+
+        chain.options.chainMigrate = 1;
+        chain.db.version = 2;
+
+        try {
+          await chain.open();
+        } catch (e) {
+          ;
+        }
+
+        ldb = chain.db.db;
+
+        if (mustMigrate1)
+          assert(migrated, 'Migration 1 did not run.');
+        await checkEntries(ldb, after);
+      });
+    }
   });
 
   describe('Migration ChainState (integration)', function() {
@@ -659,8 +762,8 @@ describe('Chain Migrations', function() {
         const hash = block.hash();
         const undo = await chainDB.getUndoCoins(hash);
 
-        b.put(layout.b.encode(hash), block.encode());
-        b.put(layout.u.encode(hash), undo.encode());
+        b.put(chLayout.b.encode(hash), block.encode());
+        b.put(chLayout.u.encode(hash), undo.encode());
       }
 
       await b.write();
@@ -675,7 +778,7 @@ describe('Chain Migrations', function() {
       state.value = 0;
       state.burned = 0;
 
-      await chain.db.db.put(layout.R.encode(), state.encode());
+      await chain.db.db.put(chLayout.R.encode(), state.encode());
     });
 
     it('should enable chain state migration', () => {
@@ -782,8 +885,8 @@ describe('Chain Migrations', function() {
 
         // we don't actually have undo blocks with those blocks.
         const undoData = Buffer.alloc(100, 1);
-        ldbBatch.put(layout.b.encode(hash), block.encode());
-        ldbBatch.put(layout.u.encode(hash), undoData);
+        ldbBatch.put(chLayout.b.encode(hash), block.encode());
+        ldbBatch.put(chLayout.u.encode(hash), undoData);
         blocksBatch.pruneBlock(hash);
       }
 
@@ -895,8 +998,8 @@ describe('Chain Migrations', function() {
       // Previous state
       await chain.open();
       const b = ldb.batch();
-      b.put(layout.s.encode(), Buffer.alloc(32, 0x00));
-      writeVersion(b, 'chain', 2);
+      b.put(chLayout.s.encode(), Buffer.alloc(32, 0x00));
+      writeVersion(b, chLayout.V.encode(), 'chain', 2);
       await b.write();
       await chain.close();
 
@@ -946,17 +1049,17 @@ describe('Chain Migrations', function() {
     it('should migrate tree state (2)', async () => {
       await chain.open();
 
-      const state = MigrationState.decode(await ldb.get(layout.M.encode()));
+      const state = MigrationState.decode(await ldb.get(chLayout.M.encode()));
       state.nextMigration = 0;
 
       // revert migration
       const b = ldb.batch();
       const root = Buffer.alloc(32, 0x01);
       // revert version in DB.
-      writeVersion(b , 'chain', 2);
+      writeVersion(b, chLayout.V.encode(), 'chain', 2);
       // encode wrong tree state (non default)
-      b.put(layout.s.encode(), root);
-      b.put(layout.M.encode(), state.encode());
+      b.put(chLayout.s.encode(), root);
+      b.put(chLayout.M.encode(), state.encode());
       await b.write();
 
       await chain.close();
@@ -973,7 +1076,7 @@ describe('Chain Migrations', function() {
       assert(error, 'Chain must throw an error.');
       assert.strictEqual(error.message, `Missing node: ${root.toString('hex')}.`);
 
-      const version = getVersion(await ldb.get(layout.V.encode()), 'chain');
+      const version = getVersion(await ldb.get(chLayout.V.encode()), 'chain');
       assert.strictEqual(version, 3);
       assert.bufferEqual(chaindb.treeState.treeRoot, root);
       assert.bufferEqual(chaindb.treeState.compactionRoot, ZERO_HASH);
@@ -1028,7 +1131,7 @@ describe('Chain Migrations', function() {
       // Previous state
       await chain.open();
       const b = ldb.batch();
-      writeVersion(b, 'chain', 2);
+      writeVersion(b, chLayout.V.encode(), 'chain', 2);
       await b.write();
       await chain.close();
 
@@ -1077,23 +1180,3 @@ describe('Chain Migrations', function() {
   });
 });
 
-function writeVersion(b, name, version) {
-    const value = Buffer.alloc(name.length + 4);
-
-    value.write(name, 0, 'ascii');
-    value.writeUInt32LE(version, name.length);
-
-    b.put(layout.V.encode(), value);
-}
-
-function getVersion(data, name) {
-  const error = 'version mismatch';
-
-  if (data.length !== name.length + 4)
-    throw new Error(error);
-
-  if (data.toString('ascii', 0, name.length) !== name)
-    throw new Error(error);
-
-  return data.readUInt32LE(name.length);
-}

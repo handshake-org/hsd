@@ -219,3 +219,58 @@ exports.dumpDB = async (db, prefixes) => {
 exports.dumpChainDB = async (chaindb, prefixes) => {
   return exports.dumpDB(chaindb.db, prefixes);
 };
+
+exports.checkEntries = async (ldb, data) => {
+  for (const [key, value] of Object.entries(data)) {
+    const bkey = Buffer.from(key, 'hex');
+    const bvalue = Buffer.from(value, 'hex');
+
+    const stored = await ldb.get(bkey);
+
+    assert(stored,
+      `Value for ${key} not found in db, expected: ${value}`);
+    assert.bufferEqual(stored, bvalue,
+      `Value for ${key}: ${stored.toString('hex')} does not match expected: ${value}`);
+  }
+};
+
+exports.fillEntries = async (ldb, data) => {
+  const batch = await ldb.batch();
+
+  for (const [key, value] of Object.entries(data)) {
+    const bkey = Buffer.from(key, 'hex');
+    const bvalue = Buffer.from(value, 'hex');
+
+    batch.put(bkey, bvalue);
+  }
+
+  await batch.write();
+};
+
+exports.writeVersion = (b, key, name, version) => {
+    const value = Buffer.alloc(name.length + 4);
+
+    value.write(name, 0, 'ascii');
+    value.writeUInt32LE(version, name.length);
+
+    b.put(key, value);
+};
+
+exports.getVersion = (data, name) => {
+  const error = 'version mismatch';
+
+  if (data.length !== name.length + 4)
+    throw new Error(error);
+
+  if (data.toString('ascii', 0, name.length) !== name)
+    throw new Error(error);
+
+  return data.readUInt32LE(name.length);
+};
+
+exports.checkVersion = async (ldb, versionDBKey, expectedVersion) => {
+  const data = await ldb.get(versionDBKey);
+  const version = exports.getVersion(data, 'wallet');
+
+  assert.strictEqual(version, expectedVersion);
+};

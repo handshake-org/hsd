@@ -18,7 +18,14 @@ const {
   types,
   oldLayout
 } = require('../lib/migrations/migrator');
-const {migrationError} = require('./util/migrations');
+const {
+  migrationError,
+  writeVersion,
+  getVersion,
+  checkVersion,
+  checkEntries,
+  fillEntries
+} = require('./util/migrations');
 const {rimraf, testdir} = require('./util/common');
 
 const NETWORK = 'regtest';
@@ -171,9 +178,9 @@ describe('Wallet Migrations', function() {
 
     it('should upgrade and run new migration with flag', async () => {
       const b = ldb.batch();
-      b.del(layout.M.encode());
+      b.del(layouts.wdb.M.encode());
       b.put(oldLayout.M.encode(0), null);
-      writeVersion(b, 'wallet', 0);
+      writeVersion(b, layouts.wdb.V.encode(), 'wallet', 0);
       await b.write();
       await walletDB.close();
 
@@ -181,8 +188,8 @@ describe('Wallet Migrations', function() {
       walletDB.version = 1;
       await walletDB.open();
 
-      const versionData = await ldb.get(layout.V.encode());
-      const version = getVersion(versionData, 'wallet');
+      const versionData = await ldb.get(layouts.wdb.V.encode());
+      const version = await getVersion(versionData, 'wallet');
       assert.strictEqual(version, walletDB.version);
 
       const rawState = await ldb.get(layout.M.encode());
@@ -269,7 +276,7 @@ describe('Wallet Migrations', function() {
           b.put(bkey, bvalue);
         }
 
-        writeVersion(b, 'wallet', 0);
+        writeVersion(b, layouts.wdb.V.encode(), 'wallet', 0);
 
         await b.write();
         await ldb.close();
@@ -822,58 +829,3 @@ describe('Wallet Migrations', function() {
     });
   });
 });
-
-function writeVersion(b, name, version) {
-    const value = Buffer.alloc(name.length + 4);
-
-    value.write(name, 0, 'ascii');
-    value.writeUInt32LE(version, name.length);
-
-    b.put(layout.V.encode(), value);
-}
-
-function getVersion(data, name) {
-  const error = 'version mismatch';
-
-  if (data.length !== name.length + 4)
-    throw new Error(error);
-
-  if (data.toString('ascii', 0, name.length) !== name)
-    throw new Error(error);
-
-  return data.readUInt32LE(name.length);
-}
-
-async function checkVersion(ldb, versionDBKey, expectedVersion) {
-  const data = await ldb.get(versionDBKey);
-  const version = getVersion(data, 'wallet');
-
-  assert.strictEqual(version, expectedVersion);
-}
-
-async function checkEntries(ldb, data) {
-  for (const [key, value] of Object.entries(data)) {
-    const bkey = Buffer.from(key, 'hex');
-    const bvalue = Buffer.from(value, 'hex');
-
-    const stored = await ldb.get(bkey);
-
-    assert(stored,
-      `Value for ${key} not found in db, expected: ${value}`);
-    assert.bufferEqual(stored, bvalue,
-      `Value for ${key}: ${stored.toString('hex')} does not match expected: ${value}`);
-  }
-}
-
-async function fillEntries(ldb, data) {
-  const batch = await ldb.batch();
-
-  for (const [key, value] of Object.entries(data)) {
-    const bkey = Buffer.from(key, 'hex');
-    const bvalue = Buffer.from(value, 'hex');
-
-    batch.put(bkey, bvalue);
-  }
-
-  await batch.write();
-}

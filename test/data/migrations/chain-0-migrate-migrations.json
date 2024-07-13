@@ -1,0 +1,158 @@
+{
+  "description": "Migrate migrations. Affects chaindb layout M.",
+  "cases": [
+    {
+      "description": "Migration after migration flag was set (full) < v3.0.0.",
+      "options": {
+        "spv": false,
+        "prune": false
+      },
+      "dbVersion": 1,
+      "migrate1": false,
+      "before": {
+        "4d00000000": "00",
+        "4d00000001": "00",
+        "4f": "cf9538ae0000000000000000"
+      },
+      "after": {
+        "4d": "000000000200",
+        "4f": "cf9538ae0000000000000000"
+      }
+    },
+    {
+      "description": "Migration after migration flag was set (pruned) < v3.0.0.",
+      "options": {
+        "spv": false,
+        "prune": true
+      },
+      "dbVersion": 1,
+      "migrate1": false,
+      "before": {
+        "4d00000000": "00",
+        "4d00000001": "00",
+        "4f": "cf9538ae0200000000000000"
+      },
+      "after": {
+        "4d": "00000000020101",
+        "4f": "cf9538ae0200000000000000"
+      }
+    },
+    {
+      "description": "Migration after migration flag was set (spv) from < v3.0.0.",
+      "options": {
+        "spv": true,
+        "prune": false
+      },
+      "dbVersion": 1,
+      "migrate1": false,
+      "before": {
+        "4d00000000": "00",
+        "4d00000001": "00",
+        "4f": "cf9538ae0100000000000000"
+      },
+      "after": {
+        "4d": "000000000200",
+        "4f": "cf9538ae0100000000000000"
+      }
+    },
+    {
+      "description": "Migration before flag was set (full) from 2.3.0 to v2.4.0",
+      "options": {
+        "spv": false,
+        "prune": false
+      },
+      "dbVersion": 0,
+      "migrate1": true,
+      "before": {
+        "4d00000000": "00",
+        "4f": "cf9538ae0000000000000000"
+      },
+      "after": {
+        "4d": "000000000200",
+        "4f": "cf9538ae0000000000000000"
+      }
+    },
+    {
+      "description": "Migration before flag was set (pruned) from 2.3.0 to v2.4.0.",
+      "options": {
+        "spv": false,
+        "prune": true
+      },
+      "dbVersion": 0,
+      "migrate1": false,
+      "before": {
+        "4d00000000": "00",
+        "4f": "cf9538ae0200000000000000"
+      },
+      "after": {
+        "4d": "00000000020101",
+        "4f": "cf9538ae0200000000000000"
+      }
+    },
+    {
+      "description": "Migration before flag was set (spv) from 2.3.0 to v2.4.0.",
+      "options": {
+        "spv": true,
+        "prune": false
+      },
+      "dbVersion": 0,
+      "migrate1": false,
+      "before": {
+        "4d00000000": "00",
+        "4f": "cf9538ae0100000000000000"
+      },
+      "after": {
+        "4d": "000000000200",
+        "4f": "cf9538ae0100000000000000"
+      }
+    },
+    {
+      "description": "Migration before flag was set (full) from < v2.3.0",
+      "options": {
+        "spv": false,
+        "prune": false
+      },
+      "dbVersion": 0,
+      "migrate1": true,
+      "before": {
+        "4f": "cf9538ae0000000000000000"
+      },
+      "after": {
+        "4d": "000000000200",
+        "4f": "cf9538ae0000000000000000"
+      }
+    },
+    {
+      "description": "Migration before flag was set (pruned) from < v2.3.0.",
+      "options": {
+        "spv": false,
+        "prune": true
+      },
+      "dbVersion": 0,
+      "migrate1": false,
+      "before": {
+        "4f": "cf9538ae0200000000000000"
+      },
+      "after": {
+        "4d": "00000000020101",
+        "4f": "cf9538ae0200000000000000"
+      }
+    },
+    {
+      "description": "Migration before flag was set (spv) from < v2.3.0",
+      "options": {
+        "spv": true,
+        "prune": false
+      },
+      "dbVersion": 0,
+      "migrate1": false,
+      "before": {
+        "4f": "cf9538ae0100000000000000"
+      },
+      "after": {
+        "4d": "000000000200",
+        "4f": "cf9538ae0100000000000000"
+      }
+    }
+  ]
+}
