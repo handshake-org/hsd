@@ -38,7 +38,7 @@ walletUtils.dummyInput = () => {
   return Input.fromOutpoint(new Outpoint(hash, 0));
 };
 
-walletUtils.determinsticInput = (id) => {
+walletUtils.deterministicInput = (id) => {
   const hash = blake2b.digest(fromU32(id));
   return Input.fromOutpoint(new Outpoint(hash, 0));
 };

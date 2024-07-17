@@ -686,129 +686,71 @@ describe('Chain Migrations', function() {
     }
   });
 
-  describe('Migration ChainState (integration)', function() {
-    const location = testdir('migrate-chain-state');
+  describe('Migrate ChainState (integration)', function() {
+    const location = testdir('migrate-chainstate-data');
+    const data = require('./data/migrations/chain-1-chainstate.json');
     const migrationsBAK = ChainMigrator.migrations;
+    const Migration = ChainMigrator.MigrateChainState;
     const store = BlockStore.create({
       memory: true,
       network
-    });
-
-    const workers = new WorkerPool({
-      enabled: true,
-      size: 2
     });
 
     const chainOptions = {
       prefix: location,
       memory: false,
       blocks: store,
-      network,
-      workers
+      logger: Logger.global,
+      network
     };
 
-    let chain, miner, cpu;
+    let chain, ldb;
     before(async () => {
       ChainMigrator.migrations = {};
       await fs.mkdirp(location);
-      await workers.open();
+      await store.open();
+      chain = new Chain(chainOptions);
+      await chain.open();
+      ldb = chain.db.db;
+
+      await fillEntries(ldb, data.before);
+
+      await chain.close();
+      await store.close();
     });
 
     after(async () => {
       ChainMigrator.migrations = migrationsBAK;
       await rimraf(location);
-      await workers.close();
     });
 
     beforeEach(async () => {
-      chain = new Chain(chainOptions);
-      miner = new Miner({ chain });
-      cpu = miner.cpu;
-
-      await miner.open();
+      await fs.mkdirp(location);
       await store.open();
     });
 
     afterEach(async () => {
-      if (chain.opened)
-        await chain.close();
-
       await store.close();
-      await miner.close();
-    });
 
-    let correctState;
-    it('should mine 10 blocks', async () => {
-      await chain.open();
-
-      for (let i = 0; i < 10; i++) {
-        const block = await cpu.mineBlock();
-        assert(block);
-        assert(await chain.add(block));
+      if (chain.opened) {
+        await chain.close();
       }
     });
 
-    it('should move blocks to pre-blockstore state', async () => {
-      await chain.open();
-      const chainDB = chain.db;
-      const ldb = chainDB.db;
-
-      const state = await chainDB.getState();
-      const tipHeight = await chainDB.getHeight(state.tip);
-
-      const b = ldb.batch();
-      for (let i = 0; i <= tipHeight; i++) {
-        const block = await chainDB.getBlock(i);
-        const hash = block.hash();
-        const undo = await chainDB.getUndoCoins(hash);
-
-        b.put(chLayout.b.encode(hash), block.encode());
-        b.put(chLayout.u.encode(hash), undo.encode());
-      }
-
-      await b.write();
-    });
-
-    it('should set incorrect chaindb state', async () => {
-      await chain.open();
-      const state = chain.db.state.clone();
-      correctState = state.clone();
-
-      state.coin = 0;
-      state.value = 0;
-      state.burned = 0;
-
-      await chain.db.db.put(chLayout.R.encode(), state.encode());
-    });
-
-    it('should enable chain state migration', () => {
+    it('should migrate', async () => {
       ChainMigrator.migrations = {
-        0: ChainMigrator.MigrateChainState
+        0: Migration
       };
-    });
 
-    it('should throw error when new migration is available', async () => {
-      const expected = migrationError(ChainMigrator.migrations, [0],
-        chainFlagError(0));
-
-      let error;
+      chain.options.chainMigrate = 0;
       try {
         await chain.open();
       } catch (e) {
-        error = e;
+        ;
       }
 
-      assert(error, 'Chain must throw an error.');
-      assert.strictEqual(error.message, expected);
-    });
-
-    it('should migrate chain state', async () => {
-      chain.options.chainMigrate = 0;
-
-      await chain.open();
-
-      assert.bufferEqual(chain.db.state.encode(), correctState.encode(),
-        'Chain State did not properly migrate.');
+      await checkEntries(ldb, data.after);
+      await chain.close();
     });
   });
 
