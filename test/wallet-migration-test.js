@@ -379,7 +379,7 @@ describe('Wallet Migrations', function() {
     });
   });
 
-  describe('Migrate change address (data)', function() {
+  describe('Migrate account lookahead (data)', function() {
     const location = testdir('wallet-lookahead-data');
     const migrationsBAK = WalletMigrator.migrations;
     const data = require('./data/migrations/wallet-2-account-lookahead.json');

@@ -1,23 +1,7 @@
 'use strict';
 
 /**
- * Migration from 2.1.2 to 2.1.3
- * NOTE, patches necessary to run this migration gen:
-diff --git a/test/util/memwallet.js b/test/util/memwallet.js
-index 02cce343..c4831893 100644
---- a/test/util/memwallet.js
-+++ b/test/util/memwallet.js
-@@ -284,8 +284,8 @@ class MemWallet {
-     if (height == null)
-       height = -1;
-
--    if (this.map.has(hash))
--      return true;
-+    // if (this.map.has(hash))
-+    //   return true;
-
-     const view = new CoinView();
- *
+ * Migration from v2.x to v3.0.0
  */
 
 const Logger = require('blgr');
@@ -42,9 +26,12 @@ try {
 const wallet1priv = 'rprvKE8qsHtkmUxUSPQdn2sFKFUcKyUQz9pKQhxjEWecnXg9hgJMsmJXcw'
   + 'J77SqmHT1R6mcuNqVPzgT2EoGStsXaUN92VJKhQWUB6uZdL8gAZvez';
 
-let txID = 0;
+async function dumpMigration(prune) {
+  NETWORK.block.pruneAfterHeight = 10;
+  NETWORK.block.keepBlocks = 40;
 
-async function dumpMigration() {
+  let txID = 0;
+
   const commonOptions = {
     memory: true,
     network: NETWORK,
@@ -62,7 +49,8 @@ async function dumpMigration() {
   const chain = new Chain({
     ...commonOptions,
     entryCache: 5000,
-    blocks
+    blocks,
+    prune
   });
 
   const mempool = new Mempool({
@@ -126,10 +114,8 @@ async function dumpMigration() {
     await chain.add(block);
   };
 
-  // 10 blocks
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 40; i++)
     await mineBlock();
-  }
 
   // full auction from start to finish.
   // const name = rules.grindName(10, chain.tip.height + 1, NETWORK);
@@ -175,10 +161,12 @@ async function dumpMigration() {
 }
 
 (async () => {
-  const full = await dumpMigration();
+  const full = await dumpMigration(false);
+  const pruned = await dumpMigration(true);
 
   console.log(JSON.stringify({
-    full
+    full,
+    pruned
   }, null, 2));
 })().catch((err) => {
   console.error(err.stack);
@@ -187,9 +175,6 @@ async function dumpMigration() {
 
 async function getMigrationDump(chain) {
   const prefixes = [
-    'R',
-    'h',
-    'H',
     'b',
     'u'
   ];

@@ -686,7 +686,7 @@ describe('Chain Migrations', function() {
     }
   });
 
-  describe('Migrate ChainState (integration)', function() {
+  describe('Migrate ChainState (data)', function() {
     const location = testdir('migrate-chainstate-data');
     const data = require('./data/migrations/chain-1-chainstate.json');
     const migrationsBAK = ChainMigrator.migrations;
@@ -867,6 +867,118 @@ describe('Chain Migrations', function() {
         assert.bufferEqual(undo, undoData);
       }
     });
+  });
+
+  describe('Migrate BlockStore (data)', function() {
+    const location = testdir('migrate-blockstore-data');
+    const data = require('./data/migrations/chain-2-blockstore.json');
+    const migrationsBAK = ChainMigrator.migrations;
+    const Migration = ChainMigrator.MigrateBlockStore;
+    const layout = Migration.layout();
+    const store = BlockStore.create({
+      memory: true,
+      network
+    });
+
+    const chainOptions = {
+      prefix: location,
+      memory: false,
+      blocks: store,
+      logger: Logger.global,
+      network
+    };
+
+    const full = {
+      name: 'full',
+      options: chainOptions,
+      data: data.full
+    };
+    const pruned = {
+      name: 'pruned',
+      options: {
+        ...chainOptions,
+        prune: true
+      },
+      data: data.pruned
+    };
+
+    let chain, ldb;
+    beforeEach(async () => {
+      await fs.mkdirp(location);
+      await store.open();
+    });
+
+    afterEach(async () => {
+      await rimraf(location);
+      await store.close();
+
+      if (chain.opened)
+        await chain.close();
+    });
+
+    after(async () => {
+      ChainMigrator.migrations = migrationsBAK;
+    });
+
+    for (const tcase of [full, pruned]) {
+    it(`should migrate ${tcase.name} node`, async () => {
+      ChainMigrator.migrations = {};
+      chain = new Chain(tcase.options);
+      await chain.open();
+      ldb = chain.db.db;
+
+      await fillEntries(ldb, tcase.data);
+      await chain.close();
+
+      ChainMigrator.migrations = {
+        0: Migration
+      };
+
+      chain.options.chainMigrate = 0;
+
+        await chain.open();
+
+      // do we have block entries.
+      const blocks = await ldb.range({
+        gte: layout.b.min(),
+        lte: layout.b.max()
+      });
+
+      assert.strictEqual(blocks.length, 0);
+
+      const undos = await ldb.range({
+        gte: layout.u.min(),
+        lte: layout.u.max()
+      });
+
+      assert.strictEqual(undos.length, 0);
+
+      for (const [hexKey, hexValue] of Object.entries(data.full)) {
+        // block.
+        if (hexKey.slice(0, 2) === 'b'.charCodeAt(0).toString(16)) {
+          const key = layout.b.decode(Buffer.from(hexKey, 'hex'));
+          const hash = key[0];
+          const value = Buffer.from(hexValue, 'hex');
+
+          const block = await store.readBlock(hash);
+          assert(block);
+          assert.bufferEqual(block, value);
+          continue;
+        }
+
+        // undo block
+        if (hexKey.slice(0, 2) === 'u'.charCodeAt(0).toString(16)) {
+          const key = layout.u.decode(Buffer.from(hexKey, 'hex'));
+          const hash = key[0];
+          const value = Buffer.from(hexValue, 'hex');
+
+          const undo = await store.readUndo(hash);
+          assert(undo);
+          assert.bufferEqual(undo, value);
+        }
+      }
+    });
+    }
   });
 
   describe('Migration Tree State (integration)', function() {
