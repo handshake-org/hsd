@@ -1232,5 +1232,75 @@ describe('Chain Migrations', function() {
       assert.bufferEqual(state.encode(), encoded);
     });
   });
+
+  describe('Migrate Tree State (data)', function() {
+    const location = testdir('migrate-treestate-data');
+    const data = require('./data/migrations/chain-3-treestate.json');
+    const migrationsBAK = ChainMigrator.migrations;
+    const Migration = ChainMigrator.MigrateTreeState;
+    const store = BlockStore.create({
+      memory: true,
+      network
+    });
+
+    const chainOptions = {
+      prefix: location,
+      memory: false,
+      blocks: store,
+      logger: Logger.global,
+      network
+    };
+
+    let chain, ldb;
+    before(async () => {
+      ChainMigrator.migrations = {};
+      await fs.mkdirp(location);
+      await store.open();
+      chain = new Chain(chainOptions);
+      chain.db.version = 2;
+      await chain.open();
+      ldb = chain.db.db;
+
+      await fillEntries(ldb, data.before);
+
+      await chain.close();
+      await store.close();
+    });
+
+    after(async () => {
+      ChainMigrator.migrations = migrationsBAK;
+      await rimraf(location);
+    });
+
+    beforeEach(async () => {
+      await fs.mkdirp(location);
+      await store.open();
+    });
+
+    afterEach(async () => {
+      await store.close();
+
+      if (chain.opened) {
+        await chain.close();
+      }
+    });
+
+    it('should migrate', async () => {
+      ChainMigrator.migrations = {
+        0: Migration
+      };
+
+      chain.options.chainMigrate = 0;
+      chain.db.version = 3;
+      try {
+        await chain.open();
+      } catch (e) {
+        ;
+      }
+
+      await checkEntries(ldb, data.after);
+      await chain.close();
+    });
+  });
 });
 
