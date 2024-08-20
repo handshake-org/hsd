@@ -103,13 +103,14 @@ common.rimraf = async function(p) {
   return await fs.rimraf(p);
 };
 
-common.forValue = async function forValue(obj, key, val, timeout = 5000) {
+common.forValue = async function forValue(obj, key, val, timeout = 2000) {
   assert(typeof obj === 'object');
   assert(typeof key === 'string');
 
   const ms = 10;
   let interval = null;
   let count = 0;
+  const stack = getStack();
 
   return new Promise((resolve, reject) => {
     interval = setInterval(() => {
@@ -118,14 +119,16 @@ common.forValue = async function forValue(obj, key, val, timeout = 5000) {
         resolve();
       } else if (count * ms >= timeout) {
         clearInterval(interval);
-        reject(new Error('Timeout waiting for value.'));
+        const error = new Error('Timeout waiting for value.');
+        error.stack = error.stack + '\n' + stack;
+        reject(error);
       }
       count += 1;
     }, ms);
   });
 };
 
-common.forEvent = async function forEvent(obj, name, count = 1, timeout = 5000) {
+common.forEvent = async function forEvent(obj, name, count = 1, timeout = 2000) {
   assert(typeof obj === 'object');
   assert(typeof name === 'string');
   assert(typeof count === 'number');
@@ -133,6 +136,8 @@ common.forEvent = async function forEvent(obj, name, count = 1, timeout = 5000) 
 
   let countdown = count;
   const events = [];
+
+  const stack = getStack();
 
   return new Promise((resolve, reject) => {
     let timeoutHandler, listener;
@@ -159,9 +164,11 @@ common.forEvent = async function forEvent(obj, name, count = 1, timeout = 5000) 
     timeoutHandler = setTimeout(() => {
       cleanup();
       const msg = `Timeout waiting for event ${name} `
-        + `(received ${count - countdown}/${count})`;
+        + `(received ${count - countdown}/${count})\n${stack}`;
 
-      reject(new Error(msg));
+      const error = new Error(msg);
+      error.stack = error.stack + '\n' + stack;
+      reject(error);
       return;
     }, timeout);
 
@@ -169,11 +176,13 @@ common.forEvent = async function forEvent(obj, name, count = 1, timeout = 5000) 
   });
 };
 
-common.forEventCondition = async function forEventCondition(obj, name, fn, timeout = 5000) {
+common.forEventCondition = async function forEventCondition(obj, name, fn, timeout = 2000) {
   assert(typeof obj === 'object');
   assert(typeof name === 'string');
   assert(typeof fn === 'function');
   assert(typeof timeout === 'number');
+
+  const stack = getStack();
 
   return new Promise((resolve, reject) => {
     let timeoutHandler, listener;
@@ -190,6 +199,7 @@ common.forEventCondition = async function forEventCondition(obj, name, fn, timeo
         res = await fn(...args);
       } catch (e) {
         cleanup();
+        e.stack = e.stack + '\n' + stack;
         reject(e);
         return;
       }
@@ -203,7 +213,9 @@ common.forEventCondition = async function forEventCondition(obj, name, fn, timeo
     timeoutHandler = setTimeout(() => {
       cleanup();
       const msg = `Timeout waiting for event ${name} with condition`;
-      reject(new Error(msg));
+      const error = new Error(msg);
+      error.stack = error.stack + '\n' + stack;
+      reject(error);
       return;
     }, timeout);
 
@@ -356,4 +368,8 @@ class TXContext {
 
     return [tx, view];
   }
+}
+
+function getStack() {
+  return new Error().stack.split('\n').slice(2).join('\n');
 }

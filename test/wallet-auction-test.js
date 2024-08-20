@@ -131,8 +131,9 @@ describe('Wallet Auction', function() {
       const openMTX = openTXs[openIndex++];
       const tx = openMTX.toTX();
       const addResult = await wdb.addTX(tx);
-      assert.strictEqual(addResult.size, 1);
-      assert.ok(addResult.has(wallet.wid));
+      assert.ok(addResult);
+      assert.strictEqual(addResult.wids.size, 1);
+      assert.ok(addResult.wids.has(wallet.wid));
 
       const pending = await wallet.getPending();
       assert.strictEqual(pending.length, 1);
@@ -305,7 +306,8 @@ describe('Wallet Auction', function() {
       // double opens are properly removed.
       await wallet.sign(spendMTX);
       const added = await wdb.addTX(spendMTX.toTX());
-      assert.strictEqual(added.size, 1);
+      assert.ok(added);
+      assert.strictEqual(added.wids.size, 1);
     });
 
     it('should mine enough blocks to expire auction (again)', async () => {

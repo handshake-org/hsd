@@ -1,18 +1,20 @@
 'use strict';
 
+const assert = require('bsert');
 const blake2b = require('bcrypto/lib/blake2b');
 const random = require('bcrypto/lib/random');
-const Block = require('../../lib/primitives/block');
 const ChainEntry = require('../../lib/blockchain/chainentry');
 const Input = require('../../lib/primitives/input');
 const Outpoint = require('../../lib/primitives/outpoint');
+const {ZERO_HASH} = require('../../lib/protocol/consensus');
 
 const walletUtils = exports;
 
-walletUtils.fakeBlock = (height) => {
-  const prev = blake2b.digest(fromU32((height - 1) >>> 0));
-  const hash = blake2b.digest(fromU32(height >>> 0));
-  const root = blake2b.digest(fromU32((height | 0x80000000) >>> 0));
+walletUtils.fakeBlock = (height, prevSeed = 0, seed = prevSeed) => {
+  assert(height >= 0);
+  const prev = height === 0 ? ZERO_HASH : blake2b.digest(fromU32(((height - 1) ^ prevSeed) >>> 0));
+  const hash = blake2b.digest(fromU32((height ^ seed) >>> 0));
+  const root = blake2b.digest(fromU32((height | 0x80000000 ^ seed) >>> 0));
 
   return {
     hash: hash,
@@ -36,22 +38,26 @@ walletUtils.dummyInput = () => {
   return Input.fromOutpoint(new Outpoint(hash, 0));
 };
 
-walletUtils.nextBlock = (wdb) => {
-  return walletUtils.fakeBlock(wdb.state.height + 1);
+walletUtils.nextBlock = (wdb, prevSeed = 0, seed = prevSeed) => {
+  return walletUtils.fakeBlock(wdb.state.height + 1, prevSeed, seed);
 };
 
-walletUtils.curBlock = (wdb) => {
-  return walletUtils.fakeBlock(wdb.state.height);
+walletUtils.curBlock = (wdb, prevSeed = 0, seed = prevSeed) => {
+  return walletUtils.fakeBlock(wdb.state.height, prevSeed, seed);
 };
 
-walletUtils.nextEntry = (wdb) => {
-  const cur = walletUtils.curEntry(wdb);
-  const next = new Block(walletUtils.nextBlock(wdb));
-  return ChainEntry.fromBlock(next, cur);
+walletUtils.fakeEntry = (height, prevSeed = 0, curSeed = prevSeed) => {
+  const cur = walletUtils.fakeBlock(height, prevSeed, curSeed);
+  return new ChainEntry(cur);;
 };
 
-walletUtils.curEntry = (wdb) => {
-  return new ChainEntry(walletUtils.curBlock(wdb));
+walletUtils.nextEntry = (wdb, curSeed = 0, nextSeed = curSeed) => {
+  const next = walletUtils.nextBlock(wdb, curSeed, nextSeed);
+  return new ChainEntry(next);
+};
+
+walletUtils.curEntry = (wdb, prevSeed = 0, seed = prevSeed) => {
+  return walletUtils.fakeEntry(wdb.state.height, seed);
 };
 
 function fromU32(num) {

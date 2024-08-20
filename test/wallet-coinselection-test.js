@@ -7,10 +7,29 @@ const {
   WalletDB,
   policy
 } = require('..');
+const {BlockMeta} = require('../lib/wallet/records');
 
 // Use main instead of regtest because (deprecated)
 // CoinSelector.MAX_FEE was network agnostic
 const network = Network.get('main');
+
+function dummyBlock(tipHeight) {
+  const height = tipHeight + 1;
+  const hash = Buffer.alloc(32);
+  hash.writeUInt16BE(height);
+
+  const prevHash = Buffer.alloc(32);
+  prevHash.writeUInt16BE(tipHeight);
+
+  const dummyBlock = {
+    hash,
+    height,
+    time: Date.now(),
+    prevBlock: prevHash
+  };
+
+  return dummyBlock;
+}
 
 async function fundWallet(wallet, amounts) {
   assert(Array.isArray(amounts));
@@ -21,15 +40,8 @@ async function fundWallet(wallet, amounts) {
     mtx.addOutput(addr, amt);
   }
 
-  const height = wallet.wdb.height + 1;
-  const hash = Buffer.alloc(32);
-  hash.writeUInt16BE(height);
-  const dummyBlock = {
-    hash,
-    height,
-    time: Date.now()
-  };
-  await wallet.wdb.addBlock(dummyBlock, [mtx.toTX()]);
+  const dummy = dummyBlock(wallet.wdb.height);
+  await wallet.wdb.addBlock(dummy, [mtx.toTX()]);
 }
 
 describe('Wallet Coin Selection', function () {
@@ -41,6 +53,10 @@ describe('Wallet Coin Selection', function () {
       await wdb.open();
       wdb.height = network.txStart + 1;
       wdb.state.height = wdb.height;
+
+      const dummy = dummyBlock(network.txStart + 1);
+      const record = BlockMeta.fromEntry(dummy);
+      await wdb.setTip(record);
       wallet = wdb.primary;
     });
 

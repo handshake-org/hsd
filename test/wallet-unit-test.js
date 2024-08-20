@@ -5,20 +5,24 @@ const blake2b = require('bcrypto/lib/blake2b');
 const base58 = require('bcrypto/lib/encoding/base58');
 const random = require('bcrypto/lib/random');
 const bio = require('bufio');
-const {
-  HDPrivateKey,
-  Mnemonic,
-  WalletDB,
-  Network,
-  wallet: { Wallet }
-} = require('../lib/hsd');
+const Network = require('../lib/protocol/network');
+const MTX = require('../lib/primitives/mtx');
+const HDPrivateKey = require('../lib/hd/private');
+const Mnemonic = require('../lib/hd/mnemonic');
+const WalletDB = require('../lib/wallet/walletdb');
+const Wallet = require('../lib/wallet/wallet');
 const Account = require('../lib/wallet/account');
+const wutils = require('./util/wallet');
+const {nextEntry, fakeEntry} = require('./util/wallet');
+const MemWallet = require('./util/memwallet');
+
+/** @typedef {import('../lib/primitives/tx')} TX */
 
 const mnemonics = require('./data/mnemonic-english.json');
 const network = Network.get('main');
 
 describe('Wallet Unit Tests', () => {
-  describe('constructor', () => {
+  describe('constructor', function() {
     // abandon, abandon... about
     const phrase = mnemonics[0][1];
     const passphrase = mnemonics[0][2];
@@ -346,4 +350,211 @@ describe('Wallet Unit Tests', () => {
       }
     });
   });
+
+  describe('addBlock', function() {
+    const ALT_SEED = 0xdeadbeef;
+
+    /** @type {WalletDB} */
+    let wdb;
+    /** @type {Wallet} */
+    let wallet;
+    /** @type {MemWallet} */
+    let memwallet;
+
+    beforeEach(async () => {
+      wdb = new WalletDB({
+        network: network.type,
+        memory: true
+      });
+
+      await wdb.open();
+      wallet = wdb.primary;
+
+      memwallet = new MemWallet({
+        network
+      });
+
+      for (let i = 0; i < 10; i++) {
+        const entry = nextEntry(wdb);
+        await wdb.addBlock(entry, []);
+      }
+    });
+
+    afterEach(async () => {
+      await wdb.close();
+      wdb = null;
+    });
+
+    // Move forward
+    it('should progress with 10 block', async () => {
+      const tip = await wdb.getTip();
+
+      for (let i = 0; i < 10; i++) {
+        const entry = nextEntry(wdb);
+        const added = await wdb.addBlock(entry, []);
+        assert.ok(added);
+        assert.strictEqual(added.txs, 0);
+        assert.strictEqual(added.filterUpdated, false);
+        assert.equal(wdb.height, entry.height);
+      }
+
+      assert.strictEqual(wdb.height, tip.height + 10);
+    });
+
+    it('should return number of transactions added (owned)', async () => {
+      const tip = await wdb.getTip();
+      const wtx = await fakeWTX(wallet);
+      const entry = nextEntry(wdb);
+      const added = await wdb.addBlock(entry, [wtx]);
+
+      assert.ok(added);
+      assert.strictEqual(added.txs, 1);
+      assert.strictEqual(added.filterUpdated, true);
+      assert.equal(wdb.height, tip.height + 1);
+    });
+
+    it('should return number of transactions added (none)', async () => {
+      const tip = await wdb.getTip();
+      const entry = nextEntry(wdb);
+      const added = await wdb.addBlock(entry, []);
+
+      assert.ok(added);
+      assert.strictEqual(added.txs, 0);
+      assert.strictEqual(added.filterUpdated, false);
+      assert.equal(wdb.height, tip.height + 1);
+    });
+
+    it('should fail to add block on unusual reorg', async () => {
+      const tip = await wdb.getTip();
+      const entry = nextEntry(wdb, ALT_SEED, ALT_SEED);
+
+      // TODO: Detect sync chain is correct.
+      const added = await wdb.addBlock(entry, []);
+      assert.strictEqual(added, null);
+      assert.strictEqual(wdb.height, tip.height);
+    });
+
+    // Same block
+    it('should re-add the same block', async () => {
+      const tip = await wdb.getTip();
+      const entry = nextEntry(wdb);
+      const wtx1 = await fakeWTX(wallet);
+      const wtx2 = await fakeWTX(wallet);
+
+      const added1 = await wdb.addBlock(entry, [wtx1]);
+      assert.ok(added1);
+      assert.strictEqual(added1.txs, 1);
+      assert.strictEqual(added1.filterUpdated, true);
+      assert.equal(wdb.height, tip.height + 1);
+
+      // Same TX wont show up second time.
+      const added2 = await wdb.addBlock(entry, [wtx1]);
+      assert.ok(added2);
+      assert.strictEqual(added2.txs, 0);
+      assert.strictEqual(added2.filterUpdated, false);
+      assert.equal(wdb.height, tip.height + 1);
+
+      const added3 = await wdb.addBlock(entry, [wtx1, wtx2]);
+      assert.ok(added3);
+      assert.strictEqual(added3.txs, 1);
+      // Both txs are using the same address.
+      assert.strictEqual(added3.filterUpdated, false);
+      assert.equal(wdb.height, tip.height + 1);
+    });
+
+    it('should ignore txs not owned by wallet', async () => {
+      const tip = await wdb.getTip();
+      const addr = memwallet.getReceive().toString(network);
+      const tx = fakeTX(addr);
+
+      const entry = nextEntry(wdb);
+      const added = await wdb.addBlock(entry, [tx]);
+      assert.ok(added);
+      assert.strictEqual(added.txs, 0);
+      assert.strictEqual(added.filterUpdated, false);
+
+      assert.strictEqual(wdb.height, tip.height + 1);
+    });
+
+    // This should not happen, but there should be guards in place.
+    it('should resync if the block is the same', async () => {
+      const tip = await wdb.getTip();
+      const entry = fakeEntry(tip.height, 0, ALT_SEED);
+
+      // TODO: Detect sync chain is correct.
+      const added = await wdb.addBlock(entry, []);
+      assert.strictEqual(added, null);
+    });
+
+    // LOW BLOCKS
+    it('should ignore blocks before tip', async () => {
+      const tip = await wdb.getTip();
+      const entry = fakeEntry(tip.height - 1);
+      const wtx = await fakeWTX(wallet);
+
+      // ignore low blocks.
+      const added = await wdb.addBlock(entry, [wtx]);
+      assert.strictEqual(added, null);
+      assert.strictEqual(wdb.height, tip.height);
+    });
+
+    it('should sync chain blocks before tip on unusual low block reorg', async () => {
+      const tip = await wdb.getTip();
+      const entry = fakeEntry(tip.height - 1, 0, ALT_SEED);
+      const wtx = await fakeWTX(wallet);
+
+      // TODO: Detect sync chain is correct.
+
+      // ignore low blocks.
+      const added = await wdb.addBlock(entry, [wtx]);
+      assert.strictEqual(added, null);
+      assert.strictEqual(wdb.height, tip.height);
+    });
+
+    // HIGH BLOCKS
+    it('should rescan for missed blocks', async () => {
+      const tip = await wdb.getTip();
+      // next + 1
+      const entry = fakeEntry(tip.height + 2);
+
+      let rescan = false;
+      let rescanHash = null;
+
+      wdb.client.rescanInteractive = async (hash) => {
+        rescan = true;
+        rescanHash = hash;
+      };
+
+      const added = await wdb.addBlock(entry, []);
+      assert.strictEqual(added, null);
+
+      assert.strictEqual(rescan, true);
+      assert.bufferEqual(rescanHash, tip.hash);
+    });
+  });
 });
+
+/**
+ * @param {String} addr
+ * @returns {TX}
+ */
+
+function fakeTX(addr) {
+  const tx = new MTX();
+  tx.addInput(wutils.dummyInput());
+  tx.addOutput({
+    address: addr,
+    value: 5460
+  });
+  return tx.toTX();
+}
+
+/**
+ * @param {Wallet} wallet
+ * @returns {Promise<TX>}
+ */
+
+async function fakeWTX(wallet) {
+  const addr = await wallet.receiveAddress();
+  return fakeTX(addr);
+}

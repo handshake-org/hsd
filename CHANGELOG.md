@@ -31,7 +31,7 @@ process and allows parallel rescans.
       - `compactInterval` - what is the current compaction interval config.
       - `nextCompaction` - when will the next compaction trigger after restart.
       - `lastCompaction` - when was the last compaction run.
-  - Introduce `scan interactive` hook (start, filter)
+  - Introduce `scan interactive` hook (start, filter, fullLock)
 
 ### Node HTTP Client:
   - Introduce `scanInteractive` method that starts interactive rescan.
@@ -43,6 +43,9 @@ process and allows parallel rescans.
   - Add `getFee`, an HTTP alternative to estimateFee socket call.
 
 ### Wallet Changes
+- Add migration that recalculates txdb balances to fix any inconsistencies.
+- Wallet will now use `interactive scan` for initial sync(on open) and rescan.
+
 #### Configuration
 - Wallet now has option `wallet-migrate-no-rescan`/`migrate-no-rescan` if you
   want to disable rescan when migration recommends it. It may result in the
@@ -54,7 +57,7 @@ process and allows parallel rescans.
 
 #### Wallet API
 
-- Add migration that recalculates txdb balances to fix any inconsistencies.
+- WalletNode now emits `open` and `close` events.
 - WalletDB Now emits events for: `open`, `close`, `connect`, `disconnect`.
 - WalletDB
   - `open()` no longer calls `connect` and needs separate call `connect`.
@@ -62,12 +65,13 @@ process and allows parallel rescans.
     sync to do the rescan.
   - emits events for: `open`, `close`, `connect`, `disconnect`, `sync done`.
 
-### Wallet HTTP Client
+#### Wallet HTTP
   - All transaction creating endpoints now accept `hardFee` for specifying the
     exact fee.
   - All transaction sending endpoints now fundlock/queue tx creation. (no more
     conflicting transactions)
   - Add options to `getNames` for passing `own`.
+
 
 ## v6.0.0
 
