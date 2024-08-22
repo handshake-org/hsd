@@ -202,7 +202,7 @@ describe('MTX', function() {
 
       await mtx.fund(coins1, {
         changeAddress: wallet1.getChange(),
-        inputs: [{
+        preferredInputs: [{
           hash: coin.hash,
           index: coin.index
         }]
@@ -229,7 +229,7 @@ describe('MTX', function() {
 
       await mtx.fund(coins1, {
         changeAddress: wallet1.getChange(),
-        inputs: [{
+        preferredInputs: [{
           hash: coin.hash,
           index: coin.index
         }]
@@ -257,7 +257,7 @@ describe('MTX', function() {
 
       await mtx.fund(coins1, {
         changeAddress: wallet1.getChange(),
-        inputs: [{
+        preferredInputs: [{
           hash: viewCoin.hash,
           index: viewCoin.index
         }, {
@@ -296,7 +296,7 @@ describe('MTX', function() {
       try {
         await mtx.fund(coins1, {
           changeAddress: wallet1.getChange(),
-          inputs: [{
+          preferredInputs: [{
             hash: coin.hash,
             index: coin.index
           }]
@@ -458,7 +458,7 @@ describe('MTX', function() {
 
       await mtx.fund(coins1, {
         changeAddress: wallet1.getChange(),
-        inputs: [{
+        preferredInputs: [{
           hash: coin2.hash,
           index: coin2.index
         }]
@@ -501,7 +501,7 @@ describe('MTX', function() {
 
       await mtx.fund(coins1, {
         changeAddress: wallet1.getChange(),
-        inputs: [{
+        preferredInputs: [{
           hash: coin2.hash,
           index: coin2.index
         }]
@@ -555,7 +555,7 @@ describe('MTX', function() {
 
       await mtx.fund(coins1, {
         changeAddress: wallet1.getChange(),
-        inputs: [{
+        preferredInputs: [{
           hash: coin2.hash,
           index: coin2.index
         }, {
@@ -629,7 +629,7 @@ describe('MTX', function() {
       try {
         await mtx.fund(coins1, {
           changeAddress: wallet1.getChange(),
-          inputs: [{
+          preferredInputs: [{
             hash: coin2.hash,
             index: coin2.index
           }, {
@@ -676,7 +676,7 @@ describe('MTX', function() {
       try {
         await mtx.fund(coins1, {
           changeAddress: wallet1.getChange(),
-          inputs: [{
+          preferredInputs: [{
             hash: coin2.hash,
             index: coin2.index
           }, {
@@ -723,7 +723,7 @@ describe('MTX', function() {
       try {
         await mtx.fund(coins1, {
           changeAddress: wallet1.getChange(),
-          inputs: [{
+          preferredInputs: [{
             hash: coin2.hash,
             index: coin2.index
           }, {
