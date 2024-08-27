@@ -1,0 +1,21 @@
+{
+  "description": "Migrate migrations. Affects wdb layout M.",
+  "cases": [
+    {
+      "description": "Migration after migration flag was set.",
+      "before": {
+        "4d00000000": "00"
+      },
+      "after": {
+        "4d": "000000000200"
+      }
+    },
+    {
+      "description": "Migration before flag was set.",
+      "before": {},
+      "after": {
+        "4d": "000000000200"
+      }
+    }
+  ]
+}

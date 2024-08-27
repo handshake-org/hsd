@@ -40,7 +40,6 @@ class MemWallet {
     this.network = Network.primary;
     this.master = null;
     this.key = null;
-    this.witness = false;
     this.account = 0;
     this.height = 0;
     this.receiveDepth = 1;
@@ -84,11 +83,6 @@ class MemWallet {
     if (options.key != null) {
       assert(HD.isPrivate(options.key));
       this.key = options.key;
-    }
-
-    if (options.witness != null) {
-      assert(typeof options.witness === 'boolean');
-      this.witness = options.witness;
     }
 
     if (options.account != null) {

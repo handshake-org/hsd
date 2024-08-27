@@ -2980,7 +2980,7 @@ describe('Wallet', function() {
     // Verifiable with reserved-browser.js and names.json
     const lockup = 6800000000000 + 503513487;
     // By setting the fee rate to zero when we create the claim,
-    // we can ensure determinstic wallet values even if the size of
+    // we can ensure deterministic wallet values even if the size of
     // claim changes due to external factors like Cloudflare updating
     // their real world DNS zone, which is retrieved by the wallet in this test.
     const fee = 0;

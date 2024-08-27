@@ -38,6 +38,11 @@ walletUtils.dummyInput = () => {
   return Input.fromOutpoint(new Outpoint(hash, 0));
 };
 
+walletUtils.deterministicInput = (id) => {
+  const hash = blake2b.digest(fromU32(id));
+  return Input.fromOutpoint(new Outpoint(hash, 0));
+};
+
 walletUtils.nextBlock = (wdb, prevSeed = 0, seed = prevSeed) => {
   return walletUtils.fakeBlock(wdb.state.height + 1, prevSeed, seed);
 };

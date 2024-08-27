@@ -9,11 +9,18 @@
 const assert = require('bsert');
 const Logger = require('blgr');
 const Network = require('../../lib/protocol/network');
+const consensus = require('../../lib/protocol/consensus');
+const BlockTemplate = require('../../lib/mining/template');
 const bdb = require('bdb');
 
-const {
-  Migrator
-} = require('../../lib/migrations/migrator');
+let Migrator = class {};
+
+try {
+  const migrator = require('../../lib/migrations/migrator');
+  Migrator = migrator.Migrator;
+} catch (e) {
+  ;
+}
 
 const oldMockLayout = {
   V: bdb.key('V'),
@@ -26,9 +33,9 @@ const mockLayout = {
 
   // data for testing
   a: bdb.key('a'),
-  b: bdb.key('a'),
-  c: bdb.key('a'),
-  d: bdb.key('a')
+  b: bdb.key('b'),
+  c: bdb.key('c'),
+  d: bdb.key('d')
 };
 
 const DB_FLAG_ERROR = 'mock chain needs migration';
@@ -194,4 +201,149 @@ exports.migrationError = (migrations, ids, flagError) => {
   error += flagError;
 
   return error;
+};
+
+exports.prefix2hex = function prefix2hex(prefix) {
+  return Buffer.from(prefix, 'ascii').toString('hex');
+};
+
+exports.dumpDB = async (db, prefixes) => {
+  const data = await db.dump();
+  const filtered = {};
+
+  for (const [key, value] of Object.entries(data)) {
+    for (const prefix of prefixes) {
+      if (key.startsWith(prefix)) {
+        filtered[key] = value;
+        break;
+      }
+    }
+  }
+
+  return filtered;
+};
+
+exports.dumpChainDB = async (chaindb, prefixes) => {
+  return exports.dumpDB(chaindb.db, prefixes);
+};
+
+exports.checkEntries = async (ldb, data) => {
+  for (const [key, value] of Object.entries(data)) {
+    const bkey = Buffer.from(key, 'hex');
+    const bvalue = Buffer.from(value, 'hex');
+
+    const stored = await ldb.get(bkey);
+
+    assert(stored,
+      `Value for ${key} not found in db, expected: ${value}`);
+    assert.bufferEqual(stored, bvalue,
+      `Value for ${key}: ${stored.toString('hex')} does not match expected: ${value}`);
+  }
+};
+
+exports.fillEntries = async (ldb, data) => {
+  const batch = await ldb.batch();
+
+  for (const [key, value] of Object.entries(data)) {
+    const bkey = Buffer.from(key, 'hex');
+    const bvalue = Buffer.from(value, 'hex');
+
+    batch.put(bkey, bvalue);
+  }
+
+  await batch.write();
+};
+
+exports.writeVersion = (b, key, name, version) => {
+    const value = Buffer.alloc(name.length + 4);
+
+    value.write(name, 0, 'ascii');
+    value.writeUInt32LE(version, name.length);
+
+    b.put(key, value);
+};
+
+exports.getVersion = (data, name) => {
+  const error = 'version mismatch';
+
+  if (data.length !== name.length + 4)
+    throw new Error(error);
+
+  if (data.toString('ascii', 0, name.length) !== name)
+    throw new Error(error);
+
+  return data.readUInt32LE(name.length);
+};
+
+exports.checkVersion = async (ldb, versionDBKey, expectedVersion) => {
+  const data = await ldb.get(versionDBKey);
+  const version = exports.getVersion(data, 'wallet');
+
+  assert.strictEqual(version, expectedVersion);
+};
+
+// Chain generation
+const REGTEST_TIME = 1580745078;
+const getBlockTime = height => REGTEST_TIME + (height * 10 * 60);
+
+/**
+ * Create deterministic block.
+ * @param {Object} options
+ * @param {Chain} options.chain
+ * @param {Miner} options.miner
+ * @param {ChainEntry} options.tip
+ * @param {Address} options.address
+ * @param {Number} options.txno
+ * @returns {BlockTemplate}
+ */
+
+exports.createBlock = async (options) => {
+  const {
+    chain,
+    miner,
+    tip,
+    address,
+    txno
+  } = options;
+  const version = await chain.computeBlockVersion(tip);
+  const mtp = await chain.getMedianTime(tip);
+  const time = getBlockTime(tip.height + 1);
+
+  const state = await chain.getDeployments(time, tip);
+  const target = await chain.getTarget(time, tip);
+  const root = chain.db.treeRoot();
+
+  const attempt = new BlockTemplate({
+    prevBlock: tip.hash,
+    treeRoot: root,
+    reservedRoot: consensus.ZERO_HASH,
+    height: tip.height + 1,
+    version: version,
+    time: time,
+    bits: target,
+    mtp: mtp,
+    flags: state.flags,
+    address: address,
+    coinbaseFlags: Buffer.from('Miner for data gen', 'ascii'),
+    interval: miner.network.halvingInterval,
+    weight: miner.options.reservedWeight,
+    sigops: miner.options.reservedSigops
+  });
+
+  miner.assemble(attempt);
+
+  const _createCB = attempt.createCoinbase.bind(attempt);
+  attempt.createCoinbase = function createCoinbase() {
+    const cb = _createCB();
+    const wit = Buffer.alloc(8);
+    const id = txno;
+    // make txs deterministic
+    wit.writeUInt32LE(id, 0, true);
+    cb.inputs[0].sequence = id;
+    cb.inputs[0].witness.setData(1, wit);
+    cb.refresh();
+    return cb;
+  };
+
+  return attempt;
 };
