@@ -3300,11 +3300,11 @@ describe('Wallet', function() {
       assert.strictEqual(bal.ulocked, lockup);
       assert.strictEqual(bal.clocked, lockup);
 
-      const auctionsTxs = await wallet.createAuctionTxs(name, value, lockup, {
+      const auctionsTXs = await wallet.createAuctionTXs(name, value, lockup, {
         hardFee: fee
       });
-      const winningBidUnsent = auctionsTxs.bid;
-      unsentReveal = auctionsTxs.reveal;
+      const winningBidUnsent = auctionsTXs.bid;
+      unsentReveal = auctionsTXs.reveal;
 
       const winningBid = await wallet.sendMTX(winningBidUnsent, null);
       uTXCount++;

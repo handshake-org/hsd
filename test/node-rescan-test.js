@@ -290,8 +290,8 @@ describe('Node Rescan Interactive API', function() {
     const {node} = nodeCtx;
     const startHeight = nodeCtx.height - RESCAN_DEPTH + 1;
 
-    const filterAndTxs = tests.slice();
-    let test = filterAndTxs.shift();
+    const filterAndTXs = tests.slice();
+    let test = filterAndTXs.shift();
 
     // initial run is the first filter test.
     let count = 0;
@@ -304,14 +304,14 @@ describe('Node Rescan Interactive API', function() {
       // we are testing against the current filter.
       assert(test.txCountCheck(entry.height, txs));
 
-      if (filterAndTxs.length === 0) {
+      if (filterAndTXs.length === 0) {
         return {
           type: scanActions.ABORT
         };
       }
 
       // next test
-      test = filterAndTxs.shift();
+      test = filterAndTXs.shift();
 
       return {
         type: scanActions.REPEAT_SET,
@@ -710,8 +710,8 @@ describe('Node Rescan Interactive API', function() {
     it('should rescan the same block with update filters (REPEAT_SET)', async () => {
       const startHeight = nodeCtx.height - RESCAN_DEPTH + 1;
 
-      const filterAndTxs = tests.slice();
-      let test = filterAndTxs.shift();
+      const filterAndTXs = tests.slice();
+      let test = filterAndTXs.shift();
 
       let count = 0;
 
@@ -723,13 +723,13 @@ describe('Node Rescan Interactive API', function() {
         assert.strictEqual(entry.height, startHeight);
         assert(test.txCountCheck(entry.height, txs));
 
-        if (filterAndTxs.length === 0) {
+        if (filterAndTXs.length === 0) {
           return {
             type: scanActions.ABORT
           };
         }
 
-        test = filterAndTxs.shift();
+        test = filterAndTXs.shift();
 
         return {
           type: scanActions.REPEAT_SET,

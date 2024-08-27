@@ -266,8 +266,8 @@ describe('WalletDB ChainState', function() {
       await progressWithNoTX(wdb);
 
     for (let i = 0; i < blocksPerAction; i++) {
-      const blockAndTxs = await progressWithNoTX(wdb);
-      removeBlocks.push(blockAndTxs);
+      const blockAndTXs = await progressWithNoTX(wdb);
+      removeBlocks.push(blockAndTXs);
     }
 
     assert.strictEqual(wdb.state.startHeight, 0);
@@ -277,11 +277,11 @@ describe('WalletDB ChainState', function() {
     assert.strictEqual(wdb.state.marked, false);
 
     for (let i = 0; i < blocksPerAction; i++) {
-      const blockAndTxs = await progressWithTX(wdb);
-      removeBlocks.push(blockAndTxs);
+      const blockAndTXs = await progressWithTX(wdb);
+      removeBlocks.push(blockAndTXs);
 
       if (!firstBlock)
-        firstBlock = blockAndTxs.block;
+        firstBlock = blockAndTXs.block;
 
       assert.strictEqual(wdb.state.startHeight, firstBlock.height);
       assert.bufferEqual(wdb.state.startHash, firstBlock.hash);
@@ -389,10 +389,10 @@ describe('WalletDB ChainState', function() {
       removeBlocks.push(await progressWithNoTX(wdb));
 
     for (let i = 0; i < blocksPerAction; i++) {
-      const blockAndTxs = await progressWithTX(wdb);
+      const blockAndTXs = await progressWithTX(wdb);
       if (!firstBlock)
-        firstBlock = blockAndTxs.block;
-      removeBlocks.push(blockAndTxs);
+        firstBlock = blockAndTXs.block;
+      removeBlocks.push(blockAndTXs);
     }
 
     assert.strictEqual(wdb.state.startHeight, firstBlock.height);
@@ -416,10 +416,10 @@ describe('WalletDB ChainState', function() {
     firstBlock = null;
 
     for (let i = 0; i < blocksPerAction; i++) {
-      const blockAndTxs = await progressWithTX(wdb);
+      const blockAndTXs = await progressWithTX(wdb);
 
       if (!firstBlock)
-        firstBlock = blockAndTxs.block;
+        firstBlock = blockAndTXs.block;
 
       assert.strictEqual(wdb.state.startHeight, firstBlock.height);
       assert.strictEqual(wdb.state.startHash, firstBlock.hash);
@@ -445,10 +445,10 @@ describe('WalletDB ChainState', function() {
       await progressWithNoTX(wdb);
 
     for (let i = 0; i < blocksPerAction * 2; i++) {
-      const blockAndTxs = await progressWithTX(wdb);
+      const blockAndTXs = await progressWithTX(wdb);
       if (!firstBlock)
-        firstBlock = blockAndTxs.block;
-      removeBlocks.push(blockAndTxs);
+        firstBlock = blockAndTXs.block;
+      removeBlocks.push(blockAndTXs);
     }
 
     assert.strictEqual(wdb.state.startHeight, firstBlock.height);
@@ -487,10 +487,10 @@ describe('WalletDB ChainState', function() {
     firstBlock = null;
 
     for (let i = 0; i < blocksPerAction; i++) {
-      const blockAndTxs = await progressWithTX(wdb);
+      const blockAndTXs = await progressWithTX(wdb);
       if (!firstBlock)
-        firstBlock = blockAndTxs.block;
-      removeBlocks.push(blockAndTxs);
+        firstBlock = blockAndTXs.block;
+      removeBlocks.push(blockAndTXs);
 
       assert.strictEqual(wdb.state.startHeight, firstBlock.height);
       assert.strictEqual(wdb.state.startHash, firstBlock.hash);
