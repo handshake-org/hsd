@@ -3649,7 +3649,7 @@ describe('Wallet', function() {
       }
     };
 
-    const NAME = 'testname';
+    const NAME = rules.grindName(10, 1, network);
     const NAMEHASH = rules.hashString(NAME);
     let wallet;
 
@@ -3664,10 +3664,6 @@ describe('Wallet', function() {
       await wdb.connect();
 
       wallet = await wdb.create();
-
-      // rollout all names
-      wdb.height = 52 * 144 * 7;
-      wdb.state.height = 52 * 144 * 7;
     });
 
     after(async () => {

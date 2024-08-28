@@ -66,16 +66,16 @@ let timeCounter = 0;
 
   // fund wallets
   const mtx1 = new MTX();
-  mtx1.addInput(wutils.determinsticInput(txID++));
+  mtx1.addInput(wutils.deterministicInput(txID++));
   mtx1.addOutput(await wallet1.receiveAddress(0), 10e6);
 
   const mtx2 = new MTX();
-  mtx2.addInput(wutils.determinsticInput(txID++));
+  mtx2.addInput(wutils.deterministicInput(txID++));
   mtx2.addOutput(await wallet1.receiveAddress(1), 10e6);
 
   // fund second wallet.
   const mtx3 = new MTX();
-  mtx3.addInput(wutils.determinsticInput(txID++));
+  mtx3.addInput(wutils.deterministicInput(txID++));
   mtx3.addOutput(await wallet2.receiveAddress(), 10e6);
 
   await wdb.addBlock(wutils.nextEntry(wdb), [
