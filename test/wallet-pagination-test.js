@@ -65,7 +65,8 @@ describe('WalletDB Pagination', function() {
 
       const mtx = await dummyTX(wallet);
       const wids = await wdb.addTX(mtx.toTX());
-      assert.strictEqual(wids.size, 1);
+      assert(wids);
+      assert.strictEqual(wids.wids.size, 1);
 
       const txCount = await wallet.txdb.getCountForTX(mtx.hash());
       assert.strictEqual(txCount.index, initUCount.index);

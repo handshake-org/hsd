@@ -1189,8 +1189,6 @@ describe('Wallet HTTP', function() {
         if (key.startsWith(wid1 + '42'))
           dumpSlice[key] = dump[key];
       });
-
-      console.log(dumpSlice);
     });
 
     it('should get auction info', async () => {

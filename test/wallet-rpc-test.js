@@ -53,6 +53,8 @@ describe('Wallet RPC Methods', function() {
       wallet: true
     });
 
+    nodeCtx.init();
+
     wclient = nodeCtx.wclient;
     nclient = nodeCtx.nclient;
     wdb = nodeCtx.wdb;

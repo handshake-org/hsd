@@ -439,6 +439,8 @@ describe('Node HTTP', function() {
         wallet: true
       });
 
+      nodeCtx.init();
+
       const {nclient} = nodeCtx;
 
       before(async () => {
@@ -531,6 +533,8 @@ describe('Node HTTP', function() {
       const nodeCtx = new NodeContext({
         wallet: true
       });
+
+      nodeCtx.init();
 
       const {nclient, network} = nodeCtx;
       const genesisBlock = Block.decode(network.genesisBlock);
@@ -705,7 +709,7 @@ async function mineBlocks(nodeCtx, count, address) {
     count
   );
 
-  const hashes = await nodeCtx.mineBlocks(count, address);
+  const blocks = await nodeCtx.mineBlocks(count, address);
   await blockEvents;
-  return hashes;
+  return blocks.map(block => block.hash().toString('hex'));
 }

@@ -25,7 +25,8 @@ exports.generateInitialBlocks = async (options) => {
     await nodeCtx.nclient.execute('setmocktime', [blocktime]);
 
     const blocks = await nodeCtx.mineBlocks(1, coinbase);
-    const block = await nodeCtx.nclient.execute('getblock', [blocks[0]]);
+    const firstHash = blocks[0].hash().toString('hex');
+    const block = await nodeCtx.nclient.execute('getblock', [firstHash]);
 
     assert(block.time <= blocktime + 1);
     assert(block.time >= blocktime);

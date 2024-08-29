@@ -2061,14 +2061,15 @@ describe('Wallet', function() {
   });
 
   it('should pass nowFn to the txdb', async () => {
-    const nowFn = () => 1;
+    const NOW = 1;
+    const nowFn = () => NOW;
     const wallet = new Wallet({
       options: {
         nowFn
       }
     });
 
-    assert.strictEqual(wallet.txdb.nowFn(), nowFn());
+    assert.strictEqual(wallet.txdb.nowFn(), NOW);
   });
 
   it('should cleanup', async () => {
