@@ -70,3 +70,19 @@ function fromU32(num) {
   data.writeUInt32LE(num, 0, true);
   return data;
 }
+
+walletUtils.dumpWDB = async (wdb, prefixes) => {
+  const data = await wdb.dump();
+  const filtered = {};
+
+  for (const [key, value] of Object.entries(data)) {
+    for (const prefix of prefixes) {
+      if (key.startsWith(prefix)) {
+        filtered[key] = value;
+        break;
+      }
+    }
+  }
+
+  return filtered;
+};

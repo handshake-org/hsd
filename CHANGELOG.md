@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-**When upgrading to this version of hsd, you must pass `--wallet-migrate=3` when
+**When upgrading to this version of hsd, you must pass `--wallet-migrate=4` when
 you run it for the first time.**
 
 ### Primitives
@@ -72,7 +72,18 @@ process and allows parallel rescans.
     conflicting transactions)
   - Add options to `getNames` for passing `own`.
   - Rename `createAuctionTxs` to `createAuctionTXs`.
-
+  - All `bid` serializations will include `height` of the bid. (`-1` if
+    it was migrated not-owned bid)
+    - `GET /wallet/:id/auction` (`getAuctions`)
+    - `GET /wallet/:id/auction/:name` (`getAuctionByName`)
+    - `GET /wallet/:id/bid` (`getBids`)
+    - `GET /wallet/:id/bid/:name` (`getBidsByName`)
+  - All `reveal` serializations will include `bidPrevout` of the bid. (`null` if
+  it was migrated not-owned reveal)
+    - `GET /wallet/:id/auction` (`getAuctions`)
+    - `GET /wallet/:id/auction/:name` (`getAuctionByName`)
+    - `GET /wallet/:id/reveal` (`getReveals`)
+    - `GET /wallet/:id/reveal/:name` (`getRevealsByName`)
 
 ## v6.0.0
 
