@@ -910,6 +910,7 @@ describe('Wallet Migrations', function() {
     it('should migrate', async () => {
       walletDB.options.walletMigrate = 0;
 
+      walletDB.version = 3;
       await walletDB.open();
       // check we have migrated entries.
       await checkEntries(ldb, data.after);
