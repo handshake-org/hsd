@@ -1807,7 +1807,7 @@ describe('Wallet', function() {
     };
     const wtx0 = await wallet.txdb.getTX(tx0.hash());
     await wallet.txdb.confirm(wtx0, block100, {
-      medianTime: await wdb.getMedianTimeTip(99, block100.time),
+      medianTime: await wdb.getMedianTime(99, block100.time),
       txIndex: 0
     });
 
@@ -1822,7 +1822,7 @@ describe('Wallet', function() {
     };
     const wtx1 = await wallet.txdb.getTX(tx1.hash());
     await wallet.txdb.confirm(wtx1, block101, {
-      medianTime: await wdb.getMedianTimeTip(100, block101.time),
+      medianTime: await wdb.getMedianTime(100, block101.time),
       txIndex: 0
     });
 
@@ -1919,7 +1919,7 @@ describe('Wallet', function() {
     const wtx = await wallet.txdb.getTX(hash);
     // Confirm TX with dummy block in txdb
     const details = await wallet.txdb.confirm(wtx, block, {
-      medianTime: await wdb.getMedianTimeTip(99, block.time),
+      medianTime: await wdb.getMedianTime(99, block.time),
       txIndex: 0
     });
     assert.bufferEqual(details.tx.hash(), hash);
@@ -1981,7 +1981,7 @@ describe('Wallet', function() {
 
     // Confirm TX with dummy block in txdb
     await wallet.txdb.confirm(wtx1, block1, {
-      medianTime: await wdb.getMedianTimeTip(98, block1.time),
+      medianTime: await wdb.getMedianTime(98, block1.time),
       txIndex: 0
     });
 
@@ -2021,7 +2021,7 @@ describe('Wallet', function() {
 
     // Confirm TX with dummy block in txdb
     const details = await wallet.txdb.confirm(wtx2, block2, {
-      medianTime: await wdb.getMedianTimeTip(99, block2.time),
+      medianTime: await wdb.getMedianTime(99, block2.time),
       txIndex: 0
     });
     assert.bufferEqual(details.tx.hash(), hash);
@@ -3063,7 +3063,7 @@ describe('Wallet', function() {
       times[chain.tip.height] = mtp;
       for (let i = 0; i < 40; i++) {
         const block = await createBlock(chain.tip);
-        const futureMTP = await wdb.getMedianTimeTip(chain.tip.height, block.time);
+        const futureMTP = await wdb.getMedianTime(chain.tip.height, block.time);
         await chain.add(block);
         await assertSameMTP(futureMTP);
         const mtp = await node.chain.getMedianTime(chain.tip);
@@ -3074,7 +3074,7 @@ describe('Wallet', function() {
       for (let i = 0; i < 40; i++) {
         const entry = chain.tip;
         const mtp = await chain.getMedianTime(entry);
-        const tipMtp = await wdb.getMedianTimeTip(entry.height - 1, entry.time);
+        const tipMtp = await wdb.getMedianTime(entry.height - 1, entry.time);
         await assertSameMTP(times[entry.height]);
         assert.strictEqual(tipMtp, times[entry.height]);
         assert.strictEqual(tipMtp, mtp);
