@@ -3975,15 +3975,20 @@ describe('Wallet', function() {
       for (let i = 0; i < 2; i++) {
         for (const account of [DEFAULT, ALT]) {
           const mtx = await dummyTX(wallet, account);
-          // this increments/calls nowFn twice. One for
-          // wtx creation and another for unconfirmed index.
+          // this increments/calls nowFn once.
           await wdb.addTX(mtx.toTX());
           hashes.push(mtx.hash());
         }
       }
 
-      // zap will also call nowFn once. (0 - 3 time is incremented by first two)
-      const zapped = await wallet.zap(-1, time - 3);
+      // time will be 4 (4 txs), if we want to zap oldest 2 txs,
+      // zap will call nowFn once more, so time will be 5.
+      // First 2 txs have time 0 and 1. Zap accepts second argument
+      // age, which is time - age. So, we need to pass time - 1.
+      //  e.g. time - 1 = 4. Internal timer will be 5 (nowFn increment).
+      //  Age becomes: 5 - 4 = 1. So, zap will zap all txs with age 1
+      //  - so first 2 txs.
+      const zapped = await wallet.zap(-1, time - 1);
       assert.strictEqual(zapped.length, 2);
 
       const txsAfterZap = await wallet.listUnconfirmed(-1, {
@@ -4008,8 +4013,8 @@ describe('Wallet', function() {
         }
       }
 
-      // two transactions from default
-      const zapped = await wallet.zap(DEFAULT, time - 5);
+      // two transactions from default (calculation above.)
+      const zapped = await wallet.zap(DEFAULT, time - 3);
       assert.strictEqual(zapped.length, 2);
 
       const txsAfterZap = await wallet.listUnconfirmed(DEFAULT, {
