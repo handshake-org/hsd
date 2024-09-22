@@ -235,7 +235,7 @@ exports.dumpChainDB = async (chaindb, prefixes) => {
  * @param {Boolean} options.throw - throw on error.
  * @param {Boolean} options.bail - bail on first error.
  * @param {Boolean} options.logErrors - log errors.
- * @returns {Promise<[]String>} - errors.
+ * @returns {Promise<String[]>} - errors.
  */
 
 exports.checkEntries = async (ldb, options) => {
