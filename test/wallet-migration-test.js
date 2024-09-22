@@ -291,7 +291,11 @@ describe('Wallet Migrations', function() {
 
         await wdb.open();
         await checkVersion(ldb, layouts.wdb.V.encode(), 1);
-        await checkEntries(ldb, after);
+        await checkEntries(ldb, {
+          after,
+          throw: true,
+          bail: true
+        });
         const oldM = await ldb.get(layout.oldLayout.wdb.M.encode(0));
         assert.strictEqual(oldM, null);
         await wdb.close();
@@ -340,7 +344,11 @@ describe('Wallet Migrations', function() {
         ;
       }
       await checkVersion(ldb, layouts.wdb.V.encode(), 0);
-      await checkEntries(ldb, data.before);
+      await checkEntries(ldb, {
+        after: data.before,
+        throw: true,
+        bail: true
+      });
       await wdb.close();
     });
 
@@ -374,7 +382,12 @@ describe('Wallet Migrations', function() {
         ;
       }
       await checkVersion(ldb, layouts.wdb.V.encode(), 0);
-      await checkEntries(ldb, data.after);
+      await checkEntries(ldb, {
+        after: data.after,
+        throw: true,
+        bail: true
+      });
+
       await wdb.close();
     });
   });
@@ -419,7 +432,11 @@ describe('Wallet Migrations', function() {
         ;
       }
       await checkVersion(ldb, layouts.wdb.V.encode(), 1);
-      await checkEntries(ldb, data.before);
+      await checkEntries(ldb, {
+        after: data.before,
+        throw: true,
+        bail: true
+      });
       await wdb.close();
     });
 
@@ -453,7 +470,11 @@ describe('Wallet Migrations', function() {
         ;
       }
       await checkVersion(ldb, layouts.wdb.V.encode(), 2);
-      await checkEntries(ldb, data.after);
+      await checkEntries(ldb, {
+        after: data.after,
+        throw: true,
+        bail: true
+      });
       await wdb.close();
     });
   });
@@ -884,7 +905,11 @@ describe('Wallet Migrations', function() {
       walletDB.version = 2;
       await walletDB.open();
       await checkVersion(ldb, layout.wdb.V.encode(), 2);
-      await checkEntries(ldb, data.before);
+      await checkEntries(ldb, {
+        after: data.before,
+        throw: true,
+        bail: true
+      });
       await walletDB.close();
     });
 
@@ -913,7 +938,117 @@ describe('Wallet Migrations', function() {
       walletDB.version = 3;
       await walletDB.open();
       // check we have migrated entries.
-      await checkEntries(ldb, data.after);
+      await checkEntries(ldb, {
+        after: data.after,
+        throw: true,
+        bail: true
+      });
+      await walletDB.close();
+    });
+  });
+
+  describe('TX Count and time indexing migration (integration)', function() {
+    const location = testdir('wallet-tx-count-time');
+    const migrationsBAK = WalletMigrator.migrations;
+    const data = require('./data/migrations/wallet-5-pagination.json');
+    const Migration = WalletMigrator.MigrateTXCountTimeIndex;
+    const layout = Migration.layout();
+
+    const walletOptions = {
+      prefix: location,
+      memory: false,
+      network
+    };
+
+    /** @type {WalletDB} */
+    let walletDB;
+    /** @type {bdb.DB} */
+    let ldb;
+    const headersByHash = new Map();
+    const headersByHeight = new Map();
+
+    before(async () => {
+      WalletMigrator.migrations = {};
+      await fs.mkdirp(location);
+
+      walletDB = new WalletDB(walletOptions);
+      ldb = walletDB.db;
+
+      await ldb.open();
+
+      const b = ldb.batch();
+      for (const [key, value] of Object.entries(data.before)) {
+        const bkey = Buffer.from(key, 'hex');
+        const bvalue = Buffer.from(value, 'hex');
+
+        b.put(bkey, bvalue);
+      }
+
+      await b.write();
+      await ldb.close();
+
+      // load headers into maps.
+      for (const header of data.headers) {
+        headersByHash.set(header.hash, header);
+        headersByHeight.set(header.height, header);
+      }
+    });
+
+    after(async () => {
+      WalletMigrator.migrations = migrationsBAK;
+      await rimraf(location);
+    });
+
+    it('should have before entries', async () => {
+      walletDB.version = 3;
+      await walletDB.open();
+      await checkVersion(ldb, layout.wdb.V.encode(), 3);
+      await checkEntries(ldb, {
+        after: data.before,
+        throw: true
+      });
+      await walletDB.close();
+    });
+
+    it('should enable wallet migration', () => {
+      WalletMigrator.migrations = {
+        0: WalletMigrator.MigrateTXCountTimeIndex
+      };
+    });
+
+    it('should fail without migrate flag', async () => {
+      const expectedError = migrationError(WalletMigrator.migrations, [0],
+          wdbFlagError(0));
+
+      await assert.rejects(async () => {
+        await walletDB.open();
+      }, {
+        message: expectedError
+      });
+
+      await ldb.close();
+    });
+
+    it('should migrate', async () => {
+      walletDB.options.walletMigrate = 0;
+
+      // patch getBlockHeader to return headers from data.
+      walletDB.client.getBlockHeader = (block) => {
+        if (typeof block === 'number')
+          return headersByHeight.get(block);
+
+        return headersByHash.get(block);
+      };
+
+      walletDB.version = 4;
+      await walletDB.open();
+      // check we have migrated entries.
+      await checkEntries(ldb, {
+        before: data.before,
+        after: data.after,
+        throw: true
+      });
+
       await walletDB.close();
     });
   });
