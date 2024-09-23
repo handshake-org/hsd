@@ -112,6 +112,7 @@ let timeCounter = 0;
   const headerEntries = [
     entry
   ];
+  const seenHeights = new Set();
 
   const wdb = new WalletDB({
     network: NETWORK,
@@ -123,7 +124,11 @@ let timeCounter = 0;
 
   const nextEntry = () => {
     const next = wutils.nextEntry(wdb);
-    headerEntries.push(next);
+
+    if (!seenHeights.has(next.height)) {
+      headerEntries.push(next);
+      seenHeights.add(next.height);
+    }
     return next;
   };
 
@@ -179,6 +184,9 @@ let timeCounter = 0;
   await wdb.addTX(spendCrossAcctConfirmedTX);
   await wdb.addBlock(nextEntry(), [spendCrossAcctConfirmedTX]);
 
+  // just empty block.
+  await wdb.addBlock(nextEntry(), []);
+
   // ---
   // UNCONFIRMED TERRITORY
   // ---
@@ -215,6 +223,43 @@ let timeCounter = 0;
   spendCrossAcctUnconfirmed.addOutput(await wallet1.receiveAddress(1), 5e6);
   await wallet1.sign(spendCrossAcctUnconfirmed);
   await wdb.addTX(spendCrossAcctUnconfirmed.toTX());
+
+  // Confirm -> Unconfirm
+  // A pure data migration test will not have layout.x UNDO count
+  // entries, resulting in a discrepancy between the old and new state.
+  // It's not a big deal, so we're skipping this case.
+  // {
+  //   const txs = await fundThree(wallet1, wallet2);
+  //   const next2unconf = nextEntry();
+
+  //   for (const tx of txs) {
+  //     timeCounter++;
+  //     await wdb.addTX(tx);
+  //   }
+
+  //   await wdb.addBlock(next2unconf, txs);
+  //   await wdb.removeBlock(next2unconf);
+  // }
+
+  // Confirm -> Unconfirm -> Confirm
+  // Unfortunately, this can't be migrated directly. There will be
+  // a discrepancy between the old and new state, as the new state
+  // will track mempool tx counts as they come in, and they never get
+  // removed. The full migration cannot account for this,
+  // as the data for it does not exist, but it's a minor issue.
+  // {
+  //   const txs = await fundThree(wallet1, wallet2);
+  //   const next2unconf = nextEntry();
+
+  //   for (const tx of txs) {
+  //     timeCounter++;
+  //     await wdb.addTX(tx);
+  //   }
+
+  //   await wdb.addBlock(next2unconf, txs);
+  //   await wdb.removeBlock(next2unconf);
+  //   await wdb.addBlock(next2unconf, txs);
+  // }
 
   // Hack for the second block.
   headerEntries[1].prevBlock = headerEntries[0].hash;
