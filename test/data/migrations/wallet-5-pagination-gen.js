@@ -225,21 +225,18 @@ let timeCounter = 0;
   await wdb.addTX(spendCrossAcctUnconfirmed.toTX());
 
   // Confirm -> Unconfirm
-  // A pure data migration test will not have layout.x UNDO count
-  // entries, resulting in a discrepancy between the old and new state.
-  // It's not a big deal, so we're skipping this case.
-  // {
-  //   const txs = await fundThree(wallet1, wallet2);
-  //   const next2unconf = nextEntry();
+  {
+    const txs = await fundThree(wallet1, wallet2);
+    const next2unconf = nextEntry();
 
-  //   for (const tx of txs) {
-  //     timeCounter++;
-  //     await wdb.addTX(tx);
-  //   }
+    for (const tx of txs) {
+      timeCounter++;
+      await wdb.addTX(tx);
+    }
 
-  //   await wdb.addBlock(next2unconf, txs);
-  //   await wdb.removeBlock(next2unconf);
-  // }
+    await wdb.addBlock(next2unconf, txs);
+    await wdb.removeBlock(next2unconf);
+  }
 
   // Confirm -> Unconfirm -> Confirm
   // Unfortunately, this can't be migrated directly. There will be
