@@ -393,6 +393,249 @@ describe('Wallet Auction', function() {
     });
   });
 
+  // This affects linked ones mostly as they are guaranteed
+  // to reselect the same inputs: REVEAL, REDEEM, REGISTER, UPDATE,
+  // RENEW, TRANSFER, FINALIZE and REVOKE,
+  describe('Duplicate Pending Requests', function() {
+    const name1 = rules.grindName(10, 2, network);
+    const name2 = rules.grindName(10, 2, network);
+    const expectedError = name => `Credit is already pending for: ${name}.`;
+
+    const mineBlock = async (txs = []) => {
+      const job = await cpu.createJob();
+
+      for (const tx of txs)
+        job.pushTX(tx);
+
+      job.refresh();
+
+      const block = await job.mineAsync();
+      assert(await chain.add(block));
+    };
+
+    const mineBlocks = async (n) => {
+      for (let i = 0; i < n; i++)
+        await mineBlock();
+    };
+
+    it('should get to the reveal', async () => {
+      const open1 = await wallet.sendOpen(name1);
+      const open2 = await wallet.sendOpen(name2);
+
+      await mineBlock([open1, open2]);
+      await mineBlocks(treeInterval);
+
+      const bid11 = await wallet.sendBid(name1, 1000, 2000);
+      const bid12 = await wallet.sendBid(name1, 1500, 2000);
+      const bid21 = await wallet.sendBid(name2, 1000, 2000);
+      const bid22 = await wallet.sendBid(name2, 1500, 2000);
+
+      await mineBlock([bid11, bid12, bid21, bid22]);
+      await mineBlocks(biddingPeriod);
+    });
+
+    it('should REVEAL and fail duplicate reveal', async () => {
+      const reveal1 = await wallet.sendReveal(name1);
+      assert(reveal1);
+      const reveal2 = await wallet.sendReveal(name2);
+      assert(reveal2);
+
+      let err;
+      try {
+        await wallet.sendReveal(name1);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message, `No bids to reveal for name: ${name1}.`);
+
+      await mineBlock([reveal1, reveal2]);
+
+      err = null;
+
+      try {
+        await wallet.sendReveal(name2);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message, `No bids to reveal for name: ${name2}.`);
+
+      await mineBlocks(revealPeriod);
+    });
+
+    it('should REDEEM and fail duplicate redeem', async () => {
+      const redeem1 = await wallet.sendRedeem(name1);
+      assert(redeem1);
+      const redeem2 = await wallet.sendRedeem(name2);
+      assert(redeem2);
+
+      let err;
+      try {
+        await wallet.sendRedeem(name1);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message, `No reveals to redeem for name: ${name1}.`);
+
+      await mineBlock([redeem1, redeem2]);
+
+      err = null;
+
+      try {
+        await wallet.sendRedeem(name2);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message, `No reveals to redeem for name: ${name2}.`);
+    });
+
+    it('should REGISTER and fail duplicate register', async () => {
+      const register1 = await wallet.sendUpdate(name1, Resource.fromString('name1.1'));
+      assert(register1);
+      const register2 = await wallet.sendUpdate(name2, Resource.fromString('name2.1'));
+      assert(register2);
+
+      let err;
+      try {
+        await wallet.sendUpdate(name1, Resource.fromString('hello'));
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message, expectedError(name1));
+
+      await mineBlock([register1, register2]);
+
+      // This becomes update.
+      const update = await wallet.sendUpdate(name2, Resource.fromString('name2.2'));
+      assert(update);
+
+      await mineBlock([update]);
+    });
+
+    it('should UPDATE and fail duplicate UPDATE', async () => {
+      const update = await wallet.sendUpdate(name1, Resource.fromString('name1.2'));
+      assert(update);
+
+      let err = null;
+      try {
+        await wallet.sendUpdate(name1, Resource.fromString('name1.3'));
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message, expectedError(name1));
+
+      await mineBlock([update]);
+    });
+
+    it('should RENEW and fail duplicate RENEW', async () => {
+      await mineBlocks(treeInterval + 1);
+      const renew = await wallet.sendRenewal(name1);
+      assert(renew);
+      const renew2 = await wallet.sendRenewal(name2);
+      assert(renew2);
+
+      let err = null;
+      try {
+        await wallet.sendRenewal(name1);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message, expectedError(name1));
+
+      await mineBlock([renew, renew2]);
+
+      err = null;
+      try {
+        await wallet.sendRenewal(name2);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message, `Can not renew yet: ${name2}.`);
+
+      await mineBlocks(treeInterval + 1);
+    });
+
+    it('should TRANSFER and fail duplicate TRANSFER', async () => {
+      const recv = await wallet2.receiveAddress();
+      const transfer = await wallet.sendTransfer(name1, recv);
+      assert(transfer);
+
+      let err = null;
+      try {
+        await wallet.sendTransfer(name1, recv);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message, expectedError(name1));
+
+      await mineBlock([transfer]);
+
+      let err2 = null;
+      try {
+        await wallet.sendTransfer(name1, recv);
+      } catch (e) {
+        err2 = e;
+      }
+
+      assert(err2);
+      assert.strictEqual(err2.message, `Name is already being transferred: ${name1}.`);
+
+      await mineBlocks(transferLockup);
+    });
+
+    it('should FINALIZE and fail duplicate FINALIZE', async () => {
+      const finalize = await wallet.sendFinalize(name1);
+      assert(finalize);
+
+      let err = null;
+      try {
+        await wallet.sendFinalize(name1);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message, expectedError(name1));
+
+      await mineBlock([finalize]);
+    });
+
+    it('should REVOKE and fail duplicate REVOKE', async () => {
+      const revoke = await wallet.sendRevoke(name2);
+      assert(revoke);
+
+      let err = null;
+      try {
+        await wallet.sendRevoke(name2);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message, expectedError(name2));
+
+      await mineBlock([revoke]);
+      await mineBlocks(10);
+    });
+  });
+
   describe('Batch TXs', function() {
     let wallet, receive;
     const hardFee = 12345;
@@ -442,6 +685,7 @@ describe('Wallet Auction', function() {
       // Create wallet
       wallet = await wdb.create();
       receive = await wallet.receiveAddress();
+      mempool.length = 0;
 
       // Fund wallet
       await mineBlocks(20);
