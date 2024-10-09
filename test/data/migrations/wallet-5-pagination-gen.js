@@ -98,6 +98,8 @@ const layout = {
 
 const NETWORK = Network.get('regtest');
 
+const OUT_ADDR = 'rs1q2uqpaefgfjke38whrtvdzsve3478k38qcgg9ws';
+
 const wallet1priv = 'rprvKE8qsHtkmUxUSPQdn2sFKFUcKyUQz9pKQhxjEWecnXg9hgJMsmJXcw'
   + 'J77SqmHT1R6mcuNqVPzgT2EoGStsXaUN92VJKhQWUB6uZdL8gAZvez';
 const wallet2priv = 'rprvKE8qsHtkmUxUSR4jE7Lti9XV77hv7xxacAShw5MvxY6RfsAYVeB1WL'
@@ -144,8 +146,8 @@ let timeCounter = 0;
     master: wallet2priv
   });
 
-  // add 100 blocks to the wallet.
-  for (let i = 0; i < 100; i++)
+  // add 2 blocks to the wallet.
+  for (let i = 0; i < 2; i++)
     await wdb.addBlock(nextEntry(), []);
 
   // fund wallets
@@ -278,16 +280,19 @@ async function fundThree(wallet1, wallet2) {
   const mtx1 = new MTX();
   mtx1.addInput(wutils.deterministicInput(txID++));
   mtx1.addOutput(await wallet1.receiveAddress(0), 10e6);
+  mtx1.addOutput(OUT_ADDR, 1e6);
 
   timeCounter++;
   const mtx2 = new MTX();
   mtx2.addInput(wutils.deterministicInput(txID++));
   mtx2.addOutput(await wallet1.receiveAddress(1), 10e6);
+  mtx2.addOutput(OUT_ADDR, 1e6);
 
   timeCounter++;
   const mtx3 = new MTX();
   mtx3.addInput(wutils.deterministicInput(txID++));
   mtx3.addOutput(await wallet2.receiveAddress(), 10e6);
+  mtx3.addOutput(OUT_ADDR, 1e6);
 
   return [
     mtx1.toTX(),
@@ -302,6 +307,7 @@ async function spendThree(three, wallet1, wallet2) {
   mtx1.addTX(three[0], 0);
   mtx1.addOutput(await wallet1.receiveAddress(0), 5e6);
   mtx1.addOutput(await wallet1.changeAddress(0), 5e6);
+  mtx1.addOutput(OUT_ADDR, 1e6);
   await wallet1.sign(mtx1);
 
   timeCounter++;
@@ -309,6 +315,7 @@ async function spendThree(three, wallet1, wallet2) {
   mtx2.addTX(three[1], 0);
   mtx2.addOutput(await wallet1.receiveAddress(1), 5e6);
   mtx2.addOutput(await wallet1.changeAddress(1), 5e6);
+  mtx2.addOutput(OUT_ADDR, 1e6);
   await wallet1.sign(mtx2);
 
   timeCounter++;
@@ -316,6 +323,7 @@ async function spendThree(three, wallet1, wallet2) {
   mtx3.addTX(three[2], 0);
   mtx3.addOutput(await wallet2.receiveAddress(), 5e6);
   mtx3.addOutput(await wallet2.changeAddress(), 5e6);
+  mtx3.addOutput(OUT_ADDR, 1e6);
   await wallet2.sign(mtx3);
 
   assert(mtx1.verify());
