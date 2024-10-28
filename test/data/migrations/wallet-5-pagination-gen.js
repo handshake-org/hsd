@@ -24,6 +24,7 @@ const Block = require('../../../lib/primitives/block');
 const ChainEntry = require('../../../lib/blockchain/chainentry');
 const WalletDB = require('../../../lib/wallet/walletdb');
 const MTX = require('../../../lib/primitives/mtx');
+const rules = require('../../../lib/covenants/rules');
 const wutils = require('../../../test/util/wallet');
 
 const layout = {
@@ -154,11 +155,14 @@ let timeCounter = 0;
   const txs1 = await fundThree(wallet1, wallet2);
   await wdb.addBlock(nextEntry(), txs1);
 
+  const fundTXs = [];
+
   // Now let's send 5 more transactions to each wallet.
   // Seen directly in the block.
   for (let i = 0; i < 5; i++) {
     const txs = await fundThree(wallet1, wallet2);
     await wdb.addBlock(nextEntry(), txs);
+    fundTXs.push(txs);
   }
 
   // Now let's send 5 more transactions to each wallet.
@@ -188,6 +192,22 @@ let timeCounter = 0;
 
   // just empty block.
   await wdb.addBlock(nextEntry(), []);
+
+  // Some BIDs, it's is testing a special case in db
+  // where tx may be part of the recorded block, but wallet
+  // may not have the itself. That happens on BID/REVEAL/OPEN etc.
+  // which are not sent from the wallet itself.
+  //  Here, wallet1 and wallet2 txs will be separate but appear in both.
+  const name2bid = 'name2bid';
+  const txs = await createBids(
+    fundTXs.shift(),
+    wallet1,
+    wallet2,
+    name2bid,
+    wdb.height - NETWORK.names.treeInterval
+  );
+
+  await wdb.addBlock(nextEntry(), txs);
 
   // ---
   // UNCONFIRMED TERRITORY
@@ -276,65 +296,75 @@ let timeCounter = 0;
 });
 
 async function fundThree(wallet1, wallet2) {
-  timeCounter++;
-  const mtx1 = new MTX();
-  mtx1.addInput(wutils.deterministicInput(txID++));
-  mtx1.addOutput(await wallet1.receiveAddress(0), 10e6);
-  mtx1.addOutput(OUT_ADDR, 1e6);
-
-  timeCounter++;
-  const mtx2 = new MTX();
-  mtx2.addInput(wutils.deterministicInput(txID++));
-  mtx2.addOutput(await wallet1.receiveAddress(1), 10e6);
-  mtx2.addOutput(OUT_ADDR, 1e6);
-
-  timeCounter++;
-  const mtx3 = new MTX();
-  mtx3.addInput(wutils.deterministicInput(txID++));
-  mtx3.addOutput(await wallet2.receiveAddress(), 10e6);
-  mtx3.addOutput(OUT_ADDR, 1e6);
-
-  return [
-    mtx1.toTX(),
-    mtx2.toTX(),
-    mtx3.toTX()
+  const txs = [];
+  const funds = [
+    [wallet1, 0],
+    [wallet1, 1],
+    [wallet2, 0]
   ];
+
+  for (const [wallet, acct] of funds) {
+    timeCounter++;
+    const mtx1 = new MTX();
+    mtx1.addInput(wutils.deterministicInput(txID++));
+    mtx1.addOutput(await wallet.receiveAddress(acct), 10e6);
+    mtx1.addOutput(OUT_ADDR, 1e6);
+    txs.push(mtx1.toTX());
+  }
+
+  return txs;
 }
 
-async function spendThree(three, wallet1, wallet2) {
-  timeCounter++;
-  const mtx1 = new MTX();
-  mtx1.addTX(three[0], 0);
-  mtx1.addOutput(await wallet1.receiveAddress(0), 5e6);
-  mtx1.addOutput(await wallet1.changeAddress(0), 5e6);
-  mtx1.addOutput(OUT_ADDR, 1e6);
-  await wallet1.sign(mtx1);
-
-  timeCounter++;
-  const mtx2 = new MTX();
-  mtx2.addTX(three[1], 0);
-  mtx2.addOutput(await wallet1.receiveAddress(1), 5e6);
-  mtx2.addOutput(await wallet1.changeAddress(1), 5e6);
-  mtx2.addOutput(OUT_ADDR, 1e6);
-  await wallet1.sign(mtx2);
-
-  timeCounter++;
-  const mtx3 = new MTX();
-  mtx3.addTX(three[2], 0);
-  mtx3.addOutput(await wallet2.receiveAddress(), 5e6);
-  mtx3.addOutput(await wallet2.changeAddress(), 5e6);
-  mtx3.addOutput(OUT_ADDR, 1e6);
-  await wallet2.sign(mtx3);
-
-  assert(mtx1.verify());
-  assert(mtx2.verify());
-  assert(mtx3.verify());
-
-  return [
-    mtx1.toTX(),
-    mtx2.toTX(),
-    mtx3.toTX()
+async function spendThree(threeInputs, wallet1, wallet2) {
+  const txs = [];
+  const spends = [
+    [wallet1, 0],
+    [wallet1, 1],
+    [wallet2, 0]
   ];
+
+  let txi = 0;
+  for (const [wallet, acct] of spends) {
+    timeCounter++;
+    const mtx = new MTX();
+    mtx.addTX(threeInputs[txi++], 0);
+    mtx.addOutput(await wallet.changeAddress(acct), 9e6);
+    mtx.addOutput(OUT_ADDR, 1e6);
+    await wallet.sign(mtx);
+
+    txs.push(mtx.toTX());
+  }
+
+  return txs;
+}
+
+async function createBids(inputs, wallet1, wallet2, name, height) {
+  const nameHash = rules.hashName(name);
+  const rawName = Buffer.from(name, 'ascii');
+
+  const bidVal = 1e6; // bid = blind
+
+  const txs = [];
+  const bids = [
+    [wallet1, 0],
+    [wallet1, 1],
+    [wallet2, 0]
+  ];
+
+  let txi = 0;
+  for (const [wallet, acct] of bids) {
+    timeCounter++;
+    const mtx = new MTX();
+    const addr = await wallet.receiveAddress(acct);
+    const blind = await wallet.generateBlind(nameHash, addr, bidVal);
+    const bidOut = mtx.addOutput(addr, bidVal);
+    mtx.addTX(inputs[txi++], 0);
+    bidOut.covenant.setBid(nameHash, height, rawName, blind);
+    await wallet.sign(mtx);
+    txs.push(mtx.toTX());
+  }
+
+  return txs;
 }
 
 async function getMigrationDump(wdb) {
