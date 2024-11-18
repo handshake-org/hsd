@@ -43,9 +43,6 @@ const layout = {
   txdb: {
     prefix: bdb.key('t', ['uint32']),
 
-    // Latest unconfirmed Index.
-    I: bdb.key('I'),
-
     // Coin - we need this in order to find accounts.
     // c[tx-hash][index] -> coin
     c: bdb.key('c', ['hash256', 'uint32']),
@@ -62,19 +59,7 @@ const layout = {
     t: bdb.key('t', ['hash256']),
     T: bdb.key('T', ['uint32', 'hash256']),
 
-    // Transaction.
-    // z[height][index] -> tx hash (tx by count)
-    z: bdb.key('z', ['uint32', 'uint32']),
-    // Z[account][height][index] -> tx hash (tx by count + account)
-    Z: bdb.key('Z', ['uint32', 'uint32', 'uint32']),
-    // y[hash] -> count (count for tx)
-    y: bdb.key('y', ['hash256']),
-    // x[hash] -> undo count (unconfirmed count for tx)
-    x: bdb.key('x', ['hash256']),
-
     // Confirmed.
-    // these are used to recover heights [+ accounts] of txs.
-
     // b[height] -> block record
     b: bdb.key('b', ['uint32']),
     // h[height][tx-hash] -> dummy (tx by height)
@@ -82,18 +67,9 @@ const layout = {
     // H[account][height][tx-hash] -> dummy (tx by height + account)
     H: bdb.key('H', ['uint32', 'uint32', 'hash256']),
 
-    // g[time][height][index][hash] -> dummy (tx by time)
-    g: bdb.key('g', ['uint32', 'uint32', 'uint32', 'hash256']),
-    // G[account][time][height][index][hash] -> dummy (tx by time + account)
-    G: bdb.key('G', ['uint32', 'uint32', 'uint32', 'uint32', 'hash256']),
-
-    // Unconfirmed.
-    // w[time][count][hash] -> dummy (tx by time)
-    w: bdb.key('w', ['uint32', 'uint32', 'hash256']),
-    // W[account][time][count][hash] -> dummy (tx by time + account)
-    W: bdb.key('W', ['uint32', 'uint32', 'uint32', 'hash256']),
-    // e[hash] -> undo time (unconfirmed time for tx)
-    e: bdb.key('e', ['hash256'])
+    // Count and Time Index.
+    // prefix to the whole thing.
+    O: bdb.key('O')
   }
 };
 
