@@ -44,7 +44,6 @@ process and allows parallel rescans.
   - Add `getMempoolRejectionFilter` and `checkMempoolRejectionFilter` NodeClient
   aliases.
   - Add `getFee`, an HTTP alternative to estimateFee socket call.
-  - Adds `getMedianTime(blockhash)` that returns median time past of the block.
   - Adds `getEntries(start, end)` that returns encoded chain entries.
 
 ### Wallet Changes

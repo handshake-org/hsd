@@ -19,7 +19,6 @@ const mnemonics = require('./data/mnemonic-english.json');
 const consensus = require('../lib/protocol/consensus');
 const Outpoint = require('../lib/primitives/outpoint');
 const ChainEntry = require('../lib/blockchain/chainentry');
-const util = require('../lib/utils/util');
 const {ZERO_HASH} = consensus;
 
 // Commonly used test mnemonic
@@ -434,7 +433,7 @@ describe('Node HTTP', function() {
   describe('Websockets', function() {
     this.timeout(15000);
 
-    describe('Get entry and mtp', function() {
+    describe('Get entry', function() {
       const nodeCtx = new NodeContext({
         wallet: true
       });
@@ -463,11 +462,6 @@ describe('Node HTTP', function() {
         assert.strictEqual(entry.height, 0);
       });
 
-      it('should get genesis mtp by height', async () => {
-        const mtp = await nclient.getMedianTime(0);
-        assert(mtp);
-      });
-
       it('should get last entry by height', async () => {
         const rawTip = await nclient.getTip();
         assert(rawTip);
@@ -483,14 +477,6 @@ describe('Node HTTP', function() {
         assert.bufferEqual(entry.hash, tip.hash);
       });
 
-      it('should get last mtp by height', async () => {
-        const tip = ChainEntry.decode(await nclient.getTip());
-        assert(tip);
-
-        const mtp = await nclient.getMedianTime(tip.height);
-        assert(mtp);
-      });
-
       it('should get all entries by hash', async () => {
         const tip = ChainEntry.decode(await nclient.getTip());
         assert(tip);
@@ -504,25 +490,6 @@ describe('Node HTTP', function() {
 
           entry = ChainEntry.decode(rawEntry);
           assert.strictEqual(entry.height, height--);
-
-          hash = entry.prevBlock;
-        } while (entry.height > 0);
-      });
-
-      it('should get all mtps by hash', async () => {
-        const tip = ChainEntry.decode(await nclient.getTip());
-
-        let entry;
-        let hash = tip.hash;
-        let lastMTP = util.now() + 1e8;
-        do {
-          entry = ChainEntry.decode(await nclient.getEntry(hash));
-          assert(entry);
-
-          const mtp = await nclient.getMedianTime(entry.hash);
-          assert(mtp);
-          assert(mtp <= lastMTP);
-          lastMTP = mtp;
 
           hash = entry.prevBlock;
         } while (entry.height > 0);
