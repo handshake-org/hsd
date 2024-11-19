@@ -32,6 +32,11 @@ const NETWORK = 'regtest';
 const network = Network.get(NETWORK);
 const layout = layouts.wdb;
 
+const countAndTimeData = [
+  require('./data/migrations/wallet-5-pagination.json'),
+  require('./data/migrations/wallet-5-pagination-2.json')
+];
+
 const wdbFlagError = (id) => {
   return 'Restart with'
     + ` \`hsd --wallet-migrate=${id}\` or \`hsw --migrate=${id}\`\n`
@@ -947,10 +952,11 @@ describe('Wallet Migrations', function() {
     });
   });
 
-  describe('TX Count and time indexing migration (integration)', function() {
+  for (const [i, data] of countAndTimeData.entries())
+  describe(`TX Count and time indexing migration (integration ${i})`, function() {
     const location = testdir('wallet-tx-count-time');
     const migrationsBAK = WalletMigrator.migrations;
-    const data = require('./data/migrations/wallet-5-pagination.json');
+    // const data = require('./data/migrations/wallet-5-pagination.json');
     const Migration = WalletMigrator.MigrateTXCountTimeIndex;
     const layout = Migration.layout();
 
@@ -1046,7 +1052,8 @@ describe('Wallet Migrations', function() {
       await checkEntries(ldb, {
         before: data.before,
         after: data.after,
-        throw: true
+        throw: true,
+        logErrors: true
       });
 
       await walletDB.close();
