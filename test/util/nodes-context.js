@@ -5,6 +5,9 @@ const Network = require('../../lib/protocol/network');
 const NodeContext = require('./node-context');
 
 class NodesContext {
+  /** @type {NodeContext[]} */
+  nodeCtxs;
+
   constructor(network, size = 1) {
     this.network = Network.get(network);
     this.size = size;

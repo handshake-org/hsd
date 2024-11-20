@@ -10,6 +10,8 @@ const {ZERO_HASH} = require('../../lib/protocol/consensus');
 
 const walletUtils = exports;
 
+const REGTEST_TIME = 1580745078;
+
 walletUtils.fakeBlock = (height, prevSeed = 0, seed = prevSeed) => {
   assert(height >= 0);
   const prev = height === 0 ? ZERO_HASH : blake2b.digest(fromU32(((height - 1) ^ prevSeed) >>> 0));
@@ -20,7 +22,7 @@ walletUtils.fakeBlock = (height, prevSeed = 0, seed = prevSeed) => {
     hash: hash,
     prevBlock: prev,
     merkleRoot: root,
-    time: 500000000 + (height * (10 * 60)),
+    time: REGTEST_TIME + (height * (10 * 60)),
     bits: 0,
     nonce: 0,
     height: height,

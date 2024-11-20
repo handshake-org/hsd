@@ -8,6 +8,7 @@ const Witness = require('../lib/script/witness');
 const Script = require('../lib/script/script');
 const HDPrivateKey = require('../lib/hd/private');
 const Output = require('../lib/primitives/output');
+const Block = require('../lib/primitives/block');
 const Coin = require('../lib/primitives/coin');
 const MTX = require('../lib/primitives/mtx');
 const rules = require('../lib/covenants/rules');
@@ -17,6 +18,7 @@ const pkg = require('../lib/pkg');
 const mnemonics = require('./data/mnemonic-english.json');
 const consensus = require('../lib/protocol/consensus');
 const Outpoint = require('../lib/primitives/outpoint');
+const ChainEntry = require('../lib/blockchain/chainentry');
 const {ZERO_HASH} = consensus;
 
 // Commonly used test mnemonic
@@ -428,8 +430,119 @@ describe('Node HTTP', function() {
     });
   });
 
-  describe('Websockets', function () {
+  describe('Websockets', function() {
     this.timeout(15000);
+
+    describe('Get entry', function() {
+      const nodeCtx = new NodeContext({
+        wallet: true
+      });
+
+      nodeCtx.init();
+
+      const {nclient} = nodeCtx;
+
+      before(async () => {
+        await nodeCtx.open();
+
+        const {address} = await nodeCtx.wclient.createAddress('primary', 'default');
+        await mineBlocks(nodeCtx, 15, address);
+      });
+
+      after(async () => {
+        await nodeCtx.close();
+      });
+
+      it('should get entry by height', async () => {
+        const rawEntry = await nclient.getEntry(0);
+        assert(rawEntry && rawEntry.length > 0);
+
+        const entry = ChainEntry.decode(rawEntry);
+        assert(entry);
+        assert.strictEqual(entry.height, 0);
+      });
+
+      it('should get last entry by height', async () => {
+        const rawTip = await nclient.getTip();
+        assert(rawTip);
+        const tip = ChainEntry.decode(rawTip);
+        assert(tip);
+        assert.strictEqual(tip.height, 15);
+
+        const rawEntry = await nclient.getEntry(tip.height);
+        assert(rawEntry && rawEntry.length > 0);
+        const entry = ChainEntry.decode(rawEntry);
+        assert(entry);
+        assert.strictEqual(entry.height, 15);
+        assert.bufferEqual(entry.hash, tip.hash);
+      });
+
+      it('should get all entries by hash', async () => {
+        const tip = ChainEntry.decode(await nclient.getTip());
+        assert(tip);
+
+        let entry;
+        let hash = tip.hash;
+        let height = tip.height;
+        do {
+          const rawEntry = await nclient.getEntry(hash);
+          assert(rawEntry);
+
+          entry = ChainEntry.decode(rawEntry);
+          assert.strictEqual(entry.height, height--);
+
+          hash = entry.prevBlock;
+        } while (entry.height > 0);
+      });
+    });
+
+    describe('get hashes and entries', function() {
+      const nodeCtx = new NodeContext({
+        wallet: true
+      });
+
+      nodeCtx.init();
+
+      const {nclient, network} = nodeCtx;
+      const genesisBlock = Block.decode(network.genesisBlock);
+      let minedHashes;
+
+      before(async () => {
+        await nodeCtx.open();
+
+        const {address} = await nodeCtx.wclient.createAddress('primary', 'default');
+        minedHashes = await mineBlocks(nodeCtx, 15, address);
+      });
+
+      after(async () => {
+        await nodeCtx.close();
+      });
+
+      it('should get hashes by range', async () => {
+        const hashes = await nclient.getHashes(0, 15);
+        assert(hashes && hashes.length === 16);
+
+        for (const [index, hash] of hashes.entries()) {
+          if (index === 0) {
+            assert.bufferEqual(hash, genesisBlock.hash());
+            continue;
+          }
+
+          assert.bufferEqual(hash, minedHashes[index - 1]);
+        }
+      });
+
+      it('should get entries by range', async () => {
+        const entries = await nclient.getEntries(0, 15);
+        assert(entries && entries.length === 16);
+
+        for (const rawEntry of entries) {
+          const entry = ChainEntry.decode(rawEntry);
+          const gotEntry = await nclient.getEntry(entry.hash);
+          assert.bufferEqual(rawEntry, gotEntry);
+        }
+      });
+    });
 
     describe('tree commit', () => {
       const {types} = rules;
@@ -449,17 +562,6 @@ describe('Node HTTP', function() {
       let privkey, pubkey;
       let socketData, mempoolData;
       let cbAddress;
-
-      // take into account race conditions
-      async function mineBlocks(count, address) {
-        const blockEvents = common.forEvent(
-          nodeCtx.nclient.socket.events,
-          'block connect',
-          count
-        );
-        await nodeCtx.mineBlocks(count, address);
-        await blockEvents;
-      }
 
       before(async () => {
         await nodeCtx.open();
@@ -501,7 +603,7 @@ describe('Node HTTP', function() {
       });
 
       it('should mine 1 tree interval', async () => {
-        await mineBlocks(treeInterval, cbAddress);
+        await mineBlocks(nodeCtx, treeInterval, cbAddress);
         assert.equal(socketData.length, 1);
       });
 
@@ -551,7 +653,7 @@ describe('Node HTTP', function() {
         const mempool = await nclient.getMempool();
         assert.equal(mempool[0], mtx.txid());
 
-        await mineBlocks(treeInterval, cbAddress);
+        await mineBlocks(nodeCtx, treeInterval, cbAddress);
         assert.equal(socketData.length, 1);
 
         const {root, block, entry} = socketData[0];
@@ -567,3 +669,14 @@ describe('Node HTTP', function() {
   });
 });
 
+async function mineBlocks(nodeCtx, count, address) {
+  const blockEvents = common.forEvent(
+    nodeCtx.nclient.socket.events,
+    'block connect',
+    count
+  );
+
+  const blocks = await nodeCtx.mineBlocks(count, address);
+  await blockEvents;
+  return blocks.map(block => block.hash().toString('hex'));
+}

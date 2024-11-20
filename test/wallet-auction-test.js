@@ -1080,7 +1080,18 @@ describe('Wallet Auction', function() {
         const {receiveDepth} = acct;
         const addrIndexes = Array(receiveDepth - 1).fill(0);
 
-        const txs = await wallet.getHistory();
+        const historyOptions = {
+          limit: 100,
+          reverse: false
+        };
+
+        const txs = [];
+        txs.push(...await wallet.listHistory(-1, historyOptions));
+        txs.push(...await wallet.listHistoryAfter(-1, {
+          hash: txs[txs.length - 1].hash,
+          ...historyOptions
+        }));
+
         const wtxs = await wallet.toDetails(txs);
         for (const wtx of wtxs) {
           for (const output of wtx.outputs)

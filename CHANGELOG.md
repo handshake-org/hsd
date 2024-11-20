@@ -32,8 +32,11 @@ process and allows parallel rescans.
       - `nextCompaction` - when will the next compaction trigger after restart.
       - `lastCompaction` - when was the last compaction run.
   - Introduce `scan interactive` hook (start, filter, fullLock)
+  - Add `get median time` hook to get median time past for a blockhash.
+  - Add `get entries` hook to get entries. Similar to `get hashes`, but returns
+    encoded entries.
 
-### Node HTTP Client:
+### hs-client Node
   - Introduce `scanInteractive` method that starts interactive rescan.
     - expects ws hook for `block rescan interactive` params `rawEntry, rawTXs`
       that returns scanAction object.
@@ -41,6 +44,7 @@ process and allows parallel rescans.
   - Add `getMempoolRejectionFilter` and `checkMempoolRejectionFilter` NodeClient
   aliases.
   - Add `getFee`, an HTTP alternative to estimateFee socket call.
+  - Adds `getEntries(start, end)` that returns encoded chain entries.
 
 ### Wallet Changes
 - Add migration that recalculates txdb balances to fix any inconsistencies.
@@ -54,6 +58,8 @@ process and allows parallel rescans.
 - Add `--wallet-preload-all` (or `--preload-all` for standalone wallet node)
   that will open all wallets before starting other services (e.g. HTTP).
   By default this is set to `false`.
+- Add `--wallet-max-history-txs` (or `--max-history-txs` for standalone wallet
+  node) that will be the hard limit of confirmed and unconfirmed histories.
 
 #### Wallet API
 
@@ -64,8 +70,26 @@ process and allows parallel rescans.
   - `open()` no longer calls scan, instead only rollbacks and waits for
     sync to do the rescan.
   - emits events for: `open`, `close`, `connect`, `disconnect`, `sync done`.
+  - Wallet now has additional methods for quering history:
+    - `listUnconfirmed(acc, { limit, reverse })` - Get first or last `limit`
+      unconfirmed transactions.
+    - `listUnconfirmedAfter(acc, { hash, limit, reverse })` - Get first or last `limit`
+      unconfirmed transactions after/before tx with hash: `hash`.
+    - `listUnconfirmedFrom(acc, { hash, limit, reverse })` - Get first or last `limit`
+      unconfirmed transactions after/before tx with hash `hash`, inclusive.
+    - `listUnconfirmedByTime(acc, { time, limit, reverse })` - Get first or last
+      `limit` unconfirmed transactions after/before `time`, inclusive.
+    - `listHistory(acc, { limit, reverse })` - Get first or last `limit`
+      unconfirmed/confirmed transactions.
+    - `listHistoryAfter(acc, { hash, limit, reverse })` - Get first or last `limit`
+      unconfirmed/confirmed transactions after/before tx with hash `hash`.
+    - `listHistoryFrom(acc, { hash, limit, reverse })` - Get first or last `limit`
+      confirmed/unconfirmed transactions after/before tx with hash `hash`, inclusive.
+    - `listUnconfirmedByTime(acc, { time, limit, reverse })` - Get first or last
+      `limit` confirmed/unconfirmed transactions after/before `time`, inclusive.
+    - NOTE: Default is ascending order, from the oldest.
 
-#### Wallet HTTP
+##### Wallet HTTP API
   - All transaction creating endpoints now accept `hardFee` for specifying the
     exact fee.
   - All transaction sending endpoints now fundlock/queue tx creation. (no more
@@ -84,6 +108,78 @@ process and allows parallel rescans.
     - `GET /wallet/:id/auction/:name` (`getAuctionByName`)
     - `GET /wallet/:id/reveal` (`getReveals`)
     - `GET /wallet/:id/reveal/:name` (`getRevealsByName`)
+  - `GET /wallet/:id/tx/history` - The params are now `time`, `after`,
+  `limit`, and `reverse`.
+  - `GET /wallet/:id/tx/unconfirmed` - The params are are same as above.
+
+These endpoints have been deprecated:
+  - `GET /wallet/:id/tx/range` - Instead use the `time` param for the history and
+    unconfirmed endpoints.
+  - `GET /wallet/:id/tx/last` - Instead use `reverse` param for the history and
+    unconfirmed endpoints.
+
+##### Examples
+
+```
+GET /wallet/:id/tx/history?after=<txid>&limit=50&reverse=false
+GET /wallet/:id/tx/history?after=<txid>&limit=50&reverse=true
+```
+By using `after=<txid>` we can anchor pages so that results will not shift
+when new blocks and transactions arrive. With `reverse=true` we can change
+the order the transactions are returned as _latest to genesis_. The
+`limit=<number>` specifies the maximum number of transactions to return
+in the result.
+
+```
+GET /wallet/:id/tx/history?time=<median-time-past>&limit=50&reverse=false
+GET /wallet/:id/tx/history?time=<median-time-past>&limit=50&reverse=true
+```
+The param `time` is in epoch seconds and indexed based on median-time-past
+(MTP) and `date` is ISO 8601 format. Because multiple transactions can share
+the same time, this can function as an initial query, and then switch to the
+above `after` format for the following pages.
+
+```
+GET /wallet/:id/tx/unconfirmed?after=<txid>&limit=50&reverse=false
+GET /wallet/:id/tx/unconfirmed?after=<txid>&limit=50&reverse=true
+GET /wallet/:id/tx/unconfirmed?time=<time-received>&limit=50&reverse=false
+```
+The same will apply to unconfirmed transactions. The `time` is in epoch
+seconds and indexed based on when the transaction was added to the wallet.
+
+##### Wallet RPC
+
+The following new methods have been added:
+  - `listhistory` - List history with a limit and in reverse order.
+  - `listhistoryafter` - List history after a txid _(subsequent pages)_.
+  - `listhistorybytime` - List history by giving a timestamp in epoch seconds
+    _(block median time past)_.
+  - `listunconfirmed` - List unconfirmed transactions with a limit and in
+    reverse order.
+  - `listunconfirmedafter` - List unconfirmed transactions after a txid
+    _(subsequent pages)_.
+  - `listunconfirmedbytime` - List unconfirmed transactions by time they
+    where added.
+
+The following methods have been deprecated:
+
+- `listtransactions` - Use `listhistory` and the related methods and the
+  `after` argument for results that do not shift when new blocks arrive.
+
+##### Wallet CLI (hsw-cli)
+  - `history` now accepts new args on top of `--account`: `--reverse`,
+    `--limit`, `--after`, `--after`.
+  - `pending` now accepts new args, same as above.
+
+
+### Client changes
+#### Wallet HTTP Client
+
+  - `getHistory` and `Wallet.getHistory` no longer accept `account`,
+    instead accepts object with properties: `account`, `time`, `after`,
+    `limit`, and `reverse`.
+  - `getPending` and `Wallet.getPending` have the same changes as
+    `getHistory` above.
 
 ## v6.0.0
 

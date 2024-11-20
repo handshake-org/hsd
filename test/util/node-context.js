@@ -372,10 +372,15 @@ class NodeContext {
     if (!tip)
       tip = this.chain.tip;
 
+    const blocks = [];
+
     for (let i = 0; i < count; i++) {
       const block = await this.miner.mineBlock(tip, address);
       tip = await this.chain.add(block);
+      blocks.push(block);
     }
+
+    return blocks;
   }
 }
 

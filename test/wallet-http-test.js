@@ -18,6 +18,8 @@ const common = require('./util/common');
 const Outpoint = require('../lib/primitives/outpoint');
 const consensus = require('../lib/protocol/consensus');
 const NodeContext = require('./util/node-context');
+const {forEvent, sleep} = require('./util/common');
+const {generateInitialBlocks} = require('./util/pagination');
 
 const {
   treeInterval,
@@ -1187,8 +1189,6 @@ describe('Wallet HTTP', function() {
         if (key.startsWith(wid1 + '42'))
           dumpSlice[key] = dump[key];
       });
-
-      console.log(dumpSlice);
     });
 
     it('should get auction info', async () => {
@@ -2324,11 +2324,383 @@ describe('Wallet HTTP', function() {
       await forMemTX;
     });
   });
-});
 
-async function sleep(time) {
-  return new Promise(resolve => setTimeout(resolve, time));
-}
+  describe('Wallet TX pagination', function() {
+    const GENESIS_TIME = 1580745078;
+
+    // account to receive single tx per block.
+    const SINGLE_ACCOUNT = 'single';
+    const DEFAULT_ACCOUNT = 'default';
+
+    let fundWallet, testWallet, unconfirmedTime;
+
+    async function sendTXs(count, account = DEFAULT_ACCOUNT) {
+      const mempoolTXs = forEvent(nodeCtx.mempool, 'tx', count);
+
+      for (let i = 0; i < count; i++) {
+        const {address} = await testWallet.createAddress(account);
+        await fundWallet.send({ outputs: [{address, value: 1e6}] });
+      }
+
+      await mempoolTXs;
+    }
+
+    before(async () => {
+      await beforeAll();
+
+      await wclient.createWallet('test');
+      fundWallet = wclient.wallet('primary');
+      testWallet = wclient.wallet('test');
+
+      await testWallet.createAccount(SINGLE_ACCOUNT);
+
+      const fundAddress = (await fundWallet.createAddress('default')).address;
+
+      await generateInitialBlocks({
+        nodeCtx,
+        sendTXs,
+        singleAccount: SINGLE_ACCOUNT,
+        coinbase: fundAddress,
+        genesisTime: GENESIS_TIME
+      });
+
+      unconfirmedTime = Math.floor(Date.now() / 1000);
+
+      // 20 txs unconfirmed
+      const all = forEvent(nodeCtx.wdb, 'tx', 20);
+      await sendTXs(20);
+      await all;
+    });
+
+    after(async () => {
+      await afterAll();
+    });
+
+    describe('confirmed and unconfirmed txs (dsc)', function() {
+      it('first page', async () => {
+        const history = await testWallet.getHistory({
+          limit: 100,
+          reverse: true
+        });
+
+        assert.strictEqual(history.length, 100);
+        assert.strictEqual(history[0].confirmations, 0);
+        assert.strictEqual(history[19].confirmations, 0);
+        assert.strictEqual(history[20].confirmations, 1);
+        assert.strictEqual(history[39].confirmations, 1);
+        assert.strictEqual(history[40].confirmations, 2);
+        assert.strictEqual(history[99].confirmations, 4);
+      });
+
+      it('second page', async () => {
+        const one = await testWallet.getHistory({
+          limit: 100,
+          reverse: true
+        });
+
+        assert.strictEqual(one.length, 100);
+        assert.strictEqual(one[0].confirmations, 0);
+        assert.strictEqual(one[19].confirmations, 0);
+        assert.strictEqual(one[20].confirmations, 1);
+        assert.strictEqual(one[99].confirmations, 4);
+
+        const after = one[99].hash;
+
+        const two = await testWallet.getHistory({
+          after,
+          limit: 100,
+          reverse: true
+        });
+
+        assert.strictEqual(two.length, 100);
+        assert.strictEqual(two[0].confirmations, 5);
+        assert.strictEqual(two[19].confirmations, 5);
+        assert.strictEqual(two[20].confirmations, 6);
+        assert.strictEqual(two[99].confirmations, 9);
+        assert.notStrictEqual(two[0].hash, one[99].hash);
+      });
+
+      it('first page (w/ account)', async () => {
+        const history = await testWallet.getHistory({
+          account: SINGLE_ACCOUNT,
+          limit: 100,
+          reverse: true
+        });
+
+        // we are sending txs from coinbase.
+        assert.strictEqual(history.length, 20);
+        assert.strictEqual(history[0].confirmations, 1);
+        assert.strictEqual(history[1].confirmations, 2);
+        assert.strictEqual(history[19].confirmations, 20);
+      });
+
+      it('second page (w/ account)', async () => {
+        const one = await testWallet.getHistory({
+          account: SINGLE_ACCOUNT,
+          limit: 10,
+          reverse: true
+        });
+
+        assert.strictEqual(one.length, 10);
+
+        const after = one[9].hash;
+
+        const two = await testWallet.getHistory({
+          account: SINGLE_ACCOUNT,
+          after: after,
+          limit: 10,
+          reverse: true
+        });
+
+        assert.strictEqual(two.length, 10);
+        assert.strictEqual(two[0].confirmations, 11);
+        assert.strictEqual(two[9].confirmations, 20);
+        assert.notStrictEqual(two[0].hash, one[9].hash);
+      });
+
+      it('with datetime (MTP in epoch seconds)', async () => {
+        const history = await testWallet.getHistory({
+          limit: 100,
+          time: Math.ceil(Date.now() / 1000),
+          reverse: true
+        });
+
+        assert.strictEqual(history.length, 100);
+        assert(history[0].confirmations < history[99].confirmations);
+      });
+    });
+
+    describe('confirmed txs (asc)', function() {
+      it('first page', async () => {
+        const history = await testWallet.getHistory({
+          account: SINGLE_ACCOUNT,
+          limit: 12,
+          reverse: false
+        });
+
+        assert.strictEqual(history.length, 12);
+        assert.strictEqual(history[0].confirmations, 20);
+        assert.strictEqual(history[11].confirmations, 9);
+      });
+
+      it('second page', async () => {
+        const one = await testWallet.getHistory({
+          account: SINGLE_ACCOUNT,
+          limit: 12,
+          reverse: false
+        });
+
+        assert.strictEqual(one.length, 12);
+        assert.strictEqual(one[0].confirmations, 20);
+        assert.strictEqual(one[11].confirmations, 9);
+
+        const after = one[11].hash;
+
+        const two = await testWallet.getHistory({
+          account: SINGLE_ACCOUNT,
+          after: after,
+          limit: 10,
+          reverse: false
+        });
+
+        assert.strictEqual(two.length, 8);
+        assert.strictEqual(two[0].confirmations, 8);
+        assert.strictEqual(two[7].confirmations, 1);
+        assert.notStrictEqual(two[0].hash, one[7].hash);
+      });
+
+      it('with datetime (MTP in epoch seconds)', async () => {
+        const history = await testWallet.getHistory({
+          limit: 100,
+          time: GENESIS_TIME,
+          reverse: false
+        });
+
+        assert.strictEqual(history.length, 100);
+        assert(history[0].confirmations > history[99].confirmations);
+      });
+    });
+
+    describe('unconfirmed txs (dsc)', function() {
+      it('first page', async () => {
+        const history = await testWallet.getPending({
+          limit: 50,
+          reverse: true
+        });
+
+        assert.strictEqual(history.length, 20);
+        assert.strictEqual(history[0].confirmations, 0);
+        const a = history[0].mtime;
+        assert.strictEqual(Number.isInteger(a), true);
+        assert.strictEqual(history[19].confirmations, 0);
+        const b = history[19].mtime;
+        assert.strictEqual(Number.isInteger(b), true);
+        assert.strictEqual(a >= b, true);
+
+        const historyAccount = await testWallet.getPending({
+          account: DEFAULT_ACCOUNT,
+          limit: 50,
+          reverse: true
+        });
+
+        assert.deepStrictEqual(historyAccount, history);
+      });
+
+      it('second page', async () => {
+        const one = await testWallet.getPending({
+          limit: 5,
+          reverse: true
+        });
+
+        const oneAccount = await testWallet.getPending({
+          account: DEFAULT_ACCOUNT,
+          limit: 5,
+          reverse: true
+        });
+
+        assert.deepStrictEqual(oneAccount, one);
+
+        const after = one[4].hash;
+
+        const two = await testWallet.getPending({
+          after: after,
+          limit: 40,
+          reverse: true
+        });
+
+        const twoAccount = await testWallet.getPending({
+          after: after,
+          account: DEFAULT_ACCOUNT,
+          limit: 40,
+          reverse: true
+        });
+
+        assert.deepStrictEqual(twoAccount, two);
+
+        assert.strictEqual(two.length, 15);
+        assert.strictEqual(two[0].confirmations, 0);
+        const a = two[0].mtime;
+        assert.strictEqual(Number.isInteger(a), true);
+        assert.strictEqual(two[14].confirmations, 0);
+        const b = two[14].mtime;
+        assert.strictEqual(Number.isInteger(b), true);
+        assert.strictEqual(a >= b, true);
+
+        assert.notStrictEqual(two[0].hash, one[4].hash);
+      });
+
+      it('with datetime (MTP in epoch seconds)', async () => {
+        const history = await testWallet.getPending({
+          limit: 20,
+          time: Math.ceil((Date.now() + 2000) / 1000),
+          reverse: true
+        });
+
+        assert.strictEqual(history.length, 20);
+        assert(history[0].mtime >= history[19].mtime);
+
+        const historyAccount = await testWallet.getPending({
+          account: DEFAULT_ACCOUNT,
+          limit: 20,
+          time: Math.ceil((Date.now() + 2000) / 1000),
+          reverse: true
+        });
+
+        assert.deepStrictEqual(historyAccount, history);
+      });
+    });
+
+    describe('unconfirmed txs (asc)', function() {
+      it('first page', async () => {
+        const history = await testWallet.getPending({
+          limit: 50,
+          reverse: false
+        });
+
+        const historyAccount = await testWallet.getPending({
+          account: DEFAULT_ACCOUNT,
+          limit: 50,
+          reverse: false
+        });
+
+        assert.deepStrictEqual(historyAccount, history);
+
+        assert.strictEqual(history.length, 20);
+        assert.strictEqual(history[0].confirmations, 0);
+        const a = history[0].mtime;
+        assert.strictEqual(Number.isInteger(a), true);
+        assert.strictEqual(history[19].confirmations, 0);
+        const b = history[19].mtime;
+        assert.strictEqual(Number.isInteger(b), true);
+        assert.strictEqual(a <= b, true);
+      });
+
+      it('second page', async () => {
+        const one = await testWallet.getPending({
+          limit: 5,
+          reverse: false
+        });
+
+        const oneAccount = await testWallet.getPending({
+          account: DEFAULT_ACCOUNT,
+          limit: 5,
+          reverse: false
+        });
+
+        assert.deepStrictEqual(oneAccount, one);
+
+        assert.strictEqual(one.length, 5);
+        const after = one[4].hash;
+
+        const two = await testWallet.getPending({
+          after: after,
+          limit: 15,
+          reverse: false
+        });
+
+        const twoAccount = await testWallet.getPending({
+          after: after,
+          account: DEFAULT_ACCOUNT,
+          limit: 15,
+          reverse: false
+        });
+
+        assert.deepStrictEqual(twoAccount, two);
+
+        assert.strictEqual(two.length, 15);
+        assert.strictEqual(two[0].confirmations, 0);
+        const a = two[0].mtime;
+        assert.strictEqual(Number.isInteger(a), true);
+        assert.strictEqual(two[14].confirmations, 0);
+        const b = two[14].mtime;
+        assert.strictEqual(Number.isInteger(b), true);
+        assert.strictEqual(a <= b, true);
+
+        assert.notStrictEqual(two[0].hash, one[4].hash);
+      });
+
+      it('with datetime (MTP in epoch seconds)', async () => {
+        const history = await testWallet.getPending({
+          limit: 20,
+          time: unconfirmedTime,
+          reverse: false
+        });
+
+        assert.strictEqual(history.length, 20);
+        assert(history[0].mtime <= history[19].mtime);
+
+        const historyAccount = await testWallet.getPending({
+          account: DEFAULT_ACCOUNT,
+          limit: 20,
+          time: unconfirmedTime,
+          reverse: false
+        });
+
+        assert.deepStrictEqual(historyAccount, history);
+      });
+    });
+  });
+});
 
 // create an OPEN output
 function openOutput(name, address) {

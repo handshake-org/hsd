@@ -1,13 +1,12 @@
 'use strict';
 
 const assert = require('bsert');
-const {
-  MTX,
-  Network,
-  WalletDB,
-  policy
-} = require('..');
 const {BlockMeta} = require('../lib/wallet/records');
+const util = require('../lib/utils/util');
+const Network = require('../lib/protocol/network');
+const MTX = require('../lib/primitives/mtx');
+const WalletDB = require('../lib/wallet/walletdb');
+const policy = require('../lib/protocol/policy');
 
 // Use main instead of regtest because (deprecated)
 // CoinSelector.MAX_FEE was network agnostic
@@ -24,7 +23,7 @@ function dummyBlock(tipHeight) {
   const dummyBlock = {
     hash,
     height,
-    time: Date.now(),
+    time: util.now(),
     prevBlock: prevHash
   };
 

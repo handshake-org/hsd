@@ -227,18 +227,73 @@ exports.dumpChainDB = async (chaindb, prefixes) => {
   return exports.dumpDB(chaindb.db, prefixes);
 };
 
-exports.checkEntries = async (ldb, data) => {
-  for (const [key, value] of Object.entries(data)) {
+/**
+ * @param {bdb.DB} ldb
+ * @param {Object} options
+ * @param {Object} options.before - key value pairs to check before.
+ * @param {Object} options.after - key value pairs to check.
+ * @param {Boolean} options.throw - throw on error.
+ * @param {Boolean} options.bail - bail on first error.
+ * @param {Boolean} options.logErrors - log errors.
+ * @returns {Promise<String[]>} - errors.
+ */
+
+exports.checkEntries = async (ldb, options) => {
+  const errors = [];
+
+  options.before = options.before || {};
+  options.after = options.after || {};
+
+  for (const [key, value] of Object.entries(options.after)) {
+    if (errors.length > 0 && options.bail) {
+      if (options.throw)
+        throw new Error(errors[0]);
+
+      break;
+    }
+
     const bkey = Buffer.from(key, 'hex');
     const bvalue = Buffer.from(value, 'hex');
 
     const stored = await ldb.get(bkey);
 
-    assert(stored,
-      `Value for ${key} not found in db, expected: ${value}`);
-    assert.bufferEqual(stored, bvalue,
-      `Value for ${key}: ${stored.toString('hex')} does not match expected: ${value}`);
+    if (!stored) {
+      errors.push(`Value for ${key} not found in db, expected: ${value}`);
+      continue;
+    }
+
+    if (!bvalue.equals(stored)) {
+      errors.push(`Value for ${key}: ${stored.toString('hex')} does not match expected: ${value}`);
+      continue;
+    }
   }
+
+  // check that entries have been removed.
+  for (const [key] of Object.entries(options.before)) {
+    // if after also has this key, skip.
+    if (options.after[key] != null)
+      continue;
+
+    const bkey = Buffer.from(key, 'hex');
+
+    const stored = await ldb.get(bkey);
+
+    if (stored) {
+      errors.push(`Value for ${key}: ${stored.toString('hex')} should have been removed.`);
+      continue;
+    }
+  }
+
+  if (options.logErrors && errors.length !== 0) {
+    console.error(
+      JSON.stringify(errors, null, 2)
+    );
+  }
+
+  if (errors.length > 0 && options.throw)
+    throw new Error(`Check entries failed with ${errors.length} errors.`);
+
+  return errors;
 };
 
 exports.fillEntries = async (ldb, data) => {

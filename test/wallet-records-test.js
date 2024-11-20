@@ -227,12 +227,13 @@ describe('Wallet Records', function() {
       compareBlockMeta(decoded, data);
     });
 
-    it('should return block hash', () => {
+    it('should return block hash and time and decode', () => {
       const data = getRandomBlockMetaData();
-      const meta = new BlockMeta();
-      meta.inject(data);
+      const meta = BlockMeta.fromEntry(data);
 
-      assert.bufferEqual(meta.toHash(), data.hash);
+      const hashAndTime = meta.toHashAndTime();
+      const meta2 = BlockMeta.fromHashAndTime(hashAndTime, data.height);
+      compareBlockMeta(meta, meta2);
     });
 
     it('should be created from ChainEntry', () => {
@@ -311,8 +312,8 @@ describe('Wallet Records', function() {
 
     it('should encode/decode w/ tx', () => {
       const {data, tx, mtime} = getRandomTXRecordData(true);
-
       const wtx = new TXRecord(mtime, tx);
+
       const encoded = wtx.encode();
       const decoded = TXRecord.decode(encoded);
 
@@ -322,7 +323,6 @@ describe('Wallet Records', function() {
 
     it('should encode/decode w/ tx and block', () => {
       const {data, tx, block, mtime} = getRandomTXRecordData(true, true);
-
       const wtx = new TXRecord(mtime, tx, block);
       const encoded = wtx.encode();
       const decoded = TXRecord.decode(encoded);
