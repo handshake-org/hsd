@@ -1,6 +1,6 @@
 # HSD Release Notes & Changelog
 
-## Unreleased
+## v7.0.0
 
 **When upgrading to this version of hsd, you must pass `--wallet-migrate=4` when
 you run it for the first time.**
