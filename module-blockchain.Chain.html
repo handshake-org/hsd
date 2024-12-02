@@ -296,7 +296,7 @@
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line47">line 47</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line48">line 48</a>
     </li></ul></dd>
     
 
@@ -529,7 +529,7 @@
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2277">line 2277</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2411">line 2411</a>
     </li></ul></dd>
     
 
@@ -696,7 +696,7 @@
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3129">line 3129</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3274">line 3274</a>
     </li></ul></dd>
     
 
@@ -851,7 +851,7 @@
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2118">line 2118</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2137">line 2137</a>
     </li></ul></dd>
     
 
@@ -1052,7 +1052,7 @@
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2080">line 2080</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2099">line 2099</a>
     </li></ul></dd>
     
 
@@ -1210,7 +1210,292 @@
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2031">line 2031</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2050">line 2050</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+
+
+<dl>
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Promise</span>
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="_scanInteractive"><span class="type-signature">(async) </span>_scanInteractive<span class="signature">(start, filter, iter, lockPerScan<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    <p>Interactive scan the blockchain for transactions containing specified
+address hashes. Allows repeat and abort.</p>
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+        <th>Attributes</th>
+        
+
+        
+        <th>Default</th>
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>start</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type"><a href="global.html#Hash">Hash</a></span>
+|
+
+<span class="param-type">Number</span>
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                </td>
+            
+
+            <td class="description last"><p>Block hash or height to start at.</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>filter</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">BloomFilter</span>
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                </td>
+            
+
+            <td class="description last"><p>Starting bloom filter containing tx,
+address and name hashes.</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>iter</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type"><a href="global.html#ScanInteractiveIterCB">ScanInteractiveIterCB</a></span>
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                </td>
+            
+
+            <td class="description last"><p>Iterator.</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>lockPerScan</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Boolean</span>
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    true
+                
+                </td>
+            
+
+            <td class="description last"><p>if we should lock per block scan.</p></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2317">line 2317</a>
     </li></ul></dd>
     
 
@@ -1366,7 +1651,7 @@ on a block, without POW check (no lock).</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line276">line 276</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line295">line 295</a>
     </li></ul></dd>
     
 
@@ -1597,7 +1882,7 @@ on a block, without POW check (no lock).</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2258">line 2258</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2392">line 2392</a>
     </li></ul></dd>
     
 
@@ -1752,7 +2037,7 @@ on a block, without POW check (no lock).</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2605">line 2605</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2739">line 2739</a>
     </li></ul></dd>
     
 
@@ -1858,7 +2143,7 @@ on a block, without POW check (no lock).</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line128">line 128</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line129">line 129</a>
     </li></ul></dd>
     
 
@@ -1966,7 +2251,7 @@ linked directly to the provided root node hash.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2144">line 2144</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2163">line 2163</a>
     </li></ul></dd>
     
 
@@ -2121,7 +2406,7 @@ linked directly to the provided root node hash.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3575">line 3575</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3720">line 3720</a>
     </li></ul></dd>
     
 
@@ -2335,7 +2620,7 @@ linked directly to the provided root node hash.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2352">line 2352</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2486">line 2486</a>
     </li></ul></dd>
     
 
@@ -2490,7 +2775,7 @@ linked directly to the provided root node hash.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line1764">line 1764</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line1783">line 1783</a>
     </li></ul></dd>
     
 
@@ -2668,7 +2953,7 @@ linked directly to the provided root node hash.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line1558">line 1558</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line1577">line 1577</a>
     </li></ul></dd>
     
 
@@ -2823,7 +3108,7 @@ linked directly to the provided root node hash.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3373">line 3373</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3518">line 3518</a>
     </li></ul></dd>
     
 
@@ -3008,7 +3293,7 @@ hash of the latest known block).</li>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line308">line 308</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line327">line 327</a>
     </li></ul></dd>
     
 
@@ -3192,7 +3477,7 @@ hash of the latest known block).</li>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3531">line 3531</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3676">line 3676</a>
     </li></ul></dd>
     
 
@@ -3353,7 +3638,7 @@ hash of the latest known block).</li>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2901">line 2901</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3046">line 3046</a>
     </li></ul></dd>
     
 
@@ -3514,7 +3799,7 @@ hash of the latest known block).</li>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2921">line 2921</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3066">line 3066</a>
     </li></ul></dd>
     
 
@@ -3698,7 +3983,7 @@ hash of the latest known block).</li>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2891">line 2891</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3036">line 3036</a>
     </li></ul></dd>
     
 
@@ -3859,7 +4144,7 @@ hash of the latest known block).</li>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2960">line 2960</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3105">line 3105</a>
     </li></ul></dd>
     
 
@@ -4020,7 +4305,7 @@ hash of the latest known block).</li>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3030">line 3030</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3175">line 3175</a>
     </li></ul></dd>
     
 
@@ -4063,6 +4348,112 @@ hash of the latest known block).</li>
     <dd>
         
 <span class="param-type">Promise</span>
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="getCompactionHeights"><span class="type-signature">(async) </span>getCompactionHeights<span class="signature">()</span><span class="type-signature"> &rarr; {Promise.&lt;Object>}</span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    <p>Get compaction heights.</p>
+</div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line140">line 140</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+
+
+<dl>
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Promise.&lt;Object></span>
 
 
     </dd>
@@ -4132,7 +4523,7 @@ hash of the latest known block).</li>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3237">line 3237</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3382">line 3382</a>
     </li></ul></dd>
     
 
@@ -4317,7 +4708,7 @@ hash of the latest known block).</li>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line700">line 700</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line719">line 719</a>
     </li></ul></dd>
     
 
@@ -4429,7 +4820,7 @@ hash of the latest known block).</li>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3598">line 3598</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3743">line 3743</a>
     </li></ul></dd>
     
 
@@ -4489,7 +4880,221 @@ hash of the latest known block).</li>
     
 
     
-    <h4 class="name" id="getEntry"><span class="type-signature"></span>getEntry<span class="signature">(hash/height)</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+    <h4 class="name" id="getEntries"><span class="type-signature"></span>getEntries<span class="signature">(start<span class="signature-attributes">opt</span>, end<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Promise.&lt;Array.&lt;ChainEntry>>}</span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    <p>Get range of entries.</p>
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+        <th>Attributes</th>
+        
+
+        
+        <th>Default</th>
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>start</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Number</span>
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    -1
+                
+                </td>
+            
+
+            <td class="description last"></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>end</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Number</span>
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    -1
+                
+                </td>
+            
+
+            <td class="description last"></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3014">line 3014</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+
+
+<dl>
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Promise.&lt;Array.&lt;ChainEntry>></span>
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="getEntry"><span class="type-signature"></span>getEntry<span class="signature">(hash)</span><span class="type-signature"> &rarr; {Promise.&lt;?ChainEntry>}</span></h4>
     
 
     
@@ -4533,7 +5138,7 @@ hash of the latest known block).</li>
 
         <tr>
             
-                <td class="name"><code>hash/height</code></td>
+                <td class="name"><code>hash</code></td>
             
 
             <td class="type">
@@ -4593,7 +5198,7 @@ hash of the latest known block).</li>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2778">line 2778</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2912">line 2912</a>
     </li></ul></dd>
     
 
@@ -4621,12 +5226,6 @@ hash of the latest known block).</li>
 <h5>Returns:</h5>
 
         
-<div class="param-desc">
-    <ul>
-<li>Returns ChainEntry.</li>
-</ul>
-</div>
-
 
 
 <dl>
@@ -4635,7 +5234,7 @@ hash of the latest known block).</li>
     </dt>
     <dd>
         
-<span class="param-type">Promise</span>
+<span class="param-type">Promise.&lt;?ChainEntry></span>
 
 
     </dd>
@@ -4754,7 +5353,7 @@ hash of the latest known block).</li>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2798">line 2798</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2932">line 2932</a>
     </li></ul></dd>
     
 
@@ -4915,7 +5514,7 @@ hash of the latest known block).</li>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2788">line 2788</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2922">line 2922</a>
     </li></ul></dd>
     
 
@@ -5077,7 +5676,7 @@ will only return hashes in the main chain.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2809">line 2809</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2943">line 2943</a>
     </li></ul></dd>
     
 
@@ -5137,7 +5736,7 @@ will only return hashes in the main chain.</p>
     
 
     
-    <h4 class="name" id="getHashes"><span class="type-signature"></span>getHashes<span class="signature">(start<span class="signature-attributes">opt</span>, end<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+    <h4 class="name" id="getHashes"><span class="type-signature"></span>getHashes<span class="signature">(start<span class="signature-attributes">opt</span>, end<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Promise.&lt;Array.&lt;<a href="global.html#Hash">Hash</a>>>}</span></h4>
     
 
     
@@ -5297,7 +5896,7 @@ will only return hashes in the main chain.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2869">line 2869</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3003">line 3003</a>
     </li></ul></dd>
     
 
@@ -5333,7 +5932,7 @@ will only return hashes in the main chain.</p>
     </dt>
     <dd>
         
-<span class="param-type">Promise</span>
+<span class="param-type">Promise.&lt;Array.&lt;<a href="global.html#Hash">Hash</a>>></span>
 
 
     </dd>
@@ -5452,7 +6051,7 @@ will only return hashes in the main chain.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2970">line 2970</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3115">line 3115</a>
     </li></ul></dd>
     
 
@@ -5613,7 +6212,7 @@ will only return hashes in the main chain.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2819">line 2819</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2953">line 2953</a>
     </li></ul></dd>
     
 
@@ -5788,7 +6387,7 @@ non-existent hash, which is useful for headers-first locators.</p></td>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3113">line 3113</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3258">line 3258</a>
     </li></ul></dd>
     
 
@@ -6018,7 +6617,7 @@ non-existent hash, which is useful for headers-first locators.</p></td>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3665">line 3665</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3810">line 3810</a>
     </li></ul></dd>
     
 
@@ -6173,7 +6772,7 @@ non-existent hash, which is useful for headers-first locators.</p></td>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line910">line 910</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line929">line 929</a>
     </li></ul></dd>
     
 
@@ -6227,7 +6826,7 @@ non-existent hash, which is useful for headers-first locators.</p></td>
     
 
     
-    <h4 class="name" id="getMedianTime"><span class="type-signature">(async) </span>getMedianTime<span class="signature">(prev)</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+    <h4 class="name" id="getMedianTime"><span class="type-signature">(async) </span>getMedianTime<span class="signature">(prev)</span><span class="type-signature"> &rarr; {Promise.&lt;Number>}</span></h4>
     
 
     
@@ -6328,7 +6927,7 @@ non-existent hash, which is useful for headers-first locators.</p></td>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line358">line 358</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line377">line 377</a>
     </li></ul></dd>
     
 
@@ -6356,12 +6955,6 @@ non-existent hash, which is useful for headers-first locators.</p></td>
 <h5>Returns:</h5>
 
         
-<div class="param-desc">
-    <ul>
-<li>Returns Number.</li>
-</ul>
-</div>
-
 
 
 <dl>
@@ -6370,7 +6963,7 @@ non-existent hash, which is useful for headers-first locators.</p></td>
     </dt>
     <dd>
         
-<span class="param-type">Promise</span>
+<span class="param-type">Promise.&lt;Number></span>
 
 
     </dd>
@@ -6489,7 +7082,7 @@ non-existent hash, which is useful for headers-first locators.</p></td>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2931">line 2931</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3076">line 3076</a>
     </li></ul></dd>
     
 
@@ -6650,7 +7243,7 @@ non-existent hash, which is useful for headers-first locators.</p></td>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2990">line 2990</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3135">line 3135</a>
     </li></ul></dd>
     
 
@@ -6811,7 +7404,7 @@ non-existent hash, which is useful for headers-first locators.</p></td>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line338">line 338</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line357">line 357</a>
     </li></ul></dd>
     
 
@@ -6972,7 +7565,7 @@ non-existent hash, which is useful for headers-first locators.</p></td>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line348">line 348</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line367">line 367</a>
     </li></ul></dd>
     
 
@@ -7133,7 +7726,7 @@ non-existent hash, which is useful for headers-first locators.</p></td>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2839">line 2839</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2973">line 2973</a>
     </li></ul></dd>
     
 
@@ -7245,7 +7838,7 @@ non-existent hash, which is useful for headers-first locators.</p></td>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3628">line 3628</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3773">line 3773</a>
     </li></ul></dd>
     
 
@@ -7406,7 +7999,7 @@ non-existent hash, which is useful for headers-first locators.</p></td>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3000">line 3000</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3145">line 3145</a>
     </li></ul></dd>
     
 
@@ -7561,7 +8154,7 @@ non-existent hash, which is useful for headers-first locators.</p></td>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3184">line 3184</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3329">line 3329</a>
     </li></ul></dd>
     
 
@@ -7716,7 +8309,7 @@ non-existent hash, which is useful for headers-first locators.</p></td>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line328">line 328</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line347">line 347</a>
     </li></ul></dd>
     
 
@@ -7874,7 +8467,7 @@ non-existent hash, which is useful for headers-first locators.</p></td>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line318">line 318</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line337">line 337</a>
     </li></ul></dd>
     
 
@@ -7986,7 +8579,7 @@ non-existent hash, which is useful for headers-first locators.</p></td>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3098">line 3098</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3243">line 3243</a>
     </li></ul></dd>
     
 
@@ -8169,7 +8762,7 @@ between two blocks by examining chainworks.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3210">line 3210</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3355">line 3355</a>
     </li></ul></dd>
     
 
@@ -8324,7 +8917,7 @@ between two blocks by examining chainworks.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2911">line 2911</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3056">line 3056</a>
     </li></ul></dd>
     
 
@@ -8436,7 +9029,7 @@ between two blocks by examining chainworks.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3737">line 3737</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3882">line 3882</a>
     </li></ul></dd>
     
 
@@ -8591,7 +9184,7 @@ between two blocks by examining chainworks.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3040">line 3040</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3185">line 3185</a>
     </li></ul></dd>
     
 
@@ -8775,7 +9368,7 @@ between two blocks by examining chainworks.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3407">line 3407</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3552">line 3552</a>
     </li></ul></dd>
     
 
@@ -8948,7 +9541,7 @@ between two blocks by examining chainworks.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3247">line 3247</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3392">line 3392</a>
     </li></ul></dd>
     
 
@@ -9126,7 +9719,7 @@ between two blocks by examining chainworks.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3276">line 3276</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3421">line 3421</a>
     </li></ul></dd>
     
 
@@ -9239,7 +9832,7 @@ between two blocks by examining chainworks.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2858">line 2858</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2992">line 2992</a>
     </li></ul></dd>
     
 
@@ -9400,7 +9993,7 @@ between two blocks by examining chainworks.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2941">line 2941</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3086">line 3086</a>
     </li></ul></dd>
     
 
@@ -9561,7 +10154,7 @@ between two blocks by examining chainworks.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2980">line 2980</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3125">line 3125</a>
     </li></ul></dd>
     
 
@@ -9722,7 +10315,7 @@ between two blocks by examining chainworks.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2444">line 2444</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2578">line 2578</a>
     </li></ul></dd>
     
 
@@ -9878,7 +10471,7 @@ a block, or has recently seen a block.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2759">line 2759</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2893">line 2893</a>
     </li></ul></dd>
     
 
@@ -9992,7 +10585,7 @@ network.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3089">line 3089</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3234">line 3234</a>
     </li></ul></dd>
     
 
@@ -10147,7 +10740,7 @@ network.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2849">line 2849</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2983">line 2983</a>
     </li></ul></dd>
     
 
@@ -10308,7 +10901,7 @@ network.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2829">line 2829</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2963">line 2963</a>
     </li></ul></dd>
     
 
@@ -10469,7 +11062,7 @@ network.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2718">line 2718</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2852">line 2852</a>
     </li></ul></dd>
     
 
@@ -10624,7 +11217,7 @@ network.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2647">line 2647</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2781">line 2781</a>
     </li></ul></dd>
     
 
@@ -10779,7 +11372,7 @@ network.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3010">line 3010</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3155">line 3155</a>
     </li></ul></dd>
     
 
@@ -10940,7 +11533,7 @@ network.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3020">line 3020</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3165">line 3165</a>
     </li></ul></dd>
     
 
@@ -11097,7 +11690,7 @@ network.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2950">line 2950</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3095">line 3095</a>
     </li></ul></dd>
     
 
@@ -11258,7 +11851,7 @@ network.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2103">line 2103</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2122">line 2122</a>
     </li></ul></dd>
     
 
@@ -11436,7 +12029,7 @@ network.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3392">line 3392</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3537">line 3537</a>
     </li></ul></dd>
     
 
@@ -11560,7 +12153,7 @@ network.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3054">line 3054</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3199">line 3199</a>
     </li></ul></dd>
     
 
@@ -11716,7 +12309,7 @@ an ancestor of a checkpoint.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line387">line 387</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line406">line 406</a>
     </li></ul></dd>
     
 
@@ -11872,7 +12465,7 @@ an ancestor of a checkpoint.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line402">line 402</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line421">line 421</a>
     </li></ul></dd>
     
 
@@ -12027,7 +12620,7 @@ an ancestor of a checkpoint.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line297">line 297</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line316">line 316</a>
     </li></ul></dd>
     
 
@@ -12188,7 +12781,7 @@ an ancestor of a checkpoint.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line287">line 287</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line306">line 306</a>
     </li></ul></dd>
     
 
@@ -12300,7 +12893,7 @@ an ancestor of a checkpoint.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2481">line 2481</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2615">line 2615</a>
     </li></ul></dd>
     
 
@@ -12407,7 +13000,7 @@ coinbase height (likely to be the peer's tip).</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2688">line 2688</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2822">line 2822</a>
     </li></ul></dd>
     
 
@@ -12591,7 +13184,7 @@ start time and log block.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2506">line 2506</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2640">line 2640</a>
     </li></ul></dd>
     
 
@@ -12679,7 +13272,7 @@ start time and log block.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3063">line 3063</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3208">line 3208</a>
     </li></ul></dd>
     
 
@@ -12767,7 +13360,7 @@ start time and log block.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line83">line 83</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line84">line 84</a>
     </li></ul></dd>
     
 
@@ -12873,7 +13466,7 @@ start time and log block.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2128">line 2128</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2147">line 2147</a>
     </li></ul></dd>
     
 
@@ -12979,7 +13572,7 @@ start time and log block.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2671">line 2671</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2805">line 2805</a>
     </li></ul></dd>
     
 
@@ -13116,7 +13709,7 @@ start time and log block.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2880">line 2880</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3025">line 3025</a>
     </li></ul></dd>
     
 
@@ -13228,7 +13821,7 @@ start time and log block.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3608">line 3608</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3753">line 3753</a>
     </li></ul></dd>
     
 
@@ -13415,7 +14008,7 @@ in alternate chains when they come in).</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line1796">line 1796</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line1815">line 1815</a>
     </li></ul></dd>
     
 
@@ -13521,7 +14114,7 @@ in alternate chains when they come in).</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2205">line 2205</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2224">line 2224</a>
     </li></ul></dd>
     
 
@@ -13676,7 +14269,7 @@ in alternate chains when they come in).</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2748">line 2748</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2882">line 2882</a>
     </li></ul></dd>
     
 
@@ -13813,7 +14406,7 @@ in alternate chains when they come in).</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2626">line 2626</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2760">line 2760</a>
     </li></ul></dd>
     
 
@@ -13970,7 +14563,7 @@ is received.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line1587">line 1587</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line1606">line 1606</a>
     </li></ul></dd>
     
 
@@ -14126,7 +14719,7 @@ will reset the chain to the fork block.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line1714">line 1714</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line1733">line 1733</a>
     </li></ul></dd>
     
 
@@ -14285,7 +14878,7 @@ the blockchain download for SPV.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2063">line 2063</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2082">line 2082</a>
     </li></ul></dd>
     
 
@@ -14445,7 +15038,7 @@ for SPV.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2015">line 2015</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2034">line 2034</a>
     </li></ul></dd>
     
 
@@ -14600,7 +15193,7 @@ for SPV.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2658">line 2658</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2792">line 2792</a>
     </li></ul></dd>
     
 
@@ -14778,7 +15371,7 @@ for SPV.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3321">line 3321</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3466">line 3466</a>
     </li></ul></dd>
     
 
@@ -15006,7 +15599,7 @@ for SPV.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line1948">line 1948</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line1967">line 1967</a>
     </li></ul></dd>
     
 
@@ -15111,6 +15704,9 @@ for SPV.</p>
             
                 
 <span class="param-type"><a href="global.html#Hash">Hash</a></span>
+|
+
+<span class="param-type">Number</span>
 
 
             
@@ -15120,7 +15716,7 @@ for SPV.</p>
 
             
 
-            <td class="description last"><p>Block hash to start at.</p></td>
+            <td class="description last"><p>Block hash or height to start at.</p></td>
         </tr>
 
     
@@ -15207,7 +15803,292 @@ for SPV.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2241">line 2241</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2260">line 2260</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+<h5>Returns:</h5>
+
+        
+
+
+<dl>
+    <dt>
+        Type
+    </dt>
+    <dd>
+        
+<span class="param-type">Promise</span>
+
+
+    </dd>
+</dl>
+
+    
+
+
+
+
+
+        
+            
+
+    
+
+    
+    <h4 class="name" id="scanInteractive"><span class="type-signature">(async) </span>scanInteractive<span class="signature">(start, filter, iter, fullLock<span class="signature-attributes">opt</span>)</span><span class="type-signature"> &rarr; {Promise}</span></h4>
+    
+
+    
+
+
+
+<div class="description">
+    <p>Interactive scan the blockchain for transactions containing specified
+address hashes. Allows repeat and abort.</p>
+</div>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+        <th>Attributes</th>
+        
+
+        
+        <th>Default</th>
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>start</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type"><a href="global.html#Hash">Hash</a></span>
+|
+
+<span class="param-type">Number</span>
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                </td>
+            
+
+            <td class="description last"><p>Block hash or height to start at.</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>filter</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">BloomFilter</span>
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                </td>
+            
+
+            <td class="description last"><p>Starting bloom filter containing tx,
+address and name hashes.</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>iter</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type"><a href="global.html#ScanInteractiveIterCB">ScanInteractiveIterCB</a></span>
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                </td>
+            
+
+            <td class="description last"><p>Iterator.</p></td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>fullLock</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type">Boolean</span>
+
+
+            
+            </td>
+
+            
+                <td class="attributes">
+                
+                    &lt;optional><br>
+                
+
+                
+
+                
+                </td>
+            
+
+            
+                <td class="default">
+                
+                    false
+                
+                </td>
+            
+
+            <td class="description last"></td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2289">line 2289</a>
     </li></ul></dd>
     
 
@@ -15432,7 +16313,7 @@ block with greater chainwork than the current tip.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line1850">line 1850</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line1869">line 1869</a>
     </li></ul></dd>
     
 
@@ -15587,7 +16468,7 @@ block with greater chainwork than the current tip.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line720">line 720</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line739">line 739</a>
     </li></ul></dd>
     
 
@@ -15724,7 +16605,7 @@ block with greater chainwork than the current tip.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2738">line 2738</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2872">line 2872</a>
     </li></ul></dd>
     
 
@@ -15937,7 +16818,7 @@ block with greater chainwork than the current tip.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2572">line 2572</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2706">line 2706</a>
     </li></ul></dd>
     
 
@@ -16025,7 +16906,7 @@ block with greater chainwork than the current tip.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line172">line 172</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line191">line 191</a>
     </li></ul></dd>
     
 
@@ -16113,7 +16994,7 @@ block with greater chainwork than the current tip.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line139">line 139</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line160">line 160</a>
     </li></ul></dd>
     
 
@@ -16297,7 +17178,7 @@ block with greater chainwork than the current tip.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line1661">line 1661</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line1680">line 1680</a>
     </li></ul></dd>
     
 
@@ -16475,7 +17356,7 @@ block with greater chainwork than the current tip.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line746">line 746</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line765">line 765</a>
     </li></ul></dd>
     
 
@@ -16684,7 +17565,7 @@ coinbase height, finality checks.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line421">line 421</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line440">line 440</a>
     </li></ul></dd>
     
 
@@ -16846,7 +17727,7 @@ on a block, without POW check.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line259">line 259</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line278">line 278</a>
     </li></ul></dd>
     
 
@@ -17024,7 +17905,7 @@ on a block, without POW check.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2532">line 2532</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line2666">line 2666</a>
     </li></ul></dd>
     
 
@@ -17225,7 +18106,7 @@ on a block, without POW check.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line230">line 230</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line249">line 249</a>
     </li></ul></dd>
     
 
@@ -17455,7 +18336,7 @@ on a block, without POW check.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line976">line 976</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line995">line 995</a>
     </li></ul></dd>
     
 
@@ -17639,7 +18520,7 @@ if it is present in the lock flags.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3644">line 3644</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3789">line 3789</a>
     </li></ul></dd>
     
 
@@ -17853,7 +18734,7 @@ for historical data.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line788">line 788</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line807">line 807</a>
     </li></ul></dd>
     
 
@@ -18092,7 +18973,7 @@ for historical data.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3714">line 3714</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line3859">line 3859</a>
     </li></ul></dd>
     
 
@@ -18152,7 +19033,7 @@ for historical data.</p>
     
 
     
-    <h4 class="name" id="verifyRenewal"><span class="type-signature">(async) </span>verifyRenewal<span class="signature">(hash, height)</span><span class="type-signature"> &rarr; {Boolean}</span></h4>
+    <h4 class="name" id="verifyRenewal"><span class="type-signature">(async) </span>verifyRenewal<span class="signature">(hash, height)</span><span class="type-signature"> &rarr; {Promise.&lt;Boolean>}</span></h4>
     
 
     
@@ -18276,7 +19157,7 @@ for historical data.</p>
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line930">line 930</a>
+        <a href="blockchain_chain.js.html">blockchain/chain.js</a>, <a href="blockchain_chain.js.html#line949">line 949</a>
     </li></ul></dd>
     
 
@@ -18312,7 +19193,7 @@ for historical data.</p>
     </dt>
     <dd>
         
-<span class="param-type">Boolean</span>
+<span class="param-type">Promise.&lt;Boolean></span>
 
 
     </dd>
@@ -18340,13 +19221,13 @@ for historical data.</p>
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-blockchain.html">blockchain</a></li><li><a href="module-blockchain_common.html">blockchain/common</a></li><li><a href="module-blockstore.html">blockstore</a></li><li><a href="module-blockstore_common.html">blockstore/common</a></li><li><a href="module-blockstore_records.html">blockstore/records</a></li><li><a href="module-client.html">client</a></li><li><a href="module-coins.html">coins</a></li><li><a href="module-covenants.html">covenants</a></li><li><a href="module-dns_common.html">dns/common</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-hd.html">hd</a></li><li><a href="module-hsd.html">hsd</a></li><li><a href="module-mempool.html">mempool</a></li><li><a href="module-mining.html">mining</a></li><li><a href="module-mining_common.html">mining/common</a></li><li><a href="module-net.html">net</a></li><li><a href="module-net_bip152.html">net/bip152</a></li><li><a href="module-net_common.html">net/common</a></li><li><a href="module-net_packets.html">net/packets</a></li><li><a href="module-node.html">node</a></li><li><a href="module-primitives.html">primitives</a></li><li><a href="module-protocol.html">protocol</a></li><li><a href="module-protocol_consensus.html">protocol/consensus</a></li><li><a href="module-protocol_errors.html">protocol/errors</a></li><li><a href="module-protocol_networks.html">protocol/networks</a></li><li><a href="module-protocol_policy.html">protocol/policy</a></li><li><a href="module-script.html">script</a></li><li><a href="module-script_common.html">script/common</a></li><li><a href="module-ui.html">ui</a></li><li><a href="module-utils.html">utils</a></li><li><a href="module-utils_util.html">utils/util</a></li><li><a href="module-wallet.html">wallet</a></li><li><a href="module-wallet_common.html">wallet/common</a></li><li><a href="module-wallet_plugin.html">wallet/plugin</a></li><li><a href="module-wallet_records.html">wallet/records</a></li><li><a href="module-workers.html">workers</a></li><li><a href="module-workers_jobs.html">workers/jobs</a></li><li><a href="module-workers_packets.html">workers/packets</a></li></ul><h3>Classes</h3><ul><li><a href="AirdropKey.html">AirdropKey</a></li><li><a href="AirdropProof.html">AirdropProof</a></li><li><a href="BidReveal.html">BidReveal</a></li><li><a href="BitField.html">BitField</a></li><li><a href="BitView.html">BitView</a></li><li><a href="BlindBid.html">BlindBid</a></li><li><a href="BlindValue.html">BlindValue</a></li><li><a href="BlockProof.html">BlockProof</a></li><li><a href="Brontide.html">Brontide</a></li><li><a href="BrontideStream.html">BrontideStream</a></li><li><a href="ChainFlags.html">ChainFlags</a></li><li><a href="ChainState.html">ChainState</a></li><li><a href="CipherState.html">CipherState</a></li><li><a href="Claim.html">Claim</a></li><li><a href="DetailsMember.html">DetailsMember</a></li><li><a href="DS.html">DS</a></li><li><a href="Field.html">Field</a></li><li><a href="GLUE4.html">GLUE4</a></li><li><a href="GLUE6.html">GLUE6</a></li><li><a href="HandshakeState.html">HandshakeState</a></li><li><a href="HashList.html">HashList</a></li><li><a href="LockedUp.html">LockedUp</a></li><li><a href="MigrateAccountLookahead.html">MigrateAccountLookahead</a></li><li><a href="MigrateBlockStore.html">MigrateBlockStore</a></li><li><a href="MigrateChainState.html">MigrateChainState</a></li><li><a href="MigrateChangeAddress.html">MigrateChangeAddress</a></li><li><a href="MigrateMigrations.html">MigrateMigrations</a></li><li><a href="MigrateTreeState.html">MigrateTreeState</a></li><li><a href="module.migrations.MigrationState.html">MigrationState</a></li><li><a href="module-blockchain.Chain.html">Chain</a></li><li><a href="module-blockchain.ChainDB.html">ChainDB</a></li><li><a href="module-blockchain.ChainEntry.html">ChainEntry</a></li><li><a href="module-blockchain.ChainMigrator.html">ChainMigrator</a></li><li><a href="module-blockchain.ChainMigratorOptions.html">ChainMigratorOptions</a></li><li><a href="module-blockchain.ChainOptions.html">ChainOptions</a></li><li><a href="module-blockchain.DeploymentState.html">DeploymentState</a></li><li><a href="module-blockchain.WalletMigrationResult.html">WalletMigrationResult</a></li><li><a href="module-blockchain.WalletMigrator.html">WalletMigrator</a></li><li><a href="module-blockstore.AbstractBatch.html">AbstractBatch</a></li><li><a href="module-blockstore.AbstractBlockStore.html">AbstractBlockStore</a></li><li><a href="module-blockstore.FileBatch.html">FileBatch</a></li><li><a href="module-blockstore.LevelBatch.html">LevelBatch</a></li><li><a href="module-blockstore_records-BlockRecord.html">BlockRecord</a></li><li><a href="module-blockstore_records-FileRecord.html">FileRecord</a></li><li><a href="module-blockstore_FileBlockStore.html">blockstore:FileBlockStore</a></li><li><a href="module-blockstore_LevelBlockStore.html">blockstore:LevelBlockStore</a></li><li><a href="module-client.NodeClient.html">NodeClient</a></li><li><a href="module-client.WalletClient.html">WalletClient</a></li><li><a href="module-coins.CoinEntry.html">CoinEntry</a></li><li><a href="module-coins.Coins.html">Coins</a></li><li><a href="module-coins.CoinView.html">CoinView</a></li><li><a href="module-coins.UndoCoins.html">UndoCoins</a></li><li><a href="module-currency.Amount.html">Amount</a></li><li><a href="module-errors-CriticalError.html">CriticalError</a></li><li><a href="module-hd.Mnemonic.html">Mnemonic</a></li><li><a href="module-hd.PrivateKey.html">PrivateKey</a></li><li><a href="module-hd.PublicKey.html">PublicKey</a></li><li><a href="module-http.HTTPOptions.html">HTTPOptions</a></li><li><a href="module-http.RPC.html">RPC</a></li><li><a href="module-http.Server.html">Server</a></li><li><a href="module-http.TransactionOptions.html">TransactionOptions</a></li><li><a href="module-mempool.AirdropEntry.html">AirdropEntry</a></li><li><a href="module-mempool.ClaimEntry.html">ClaimEntry</a></li><li><a href="module-mempool.ConfirmStats.html">ConfirmStats</a></li><li><a href="module-mempool.Mempool.html">Mempool</a></li><li><a href="module-mempool.MempoolEntry.html">MempoolEntry</a></li><li><a href="module-mempool.MempoolOptions.html">MempoolOptions</a></li><li><a href="module-mempool.PolicyEstimator.html">PolicyEstimator</a></li><li><a href="module-migrations.AbstractMigration.html">AbstractMigration</a></li><li><a href="module-migrations.MigrationResult.html">MigrationResult</a></li><li><a href="module-migrations.Migrator.html">Migrator</a></li><li><a href="module-mining.BlockAirdrop.html">BlockAirdrop</a></li><li><a href="module-mining.BlockClaim.html">BlockClaim</a></li><li><a href="module-mining.BlockEntry.html">BlockEntry</a></li><li><a href="module-mining.BlockTemplate.html">BlockTemplate</a></li><li><a href="module-mining.CPUMiner.html">CPUMiner</a></li><li><a href="module-mining.Miner.html">Miner</a></li><li><a href="module-mining.MinerOptions.html">MinerOptions</a></li><li><a href="module-net.BroadcastItem.html">BroadcastItem</a></li><li><a href="module-net.Framer.html">Framer</a></li><li><a href="module-net.HostEntry.html">HostEntry</a></li><li><a href="module-net.HostList.html">HostList</a></li><li><a href="module-net.HostListOptions.html">HostListOptions</a></li><li><a href="module-net.LocalAddress.html">LocalAddress</a></li><li><a href="module-net.NetAddress.html">NetAddress</a></li><li><a href="module-net.Parser.html">Parser</a></li><li><a href="module-net.Peer.html">Peer</a></li><li><a href="module-net.PeerList.html">PeerList</a></li><li><a href="module-net.PeerOptions.html">PeerOptions</a></li><li><a href="module-net.Pool.html">Pool</a></li><li><a href="module-net.PoolOptions.html">PoolOptions</a></li><li><a href="module-net_bip152-CompactBlock.html">CompactBlock</a></li><li><a href="module-net_bip152-TXRequest.html">TXRequest</a></li><li><a href="module-net_bip152-TXResponse.html">TXResponse</a></li><li><a href="module-net_packets-AddrPacket.html">AddrPacket</a></li><li><a href="module-net_packets-AirdropPacket.html">AirdropPacket</a></li><li><a href="module-net_packets-BlockPacket.html">BlockPacket</a></li><li><a href="module-net_packets-BlockTxnPacket.html">BlockTxnPacket</a></li><li><a href="module-net_packets-ClaimPacket.html">ClaimPacket</a></li><li><a href="module-net_packets-CmpctBlockPacket.html">CmpctBlockPacket</a></li><li><a href="module-net_packets-FeeFilterPacket.html">FeeFilterPacket</a></li><li><a href="module-net_packets-FilterAddPacket.html">FilterAddPacket</a></li><li><a href="module-net_packets-FilterClearPacket.html">FilterClearPacket</a></li><li><a href="module-net_packets-FilterLoadPacket.html">FilterLoadPacket</a></li><li><a href="module-net_packets-GetAddrPacket.html">GetAddrPacket</a></li><li><a href="module-net_packets-GetBlocksPacket.html">GetBlocksPacket</a></li><li><a href="module-net_packets-GetBlockTxnPacket.html">GetBlockTxnPacket</a></li><li><a href="module-net_packets-GetDataPacket.html">GetDataPacket</a></li><li><a href="module-net_packets-GetHeadersPacket.html">GetHeadersPacket</a></li><li><a href="module-net_packets-GetProofPacket.html">GetProofPacket</a></li><li><a href="module-net_packets-HeadersPacket.html">HeadersPacket</a></li><li><a href="module-net_packets-InvPacket.html">InvPacket</a></li><li><a href="module-net_packets-MempoolPacket.html">MempoolPacket</a></li><li><a href="module-net_packets-MerkleBlockPacket.html">MerkleBlockPacket</a></li><li><a href="module-net_packets-NotFoundPacket.html">NotFoundPacket</a></li><li><a href="module-net_packets-Packet.html">Packet</a></li><li><a href="module-net_packets-PingPacket.html">PingPacket</a></li><li><a href="module-net_packets-PongPacket.html">PongPacket</a></li><li><a href="module-net_packets-ProofPacket.html">ProofPacket</a></li><li><a href="module-net_packets-RejectPacket.html">RejectPacket</a></li><li><a href="module-net_packets-SendCmpctPacket.html">SendCmpctPacket</a></li><li><a href="module-net_packets-SendHeadersPacket.html">SendHeadersPacket</a></li><li><a href="module-net_packets-TXPacket.html">TXPacket</a></li><li><a href="module-net_packets-UnknownPacket.html">UnknownPacket</a></li><li><a href="module-net_packets-VerackPacket.html">VerackPacket</a></li><li><a href="module-net_packets-VersionPacket.html">VersionPacket</a></li><li><a href="module-node.FullNode.html">FullNode</a></li><li><a href="module-node.Node.html">Node</a></li><li><a href="module-node.NodeClient.html">NodeClient</a></li><li><a href="module-node.NullClient.html">NullClient</a></li><li><a href="module-node.SPVNode.html">SPVNode</a></li><li><a href="module-primitives.AbstractBlock.html">AbstractBlock</a></li><li><a href="module-primitives.Address.html">Address</a></li><li><a href="module-primitives.Block.html">Block</a></li><li><a href="module-primitives.Coin.html">Coin</a></li><li><a href="module-primitives.CoinSelector.html">CoinSelector</a></li><li><a href="module-primitives.Covenant.html">Covenant</a></li><li><a href="module-primitives.Headers.html">Headers</a></li><li><a href="module-primitives.Input.html">Input</a></li><li><a href="module-primitives.InvItem.html">InvItem</a></li><li><a href="module-primitives.KeyRing.html">KeyRing</a></li><li><a href="module-primitives.MemBlock.html">MemBlock</a></li><li><a href="module-primitives.MerkleBlock.html">MerkleBlock</a></li><li><a href="module-primitives.MTX.html">MTX</a></li><li><a href="module-primitives.Outpoint.html">Outpoint</a></li><li><a href="module-primitives.Output.html">Output</a></li><li><a href="module-primitives.TX.html">TX</a></li><li><a href="module-primitives.TXMeta.html">TXMeta</a></li><li><a href="module-protocol.Network.html">Network</a></li><li><a href="module-protocol.TimeData.html">TimeData</a></li><li><a href="module-protocol_errors-VerifyError.html">VerifyError</a></li><li><a href="module-script.Opcode.html">Opcode</a></li><li><a href="module-script.Script.html">Script</a></li><li><a href="module-script.ScriptError.html">ScriptError</a></li><li><a href="module-script.ScriptNum.html">ScriptNum</a></li><li><a href="module-script.SigCache.html">SigCache</a></li><li><a href="module-script.Stack.html">Stack</a></li><li><a href="module-script.Witness.html">Witness</a></li><li><a href="module-ui.URI.html">URI</a></li><li><a href="module-wallet.Account.html">Account</a></li><li><a href="module-wallet.Balance.html">Balance</a></li><li><a href="module-wallet.BlockRecord.html">BlockRecord</a></li><li><a href="module-wallet.Credit.html">Credit</a></li><li><a href="module-wallet.Details.html">Details</a></li><li><a href="module-wallet.HTTP.html">HTTP</a></li><li><a href="module-wallet.MasterKey.html">MasterKey</a></li><li><a href="module-wallet.Path.html">Path</a></li><li><a href="module-wallet.Paths.html">Paths</a></li><li><a href="module-wallet.RPC.html">RPC</a></li><li><a href="module-wallet.TXDB.html">TXDB</a></li><li><a href="module-wallet.Wallet.html">Wallet</a></li><li><a href="module-wallet.WalletCoinView.html">WalletCoinView</a></li><li><a href="module-wallet.WalletDB.html">WalletDB</a></li><li><a href="module-wallet.WalletKey.html">WalletKey</a></li><li><a href="module-wallet.WalletMigratorOptions.html">WalletMigratorOptions</a></li><li><a href="module-wallet.WalletOptions.html">WalletOptions</a></li><li><a href="module-wallet_plugin-Plugin.html">Plugin</a></li><li><a href="module-wallet_records-BlockMeta.html">BlockMeta</a></li><li><a href="module-wallet_records-ChainState.html">ChainState</a></li><li><a href="module-wallet_records-MapRecord.html">MapRecord</a></li><li><a href="module-wallet_records-TXRecord.html">TXRecord</a></li><li><a href="module-workers.Framer.html">Framer</a></li><li><a href="module-workers.Master.html">Master</a></li><li><a href="module-workers.Parent.html">Parent</a></li><li><a href="module-workers.Parser.html">Parser</a></li><li><a href="module-workers.Worker.html">Worker</a></li><li><a href="module-workers.WorkerPool.html">WorkerPool</a></li><li><a href="module-workers_packets-CheckInputPacket.html">CheckInputPacket</a></li><li><a href="module-workers_packets-CheckInputResultPacket.html">CheckInputResultPacket</a></li><li><a href="module-workers_packets-CheckPacket.html">CheckPacket</a></li><li><a href="module-workers_packets-CheckResultPacket.html">CheckResultPacket</a></li><li><a href="module-workers_packets-ECSignPacket.html">ECSignPacket</a></li><li><a href="module-workers_packets-ECSignResultPacket.html">ECSignResultPacket</a></li><li><a href="module-workers_packets-ECVerifyPacket.html">ECVerifyPacket</a></li><li><a href="module-workers_packets-ECVerifyResultPacket.html">ECVerifyResultPacket</a></li><li><a href="module-workers_packets-EnvPacket.html">EnvPacket</a></li><li><a href="module-workers_packets-ErrorPacket.html">ErrorPacket</a></li><li><a href="module-workers_packets-ErrorResultPacket.html">ErrorResultPacket</a></li><li><a href="module-workers_packets-EventPacket.html">EventPacket</a></li><li><a href="module-workers_packets-LogPacket.html">LogPacket</a></li><li><a href="module-workers_packets-MinePacket.html">MinePacket</a></li><li><a href="module-workers_packets-MineResultPacket.html">MineResultPacket</a></li><li><a href="module-workers_packets-Packet.html">Packet</a></li><li><a href="module-workers_packets-ScryptPacket.html">ScryptPacket</a></li><li><a href="module-workers_packets-ScryptResultPacket.html">ScryptResultPacket</a></li><li><a href="module-workers_packets-SignInputPacket.html">SignInputPacket</a></li><li><a href="module-workers_packets-SignInputResultPacket.html">SignInputResultPacket</a></li><li><a href="module-workers_packets-SignPacket.html">SignPacket</a></li><li><a href="module-workers_packets-SignResultPacket.html">SignResultPacket</a></li><li><a href="NameDelta.html">NameDelta</a></li><li><a href="NameState.html">NameState</a></li><li><a href="NS.html">NS</a></li><li><a href="Ownership.html">Ownership</a></li><li><a href="Proof.html">Proof</a></li><li><a href="ProofData.html">ProofData</a></li><li><a href="RecursiveServer.html">RecursiveServer</a></li><li><a href="Reserved.html">Reserved</a></li><li><a href="Resource.html">Resource</a></li><li><a href="RootCache.html">RootCache</a></li><li><a href="RootServer.html">RootServer</a></li><li><a href="Seeder.html">Seeder</a></li><li><a href="SlidingWindow.html">SlidingWindow</a></li><li><a href="StateCache.html">StateCache</a></li><li><a href="SymmetricState.html">SymmetricState</a></li><li><a href="SYNTH4.html">SYNTH4</a></li><li><a href="SYNTH6.html">SYNTH6</a></li><li><a href="TXT.html">TXT</a></li><li><a href="Wallet.html">Wallet</a></li><li><a href="WalletNode.html">WalletNode</a></li></ul><h3>Global</h3><ul><li><a href="global.html#bindExit">bindExit</a></li><li><a href="global.html#checksig">checksig</a></li><li><a href="global.html#decode">decode</a></li><li><a href="global.html#encode">encode</a></li><li><a href="global.html#fromFloat">fromFloat</a></li><li><a href="global.html#groupKey">groupKey</a></li><li><a href="global.html#insert">insert</a></li><li><a href="global.html#listenExit">listenExit</a></li><li><a href="global.html#migrationLayout">migrationLayout</a></li><li><a href="global.html#oldLayout">oldLayout</a></li><li><a href="global.html#remove">remove</a></li><li><a href="global.html#search">search</a></li><li><a href="global.html#toFloat">toFloat</a></li><li><a href="global.html#validateKey">validateKey</a></li><li><a href="global.html#validateSignature">validateSignature</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-blockchain.html">blockchain</a></li><li><a href="module-blockchain_common.html">blockchain/common</a></li><li><a href="module-blockstore.html">blockstore</a></li><li><a href="module-blockstore_common.html">blockstore/common</a></li><li><a href="module-blockstore_records.html">blockstore/records</a></li><li><a href="module-client.html">client</a></li><li><a href="module-coins.html">coins</a></li><li><a href="module-covenants.html">covenants</a></li><li><a href="module-dns_common.html">dns/common</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-hd.html">hd</a></li><li><a href="module-hsd.html">hsd</a></li><li><a href="module-mempool.html">mempool</a></li><li><a href="module-mining.html">mining</a></li><li><a href="module-mining_common.html">mining/common</a></li><li><a href="module-net.html">net</a></li><li><a href="module-net_bip152.html">net/bip152</a></li><li><a href="module-net_common.html">net/common</a></li><li><a href="module-net_packets.html">net/packets</a></li><li><a href="module-node.html">node</a></li><li><a href="module-primitives.html">primitives</a></li><li><a href="module-protocol.html">protocol</a></li><li><a href="module-protocol_consensus.html">protocol/consensus</a></li><li><a href="module-protocol_errors.html">protocol/errors</a></li><li><a href="module-protocol_networks.html">protocol/networks</a></li><li><a href="module-protocol_policy.html">protocol/policy</a></li><li><a href="module-script.html">script</a></li><li><a href="module-script_common.html">script/common</a></li><li><a href="module-ui.html">ui</a></li><li><a href="module-utils.html">utils</a></li><li><a href="module-utils_util.html">utils/util</a></li><li><a href="module-wallet.html">wallet</a></li><li><a href="module-wallet_common.html">wallet/common</a></li><li><a href="module-wallet_plugin.html">wallet/plugin</a></li><li><a href="module-wallet_records.html">wallet/records</a></li><li><a href="module-workers.html">workers</a></li><li><a href="module-workers_jobs.html">workers/jobs</a></li><li><a href="module-workers_packets.html">workers/packets</a></li></ul><h3>Classes</h3><ul><li><a href="AirdropKey.html">AirdropKey</a></li><li><a href="AirdropProof.html">AirdropProof</a></li><li><a href="BidReveal.html">BidReveal</a></li><li><a href="BitField.html">BitField</a></li><li><a href="BitView.html">BitView</a></li><li><a href="BlindBid.html">BlindBid</a></li><li><a href="BlindValue.html">BlindValue</a></li><li><a href="BlockProof.html">BlockProof</a></li><li><a href="Brontide.html">Brontide</a></li><li><a href="BrontideStream.html">BrontideStream</a></li><li><a href="ChainFlags.html">ChainFlags</a></li><li><a href="ChainState.html">ChainState</a></li><li><a href="CipherState.html">CipherState</a></li><li><a href="Claim.html">Claim</a></li><li><a href="ContractState.html">ContractState</a></li><li><a href="DetailsMember.html">DetailsMember</a></li><li><a href="DS.html">DS</a></li><li><a href="Field.html">Field</a></li><li><a href="GLUE4.html">GLUE4</a></li><li><a href="GLUE6.html">GLUE6</a></li><li><a href="HandshakeState.html">HandshakeState</a></li><li><a href="HashList.html">HashList</a></li><li><a href="LockedUp.html">LockedUp</a></li><li><a href="MigrateAccountLookahead.html">MigrateAccountLookahead</a></li><li><a href="MigrateBidRevealEntries.html">MigrateBidRevealEntries</a></li><li><a href="MigrateBlockStore.html">MigrateBlockStore</a></li><li><a href="MigrateChainState.html">MigrateChainState</a></li><li><a href="MigrateChangeAddress.html">MigrateChangeAddress</a></li><li><a href="MigrateMigrations.html">MigrateMigrations</a></li><li><a href="MigrateTreeState.html">MigrateTreeState</a></li><li><a href="MigrateTXCountTimeIndex.html">MigrateTXCountTimeIndex</a></li><li><a href="MigrateTXDBBalances.html">MigrateTXDBBalances</a></li><li><a href="module.migrations.MigrationState.html">MigrationState</a></li><li><a href="module-blockchain.Chain.html">Chain</a></li><li><a href="module-blockchain.ChainDB.html">ChainDB</a></li><li><a href="module-blockchain.ChainEntry.html">ChainEntry</a></li><li><a href="module-blockchain.ChainMigrator.html">ChainMigrator</a></li><li><a href="module-blockchain.ChainMigratorOptions.html">ChainMigratorOptions</a></li><li><a href="module-blockchain.ChainOptions.html">ChainOptions</a></li><li><a href="module-blockchain.DeploymentState.html">DeploymentState</a></li><li><a href="module-blockchain.WalletMigrationResult.html">WalletMigrationResult</a></li><li><a href="module-blockchain.WalletMigrator.html">WalletMigrator</a></li><li><a href="module-blockstore.AbstractBatch.html">AbstractBatch</a></li><li><a href="module-blockstore.AbstractBlockStore.html">AbstractBlockStore</a></li><li><a href="module-blockstore.FileBatch.html">FileBatch</a></li><li><a href="module-blockstore.LevelBatch.html">LevelBatch</a></li><li><a href="module-blockstore_records-BlockRecord.html">BlockRecord</a></li><li><a href="module-blockstore_records-FileRecord.html">FileRecord</a></li><li><a href="module-blockstore_FileBlockStore.html">blockstore:FileBlockStore</a></li><li><a href="module-blockstore_LevelBlockStore.html">blockstore:LevelBlockStore</a></li><li><a href="module-client.NodeClient.html">NodeClient</a></li><li><a href="module-client.WalletClient.html">WalletClient</a></li><li><a href="module-coins.CoinEntry.html">CoinEntry</a></li><li><a href="module-coins.Coins.html">Coins</a></li><li><a href="module-coins.CoinView.html">CoinView</a></li><li><a href="module-coins.UndoCoins.html">UndoCoins</a></li><li><a href="module-currency.Amount.html">Amount</a></li><li><a href="module-errors-CriticalError.html">CriticalError</a></li><li><a href="module-hd.Mnemonic.html">Mnemonic</a></li><li><a href="module-hd.PrivateKey.html">PrivateKey</a></li><li><a href="module-hd.PublicKey.html">PublicKey</a></li><li><a href="module-http.HTTPOptions.html">HTTPOptions</a></li><li><a href="module-http.RPC.html">RPC</a></li><li><a href="module-http.Server.html">Server</a></li><li><a href="module-http.TransactionOptions.html">TransactionOptions</a></li><li><a href="module-mempool.AirdropEntry.html">AirdropEntry</a></li><li><a href="module-mempool.ClaimEntry.html">ClaimEntry</a></li><li><a href="module-mempool.ConfirmStats.html">ConfirmStats</a></li><li><a href="module-mempool.Mempool.html">Mempool</a></li><li><a href="module-mempool.MempoolEntry.html">MempoolEntry</a></li><li><a href="module-mempool.MempoolOptions.html">MempoolOptions</a></li><li><a href="module-mempool.PolicyEstimator.html">PolicyEstimator</a></li><li><a href="module-migrations.AbstractMigration.html">AbstractMigration</a></li><li><a href="module-migrations.MigrationResult.html">MigrationResult</a></li><li><a href="module-migrations.Migrator.html">Migrator</a></li><li><a href="module-mining.BlockAirdrop.html">BlockAirdrop</a></li><li><a href="module-mining.BlockClaim.html">BlockClaim</a></li><li><a href="module-mining.BlockEntry.html">BlockEntry</a></li><li><a href="module-mining.BlockTemplate.html">BlockTemplate</a></li><li><a href="module-mining.CPUMiner.html">CPUMiner</a></li><li><a href="module-mining.Miner.html">Miner</a></li><li><a href="module-mining.MinerOptions.html">MinerOptions</a></li><li><a href="module-net.BroadcastItem.html">BroadcastItem</a></li><li><a href="module-net.Framer.html">Framer</a></li><li><a href="module-net.HostEntry.html">HostEntry</a></li><li><a href="module-net.HostList.html">HostList</a></li><li><a href="module-net.HostListOptions.html">HostListOptions</a></li><li><a href="module-net.LocalAddress.html">LocalAddress</a></li><li><a href="module-net.NetAddress.html">NetAddress</a></li><li><a href="module-net.Parser.html">Parser</a></li><li><a href="module-net.Peer.html">Peer</a></li><li><a href="module-net.PeerList.html">PeerList</a></li><li><a href="module-net.PeerOptions.html">PeerOptions</a></li><li><a href="module-net.Pool.html">Pool</a></li><li><a href="module-net.PoolOptions.html">PoolOptions</a></li><li><a href="module-net_bip152-CompactBlock.html">CompactBlock</a></li><li><a href="module-net_bip152-TXRequest.html">TXRequest</a></li><li><a href="module-net_bip152-TXResponse.html">TXResponse</a></li><li><a href="module-net_packets-AddrPacket.html">AddrPacket</a></li><li><a href="module-net_packets-AirdropPacket.html">AirdropPacket</a></li><li><a href="module-net_packets-BlockPacket.html">BlockPacket</a></li><li><a href="module-net_packets-BlockTxnPacket.html">BlockTxnPacket</a></li><li><a href="module-net_packets-ClaimPacket.html">ClaimPacket</a></li><li><a href="module-net_packets-CmpctBlockPacket.html">CmpctBlockPacket</a></li><li><a href="module-net_packets-FeeFilterPacket.html">FeeFilterPacket</a></li><li><a href="module-net_packets-FilterAddPacket.html">FilterAddPacket</a></li><li><a href="module-net_packets-FilterClearPacket.html">FilterClearPacket</a></li><li><a href="module-net_packets-FilterLoadPacket.html">FilterLoadPacket</a></li><li><a href="module-net_packets-GetAddrPacket.html">GetAddrPacket</a></li><li><a href="module-net_packets-GetBlocksPacket.html">GetBlocksPacket</a></li><li><a href="module-net_packets-GetBlockTxnPacket.html">GetBlockTxnPacket</a></li><li><a href="module-net_packets-GetDataPacket.html">GetDataPacket</a></li><li><a href="module-net_packets-GetHeadersPacket.html">GetHeadersPacket</a></li><li><a href="module-net_packets-GetProofPacket.html">GetProofPacket</a></li><li><a href="module-net_packets-HeadersPacket.html">HeadersPacket</a></li><li><a href="module-net_packets-InvPacket.html">InvPacket</a></li><li><a href="module-net_packets-MempoolPacket.html">MempoolPacket</a></li><li><a href="module-net_packets-MerkleBlockPacket.html">MerkleBlockPacket</a></li><li><a href="module-net_packets-NotFoundPacket.html">NotFoundPacket</a></li><li><a href="module-net_packets-Packet.html">Packet</a></li><li><a href="module-net_packets-PingPacket.html">PingPacket</a></li><li><a href="module-net_packets-PongPacket.html">PongPacket</a></li><li><a href="module-net_packets-ProofPacket.html">ProofPacket</a></li><li><a href="module-net_packets-RejectPacket.html">RejectPacket</a></li><li><a href="module-net_packets-SendCmpctPacket.html">SendCmpctPacket</a></li><li><a href="module-net_packets-SendHeadersPacket.html">SendHeadersPacket</a></li><li><a href="module-net_packets-TXPacket.html">TXPacket</a></li><li><a href="module-net_packets-UnknownPacket.html">UnknownPacket</a></li><li><a href="module-net_packets-VerackPacket.html">VerackPacket</a></li><li><a href="module-net_packets-VersionPacket.html">VersionPacket</a></li><li><a href="module-node.FullNode.html">FullNode</a></li><li><a href="module-node.Node.html">Node</a></li><li><a href="module-node.NodeClient.html">NodeClient</a></li><li><a href="module-node.NullClient.html">NullClient</a></li><li><a href="module-node.SPVNode.html">SPVNode</a></li><li><a href="module-primitives.AbstractBlock.html">AbstractBlock</a></li><li><a href="module-primitives.Address.html">Address</a></li><li><a href="module-primitives.Block.html">Block</a></li><li><a href="module-primitives.Coin.html">Coin</a></li><li><a href="module-primitives.CoinSelector.html">CoinSelector</a></li><li><a href="module-primitives.Covenant.html">Covenant</a></li><li><a href="module-primitives.Headers.html">Headers</a></li><li><a href="module-primitives.Input.html">Input</a></li><li><a href="module-primitives.InvItem.html">InvItem</a></li><li><a href="module-primitives.KeyRing.html">KeyRing</a></li><li><a href="module-primitives.MemBlock.html">MemBlock</a></li><li><a href="module-primitives.MerkleBlock.html">MerkleBlock</a></li><li><a href="module-primitives.MTX.html">MTX</a></li><li><a href="module-primitives.Outpoint.html">Outpoint</a></li><li><a href="module-primitives.Output.html">Output</a></li><li><a href="module-primitives.TX.html">TX</a></li><li><a href="module-primitives.TXMeta.html">TXMeta</a></li><li><a href="module-protocol.Network.html">Network</a></li><li><a href="module-protocol.TimeData.html">TimeData</a></li><li><a href="module-protocol_errors-VerifyError.html">VerifyError</a></li><li><a href="module-script.Opcode.html">Opcode</a></li><li><a href="module-script.Script.html">Script</a></li><li><a href="module-script.ScriptError.html">ScriptError</a></li><li><a href="module-script.ScriptNum.html">ScriptNum</a></li><li><a href="module-script.SigCache.html">SigCache</a></li><li><a href="module-script.Stack.html">Stack</a></li><li><a href="module-script.Witness.html">Witness</a></li><li><a href="module-ui.URI.html">URI</a></li><li><a href="module-wallet.Account.html">Account</a></li><li><a href="module-wallet.Balance.html">Balance</a></li><li><a href="module-wallet.BlockRecord.html">BlockRecord</a></li><li><a href="module-wallet.Credit.html">Credit</a></li><li><a href="module-wallet.Details.html">Details</a></li><li><a href="module-wallet.HTTP.html">HTTP</a></li><li><a href="module-wallet.MasterKey.html">MasterKey</a></li><li><a href="module-wallet.Path.html">Path</a></li><li><a href="module-wallet.Paths.html">Paths</a></li><li><a href="module-wallet.RPC.html">RPC</a></li><li><a href="module-wallet.TXDB.html">TXDB</a></li><li><a href="module-wallet.Wallet.html">Wallet</a></li><li><a href="module-wallet.WalletCoinView.html">WalletCoinView</a></li><li><a href="module-wallet.WalletKey.html">WalletKey</a></li><li><a href="module-wallet.WalletMigratorOptions.html">WalletMigratorOptions</a></li><li><a href="module-wallet.WalletOptions.html">WalletOptions</a></li><li><a href="module-wallet_plugin-Plugin.html">Plugin</a></li><li><a href="module-wallet_records-BlockMeta.html">BlockMeta</a></li><li><a href="module-wallet_records-ChainState.html">ChainState</a></li><li><a href="module-wallet_records-MapRecord.html">MapRecord</a></li><li><a href="module-wallet_records-TXRecord.html">TXRecord</a></li><li><a href="module-workers.Framer.html">Framer</a></li><li><a href="module-workers.Master.html">Master</a></li><li><a href="module-workers.Parent.html">Parent</a></li><li><a href="module-workers.Parser.html">Parser</a></li><li><a href="module-workers.Worker.html">Worker</a></li><li><a href="module-workers.WorkerPool.html">WorkerPool</a></li><li><a href="module-workers_packets-CheckInputPacket.html">CheckInputPacket</a></li><li><a href="module-workers_packets-CheckInputResultPacket.html">CheckInputResultPacket</a></li><li><a href="module-workers_packets-CheckPacket.html">CheckPacket</a></li><li><a href="module-workers_packets-CheckResultPacket.html">CheckResultPacket</a></li><li><a href="module-workers_packets-ECSignPacket.html">ECSignPacket</a></li><li><a href="module-workers_packets-ECSignResultPacket.html">ECSignResultPacket</a></li><li><a href="module-workers_packets-ECVerifyPacket.html">ECVerifyPacket</a></li><li><a href="module-workers_packets-ECVerifyResultPacket.html">ECVerifyResultPacket</a></li><li><a href="module-workers_packets-EnvPacket.html">EnvPacket</a></li><li><a href="module-workers_packets-ErrorPacket.html">ErrorPacket</a></li><li><a href="module-workers_packets-ErrorResultPacket.html">ErrorResultPacket</a></li><li><a href="module-workers_packets-EventPacket.html">EventPacket</a></li><li><a href="module-workers_packets-LogPacket.html">LogPacket</a></li><li><a href="module-workers_packets-MinePacket.html">MinePacket</a></li><li><a href="module-workers_packets-MineResultPacket.html">MineResultPacket</a></li><li><a href="module-workers_packets-Packet.html">Packet</a></li><li><a href="module-workers_packets-ScryptPacket.html">ScryptPacket</a></li><li><a href="module-workers_packets-ScryptResultPacket.html">ScryptResultPacket</a></li><li><a href="module-workers_packets-SignInputPacket.html">SignInputPacket</a></li><li><a href="module-workers_packets-SignInputResultPacket.html">SignInputResultPacket</a></li><li><a href="module-workers_packets-SignPacket.html">SignPacket</a></li><li><a href="module-workers_packets-SignResultPacket.html">SignResultPacket</a></li><li><a href="NameDelta.html">NameDelta</a></li><li><a href="NameState.html">NameState</a></li><li><a href="NS.html">NS</a></li><li><a href="Ownership.html">Ownership</a></li><li><a href="Proof.html">Proof</a></li><li><a href="ProofData.html">ProofData</a></li><li><a href="RecursiveServer.html">RecursiveServer</a></li><li><a href="Reserved.html">Reserved</a></li><li><a href="Resource.html">Resource</a></li><li><a href="RootCache.html">RootCache</a></li><li><a href="RootServer.html">RootServer</a></li><li><a href="Seeder.html">Seeder</a></li><li><a href="SlidingWindow.html">SlidingWindow</a></li><li><a href="StateCache.html">StateCache</a></li><li><a href="SymmetricState.html">SymmetricState</a></li><li><a href="SYNTH4.html">SYNTH4</a></li><li><a href="SYNTH6.html">SYNTH6</a></li><li><a href="TXCount.html">TXCount</a></li><li><a href="TXT.html">TXT</a></li><li><a href="Wallet.html">Wallet</a></li><li><a href="WalletDB.html">WalletDB</a></li><li><a href="WalletNode.html">WalletNode</a></li></ul><h3>Global</h3><ul><li><a href="global.html#bindExit">bindExit</a></li><li><a href="global.html#checksig">checksig</a></li><li><a href="global.html#decode">decode</a></li><li><a href="global.html#encode">encode</a></li><li><a href="global.html#fromFloat">fromFloat</a></li><li><a href="global.html#fromU32">fromU32</a></li><li><a href="global.html#groupKey">groupKey</a></li><li><a href="global.html#insert">insert</a></li><li><a href="global.html#listenExit">listenExit</a></li><li><a href="global.html#migrationLayout">migrationLayout</a></li><li><a href="global.html#oldLayout">oldLayout</a></li><li><a href="global.html#opCache">opCache</a></li><li><a href="global.html#ownership">ownership</a></li><li><a href="global.html#remove">remove</a></li><li><a href="global.html#search">search</a></li><li><a href="global.html#splice">splice</a></li><li><a href="global.html#toFloat">toFloat</a></li><li><a href="global.html#toString">toString</a></li><li><a href="global.html#validateKey">validateKey</a></li><li><a href="global.html#validateSignature">validateSignature</a></li></ul>
 </nav>
 
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 1.1.2</a> on Thu Nov 09 2023 10:09:49 GMT+0000 (Coordinated Universal Time)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 1.1.5</a> on Mon Dec 02 2024 13:12:53 GMT+0000 (Coordinated Universal Time)
 </footer>
 
 <script> prettyPrint(); </script>

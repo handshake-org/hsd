@@ -42,7 +42,7 @@ const assert = require('bsert');
 const bio = require('bufio');
 const blake2b = require('bcrypto/lib/blake2b');
 const UrkelProof = require('urkel').Proof;
-const {BloomFilter} = require('bfilter');
+const {BloomFilter} = require('@handshake-org/bfilter');
 const common = require('./common');
 const util = require('../utils/util');
 const bip152 = require('./bip152');
@@ -57,6 +57,12 @@ const Claim = require('../primitives/claim');
 const AirdropProof = require('../primitives/airdropproof');
 const {encoding} = bio;
 const DUMMY = Buffer.alloc(0);
+
+/** @typedef {import('../types').Hash} Hash */
+/** @typedef {import('../types').Rate} Rate */
+/** @typedef {import('../types').BufioWriter} BufioWriter */
+/** @typedef {import('../protocol/errors').VerifyError} VerifyError */
+/** @typedef {import('../primitives/block')} Block */
 
 /**
  * Packet types.
@@ -184,15 +190,15 @@ class VersionPacket extends Packet {
   /**
    * Create a version packet.
    * @constructor
-   * @param {Object?} options
-   * @param {Number} options.version - Protocol version.
-   * @param {Number} options.services - Service bits.
-   * @param {Number} options.time - Timestamp of discovery.
-   * @param {NetAddress} options.remote - Their address.
-   * @param {Buffer} options.nonce
-   * @param {String} options.agent - User agent string.
-   * @param {Number} options.height - Chain height.
-   * @param {Boolean} options.noRelay - Whether transactions
+   * @param {Object} [options]
+   * @param {Number?} options.version - Protocol version.
+   * @param {Number?} options.services - Service bits.
+   * @param {Number?} options.time - Timestamp of discovery.
+   * @param {NetAddress?} options.remote - Their address.
+   * @param {Buffer?} options.nonce
+   * @param {String?} options.agent - User agent string.
+   * @param {Number?} options.height - Chain height.
+   * @param {Boolean?} options.noRelay - Whether transactions
    * should be relayed immediately.
    */
 
@@ -201,6 +207,7 @@ class VersionPacket extends Packet {
 
     this.type = exports.types.VERSION;
 
+    /** @type {Number} */
     this.version = common.PROTOCOL_VERSION;
     this.services = common.LOCAL_SERVICES;
     this.time = util.now();
@@ -216,7 +223,6 @@ class VersionPacket extends Packet {
 
   /**
    * Inject properties from options.
-   * @private
    * @param {Object} options
    */
 
@@ -266,7 +272,8 @@ class VersionPacket extends Packet {
 
   /**
    * Write version packet to buffer writer.
-   * @param {BufferWriter} bw
+   * @param {BufioWriter} bw
+   * @returns {BufioWriter}
    */
 
   write(bw) {
@@ -280,13 +287,13 @@ class VersionPacket extends Packet {
     bw.writeString(this.agent, 'ascii');
     bw.writeU32(this.height);
     bw.writeU8(this.noRelay ? 1 : 0);
-    return this;
+    return bw;
   }
 
   /**
    * Inject properties from buffer reader.
-   * @private
-   * @param {BufferReader} br
+   * @param {bio.BufferReader} br
+   * @returns {this}
    */
 
   read(br) {
@@ -357,18 +364,18 @@ class PingPacket extends Packet {
 
   /**
    * Serialize ping packet to writer.
-   * @param {BufferWriter} bw
+   * @param {BufioWriter} bw
+   * @returns {BufioWriter}
    */
 
   write(bw) {
     bw.writeBytes(this.nonce);
-    return this;
+    return bw;
   }
 
   /**
    * Inject properties from buffer reader.
-   * @private
-   * @param {BufferReader} br
+   * @param {bio.BufferReader} br
    */
 
   read(br) {
@@ -409,18 +416,18 @@ class PongPacket extends Packet {
 
   /**
    * Serialize pong packet to writer.
-   * @param {BufferWriter} bw
+   * @param {BufioWriter} bw
+   * @returns {BufioWriter}
    */
 
   write(bw) {
     bw.writeBytes(this.nonce);
-    return this;
+    return bw;
   }
 
   /**
    * Inject properties from buffer reader.
-   * @private
-   * @param {BufferReader} br
+   * @param {bio.BufferReader} br
    */
 
   read(br) {
@@ -482,7 +489,8 @@ class AddrPacket extends Packet {
 
   /**
    * Serialize addr packet to writer.
-   * @param {BufferWriter} bw
+   * @param {BufioWriter} bw
+   * @returns {BufioWriter}
    */
 
   write(bw) {
@@ -491,13 +499,12 @@ class AddrPacket extends Packet {
     for (const item of this.items)
       item.write(bw);
 
-    return this;
+    return bw;
   }
 
   /**
    * Inject properties from serialized data.
-   * @private
-   * @param {Buffer} data
+   * @param {bio.BufferReader} br
    */
 
   read(br) {
@@ -528,6 +535,7 @@ class InvPacket extends Packet {
 
     this.type = exports.types.INV;
 
+    /** @type {InvItem[]} */
     this.items = items || [];
   }
 
@@ -545,7 +553,8 @@ class InvPacket extends Packet {
 
   /**
    * Serialize inv packet to writer.
-   * @param {Buffer} bw
+   * @param {BufioWriter} bw
+   * @returns {BufioWriter}
    */
 
   write(bw) {
@@ -556,13 +565,12 @@ class InvPacket extends Packet {
     for (const item of this.items)
       item.write(bw);
 
-    return this;
+    return bw;
   }
 
   /**
    * Inject properties from buffer reader.
-   * @private
-   * @param {BufferReader} br
+   * @param {bio.BufferReader} br
    */
 
   read(br) {
@@ -652,7 +660,8 @@ class GetBlocksPacket extends Packet {
 
   /**
    * Serialize getblocks packet to writer.
-   * @param {BufferWriter} bw
+   * @param {BufioWriter} bw
+   * @returns {BufioWriter}
    */
 
   write(bw) {
@@ -665,13 +674,12 @@ class GetBlocksPacket extends Packet {
 
     bw.writeHash(this.stop);
 
-    return this;
+    return bw;
   }
 
   /**
    * Inject properties from buffer reader.
-   * @private
-   * @param {BufferReader} br
+   * @param {bio.BufferReader} br
    */
 
   read(br) {
@@ -746,7 +754,8 @@ class HeadersPacket extends Packet {
 
   /**
    * Serialize headers packet to writer.
-   * @param {BufferWriter} bw
+   * @param {BufioWriter} bw
+   * @returns {BufioWriter}
    */
 
   write(bw) {
@@ -757,13 +766,12 @@ class HeadersPacket extends Packet {
     for (const item of this.items)
       item.write(bw);
 
-    return this;
+    return bw;
   }
 
   /**
    * Inject properties from buffer reader.
-   * @private
-   * @param {BufferReader} br
+   * @param {bio.BufferReader} br
    */
 
   read(br) {
@@ -827,7 +835,7 @@ class BlockPacket extends Packet {
 
   /**
    * Serialize block packet to writer.
-   * @param {BufferWriter} bw
+   * @param {BufioWriter} bw
    */
 
   write(bw) {
@@ -836,8 +844,7 @@ class BlockPacket extends Packet {
 
   /**
    * Inject properties from buffer reader.
-   * @private
-   * @param {BufferReader} br
+   * @param {bio.BufferReader} br
    */
 
   read(br) {
@@ -878,7 +885,7 @@ class TXPacket extends Packet {
 
   /**
    * Serialize tx packet to writer.
-   * @param {BufferWriter} bw
+   * @param {BufioWriter} bw
    */
 
   write(bw) {
@@ -887,8 +894,7 @@ class TXPacket extends Packet {
 
   /**
    * Inject properties from buffer reader.
-   * @private
-   * @param {BufferReader} br
+   * @param {bio.BufferReader} br
    */
 
   read(br) {
@@ -904,13 +910,14 @@ class TXPacket extends Packet {
  * (see {@link RejectPacket.codes}).
  * @property {String?} msg - Message.
  * @property {String?} reason - Reason.
- * @property {(Hash|Buffer)?} data - Transaction or block hash.
+ * @property {(Hash|Buffer)?} hash - Transaction or block hash.
  */
 
 class RejectPacket extends Packet {
   /**
    * Create reject packet.
    * @constructor
+   * @param {Object} [options]
    */
 
   constructor(options) {
@@ -921,6 +928,7 @@ class RejectPacket extends Packet {
     this.message = 0;
     this.code = RejectPacket.codes.INVALID;
     this.reason = '';
+    /** @type {Hash?} */
     this.hash = null;
 
     if (options)
@@ -929,7 +937,6 @@ class RejectPacket extends Packet {
 
   /**
    * Inject properties from options object.
-   * @private
    * @param {Object} options
    */
 
@@ -993,7 +1000,7 @@ class RejectPacket extends Packet {
 
   /**
    * Serialize reject packet to writer.
-   * @param {BufferWriter} bw
+   * @param {BufioWriter} bw
    */
 
   write(bw) {
@@ -1005,13 +1012,12 @@ class RejectPacket extends Packet {
     if (this.hash)
       bw.writeHash(this.hash);
 
-    return this;
+    return bw;
   }
 
   /**
    * Inject properties from buffer reader.
-   * @private
-   * @param {BufferReader} br
+   * @param {bio.BufferReader} br
    */
 
   read(br) {
@@ -1036,11 +1042,10 @@ class RejectPacket extends Packet {
 
   /**
    * Inject properties from reason message and object.
-   * @private
-   * @param {Number} code
+   * @param {(String|Number)?} code
    * @param {String} reason
-   * @param {String?} msg
-   * @param {Hash?} hash
+   * @param {Number?} [msg]
+   * @param {Hash?} [hash]
    */
 
   fromReason(code, reason, msg, hash) {
@@ -1068,10 +1073,10 @@ class RejectPacket extends Packet {
 
   /**
    * Instantiate reject packet from reason message.
-   * @param {Number} code
+   * @param {(String|Number)?} code
    * @param {String} reason
-   * @param {String?} msg
-   * @param {Hash?} hash
+   * @param {Number?} [msg]
+   * @param {Hash?} [hash]
    * @returns {RejectPacket}
    */
 
@@ -1082,7 +1087,7 @@ class RejectPacket extends Packet {
   /**
    * Instantiate reject packet from verify error.
    * @param {VerifyError} err
-   * @param {(TX|Block)?} obj
+   * @param {(TX|Block)?} [obj]
    * @returns {RejectPacket}
    */
 
@@ -1200,7 +1205,7 @@ class FilterLoadPacket extends Packet {
 
   /**
    * Serialize filterload packet to writer.
-   * @param {BufferWriter} bw
+   * @param {BufioWriter} bw
    */
 
   write(bw) {
@@ -1209,8 +1214,7 @@ class FilterLoadPacket extends Packet {
 
   /**
    * Inject properties from buffer reader.
-   * @private
-   * @param {BufferReader} br
+   * @param {bio.BufferReader} br
    */
 
   read(br) {
@@ -1260,18 +1264,17 @@ class FilterAddPacket extends Packet {
 
   /**
    * Serialize filteradd packet to writer.
-   * @returns {BufferWriter} bw
+   * @returns {BufioWriter} bw
    */
 
   write(bw) {
     bw.writeVarBytes(this.data);
-    return this;
+    return bw;
   }
 
   /**
    * Inject properties from buffer reader.
-   * @private
-   * @param {BufferReader} br
+   * @param {bio.BufferReader} br
    */
 
   read(br) {
@@ -1329,7 +1332,7 @@ class MerkleBlockPacket extends Packet {
 
   /**
    * Serialize merkleblock packet to writer.
-   * @param {BufferWriter} bw
+   * @param {BufioWriter} bw
    */
 
   write(bw) {
@@ -1338,8 +1341,7 @@ class MerkleBlockPacket extends Packet {
 
   /**
    * Inject properties from buffer reader.
-   * @private
-   * @param {BufferReader} br
+   * @param {bio.BufferReader} br
    */
 
   read(br) {
@@ -1380,18 +1382,17 @@ class FeeFilterPacket extends Packet {
 
   /**
    * Serialize feefilter packet to writer.
-   * @param {BufferWriter} bw
+   * @param {BufioWriter} bw
    */
 
   write(bw) {
     bw.writeI64(this.rate);
-    return this;
+    return bw;
   }
 
   /**
    * Inject properties from buffer reader.
-   * @private
-   * @param {BufferReader} br
+   * @param {bio.BufferReader} br
    */
 
   read(br) {
@@ -1435,19 +1436,18 @@ class SendCmpctPacket extends Packet {
 
   /**
    * Serialize sendcmpct packet to writer.
-   * @param {BufferWriter} bw
+   * @param {BufioWriter} bw
    */
 
   write(bw) {
     bw.writeU8(this.mode);
     bw.writeU64(this.version);
-    return this;
+    return bw;
   }
 
   /**
    * Inject properties from buffer reader.
-   * @private
-   * @param {BufferReader} br
+   * @param {bio.BufferReader} br
    */
 
   read(br) {
@@ -1475,12 +1475,13 @@ class CmpctBlockPacket extends Packet {
 
     this.type = exports.types.CMPCTBLOCK;
 
+    /** @type {Block|bip152.CompactBlock} */
     this.block = block || new bip152.CompactBlock();
   }
 
   /**
    * Serialize cmpctblock packet.
-   * @returns {Buffer}
+   * @returns {Number}
    */
 
   getSize() {
@@ -1489,7 +1490,7 @@ class CmpctBlockPacket extends Packet {
 
   /**
    * Serialize cmpctblock packet to writer.
-   * @param {BufferWriter} bw
+   * @param {BufioWriter} bw
    */
 
   write(bw) {
@@ -1498,8 +1499,7 @@ class CmpctBlockPacket extends Packet {
 
   /**
    * Inject properties from buffer reader.
-   * @private
-   * @param {BufferReader} br
+   * @param {bio.BufferReader} br
    */
 
   read(br) {
@@ -1511,14 +1511,14 @@ class CmpctBlockPacket extends Packet {
 /**
  * GetBlockTxn Packet
  * @extends Packet
- * @property {TXRequest} request
+ * @property {bip152.TXRequest} request
  */
 
 class GetBlockTxnPacket extends Packet {
   /**
    * Create a `getblocktxn` packet.
    * @constructor
-   * @param {TXRequest?} request
+   * @param {bip152.TXRequest?} [request]
    */
 
   constructor(request) {
@@ -1540,7 +1540,7 @@ class GetBlockTxnPacket extends Packet {
 
   /**
    * Serialize getblocktxn packet to writer.
-   * @param {BufferWriter} bw
+   * @param {BufioWriter} bw
    */
 
   write(bw) {
@@ -1549,8 +1549,7 @@ class GetBlockTxnPacket extends Packet {
 
   /**
    * Inject properties from buffer reader.
-   * @private
-   * @param {BufferReader} br
+   * @param {bio.BufferReader} br
    */
 
   read(br) {
@@ -1562,14 +1561,14 @@ class GetBlockTxnPacket extends Packet {
 /**
  * BlockTxn Packet
  * @extends Packet
- * @property {TXResponse} response
+ * @property {bip152.TXResponse} response
  */
 
 class BlockTxnPacket extends Packet {
   /**
    * Create a `blocktxn` packet.
    * @constructor
-   * @param {TXResponse?} response
+   * @param {bip152.TXResponse?} [response]
    */
 
   constructor(response) {
@@ -1591,7 +1590,7 @@ class BlockTxnPacket extends Packet {
 
   /**
    * Serialize blocktxn packet to writer.
-   * @param {BufferWriter} bw
+   * @param {BufioWriter} bw
    */
 
   write(bw) {
@@ -1600,8 +1599,7 @@ class BlockTxnPacket extends Packet {
 
   /**
    * Inject properties from buffer reader.
-   * @private
-   * @param {BufferReader} br
+   * @param {bio.BufferReader} br
    */
 
   read(br) {
@@ -1621,8 +1619,8 @@ class GetProofPacket extends Packet {
   /**
    * Create a `getproof` packet.
    * @constructor
-   * @param {Buffer?} root
-   * @param {Buffer?} key
+   * @param {Buffer?} [root]
+   * @param {Buffer?} [key]
    */
 
   constructor(root, key) {
@@ -1644,19 +1642,18 @@ class GetProofPacket extends Packet {
 
   /**
    * Serialize getproof packet to writer.
-   * @param {BufferWriter} bw
+   * @param {BufioWriter} bw
    */
 
   write(bw) {
     bw.writeHash(this.root);
     bw.writeBytes(this.key);
-    return this;
+    return bw;
   }
 
   /**
    * Inject properties from buffer reader.
-   * @private
-   * @param {BufferReader} br
+   * @param {bio.BufferReader} br
    */
 
   read(br) {
@@ -1676,9 +1673,9 @@ class ProofPacket extends Packet {
   /**
    * Create a `proof` packet.
    * @constructor
-   * @param {Buffer} root
-   * @param {Buffer} key
-   * @param {UrkelProof} proof
+   * @param {Buffer} [root]
+   * @param {Buffer} [key]
+   * @param {UrkelProof} [proof]
    */
 
   constructor(root, key, proof) {
@@ -1703,20 +1700,19 @@ class ProofPacket extends Packet {
 
   /**
    * Serialize proof packet to writer.
-   * @param {BufferWriter} bw
+   * @param {BufioWriter} bw
    */
 
   write(bw) {
     bw.writeHash(this.root);
     bw.writeBytes(this.key);
     this.proof.writeBW(bw, blake2b, 256);
-    return this;
+    return bw;
   }
 
   /**
    * Inject properties from buffer reader.
-   * @private
-   * @param {BufferReader} br
+   * @param {bio.BufferReader} br
    */
 
   read(br) {
@@ -1736,7 +1732,7 @@ class ClaimPacket extends Packet {
   /**
    * Create a `proof` packet.
    * @constructor
-   * @param {Claim?} claim
+   * @param {Claim?} [claim]
    */
 
   constructor(claim) {
@@ -1757,18 +1753,17 @@ class ClaimPacket extends Packet {
 
   /**
    * Serialize proof packet to writer.
-   * @param {BufferWriter} bw
+   * @param {BufioWriter} bw
    */
 
   write(bw) {
     this.claim.write(bw);
-    return this;
+    return bw;
   }
 
   /**
    * Inject properties from buffer reader.
-   * @private
-   * @param {BufferReader} br
+   * @param {bio.BufferReader} br
    */
 
   read(br) {
@@ -1786,7 +1781,7 @@ class AirdropPacket extends Packet {
   /**
    * Create a `proof` packet.
    * @constructor
-   * @param {AirdropProof?} proof
+   * @param {AirdropProof?} [proof]
    */
 
   constructor(proof) {
@@ -1807,18 +1802,18 @@ class AirdropPacket extends Packet {
 
   /**
    * Serialize proof packet to writer.
-   * @param {BufferWriter} bw
+   * @param {BufioWriter} bw
+   * @returns {BufioWriter}
    */
 
   write(bw) {
     this.proof.write(bw);
-    return this;
+    return bw;
   }
 
   /**
    * Inject properties from buffer reader.
-   * @private
-   * @param {BufferReader} br
+   * @param {bio.BufferReader} br
    */
 
   read(br) {
@@ -1838,8 +1833,8 @@ class UnknownPacket extends Packet {
   /**
    * Create an unknown packet.
    * @constructor
-   * @param {Number|null} type
-   * @param {Buffer|null} data
+   * @param {Number?} [type]
+   * @param {Buffer?} [data]
    */
 
   constructor(type, data) {
@@ -1865,18 +1860,17 @@ class UnknownPacket extends Packet {
 
   /**
    * Serialize unknown packet to writer.
-   * @param {BufferWriter} bw
+   * @param {BufioWriter} bw
    */
 
   write(bw) {
     bw.writeBytes(this.data);
-    return this;
+    return bw;
   }
 
   /**
    * Inject properties from serialized data.
-   * @private
-   * @param {BufferReader} data
+   * @param {bio.BufferReader} br
    * @param {Number} type
    */
 
@@ -2007,13 +2001,13 @@ exports.UnknownPacket = UnknownPacket;
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-blockchain.html">blockchain</a></li><li><a href="module-blockchain_common.html">blockchain/common</a></li><li><a href="module-blockstore.html">blockstore</a></li><li><a href="module-blockstore_common.html">blockstore/common</a></li><li><a href="module-blockstore_records.html">blockstore/records</a></li><li><a href="module-client.html">client</a></li><li><a href="module-coins.html">coins</a></li><li><a href="module-covenants.html">covenants</a></li><li><a href="module-dns_common.html">dns/common</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-hd.html">hd</a></li><li><a href="module-hsd.html">hsd</a></li><li><a href="module-mempool.html">mempool</a></li><li><a href="module-mining.html">mining</a></li><li><a href="module-mining_common.html">mining/common</a></li><li><a href="module-net.html">net</a></li><li><a href="module-net_bip152.html">net/bip152</a></li><li><a href="module-net_common.html">net/common</a></li><li><a href="module-net_packets.html">net/packets</a></li><li><a href="module-node.html">node</a></li><li><a href="module-primitives.html">primitives</a></li><li><a href="module-protocol.html">protocol</a></li><li><a href="module-protocol_consensus.html">protocol/consensus</a></li><li><a href="module-protocol_errors.html">protocol/errors</a></li><li><a href="module-protocol_networks.html">protocol/networks</a></li><li><a href="module-protocol_policy.html">protocol/policy</a></li><li><a href="module-script.html">script</a></li><li><a href="module-script_common.html">script/common</a></li><li><a href="module-ui.html">ui</a></li><li><a href="module-utils.html">utils</a></li><li><a href="module-utils_util.html">utils/util</a></li><li><a href="module-wallet.html">wallet</a></li><li><a href="module-wallet_common.html">wallet/common</a></li><li><a href="module-wallet_plugin.html">wallet/plugin</a></li><li><a href="module-wallet_records.html">wallet/records</a></li><li><a href="module-workers.html">workers</a></li><li><a href="module-workers_jobs.html">workers/jobs</a></li><li><a href="module-workers_packets.html">workers/packets</a></li></ul><h3>Classes</h3><ul><li><a href="AirdropKey.html">AirdropKey</a></li><li><a href="AirdropProof.html">AirdropProof</a></li><li><a href="BidReveal.html">BidReveal</a></li><li><a href="BitField.html">BitField</a></li><li><a href="BitView.html">BitView</a></li><li><a href="BlindBid.html">BlindBid</a></li><li><a href="BlindValue.html">BlindValue</a></li><li><a href="BlockProof.html">BlockProof</a></li><li><a href="Brontide.html">Brontide</a></li><li><a href="BrontideStream.html">BrontideStream</a></li><li><a href="ChainFlags.html">ChainFlags</a></li><li><a href="ChainState.html">ChainState</a></li><li><a href="CipherState.html">CipherState</a></li><li><a href="Claim.html">Claim</a></li><li><a href="DetailsMember.html">DetailsMember</a></li><li><a href="DS.html">DS</a></li><li><a href="Field.html">Field</a></li><li><a href="GLUE4.html">GLUE4</a></li><li><a href="GLUE6.html">GLUE6</a></li><li><a href="HandshakeState.html">HandshakeState</a></li><li><a href="HashList.html">HashList</a></li><li><a href="LockedUp.html">LockedUp</a></li><li><a href="MigrateAccountLookahead.html">MigrateAccountLookahead</a></li><li><a href="MigrateBlockStore.html">MigrateBlockStore</a></li><li><a href="MigrateChainState.html">MigrateChainState</a></li><li><a href="MigrateChangeAddress.html">MigrateChangeAddress</a></li><li><a href="MigrateMigrations.html">MigrateMigrations</a></li><li><a href="MigrateTreeState.html">MigrateTreeState</a></li><li><a href="module.migrations.MigrationState.html">MigrationState</a></li><li><a href="module-blockchain.Chain.html">Chain</a></li><li><a href="module-blockchain.ChainDB.html">ChainDB</a></li><li><a href="module-blockchain.ChainEntry.html">ChainEntry</a></li><li><a href="module-blockchain.ChainMigrator.html">ChainMigrator</a></li><li><a href="module-blockchain.ChainMigratorOptions.html">ChainMigratorOptions</a></li><li><a href="module-blockchain.ChainOptions.html">ChainOptions</a></li><li><a href="module-blockchain.DeploymentState.html">DeploymentState</a></li><li><a href="module-blockchain.WalletMigrationResult.html">WalletMigrationResult</a></li><li><a href="module-blockchain.WalletMigrator.html">WalletMigrator</a></li><li><a href="module-blockstore.AbstractBatch.html">AbstractBatch</a></li><li><a href="module-blockstore.AbstractBlockStore.html">AbstractBlockStore</a></li><li><a href="module-blockstore.FileBatch.html">FileBatch</a></li><li><a href="module-blockstore.LevelBatch.html">LevelBatch</a></li><li><a href="module-blockstore_records-BlockRecord.html">BlockRecord</a></li><li><a href="module-blockstore_records-FileRecord.html">FileRecord</a></li><li><a href="module-blockstore_FileBlockStore.html">blockstore:FileBlockStore</a></li><li><a href="module-blockstore_LevelBlockStore.html">blockstore:LevelBlockStore</a></li><li><a href="module-client.NodeClient.html">NodeClient</a></li><li><a href="module-client.WalletClient.html">WalletClient</a></li><li><a href="module-coins.CoinEntry.html">CoinEntry</a></li><li><a href="module-coins.Coins.html">Coins</a></li><li><a href="module-coins.CoinView.html">CoinView</a></li><li><a href="module-coins.UndoCoins.html">UndoCoins</a></li><li><a href="module-currency.Amount.html">Amount</a></li><li><a href="module-errors-CriticalError.html">CriticalError</a></li><li><a href="module-hd.Mnemonic.html">Mnemonic</a></li><li><a href="module-hd.PrivateKey.html">PrivateKey</a></li><li><a href="module-hd.PublicKey.html">PublicKey</a></li><li><a href="module-http.HTTPOptions.html">HTTPOptions</a></li><li><a href="module-http.RPC.html">RPC</a></li><li><a href="module-http.Server.html">Server</a></li><li><a href="module-http.TransactionOptions.html">TransactionOptions</a></li><li><a href="module-mempool.AirdropEntry.html">AirdropEntry</a></li><li><a href="module-mempool.ClaimEntry.html">ClaimEntry</a></li><li><a href="module-mempool.ConfirmStats.html">ConfirmStats</a></li><li><a href="module-mempool.Mempool.html">Mempool</a></li><li><a href="module-mempool.MempoolEntry.html">MempoolEntry</a></li><li><a href="module-mempool.MempoolOptions.html">MempoolOptions</a></li><li><a href="module-mempool.PolicyEstimator.html">PolicyEstimator</a></li><li><a href="module-migrations.AbstractMigration.html">AbstractMigration</a></li><li><a href="module-migrations.MigrationResult.html">MigrationResult</a></li><li><a href="module-migrations.Migrator.html">Migrator</a></li><li><a href="module-mining.BlockAirdrop.html">BlockAirdrop</a></li><li><a href="module-mining.BlockClaim.html">BlockClaim</a></li><li><a href="module-mining.BlockEntry.html">BlockEntry</a></li><li><a href="module-mining.BlockTemplate.html">BlockTemplate</a></li><li><a href="module-mining.CPUMiner.html">CPUMiner</a></li><li><a href="module-mining.Miner.html">Miner</a></li><li><a href="module-mining.MinerOptions.html">MinerOptions</a></li><li><a href="module-net.BroadcastItem.html">BroadcastItem</a></li><li><a href="module-net.Framer.html">Framer</a></li><li><a href="module-net.HostEntry.html">HostEntry</a></li><li><a href="module-net.HostList.html">HostList</a></li><li><a href="module-net.HostListOptions.html">HostListOptions</a></li><li><a href="module-net.LocalAddress.html">LocalAddress</a></li><li><a href="module-net.NetAddress.html">NetAddress</a></li><li><a href="module-net.Parser.html">Parser</a></li><li><a href="module-net.Peer.html">Peer</a></li><li><a href="module-net.PeerList.html">PeerList</a></li><li><a href="module-net.PeerOptions.html">PeerOptions</a></li><li><a href="module-net.Pool.html">Pool</a></li><li><a href="module-net.PoolOptions.html">PoolOptions</a></li><li><a href="module-net_bip152-CompactBlock.html">CompactBlock</a></li><li><a href="module-net_bip152-TXRequest.html">TXRequest</a></li><li><a href="module-net_bip152-TXResponse.html">TXResponse</a></li><li><a href="module-net_packets-AddrPacket.html">AddrPacket</a></li><li><a href="module-net_packets-AirdropPacket.html">AirdropPacket</a></li><li><a href="module-net_packets-BlockPacket.html">BlockPacket</a></li><li><a href="module-net_packets-BlockTxnPacket.html">BlockTxnPacket</a></li><li><a href="module-net_packets-ClaimPacket.html">ClaimPacket</a></li><li><a href="module-net_packets-CmpctBlockPacket.html">CmpctBlockPacket</a></li><li><a href="module-net_packets-FeeFilterPacket.html">FeeFilterPacket</a></li><li><a href="module-net_packets-FilterAddPacket.html">FilterAddPacket</a></li><li><a href="module-net_packets-FilterClearPacket.html">FilterClearPacket</a></li><li><a href="module-net_packets-FilterLoadPacket.html">FilterLoadPacket</a></li><li><a href="module-net_packets-GetAddrPacket.html">GetAddrPacket</a></li><li><a href="module-net_packets-GetBlocksPacket.html">GetBlocksPacket</a></li><li><a href="module-net_packets-GetBlockTxnPacket.html">GetBlockTxnPacket</a></li><li><a href="module-net_packets-GetDataPacket.html">GetDataPacket</a></li><li><a href="module-net_packets-GetHeadersPacket.html">GetHeadersPacket</a></li><li><a href="module-net_packets-GetProofPacket.html">GetProofPacket</a></li><li><a href="module-net_packets-HeadersPacket.html">HeadersPacket</a></li><li><a href="module-net_packets-InvPacket.html">InvPacket</a></li><li><a href="module-net_packets-MempoolPacket.html">MempoolPacket</a></li><li><a href="module-net_packets-MerkleBlockPacket.html">MerkleBlockPacket</a></li><li><a href="module-net_packets-NotFoundPacket.html">NotFoundPacket</a></li><li><a href="module-net_packets-Packet.html">Packet</a></li><li><a href="module-net_packets-PingPacket.html">PingPacket</a></li><li><a href="module-net_packets-PongPacket.html">PongPacket</a></li><li><a href="module-net_packets-ProofPacket.html">ProofPacket</a></li><li><a href="module-net_packets-RejectPacket.html">RejectPacket</a></li><li><a href="module-net_packets-SendCmpctPacket.html">SendCmpctPacket</a></li><li><a href="module-net_packets-SendHeadersPacket.html">SendHeadersPacket</a></li><li><a href="module-net_packets-TXPacket.html">TXPacket</a></li><li><a href="module-net_packets-UnknownPacket.html">UnknownPacket</a></li><li><a href="module-net_packets-VerackPacket.html">VerackPacket</a></li><li><a href="module-net_packets-VersionPacket.html">VersionPacket</a></li><li><a href="module-node.FullNode.html">FullNode</a></li><li><a href="module-node.Node.html">Node</a></li><li><a href="module-node.NodeClient.html">NodeClient</a></li><li><a href="module-node.NullClient.html">NullClient</a></li><li><a href="module-node.SPVNode.html">SPVNode</a></li><li><a href="module-primitives.AbstractBlock.html">AbstractBlock</a></li><li><a href="module-primitives.Address.html">Address</a></li><li><a href="module-primitives.Block.html">Block</a></li><li><a href="module-primitives.Coin.html">Coin</a></li><li><a href="module-primitives.CoinSelector.html">CoinSelector</a></li><li><a href="module-primitives.Covenant.html">Covenant</a></li><li><a href="module-primitives.Headers.html">Headers</a></li><li><a href="module-primitives.Input.html">Input</a></li><li><a href="module-primitives.InvItem.html">InvItem</a></li><li><a href="module-primitives.KeyRing.html">KeyRing</a></li><li><a href="module-primitives.MemBlock.html">MemBlock</a></li><li><a href="module-primitives.MerkleBlock.html">MerkleBlock</a></li><li><a href="module-primitives.MTX.html">MTX</a></li><li><a href="module-primitives.Outpoint.html">Outpoint</a></li><li><a href="module-primitives.Output.html">Output</a></li><li><a href="module-primitives.TX.html">TX</a></li><li><a href="module-primitives.TXMeta.html">TXMeta</a></li><li><a href="module-protocol.Network.html">Network</a></li><li><a href="module-protocol.TimeData.html">TimeData</a></li><li><a href="module-protocol_errors-VerifyError.html">VerifyError</a></li><li><a href="module-script.Opcode.html">Opcode</a></li><li><a href="module-script.Script.html">Script</a></li><li><a href="module-script.ScriptError.html">ScriptError</a></li><li><a href="module-script.ScriptNum.html">ScriptNum</a></li><li><a href="module-script.SigCache.html">SigCache</a></li><li><a href="module-script.Stack.html">Stack</a></li><li><a href="module-script.Witness.html">Witness</a></li><li><a href="module-ui.URI.html">URI</a></li><li><a href="module-wallet.Account.html">Account</a></li><li><a href="module-wallet.Balance.html">Balance</a></li><li><a href="module-wallet.BlockRecord.html">BlockRecord</a></li><li><a href="module-wallet.Credit.html">Credit</a></li><li><a href="module-wallet.Details.html">Details</a></li><li><a href="module-wallet.HTTP.html">HTTP</a></li><li><a href="module-wallet.MasterKey.html">MasterKey</a></li><li><a href="module-wallet.Path.html">Path</a></li><li><a href="module-wallet.Paths.html">Paths</a></li><li><a href="module-wallet.RPC.html">RPC</a></li><li><a href="module-wallet.TXDB.html">TXDB</a></li><li><a href="module-wallet.Wallet.html">Wallet</a></li><li><a href="module-wallet.WalletCoinView.html">WalletCoinView</a></li><li><a href="module-wallet.WalletDB.html">WalletDB</a></li><li><a href="module-wallet.WalletKey.html">WalletKey</a></li><li><a href="module-wallet.WalletMigratorOptions.html">WalletMigratorOptions</a></li><li><a href="module-wallet.WalletOptions.html">WalletOptions</a></li><li><a href="module-wallet_plugin-Plugin.html">Plugin</a></li><li><a href="module-wallet_records-BlockMeta.html">BlockMeta</a></li><li><a href="module-wallet_records-ChainState.html">ChainState</a></li><li><a href="module-wallet_records-MapRecord.html">MapRecord</a></li><li><a href="module-wallet_records-TXRecord.html">TXRecord</a></li><li><a href="module-workers.Framer.html">Framer</a></li><li><a href="module-workers.Master.html">Master</a></li><li><a href="module-workers.Parent.html">Parent</a></li><li><a href="module-workers.Parser.html">Parser</a></li><li><a href="module-workers.Worker.html">Worker</a></li><li><a href="module-workers.WorkerPool.html">WorkerPool</a></li><li><a href="module-workers_packets-CheckInputPacket.html">CheckInputPacket</a></li><li><a href="module-workers_packets-CheckInputResultPacket.html">CheckInputResultPacket</a></li><li><a href="module-workers_packets-CheckPacket.html">CheckPacket</a></li><li><a href="module-workers_packets-CheckResultPacket.html">CheckResultPacket</a></li><li><a href="module-workers_packets-ECSignPacket.html">ECSignPacket</a></li><li><a href="module-workers_packets-ECSignResultPacket.html">ECSignResultPacket</a></li><li><a href="module-workers_packets-ECVerifyPacket.html">ECVerifyPacket</a></li><li><a href="module-workers_packets-ECVerifyResultPacket.html">ECVerifyResultPacket</a></li><li><a href="module-workers_packets-EnvPacket.html">EnvPacket</a></li><li><a href="module-workers_packets-ErrorPacket.html">ErrorPacket</a></li><li><a href="module-workers_packets-ErrorResultPacket.html">ErrorResultPacket</a></li><li><a href="module-workers_packets-EventPacket.html">EventPacket</a></li><li><a href="module-workers_packets-LogPacket.html">LogPacket</a></li><li><a href="module-workers_packets-MinePacket.html">MinePacket</a></li><li><a href="module-workers_packets-MineResultPacket.html">MineResultPacket</a></li><li><a href="module-workers_packets-Packet.html">Packet</a></li><li><a href="module-workers_packets-ScryptPacket.html">ScryptPacket</a></li><li><a href="module-workers_packets-ScryptResultPacket.html">ScryptResultPacket</a></li><li><a href="module-workers_packets-SignInputPacket.html">SignInputPacket</a></li><li><a href="module-workers_packets-SignInputResultPacket.html">SignInputResultPacket</a></li><li><a href="module-workers_packets-SignPacket.html">SignPacket</a></li><li><a href="module-workers_packets-SignResultPacket.html">SignResultPacket</a></li><li><a href="NameDelta.html">NameDelta</a></li><li><a href="NameState.html">NameState</a></li><li><a href="NS.html">NS</a></li><li><a href="Ownership.html">Ownership</a></li><li><a href="Proof.html">Proof</a></li><li><a href="ProofData.html">ProofData</a></li><li><a href="RecursiveServer.html">RecursiveServer</a></li><li><a href="Reserved.html">Reserved</a></li><li><a href="Resource.html">Resource</a></li><li><a href="RootCache.html">RootCache</a></li><li><a href="RootServer.html">RootServer</a></li><li><a href="Seeder.html">Seeder</a></li><li><a href="SlidingWindow.html">SlidingWindow</a></li><li><a href="StateCache.html">StateCache</a></li><li><a href="SymmetricState.html">SymmetricState</a></li><li><a href="SYNTH4.html">SYNTH4</a></li><li><a href="SYNTH6.html">SYNTH6</a></li><li><a href="TXT.html">TXT</a></li><li><a href="Wallet.html">Wallet</a></li><li><a href="WalletNode.html">WalletNode</a></li></ul><h3>Global</h3><ul><li><a href="global.html#bindExit">bindExit</a></li><li><a href="global.html#checksig">checksig</a></li><li><a href="global.html#decode">decode</a></li><li><a href="global.html#encode">encode</a></li><li><a href="global.html#fromFloat">fromFloat</a></li><li><a href="global.html#groupKey">groupKey</a></li><li><a href="global.html#insert">insert</a></li><li><a href="global.html#listenExit">listenExit</a></li><li><a href="global.html#migrationLayout">migrationLayout</a></li><li><a href="global.html#oldLayout">oldLayout</a></li><li><a href="global.html#remove">remove</a></li><li><a href="global.html#search">search</a></li><li><a href="global.html#toFloat">toFloat</a></li><li><a href="global.html#validateKey">validateKey</a></li><li><a href="global.html#validateSignature">validateSignature</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-blockchain.html">blockchain</a></li><li><a href="module-blockchain_common.html">blockchain/common</a></li><li><a href="module-blockstore.html">blockstore</a></li><li><a href="module-blockstore_common.html">blockstore/common</a></li><li><a href="module-blockstore_records.html">blockstore/records</a></li><li><a href="module-client.html">client</a></li><li><a href="module-coins.html">coins</a></li><li><a href="module-covenants.html">covenants</a></li><li><a href="module-dns_common.html">dns/common</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-hd.html">hd</a></li><li><a href="module-hsd.html">hsd</a></li><li><a href="module-mempool.html">mempool</a></li><li><a href="module-mining.html">mining</a></li><li><a href="module-mining_common.html">mining/common</a></li><li><a href="module-net.html">net</a></li><li><a href="module-net_bip152.html">net/bip152</a></li><li><a href="module-net_common.html">net/common</a></li><li><a href="module-net_packets.html">net/packets</a></li><li><a href="module-node.html">node</a></li><li><a href="module-primitives.html">primitives</a></li><li><a href="module-protocol.html">protocol</a></li><li><a href="module-protocol_consensus.html">protocol/consensus</a></li><li><a href="module-protocol_errors.html">protocol/errors</a></li><li><a href="module-protocol_networks.html">protocol/networks</a></li><li><a href="module-protocol_policy.html">protocol/policy</a></li><li><a href="module-script.html">script</a></li><li><a href="module-script_common.html">script/common</a></li><li><a href="module-ui.html">ui</a></li><li><a href="module-utils.html">utils</a></li><li><a href="module-utils_util.html">utils/util</a></li><li><a href="module-wallet.html">wallet</a></li><li><a href="module-wallet_common.html">wallet/common</a></li><li><a href="module-wallet_plugin.html">wallet/plugin</a></li><li><a href="module-wallet_records.html">wallet/records</a></li><li><a href="module-workers.html">workers</a></li><li><a href="module-workers_jobs.html">workers/jobs</a></li><li><a href="module-workers_packets.html">workers/packets</a></li></ul><h3>Classes</h3><ul><li><a href="AirdropKey.html">AirdropKey</a></li><li><a href="AirdropProof.html">AirdropProof</a></li><li><a href="BidReveal.html">BidReveal</a></li><li><a href="BitField.html">BitField</a></li><li><a href="BitView.html">BitView</a></li><li><a href="BlindBid.html">BlindBid</a></li><li><a href="BlindValue.html">BlindValue</a></li><li><a href="BlockProof.html">BlockProof</a></li><li><a href="Brontide.html">Brontide</a></li><li><a href="BrontideStream.html">BrontideStream</a></li><li><a href="ChainFlags.html">ChainFlags</a></li><li><a href="ChainState.html">ChainState</a></li><li><a href="CipherState.html">CipherState</a></li><li><a href="Claim.html">Claim</a></li><li><a href="ContractState.html">ContractState</a></li><li><a href="DetailsMember.html">DetailsMember</a></li><li><a href="DS.html">DS</a></li><li><a href="Field.html">Field</a></li><li><a href="GLUE4.html">GLUE4</a></li><li><a href="GLUE6.html">GLUE6</a></li><li><a href="HandshakeState.html">HandshakeState</a></li><li><a href="HashList.html">HashList</a></li><li><a href="LockedUp.html">LockedUp</a></li><li><a href="MigrateAccountLookahead.html">MigrateAccountLookahead</a></li><li><a href="MigrateBidRevealEntries.html">MigrateBidRevealEntries</a></li><li><a href="MigrateBlockStore.html">MigrateBlockStore</a></li><li><a href="MigrateChainState.html">MigrateChainState</a></li><li><a href="MigrateChangeAddress.html">MigrateChangeAddress</a></li><li><a href="MigrateMigrations.html">MigrateMigrations</a></li><li><a href="MigrateTreeState.html">MigrateTreeState</a></li><li><a href="MigrateTXCountTimeIndex.html">MigrateTXCountTimeIndex</a></li><li><a href="MigrateTXDBBalances.html">MigrateTXDBBalances</a></li><li><a href="module.migrations.MigrationState.html">MigrationState</a></li><li><a href="module-blockchain.Chain.html">Chain</a></li><li><a href="module-blockchain.ChainDB.html">ChainDB</a></li><li><a href="module-blockchain.ChainEntry.html">ChainEntry</a></li><li><a href="module-blockchain.ChainMigrator.html">ChainMigrator</a></li><li><a href="module-blockchain.ChainMigratorOptions.html">ChainMigratorOptions</a></li><li><a href="module-blockchain.ChainOptions.html">ChainOptions</a></li><li><a href="module-blockchain.DeploymentState.html">DeploymentState</a></li><li><a href="module-blockchain.WalletMigrationResult.html">WalletMigrationResult</a></li><li><a href="module-blockchain.WalletMigrator.html">WalletMigrator</a></li><li><a href="module-blockstore.AbstractBatch.html">AbstractBatch</a></li><li><a href="module-blockstore.AbstractBlockStore.html">AbstractBlockStore</a></li><li><a href="module-blockstore.FileBatch.html">FileBatch</a></li><li><a href="module-blockstore.LevelBatch.html">LevelBatch</a></li><li><a href="module-blockstore_records-BlockRecord.html">BlockRecord</a></li><li><a href="module-blockstore_records-FileRecord.html">FileRecord</a></li><li><a href="module-blockstore_FileBlockStore.html">blockstore:FileBlockStore</a></li><li><a href="module-blockstore_LevelBlockStore.html">blockstore:LevelBlockStore</a></li><li><a href="module-client.NodeClient.html">NodeClient</a></li><li><a href="module-client.WalletClient.html">WalletClient</a></li><li><a href="module-coins.CoinEntry.html">CoinEntry</a></li><li><a href="module-coins.Coins.html">Coins</a></li><li><a href="module-coins.CoinView.html">CoinView</a></li><li><a href="module-coins.UndoCoins.html">UndoCoins</a></li><li><a href="module-currency.Amount.html">Amount</a></li><li><a href="module-errors-CriticalError.html">CriticalError</a></li><li><a href="module-hd.Mnemonic.html">Mnemonic</a></li><li><a href="module-hd.PrivateKey.html">PrivateKey</a></li><li><a href="module-hd.PublicKey.html">PublicKey</a></li><li><a href="module-http.HTTPOptions.html">HTTPOptions</a></li><li><a href="module-http.RPC.html">RPC</a></li><li><a href="module-http.Server.html">Server</a></li><li><a href="module-http.TransactionOptions.html">TransactionOptions</a></li><li><a href="module-mempool.AirdropEntry.html">AirdropEntry</a></li><li><a href="module-mempool.ClaimEntry.html">ClaimEntry</a></li><li><a href="module-mempool.ConfirmStats.html">ConfirmStats</a></li><li><a href="module-mempool.Mempool.html">Mempool</a></li><li><a href="module-mempool.MempoolEntry.html">MempoolEntry</a></li><li><a href="module-mempool.MempoolOptions.html">MempoolOptions</a></li><li><a href="module-mempool.PolicyEstimator.html">PolicyEstimator</a></li><li><a href="module-migrations.AbstractMigration.html">AbstractMigration</a></li><li><a href="module-migrations.MigrationResult.html">MigrationResult</a></li><li><a href="module-migrations.Migrator.html">Migrator</a></li><li><a href="module-mining.BlockAirdrop.html">BlockAirdrop</a></li><li><a href="module-mining.BlockClaim.html">BlockClaim</a></li><li><a href="module-mining.BlockEntry.html">BlockEntry</a></li><li><a href="module-mining.BlockTemplate.html">BlockTemplate</a></li><li><a href="module-mining.CPUMiner.html">CPUMiner</a></li><li><a href="module-mining.Miner.html">Miner</a></li><li><a href="module-mining.MinerOptions.html">MinerOptions</a></li><li><a href="module-net.BroadcastItem.html">BroadcastItem</a></li><li><a href="module-net.Framer.html">Framer</a></li><li><a href="module-net.HostEntry.html">HostEntry</a></li><li><a href="module-net.HostList.html">HostList</a></li><li><a href="module-net.HostListOptions.html">HostListOptions</a></li><li><a href="module-net.LocalAddress.html">LocalAddress</a></li><li><a href="module-net.NetAddress.html">NetAddress</a></li><li><a href="module-net.Parser.html">Parser</a></li><li><a href="module-net.Peer.html">Peer</a></li><li><a href="module-net.PeerList.html">PeerList</a></li><li><a href="module-net.PeerOptions.html">PeerOptions</a></li><li><a href="module-net.Pool.html">Pool</a></li><li><a href="module-net.PoolOptions.html">PoolOptions</a></li><li><a href="module-net_bip152-CompactBlock.html">CompactBlock</a></li><li><a href="module-net_bip152-TXRequest.html">TXRequest</a></li><li><a href="module-net_bip152-TXResponse.html">TXResponse</a></li><li><a href="module-net_packets-AddrPacket.html">AddrPacket</a></li><li><a href="module-net_packets-AirdropPacket.html">AirdropPacket</a></li><li><a href="module-net_packets-BlockPacket.html">BlockPacket</a></li><li><a href="module-net_packets-BlockTxnPacket.html">BlockTxnPacket</a></li><li><a href="module-net_packets-ClaimPacket.html">ClaimPacket</a></li><li><a href="module-net_packets-CmpctBlockPacket.html">CmpctBlockPacket</a></li><li><a href="module-net_packets-FeeFilterPacket.html">FeeFilterPacket</a></li><li><a href="module-net_packets-FilterAddPacket.html">FilterAddPacket</a></li><li><a href="module-net_packets-FilterClearPacket.html">FilterClearPacket</a></li><li><a href="module-net_packets-FilterLoadPacket.html">FilterLoadPacket</a></li><li><a href="module-net_packets-GetAddrPacket.html">GetAddrPacket</a></li><li><a href="module-net_packets-GetBlocksPacket.html">GetBlocksPacket</a></li><li><a href="module-net_packets-GetBlockTxnPacket.html">GetBlockTxnPacket</a></li><li><a href="module-net_packets-GetDataPacket.html">GetDataPacket</a></li><li><a href="module-net_packets-GetHeadersPacket.html">GetHeadersPacket</a></li><li><a href="module-net_packets-GetProofPacket.html">GetProofPacket</a></li><li><a href="module-net_packets-HeadersPacket.html">HeadersPacket</a></li><li><a href="module-net_packets-InvPacket.html">InvPacket</a></li><li><a href="module-net_packets-MempoolPacket.html">MempoolPacket</a></li><li><a href="module-net_packets-MerkleBlockPacket.html">MerkleBlockPacket</a></li><li><a href="module-net_packets-NotFoundPacket.html">NotFoundPacket</a></li><li><a href="module-net_packets-Packet.html">Packet</a></li><li><a href="module-net_packets-PingPacket.html">PingPacket</a></li><li><a href="module-net_packets-PongPacket.html">PongPacket</a></li><li><a href="module-net_packets-ProofPacket.html">ProofPacket</a></li><li><a href="module-net_packets-RejectPacket.html">RejectPacket</a></li><li><a href="module-net_packets-SendCmpctPacket.html">SendCmpctPacket</a></li><li><a href="module-net_packets-SendHeadersPacket.html">SendHeadersPacket</a></li><li><a href="module-net_packets-TXPacket.html">TXPacket</a></li><li><a href="module-net_packets-UnknownPacket.html">UnknownPacket</a></li><li><a href="module-net_packets-VerackPacket.html">VerackPacket</a></li><li><a href="module-net_packets-VersionPacket.html">VersionPacket</a></li><li><a href="module-node.FullNode.html">FullNode</a></li><li><a href="module-node.Node.html">Node</a></li><li><a href="module-node.NodeClient.html">NodeClient</a></li><li><a href="module-node.NullClient.html">NullClient</a></li><li><a href="module-node.SPVNode.html">SPVNode</a></li><li><a href="module-primitives.AbstractBlock.html">AbstractBlock</a></li><li><a href="module-primitives.Address.html">Address</a></li><li><a href="module-primitives.Block.html">Block</a></li><li><a href="module-primitives.Coin.html">Coin</a></li><li><a href="module-primitives.CoinSelector.html">CoinSelector</a></li><li><a href="module-primitives.Covenant.html">Covenant</a></li><li><a href="module-primitives.Headers.html">Headers</a></li><li><a href="module-primitives.Input.html">Input</a></li><li><a href="module-primitives.InvItem.html">InvItem</a></li><li><a href="module-primitives.KeyRing.html">KeyRing</a></li><li><a href="module-primitives.MemBlock.html">MemBlock</a></li><li><a href="module-primitives.MerkleBlock.html">MerkleBlock</a></li><li><a href="module-primitives.MTX.html">MTX</a></li><li><a href="module-primitives.Outpoint.html">Outpoint</a></li><li><a href="module-primitives.Output.html">Output</a></li><li><a href="module-primitives.TX.html">TX</a></li><li><a href="module-primitives.TXMeta.html">TXMeta</a></li><li><a href="module-protocol.Network.html">Network</a></li><li><a href="module-protocol.TimeData.html">TimeData</a></li><li><a href="module-protocol_errors-VerifyError.html">VerifyError</a></li><li><a href="module-script.Opcode.html">Opcode</a></li><li><a href="module-script.Script.html">Script</a></li><li><a href="module-script.ScriptError.html">ScriptError</a></li><li><a href="module-script.ScriptNum.html">ScriptNum</a></li><li><a href="module-script.SigCache.html">SigCache</a></li><li><a href="module-script.Stack.html">Stack</a></li><li><a href="module-script.Witness.html">Witness</a></li><li><a href="module-ui.URI.html">URI</a></li><li><a href="module-wallet.Account.html">Account</a></li><li><a href="module-wallet.Balance.html">Balance</a></li><li><a href="module-wallet.BlockRecord.html">BlockRecord</a></li><li><a href="module-wallet.Credit.html">Credit</a></li><li><a href="module-wallet.Details.html">Details</a></li><li><a href="module-wallet.HTTP.html">HTTP</a></li><li><a href="module-wallet.MasterKey.html">MasterKey</a></li><li><a href="module-wallet.Path.html">Path</a></li><li><a href="module-wallet.Paths.html">Paths</a></li><li><a href="module-wallet.RPC.html">RPC</a></li><li><a href="module-wallet.TXDB.html">TXDB</a></li><li><a href="module-wallet.Wallet.html">Wallet</a></li><li><a href="module-wallet.WalletCoinView.html">WalletCoinView</a></li><li><a href="module-wallet.WalletKey.html">WalletKey</a></li><li><a href="module-wallet.WalletMigratorOptions.html">WalletMigratorOptions</a></li><li><a href="module-wallet.WalletOptions.html">WalletOptions</a></li><li><a href="module-wallet_plugin-Plugin.html">Plugin</a></li><li><a href="module-wallet_records-BlockMeta.html">BlockMeta</a></li><li><a href="module-wallet_records-ChainState.html">ChainState</a></li><li><a href="module-wallet_records-MapRecord.html">MapRecord</a></li><li><a href="module-wallet_records-TXRecord.html">TXRecord</a></li><li><a href="module-workers.Framer.html">Framer</a></li><li><a href="module-workers.Master.html">Master</a></li><li><a href="module-workers.Parent.html">Parent</a></li><li><a href="module-workers.Parser.html">Parser</a></li><li><a href="module-workers.Worker.html">Worker</a></li><li><a href="module-workers.WorkerPool.html">WorkerPool</a></li><li><a href="module-workers_packets-CheckInputPacket.html">CheckInputPacket</a></li><li><a href="module-workers_packets-CheckInputResultPacket.html">CheckInputResultPacket</a></li><li><a href="module-workers_packets-CheckPacket.html">CheckPacket</a></li><li><a href="module-workers_packets-CheckResultPacket.html">CheckResultPacket</a></li><li><a href="module-workers_packets-ECSignPacket.html">ECSignPacket</a></li><li><a href="module-workers_packets-ECSignResultPacket.html">ECSignResultPacket</a></li><li><a href="module-workers_packets-ECVerifyPacket.html">ECVerifyPacket</a></li><li><a href="module-workers_packets-ECVerifyResultPacket.html">ECVerifyResultPacket</a></li><li><a href="module-workers_packets-EnvPacket.html">EnvPacket</a></li><li><a href="module-workers_packets-ErrorPacket.html">ErrorPacket</a></li><li><a href="module-workers_packets-ErrorResultPacket.html">ErrorResultPacket</a></li><li><a href="module-workers_packets-EventPacket.html">EventPacket</a></li><li><a href="module-workers_packets-LogPacket.html">LogPacket</a></li><li><a href="module-workers_packets-MinePacket.html">MinePacket</a></li><li><a href="module-workers_packets-MineResultPacket.html">MineResultPacket</a></li><li><a href="module-workers_packets-Packet.html">Packet</a></li><li><a href="module-workers_packets-ScryptPacket.html">ScryptPacket</a></li><li><a href="module-workers_packets-ScryptResultPacket.html">ScryptResultPacket</a></li><li><a href="module-workers_packets-SignInputPacket.html">SignInputPacket</a></li><li><a href="module-workers_packets-SignInputResultPacket.html">SignInputResultPacket</a></li><li><a href="module-workers_packets-SignPacket.html">SignPacket</a></li><li><a href="module-workers_packets-SignResultPacket.html">SignResultPacket</a></li><li><a href="NameDelta.html">NameDelta</a></li><li><a href="NameState.html">NameState</a></li><li><a href="NS.html">NS</a></li><li><a href="Ownership.html">Ownership</a></li><li><a href="Proof.html">Proof</a></li><li><a href="ProofData.html">ProofData</a></li><li><a href="RecursiveServer.html">RecursiveServer</a></li><li><a href="Reserved.html">Reserved</a></li><li><a href="Resource.html">Resource</a></li><li><a href="RootCache.html">RootCache</a></li><li><a href="RootServer.html">RootServer</a></li><li><a href="Seeder.html">Seeder</a></li><li><a href="SlidingWindow.html">SlidingWindow</a></li><li><a href="StateCache.html">StateCache</a></li><li><a href="SymmetricState.html">SymmetricState</a></li><li><a href="SYNTH4.html">SYNTH4</a></li><li><a href="SYNTH6.html">SYNTH6</a></li><li><a href="TXCount.html">TXCount</a></li><li><a href="TXT.html">TXT</a></li><li><a href="Wallet.html">Wallet</a></li><li><a href="WalletDB.html">WalletDB</a></li><li><a href="WalletNode.html">WalletNode</a></li></ul><h3>Global</h3><ul><li><a href="global.html#bindExit">bindExit</a></li><li><a href="global.html#checksig">checksig</a></li><li><a href="global.html#decode">decode</a></li><li><a href="global.html#encode">encode</a></li><li><a href="global.html#fromFloat">fromFloat</a></li><li><a href="global.html#fromU32">fromU32</a></li><li><a href="global.html#groupKey">groupKey</a></li><li><a href="global.html#insert">insert</a></li><li><a href="global.html#listenExit">listenExit</a></li><li><a href="global.html#migrationLayout">migrationLayout</a></li><li><a href="global.html#oldLayout">oldLayout</a></li><li><a href="global.html#opCache">opCache</a></li><li><a href="global.html#ownership">ownership</a></li><li><a href="global.html#remove">remove</a></li><li><a href="global.html#search">search</a></li><li><a href="global.html#splice">splice</a></li><li><a href="global.html#toFloat">toFloat</a></li><li><a href="global.html#toString">toString</a></li><li><a href="global.html#validateKey">validateKey</a></li><li><a href="global.html#validateSignature">validateSignature</a></li></ul>
 </nav>
 
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 1.1.2</a> on Thu Nov 09 2023 10:09:48 GMT+0000 (Coordinated Universal Time)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 1.1.5</a> on Mon Dec 02 2024 13:12:52 GMT+0000 (Coordinated Universal Time)
 </footer>
 
 <script> prettyPrint(); </script>

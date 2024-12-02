@@ -38,17 +38,20 @@ const assert = require('bsert');
 const path = require('path');
 const EventEmitter = require('events');
 const bio = require('bufio');
-const {BloomFilter} = require('bfilter');
+const {BloomFilter} = require('@handshake-org/bfilter');
 const {Lock, MapLock} = require('bmutex');
 const bdb = require('bdb');
 const Logger = require('blgr');
+const LRU = require('blru');
 const {safeEqual} = require('bcrypto/lib/safe');
 const aes = require('bcrypto/lib/aes');
 const Network = require('../protocol/network');
+const consensus = require('../protocol/consensus');
 const Path = require('./path');
 const common = require('./common');
 const Wallet = require('./wallet');
 const Account = require('./account');
+const Block = require('../primitives/block');
 const Outpoint = require('../primitives/outpoint');
 const layouts = require('./layout');
 const records = require('./records');
@@ -57,6 +60,12 @@ const WalletMigrator = require('./migrations');
 const layout = layouts.wdb;
 const tlayout = layouts.txdb;
 const {states} = require('../covenants/namestate');
+const util = require('../utils/util');
+const {scanActions} = require('../blockchain/common');
+
+/** @typedef {import('../primitives/tx')} TX */
+/** @typedef {import('../blockchain/common').ScanAction} ScanAction */
+/** @typedef {import('../types').Hash} Hash */
 
 const {
   ChainState,
@@ -64,6 +73,20 @@ const {
   TXRecord,
   MapRecord
 } = records;
+
+/** @typedef {import('./records').BlockMeta} BlockMeta */
+/** @typedef {import('./txdb').BlockExtraInfo} BlockExtraInfo */
+
+/**
+ * @typedef {Object} AddBlockResult
+ * @property {Number} txs - Number of transactions added on this add.
+ * @property {Boolean} filterUpdated - Whether the bloom filter was updated.
+ */
+
+/**
+ * @typedef {Object} AddTXResult
+ * @property {Number} wids - Wallet IDs affected.
+ * @property {Boolean} filterUpdated - Whether the bloom filter was updated.
 
 /**
  * WalletDB
@@ -90,14 +113,23 @@ class WalletDB extends EventEmitter {
     this.feeRate = this.options.feeRate;
     this.db = bdb.create(this.options);
     this.name = 'wallet';
-    this.version = 2;
+    this.version = 4;
 
-    this.primary = null;
+    // chain state.
+    this.hasStateCache = false;
     this.state = new ChainState();
-    this.confirming = false;
     this.height = 0;
+
+    // block time cache by height.
+    this.timeCache = new LRU(30);
+
+    // wallets
+    this.primary = null;
     this.wallets = new Map();
     this.depth = 0;
+
+    // guards
+    this.confirming = false;
     this.rescanning = false;
     this.filterSent = false;
 
@@ -150,18 +182,28 @@ class WalletDB extends EventEmitter {
     });
 
     this.client.on('connect', async () => {
+      this.emit('connect');
       try {
         await this.syncNode();
+        this.emit('sync done', this.state);
       } catch (e) {
         this.emit('error', e);
       }
     });
 
     this.client.on('disconnect', async () => {
+      this.emit('disconnect');
       this.filterSent = false;
     });
 
     this.client.bind('block connect', async (entry, txs) => {
+      // If we are rescanning or doing initial sync we ignore
+      // block connect events. This avoids deadlocks when using
+      // nodeclient, but also skips unnecessary addBlock calls
+      // that would just repeat after the txLock is unlocked.
+      if (this.rescanning)
+        return;
+
       try {
         await this.addBlock(entry, txs);
       } catch (e) {
@@ -170,6 +212,9 @@ class WalletDB extends EventEmitter {
     });
 
     this.client.bind('block disconnect', async (entry) => {
+      if (this.rescanning)
+        return;
+
       try {
         await this.removeBlock(entry);
       } catch (e) {
@@ -183,6 +228,25 @@ class WalletDB extends EventEmitter {
       } catch (e) {
         this.emit('error', e);
       }
+    });
+
+    this.client.hook('block rescan interactive', async (entry, txs) => {
+      try {
+        this.timeCache.start();
+        const result = await this.rescanBlockInteractive(entry, txs);
+        this.timeCache.commit();
+        return result;
+      } catch (e) {
+        this.emit('error', e);
+        this.timeCache.drop();
+        return {
+          type: scanActions.ABORT
+        };
+      }
+    });
+
+    this.client.hook('block rescan interactive abort', async (message) => {
+      this.emit('error', new Error(message));
     });
 
     this.client.bind('tx', async (tx) => {
@@ -227,11 +291,10 @@ class WalletDB extends EventEmitter {
     if (this.options.wipeNoReally)
       await this.wipe();
 
-    await this.watch();
-    await this.connect();
+    await this.loadState();
 
     this.logger.info(
-      'WalletDB loaded (depth=%d, height=%d, start=%d).',
+      'WalletDB is loading (depth=%d, height=%d, start=%d).',
       this.depth,
       this.state.height,
       this.state.startHeight);
@@ -249,9 +312,23 @@ class WalletDB extends EventEmitter {
     this.primary = wallet;
 
     if (migrationResult.rescan) {
-      this.logger.info('Rescanning...');
-      await this.scan(0);
+      if (!this.options.migrateNoRescan) {
+        this.logger.info('Migration rollback...');
+        await this.rollback(0);
+      } else {
+        this.logger.warning(
+          'Migration rescan skipped, state may be incorrect.');
+      }
     }
+
+    if (migrationResult.recalculateTXDB)
+      await this.recalculateBalances();
+
+    await this.preloadAll();
+    await this.watch();
+
+    this.logger.info('WalletDB opened.');
+    this.emit('open');
   }
 
   /**
@@ -267,6 +344,22 @@ class WalletDB extends EventEmitter {
     value.writeUInt32LE(version, this.name.length);
 
     b.put(layout.V.encode(), value);
+  }
+
+  /**
+   * Preload all wallets.
+   * @returns {Promise}
+   */
+
+  async preloadAll() {
+    if (!this.options.preloadAll)
+      return;
+
+    this.logger.info('Preloading all wallets...');
+    const wallets = await this.getWallets();
+
+    for (const wname of wallets)
+      await this.get(wname);
   }
 
   /**
@@ -292,19 +385,44 @@ class WalletDB extends EventEmitter {
   }
 
   /**
+   * Add genesis block.
+   * @returns {Promise}
+   */
+
+  async saveGenesis() {
+    // Write genesis block.
+    const network = this.network;
+    const block = Block.decode(network.genesisBlock);
+    const entry = {
+      hash: block.hash(),
+      height: 0,
+      time: block.time,
+      prevBlock: consensus.ZERO_HASH
+    };
+
+    // hack around equality check in state height.
+    this.state.height = -1;
+    await this.addBlock(entry, []);
+  }
+
+  /**
    * Close the walletdb, wait for the database to close.
    * @returns {Promise}
    */
 
   async close() {
-    await this.disconnect();
+    if (this.client.opened)
+      await this.disconnect();
 
     for (const wallet of this.wallets.values()) {
       await wallet.destroy();
       this.unregister(wallet);
     }
 
-    return this.db.close();
+    this.timeCache.reset();
+    await this.db.close();
+    this.logger.info('WalletDB Closed.');
+    this.emit('close');
   }
 
   /**
@@ -393,15 +511,37 @@ class WalletDB extends EventEmitter {
 
   async syncNode() {
     const unlock = await this.txLock.lock();
+    this.rescanning = true;
     try {
       this.logger.info('Resyncing from server...');
-      await this.syncState();
+      await this.syncInitState();
       await this.syncFilter();
       await this.syncChain();
+      this.rescanning = false;
       await this.resend();
     } finally {
+      this.rescanning = false;
       unlock();
     }
+  }
+
+  /**
+   * Recover state from the cache.
+   * @returns {Promise}
+   */
+
+  async loadState() {
+    const cache = await this.getState();
+
+    if (!cache) {
+      await this.saveGenesis();
+      return;
+    }
+
+    this.logger.info('Initialized chain state from the database.');
+    this.hasStateCache = true;
+    this.state = cache;
+    this.height = cache.height;
   }
 
   /**
@@ -409,26 +549,24 @@ class WalletDB extends EventEmitter {
    * @returns {Promise}
    */
 
-  async syncState() {
-    const cache = await this.getState();
-
-    if (cache) {
-      this.state = cache;
-      this.height = cache.height;
-      return undefined;
-    }
+  async syncInitState() {
+    // We have recovered from the cache.
+    if (this.hasStateCache)
+      return;
 
     this.logger.info('Initializing database state from server.');
 
     const b = this.db.batch();
-    const hashes = await this.client.getHashes();
+    const entries = await this.client.getEntries();
+    assert(entries, 'Could not get chain entries.');
 
     let tip = null;
 
-    for (let height = 0; height &lt; hashes.length; height++) {
-      const hash = hashes[height];
-      const meta = new BlockMeta(hash, height);
-      b.put(layout.h.encode(height), meta.toHash());
+    for (let height = 0; height &lt; entries.length; height++) {
+      const entry = entries[height];
+      assert(entry.height === height);
+      const meta = new BlockMeta(entry.hash, entry.height, entry.time);
+      b.put(layout.h.encode(height), meta.toHashAndTime());
       tip = meta;
     }
 
@@ -447,11 +585,12 @@ class WalletDB extends EventEmitter {
     this.state = state;
     this.height = state.height;
 
-    return undefined;
+    return;
   }
 
   /**
    * Connect and sync with the chain server.
+   * Part of syncNode.
    * @private
    * @returns {Promise}
    */
@@ -472,21 +611,29 @@ class WalletDB extends EventEmitter {
       height -= 1;
     }
 
-    return this.scan(height);
+    // syncNode sets the rescanning to true.
+    return this.scanInteractive(height);
   }
 
   /**
    * Rescan blockchain from a given height.
+   * Needs this.rescanning = true to be set from the caller.
    * @private
-   * @param {Number?} height
+   * @param {Number} [height=this.state.startHeight]
    * @returns {Promise}
    */
 
   async scan(height) {
+    assert(this.rescanning, 'WDB: Rescanning guard not set.');
+
     if (height == null)
       height = this.state.startHeight;
 
     assert((height >>> 0) === height, 'WDB: Must pass in a height.');
+
+    this.logger.info(
+      'Rolling back %d blocks.',
+      this.height - height + 1);
 
     await this.rollback(height);
 
@@ -496,12 +643,39 @@ class WalletDB extends EventEmitter {
 
     const tip = await this.getTip();
 
-    try {
-      this.rescanning = true;
-      await this.client.rescan(tip.hash);
-    } finally {
-      this.rescanning = false;
-    }
+    return this.client.rescan(tip.hash);
+  }
+
+  /**
+   * Interactive scan blockchain from a given height.
+   * Expect this.rescanning to be set to true.
+   * @private
+   * @param {Number} [height=this.state.startHeight]
+   * @param {Boolean} [fullLock=true]
+   * @returns {Promise}
+   */
+
+  async scanInteractive(height, fullLock = true) {
+    assert(this.rescanning, 'WDB: Rescanning guard not set.');
+
+    if (height == null)
+      height = this.state.startHeight;
+
+    assert((height >>> 0) === height, 'WDB: Must pass in a height.');
+
+    this.logger.info(
+      'Rolling back %d blocks.',
+      this.height - height + 1);
+
+    await this.rollback(height);
+
+    this.logger.info(
+      'WalletDB is scanning %d blocks.',
+      this.state.height - height + 1);
+
+    const tip = await this.getTip();
+
+    return this.client.rescanInteractive(tip.hash, fullLock);
   }
 
   /**
@@ -560,22 +734,18 @@ class WalletDB extends EventEmitter {
       lte: layout.T.max()
     });
 
-    const wids = await this.db.keys({
-      gte: layout.W.min(),
-      lte: layout.W.max(),
-      parse: key => layout.W.decode(key)[0]
-    });
+    const wnames = await this.getWallets();
 
-    for (const wid of wids) {
-      const wallet = await this.get(wid);
+    for (const wname of wnames) {
+      const wallet = await this.get(wname);
       this.logger.warning(
         'Clearing all tx history for wallet: %s (%d)',
-        wallet.id, wid
+        wallet.id, wallet.wid
       );
 
       // remove all txdb data *except* blinds ('v')
       const key = 'v'.charCodeAt();
-      const prefix = layout.t.encode(wid);
+      const prefix = layout.t.encode(wallet.wid);
       await removeRange({
         gte: Buffer.concat([prefix, Buffer.alloc(1)]),
         lt:  Buffer.concat([prefix, Buffer.from([key])])
@@ -599,6 +769,7 @@ class WalletDB extends EventEmitter {
 
   async rescan(height) {
     const unlock = await this.txLock.lock();
+
     try {
       return await this._rescan(height);
     } finally {
@@ -614,7 +785,42 @@ class WalletDB extends EventEmitter {
    */
 
   async _rescan(height) {
-    return this.scan(height);
+    this.rescanning = true;
+
+    try {
+      return await this.scanInteractive(height);
+    } finally {
+      this.rescanning = false;
+    }
+  }
+
+  /**
+   * Recalculate balances from the coins.
+   * @returns {Promise}
+   */
+
+  async recalculateBalances() {
+    const unlock = await this.txLock.lock();
+
+    try {
+      return await this._recalculateBalances();
+    } finally {
+      unlock();
+    }
+  }
+
+  /**
+   * Recalculate balances from the coins (without a lock).
+   * @returns {Promise}
+   */
+
+  async _recalculateBalances() {
+    const wnames = await this.getWallets();
+
+    for (const wname of wnames) {
+      const wallet = await this.get(wname);
+      await wallet.recalculateBalances();
+    }
   }
 
   /**
@@ -869,7 +1075,7 @@ class WalletDB extends EventEmitter {
   /**
    * Map wallet id to wid.
    * @param {String|Number} id
-   * @returns {Promise} - Returns {Number}.
+   * @returns {Promise&lt;Number>}
    */
 
   async ensureWID(id) {
@@ -885,7 +1091,7 @@ class WalletDB extends EventEmitter {
   /**
    * Map wallet id to wid.
    * @param {String} id
-   * @returns {Promise} - Returns {Number}.
+   * @returns {Promise&lt;Number>}
    */
 
   async getWID(id) {
@@ -902,7 +1108,7 @@ class WalletDB extends EventEmitter {
   /**
    * Map wallet wid to id.
    * @param {Number} wid
-   * @returns {Promise} - Returns {String}.
+   * @returns {Promise&lt;String?>}
    */
 
   async getID(wid) {
@@ -917,7 +1123,7 @@ class WalletDB extends EventEmitter {
   /**
    * Get a wallet from the database, setup watcher.
    * @param {Number|String} id
-   * @returns {Promise} - Returns {@link Wallet}.
+   * @returns {Promise&lt;Wallet?>}
    */
 
   async get(id) {
@@ -939,7 +1145,7 @@ class WalletDB extends EventEmitter {
    * Get a wallet from the database without a lock.
    * @private
    * @param {Number} wid
-   * @returns {Promise} - Returns {@link Wallet}.
+   * @returns {Promise&lt;Wallet?>}
    */
 
   async _get(wid) {
@@ -1228,7 +1434,7 @@ class WalletDB extends EventEmitter {
   /**
    * Create a new wallet, save to database, setup watcher.
    * @param {Object} options - See {@link Wallet}.
-   * @returns {Promise} - Returns {@link Wallet}.
+   * @returns {Promise&lt;Wallet>}
    */
 
   async create(options) {
@@ -1248,7 +1454,7 @@ class WalletDB extends EventEmitter {
    * Create a new wallet, save to database without a lock.
    * @private
    * @param {Object} options - See {@link Wallet}.
-   * @returns {Promise} - Returns {@link Wallet}.
+   * @returns {Promise&lt;Wallet>}
    */
 
   async _create(options) {
@@ -1574,8 +1780,8 @@ class WalletDB extends EventEmitter {
   }
 
   /**
-   * Get all wallet ids.
-   * @returns {Promise}
+   * Get all wallet names.
+   * @returns {Promise&lt;String[]>}
    */
 
   async getWallets() {
@@ -1795,12 +2001,23 @@ class WalletDB extends EventEmitter {
   /**
    * Sync the current chain state to tip.
    * @param {BlockMeta} tip
+   * @param {Boolean} checkMark - should we check startHeight/mark. This should
+   * only happen if we are progressing forward in history and have txs.
    * @returns {Promise}
    */
 
-  async setTip(tip) {
+  async setTip(tip, checkMark = false) {
     const b = this.db.batch();
     const state = this.state.clone();
+
+    // mark state if state has not been marked, we are moving forward
+    // and we have txs. If state is marked, it means we already found
+    // first tx for the whole wdb, so no longer move it forward.
+    if (checkMark &amp;&amp; !state.marked) {
+      state.startHeight = tip.height;
+      state.startHash = tip.hash;
+      state.marked = true;
+    }
 
     if (tip.height &lt; state.height) {
       // Hashes ahead of our new tip
@@ -1821,7 +2038,7 @@ class WalletDB extends EventEmitter {
     }
 
     // Save tip and state.
-    b.put(layout.h.encode(tip.height), tip.toHash());
+    b.put(layout.h.encode(tip.height), tip.toHashAndTime());
     b.put(layout.R.encode(), state.encode());
 
     await b.write();
@@ -1847,26 +2064,6 @@ class WalletDB extends EventEmitter {
   }
 
   /**
-   * Mark current state.
-   * @param {BlockMeta} block
-   * @returns {Promise}
-   */
-
-  async markState(block) {
-    const state = this.state.clone();
-    state.startHeight = block.height;
-    state.startHash = block.hash;
-    state.marked = true;
-
-    const b = this.db.batch();
-    b.put(layout.R.encode(), state.encode());
-    await b.write();
-
-    this.state = state;
-    this.height = state.height;
-  }
-
-  /**
    * Get a wallet map.
    * @param {Buffer} key
    * @returns {Promise}
@@ -1879,6 +2076,22 @@ class WalletDB extends EventEmitter {
       return null;
 
     return MapRecord.decode(data);
+  }
+
+  /**
+   * Does wdb have wallet map.
+   * @param {Buffer} key
+   * @param {Number} wid
+   * @returns {Promise&lt;Boolean>}
+   */
+
+  async hasMap(key, wid) {
+    const map = await this.getMap(key);
+
+    if (!map)
+      return false;
+
+    return map.has(wid);
   }
 
   /**
@@ -2047,7 +2260,7 @@ class WalletDB extends EventEmitter {
    */
 
   async addOutpointMap(b, hash, index, wid) {
-    await this.addOutpoint(hash, index);
+    this.addOutpoint(hash, index);
     return this.addMap(b, layout.o.encode(hash, index), wid);
   }
 
@@ -2070,6 +2283,17 @@ class WalletDB extends EventEmitter {
 
   async getNameMap(nameHash) {
     return this.getMap(layout.N.encode(nameHash));
+  }
+
+  /**
+   * Has wid in the wallet map.
+   * @param {Buffer} nameHash
+   * @param {Number} wid
+   * @returns {Promise&lt;Boolean>}
+   */
+
+  async hasNameMap(nameHash, wid) {
+    return this.hasMap(layout.N.encode(nameHash), wid);
   }
 
   /**
@@ -2097,23 +2321,23 @@ class WalletDB extends EventEmitter {
 
   /**
    * Get a wallet block meta.
-   * @param {Hash} hash
-   * @returns {Promise}
+   * @param {Number} height
+   * @returns {Promise&lt;BlockMeta?>}
    */
 
   async getBlock(height) {
-    const hash = await this.db.get(layout.h.encode(height));
+    const data = await this.db.get(layout.h.encode(height));
 
-    if (!hash)
+    if (!data)
       return null;
 
-    return new BlockMeta(hash, height);
+    return BlockMeta.fromHashAndTime(data, height);
   }
 
   /**
    * Get wallet tip.
    * @param {Hash} hash
-   * @returns {Promise}
+   * @returns {Promise&lt;BlockMeta>}
    */
 
   async getTip() {
@@ -2143,6 +2367,63 @@ class WalletDB extends EventEmitter {
   }
 
   /**
+   * Get block time.
+   * @param {Number} height
+   * @returns {Promise&lt;Number?>}
+   */
+
+  async getBlockTime(height) {
+    assert(typeof height === 'number');
+
+    if (height &lt; 0)
+      return null;
+
+    const cache = this.timeCache.get(height);
+
+    if (cache != null)
+      return cache;
+
+    const block = await this.getBlock(height);
+
+    if (!block)
+      return null;
+
+    this.timeCache.set(height, block.time);
+
+    return block.time;
+  }
+
+  /**
+   * Calculate median time past.
+   * @param {Number} height
+   * @param {Number} [time]
+   * @returns {Promise&lt;Number>}
+   */
+
+  async getMedianTime(height, time) {
+    assert(typeof height === 'number');
+    let timespan = consensus.MEDIAN_TIMESPAN;
+    const median = [];
+
+    if (time) {
+      median.push(time);
+      timespan--;
+    }
+
+    time = await this.getBlockTime(height);
+
+    for (let i = 0; i &lt; timespan &amp;&amp; time; i++) {
+      median.push(time);
+
+      time = await this.getBlockTime(height - i - 1);
+    }
+
+    median.sort(cmp);
+
+    return median[median.length >>> 1];
+  }
+
+  /**
    * Sync with chain height.
    * @param {Number} height
    * @returns {Promise}
@@ -2165,13 +2446,13 @@ class WalletDB extends EventEmitter {
     assert(tip);
 
     await this.revert(tip.height);
-    await this.setTip(tip);
+    await this.setTip(tip, false);
   }
 
   /**
    * Revert TXDB to an older state.
    * @param {Number} target
-   * @returns {Promise}
+   * @returns {Promise&lt;Number>}
    */
 
   async revert(target) {
@@ -2185,29 +2466,43 @@ class WalletDB extends EventEmitter {
     let total = 0;
 
     await iter.each(async (key, value) => {
+      this.timeCache.start();
       const [height] = layout.b.decode(key);
       const block = MapRecord.decode(value);
+      this.logger.info('Reverting block: %d', height);
 
       for (const wid of block.wids) {
         const wallet = await this.get(wid);
         assert(wallet);
         total += await wallet.revert(height);
       }
+      this.timeCache.unpush(height);
+      this.timeCache.commit();
     });
 
     this.logger.info('Rolled back %d WalletDB transactions.', total);
+    return total;
   }
 
   /**
    * Add a block's transactions and write the new best hash.
    * @param {ChainEntry} entry
-   * @returns {Promise}
+   * @param {TX[]} txs
+   * @returns {Promise&lt;AddBlockResult?>}
    */
 
   async addBlock(entry, txs) {
     const unlock = await this.txLock.lock();
+
+    this.timeCache.start();
+
     try {
-      return await this._addBlock(entry, txs);
+      const result = await this._addBlock(entry, txs);
+      this.timeCache.commit();
+      return result;
+    } catch (e) {
+      this.timeCache.drop();
+      throw e;
     } finally {
       unlock();
     }
@@ -2218,7 +2513,7 @@ class WalletDB extends EventEmitter {
    * @private
    * @param {ChainEntry} entry
    * @param {TX[]} txs
-   * @returns {Promise}
+   * @returns {Promise&lt;AddBlockResult?>}
    */
 
   async _addBlock(entry, txs) {
@@ -2228,7 +2523,18 @@ class WalletDB extends EventEmitter {
       this.logger.warning(
         'WalletDB is connecting low blocks (%d).',
         tip.height);
-      return 0;
+
+      const block = await this.getBlock(tip.height);
+      assert(block);
+
+      if (!entry.hash.equals(block.hash)) {
+        // Maybe we run syncChain here.
+        this.logger.warning(
+          'Unusual reorg at low height (%d).',
+          tip.height);
+      }
+
+      return null;
     }
 
     if (tip.height >= this.network.block.slowHeight)
@@ -2242,12 +2548,43 @@ class WalletDB extends EventEmitter {
       // updated before the block was fully
       // processed (in the case of a crash).
       this.logger.warning('Already saw WalletDB block (%d).', tip.height);
+
+      const block = await this.getBlock(tip.height);
+      assert(block);
+
+      if (!entry.hash.equals(block.hash)) {
+        this.logger.warning(
+          'Unusual reorg at the same height (%d).',
+          tip.height);
+
+        // Maybe we can run syncChain here.
+        return null;
+      }
     } else if (tip.height !== this.state.height + 1) {
-      await this.scan(this.state.height);
-      return 0;
+      await this._rescan(this.state.height);
+      return null;
     }
 
-    const walletTxs = [];
+    let block;
+
+    if (tip.height > 2) {
+      block = await this.getBlock(tip.height - 1);
+      assert(block);
+    }
+
+    if (block &amp;&amp; !block.hash.equals(entry.prevBlock)) {
+      // We can trigger syncChain here as well.
+      this.logger.warning(
+        'Unusual reorg at height (%d).',
+        tip.height);
+
+      return null;
+    }
+
+    this.timeCache.push(tip.height, tip.time);
+
+    const walletTXs = [];
+    let filterUpdated = false;
 
     try {
       // We set the state as confirming so that
@@ -2255,39 +2592,66 @@ class WalletDB extends EventEmitter {
       // increment by one until the block is fully
       // added and the height is updated.
       this.confirming = true;
+
+      const mtp = await this.getMedianTime(tip.height - 1, tip.time);
+
       for (const tx of txs) {
-        if (await this._addTX(tx, tip)) {
-          walletTxs.push(tx);
+        /** @type {BlockExtraInfo} */
+        const extra = {
+          medianTime: mtp,
+          // txIndex will be recalculated in txdb. It will be local index
+          // to the wallet instead of the whole walletdb index.
+          // @see TXDB#add.
+          txIndex: 0
+        };
+
+        const txadded = await this._addTX(tx, tip, extra);
+
+        if (txadded) {
+          walletTXs.push(tx);
+
+          if (txadded.filterUpdated)
+            filterUpdated = true;
         }
       }
 
       // Sync the state to the new tip.
-      await this.setTip(tip);
+      // If we encountered wallet txs, we also trigger mark check.
+      await this.setTip(tip, walletTXs.length > 0);
     } finally {
       this.confirming = false;
     }
 
-    if (walletTxs.length > 0) {
+    if (walletTXs.length > 0) {
       this.logger.info('Connected WalletDB block %x (tx=%d).',
-        tip.hash, walletTxs.length);
+        tip.hash, walletTXs.length);
     }
 
-    this.emit('block connect', entry, walletTxs);
+    this.emit('block connect', entry, walletTXs);
 
-    return walletTxs.length;
+    return {
+      txs: walletTXs.length,
+      filterUpdated: filterUpdated
+    };
   }
 
   /**
    * Unconfirm a block's transactions
    * and write the new best hash (SPV version).
    * @param {ChainEntry} entry
-   * @returns {Promise}
+   * @returns {Promise&lt;Number>} - number of txs removed.
    */
 
   async removeBlock(entry) {
     const unlock = await this.txLock.lock();
     try {
-      return await this._removeBlock(entry);
+      this.timeCache.start();
+      const result = await this._removeBlock(entry);
+      this.timeCache.commit();
+      return result;
+    } catch (e) {
+      this.timeCache.drop();
+      throw e;
     } finally {
       unlock();
     }
@@ -2297,7 +2661,7 @@ class WalletDB extends EventEmitter {
    * Unconfirm a block's transactions.
    * @private
    * @param {ChainEntry} entry
-   * @returns {Promise}
+   * @returns {Promise&lt;Number>} - number of txs removed.
    */
 
   async _removeBlock(entry) {
@@ -2319,11 +2683,13 @@ class WalletDB extends EventEmitter {
     const prev = await this.getBlock(tip.height - 1);
     assert(prev);
 
+    this.timeCache.unpush(tip.height);
+
     // Get the map of block->wids.
     const map = await this.getBlockMap(tip.height);
 
     if (!map) {
-      await this.setTip(prev);
+      await this.setTip(prev, false);
       this.emit('block disconnect', entry);
       return 0;
     }
@@ -2337,7 +2703,7 @@ class WalletDB extends EventEmitter {
     }
 
     // Sync the state to the previous tip.
-    await this.setTip(prev);
+    await this.setTip(prev, false);
 
     this.logger.warning('Disconnected wallet block %x (tx=%d).',
       tip.hash, total);
@@ -2366,12 +2732,51 @@ class WalletDB extends EventEmitter {
       return;
     }
 
+    this.timeCache.start();
+
     try {
       await this._addBlock(entry, txs);
+      this.timeCache.commit();
     } catch (e) {
+      this.timeCache.drop();
       this.emit('error', e);
       throw e;
     }
+  }
+
+  /**
+   * Rescan a block interactively.
+   * @param {ChainEntry} entry
+   * @param {TX[]} txs
+   * @returns {Promise&lt;ScanAction>} - interactive action
+   */
+
+  async rescanBlockInteractive(entry, txs) {
+    if (!this.rescanning)
+      throw new Error(`WDB: Unsolicited rescan block: ${entry.height}.`);
+
+    if (entry.height > this.state.height + 1)
+      throw new Error(`WDB: Rescan block too high: ${entry.height}.`);
+
+    const blockAdded = await this._addBlock(entry, txs);
+
+    if (!blockAdded)
+      throw new Error('WDB: Block not added.');
+
+    if (blockAdded.filterUpdated) {
+      // We remove block, because adding the same block twice, will ignore
+      // already indexed transactions. This handles the case where single
+      // transaction has undiscovered outputs.
+      await this._removeBlock(entry);
+
+      return {
+        type: scanActions.REPEAT
+      };
+    }
+
+    return {
+      type: scanActions.NEXT
+    };
   }
 
   /**
@@ -2379,7 +2784,7 @@ class WalletDB extends EventEmitter {
    * to wallet IDs, potentially store orphans, resolve
    * orphans, or confirm a transaction.
    * @param {TX} tx
-   * @returns {Promise}
+   * @returns {Promise&lt;AddTXResult?>}
    */
 
   async addTX(tx) {
@@ -2395,11 +2800,12 @@ class WalletDB extends EventEmitter {
    * Add a transaction to the database without a lock.
    * @private
    * @param {TX} tx
-   * @param {BlockMeta} block
-   * @returns {Promise}
+   * @param {BlockMeta} [block]
+   * @param {BlockExtraInfo} [extra]
+   * @returns {Promise&lt;AddTXResult?>}
    */
 
-  async _addTX(tx, block) {
+  async _addTX(tx, block, extra) {
     const wids = await this.getWalletsByTX(tx);
 
     assert(!tx.mutable, 'WDB: Cannot add mutable TX.');
@@ -2407,14 +2813,12 @@ class WalletDB extends EventEmitter {
     if (!wids)
       return null;
 
-    if (block &amp;&amp; !this.state.marked)
-      await this.markState(block);
-
     this.logger.info(
       'Incoming transaction for %d wallets in WalletDB (%s).',
       wids.size, tx.txid());
 
     let result = false;
+    let filterUpdated = false;
 
     // Insert the transaction
     // into every matching wallet.
@@ -2423,18 +2827,27 @@ class WalletDB extends EventEmitter {
 
       assert(wallet);
 
-      if (await wallet.add(tx, block)) {
+      const wadded = await wallet.add(tx, block, extra);
+
+      if (wadded) {
+        result = true;
+
+        if (wadded.derived.length > 0)
+          filterUpdated = true;
+
         this.logger.info(
           'Added transaction to wallet in WalletDB: %s (%d).',
           wallet.id, wid);
-        result = true;
       }
     }
 
     if (!result)
       return null;
 
-    return wids;
+    return {
+      wids,
+      filterUpdated
+    };
   }
 
   /**
@@ -2496,7 +2909,12 @@ class WalletOptions {
     this.spv = false;
     this.wipeNoReally = false;
     this.walletMigrate = -1;
-    this.icannlockup = false;
+    this.icannlockup = true;
+    this.migrateNoRescan = false;
+    this.preloadAll = false;
+    this.maxHistoryTXs = 100;
+
+    this.nowFn = util.now;
 
     if (options)
       this.fromOptions(options);
@@ -2584,6 +3002,27 @@ class WalletOptions {
       this.icannlockup = options.icannlockup;
     }
 
+    if (options.migrateNoRescan != null) {
+      assert(typeof options.migrateNoRescan === 'boolean');
+      this.migrateNoRescan = options.migrateNoRescan;
+    }
+
+    if (options.preloadAll != null) {
+      assert(typeof options.preloadAll === 'boolean');
+      this.preloadAll = options.preloadAll;
+    }
+
+    if (options.nowFn != null) {
+      assert(typeof options.nowFn === 'function');
+      this.nowFn = options.nowFn;
+    }
+
+    if (options.maxHistoryTXs != null) {
+      assert((options.maxHistoryTXs >>> 0) === options.maxHistoryTXs);
+      assert(options.maxHistoryTXs > 0);
+      this.maxHistoryTXs = options.maxHistoryTXs;
+    }
+
     return this;
   }
 
@@ -2615,10 +3054,19 @@ function fromString(str) {
   return buf;
 }
 
+/**
+ * @param {Buffer} buf
+ * @returns {String}
+ */
+
 function toString(buf) {
   assert(buf.length > 0);
   assert(buf[0] === buf.length - 1);
   return buf.toString('ascii', 1, buf.length);
+}
+
+function cmp(a, b) {
+  return a - b;
 }
 
 /*
@@ -2636,13 +3084,13 @@ module.exports = WalletDB;
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-blockchain.html">blockchain</a></li><li><a href="module-blockchain_common.html">blockchain/common</a></li><li><a href="module-blockstore.html">blockstore</a></li><li><a href="module-blockstore_common.html">blockstore/common</a></li><li><a href="module-blockstore_records.html">blockstore/records</a></li><li><a href="module-client.html">client</a></li><li><a href="module-coins.html">coins</a></li><li><a href="module-covenants.html">covenants</a></li><li><a href="module-dns_common.html">dns/common</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-hd.html">hd</a></li><li><a href="module-hsd.html">hsd</a></li><li><a href="module-mempool.html">mempool</a></li><li><a href="module-mining.html">mining</a></li><li><a href="module-mining_common.html">mining/common</a></li><li><a href="module-net.html">net</a></li><li><a href="module-net_bip152.html">net/bip152</a></li><li><a href="module-net_common.html">net/common</a></li><li><a href="module-net_packets.html">net/packets</a></li><li><a href="module-node.html">node</a></li><li><a href="module-primitives.html">primitives</a></li><li><a href="module-protocol.html">protocol</a></li><li><a href="module-protocol_consensus.html">protocol/consensus</a></li><li><a href="module-protocol_errors.html">protocol/errors</a></li><li><a href="module-protocol_networks.html">protocol/networks</a></li><li><a href="module-protocol_policy.html">protocol/policy</a></li><li><a href="module-script.html">script</a></li><li><a href="module-script_common.html">script/common</a></li><li><a href="module-ui.html">ui</a></li><li><a href="module-utils.html">utils</a></li><li><a href="module-utils_util.html">utils/util</a></li><li><a href="module-wallet.html">wallet</a></li><li><a href="module-wallet_common.html">wallet/common</a></li><li><a href="module-wallet_plugin.html">wallet/plugin</a></li><li><a href="module-wallet_records.html">wallet/records</a></li><li><a href="module-workers.html">workers</a></li><li><a href="module-workers_jobs.html">workers/jobs</a></li><li><a href="module-workers_packets.html">workers/packets</a></li></ul><h3>Classes</h3><ul><li><a href="AirdropKey.html">AirdropKey</a></li><li><a href="AirdropProof.html">AirdropProof</a></li><li><a href="BidReveal.html">BidReveal</a></li><li><a href="BitField.html">BitField</a></li><li><a href="BitView.html">BitView</a></li><li><a href="BlindBid.html">BlindBid</a></li><li><a href="BlindValue.html">BlindValue</a></li><li><a href="BlockProof.html">BlockProof</a></li><li><a href="Brontide.html">Brontide</a></li><li><a href="BrontideStream.html">BrontideStream</a></li><li><a href="ChainFlags.html">ChainFlags</a></li><li><a href="ChainState.html">ChainState</a></li><li><a href="CipherState.html">CipherState</a></li><li><a href="Claim.html">Claim</a></li><li><a href="DetailsMember.html">DetailsMember</a></li><li><a href="DS.html">DS</a></li><li><a href="Field.html">Field</a></li><li><a href="GLUE4.html">GLUE4</a></li><li><a href="GLUE6.html">GLUE6</a></li><li><a href="HandshakeState.html">HandshakeState</a></li><li><a href="HashList.html">HashList</a></li><li><a href="LockedUp.html">LockedUp</a></li><li><a href="MigrateAccountLookahead.html">MigrateAccountLookahead</a></li><li><a href="MigrateBlockStore.html">MigrateBlockStore</a></li><li><a href="MigrateChainState.html">MigrateChainState</a></li><li><a href="MigrateChangeAddress.html">MigrateChangeAddress</a></li><li><a href="MigrateMigrations.html">MigrateMigrations</a></li><li><a href="MigrateTreeState.html">MigrateTreeState</a></li><li><a href="module.migrations.MigrationState.html">MigrationState</a></li><li><a href="module-blockchain.Chain.html">Chain</a></li><li><a href="module-blockchain.ChainDB.html">ChainDB</a></li><li><a href="module-blockchain.ChainEntry.html">ChainEntry</a></li><li><a href="module-blockchain.ChainMigrator.html">ChainMigrator</a></li><li><a href="module-blockchain.ChainMigratorOptions.html">ChainMigratorOptions</a></li><li><a href="module-blockchain.ChainOptions.html">ChainOptions</a></li><li><a href="module-blockchain.DeploymentState.html">DeploymentState</a></li><li><a href="module-blockchain.WalletMigrationResult.html">WalletMigrationResult</a></li><li><a href="module-blockchain.WalletMigrator.html">WalletMigrator</a></li><li><a href="module-blockstore.AbstractBatch.html">AbstractBatch</a></li><li><a href="module-blockstore.AbstractBlockStore.html">AbstractBlockStore</a></li><li><a href="module-blockstore.FileBatch.html">FileBatch</a></li><li><a href="module-blockstore.LevelBatch.html">LevelBatch</a></li><li><a href="module-blockstore_records-BlockRecord.html">BlockRecord</a></li><li><a href="module-blockstore_records-FileRecord.html">FileRecord</a></li><li><a href="module-blockstore_FileBlockStore.html">blockstore:FileBlockStore</a></li><li><a href="module-blockstore_LevelBlockStore.html">blockstore:LevelBlockStore</a></li><li><a href="module-client.NodeClient.html">NodeClient</a></li><li><a href="module-client.WalletClient.html">WalletClient</a></li><li><a href="module-coins.CoinEntry.html">CoinEntry</a></li><li><a href="module-coins.Coins.html">Coins</a></li><li><a href="module-coins.CoinView.html">CoinView</a></li><li><a href="module-coins.UndoCoins.html">UndoCoins</a></li><li><a href="module-currency.Amount.html">Amount</a></li><li><a href="module-errors-CriticalError.html">CriticalError</a></li><li><a href="module-hd.Mnemonic.html">Mnemonic</a></li><li><a href="module-hd.PrivateKey.html">PrivateKey</a></li><li><a href="module-hd.PublicKey.html">PublicKey</a></li><li><a href="module-http.HTTPOptions.html">HTTPOptions</a></li><li><a href="module-http.RPC.html">RPC</a></li><li><a href="module-http.Server.html">Server</a></li><li><a href="module-http.TransactionOptions.html">TransactionOptions</a></li><li><a href="module-mempool.AirdropEntry.html">AirdropEntry</a></li><li><a href="module-mempool.ClaimEntry.html">ClaimEntry</a></li><li><a href="module-mempool.ConfirmStats.html">ConfirmStats</a></li><li><a href="module-mempool.Mempool.html">Mempool</a></li><li><a href="module-mempool.MempoolEntry.html">MempoolEntry</a></li><li><a href="module-mempool.MempoolOptions.html">MempoolOptions</a></li><li><a href="module-mempool.PolicyEstimator.html">PolicyEstimator</a></li><li><a href="module-migrations.AbstractMigration.html">AbstractMigration</a></li><li><a href="module-migrations.MigrationResult.html">MigrationResult</a></li><li><a href="module-migrations.Migrator.html">Migrator</a></li><li><a href="module-mining.BlockAirdrop.html">BlockAirdrop</a></li><li><a href="module-mining.BlockClaim.html">BlockClaim</a></li><li><a href="module-mining.BlockEntry.html">BlockEntry</a></li><li><a href="module-mining.BlockTemplate.html">BlockTemplate</a></li><li><a href="module-mining.CPUMiner.html">CPUMiner</a></li><li><a href="module-mining.Miner.html">Miner</a></li><li><a href="module-mining.MinerOptions.html">MinerOptions</a></li><li><a href="module-net.BroadcastItem.html">BroadcastItem</a></li><li><a href="module-net.Framer.html">Framer</a></li><li><a href="module-net.HostEntry.html">HostEntry</a></li><li><a href="module-net.HostList.html">HostList</a></li><li><a href="module-net.HostListOptions.html">HostListOptions</a></li><li><a href="module-net.LocalAddress.html">LocalAddress</a></li><li><a href="module-net.NetAddress.html">NetAddress</a></li><li><a href="module-net.Parser.html">Parser</a></li><li><a href="module-net.Peer.html">Peer</a></li><li><a href="module-net.PeerList.html">PeerList</a></li><li><a href="module-net.PeerOptions.html">PeerOptions</a></li><li><a href="module-net.Pool.html">Pool</a></li><li><a href="module-net.PoolOptions.html">PoolOptions</a></li><li><a href="module-net_bip152-CompactBlock.html">CompactBlock</a></li><li><a href="module-net_bip152-TXRequest.html">TXRequest</a></li><li><a href="module-net_bip152-TXResponse.html">TXResponse</a></li><li><a href="module-net_packets-AddrPacket.html">AddrPacket</a></li><li><a href="module-net_packets-AirdropPacket.html">AirdropPacket</a></li><li><a href="module-net_packets-BlockPacket.html">BlockPacket</a></li><li><a href="module-net_packets-BlockTxnPacket.html">BlockTxnPacket</a></li><li><a href="module-net_packets-ClaimPacket.html">ClaimPacket</a></li><li><a href="module-net_packets-CmpctBlockPacket.html">CmpctBlockPacket</a></li><li><a href="module-net_packets-FeeFilterPacket.html">FeeFilterPacket</a></li><li><a href="module-net_packets-FilterAddPacket.html">FilterAddPacket</a></li><li><a href="module-net_packets-FilterClearPacket.html">FilterClearPacket</a></li><li><a href="module-net_packets-FilterLoadPacket.html">FilterLoadPacket</a></li><li><a href="module-net_packets-GetAddrPacket.html">GetAddrPacket</a></li><li><a href="module-net_packets-GetBlocksPacket.html">GetBlocksPacket</a></li><li><a href="module-net_packets-GetBlockTxnPacket.html">GetBlockTxnPacket</a></li><li><a href="module-net_packets-GetDataPacket.html">GetDataPacket</a></li><li><a href="module-net_packets-GetHeadersPacket.html">GetHeadersPacket</a></li><li><a href="module-net_packets-GetProofPacket.html">GetProofPacket</a></li><li><a href="module-net_packets-HeadersPacket.html">HeadersPacket</a></li><li><a href="module-net_packets-InvPacket.html">InvPacket</a></li><li><a href="module-net_packets-MempoolPacket.html">MempoolPacket</a></li><li><a href="module-net_packets-MerkleBlockPacket.html">MerkleBlockPacket</a></li><li><a href="module-net_packets-NotFoundPacket.html">NotFoundPacket</a></li><li><a href="module-net_packets-Packet.html">Packet</a></li><li><a href="module-net_packets-PingPacket.html">PingPacket</a></li><li><a href="module-net_packets-PongPacket.html">PongPacket</a></li><li><a href="module-net_packets-ProofPacket.html">ProofPacket</a></li><li><a href="module-net_packets-RejectPacket.html">RejectPacket</a></li><li><a href="module-net_packets-SendCmpctPacket.html">SendCmpctPacket</a></li><li><a href="module-net_packets-SendHeadersPacket.html">SendHeadersPacket</a></li><li><a href="module-net_packets-TXPacket.html">TXPacket</a></li><li><a href="module-net_packets-UnknownPacket.html">UnknownPacket</a></li><li><a href="module-net_packets-VerackPacket.html">VerackPacket</a></li><li><a href="module-net_packets-VersionPacket.html">VersionPacket</a></li><li><a href="module-node.FullNode.html">FullNode</a></li><li><a href="module-node.Node.html">Node</a></li><li><a href="module-node.NodeClient.html">NodeClient</a></li><li><a href="module-node.NullClient.html">NullClient</a></li><li><a href="module-node.SPVNode.html">SPVNode</a></li><li><a href="module-primitives.AbstractBlock.html">AbstractBlock</a></li><li><a href="module-primitives.Address.html">Address</a></li><li><a href="module-primitives.Block.html">Block</a></li><li><a href="module-primitives.Coin.html">Coin</a></li><li><a href="module-primitives.CoinSelector.html">CoinSelector</a></li><li><a href="module-primitives.Covenant.html">Covenant</a></li><li><a href="module-primitives.Headers.html">Headers</a></li><li><a href="module-primitives.Input.html">Input</a></li><li><a href="module-primitives.InvItem.html">InvItem</a></li><li><a href="module-primitives.KeyRing.html">KeyRing</a></li><li><a href="module-primitives.MemBlock.html">MemBlock</a></li><li><a href="module-primitives.MerkleBlock.html">MerkleBlock</a></li><li><a href="module-primitives.MTX.html">MTX</a></li><li><a href="module-primitives.Outpoint.html">Outpoint</a></li><li><a href="module-primitives.Output.html">Output</a></li><li><a href="module-primitives.TX.html">TX</a></li><li><a href="module-primitives.TXMeta.html">TXMeta</a></li><li><a href="module-protocol.Network.html">Network</a></li><li><a href="module-protocol.TimeData.html">TimeData</a></li><li><a href="module-protocol_errors-VerifyError.html">VerifyError</a></li><li><a href="module-script.Opcode.html">Opcode</a></li><li><a href="module-script.Script.html">Script</a></li><li><a href="module-script.ScriptError.html">ScriptError</a></li><li><a href="module-script.ScriptNum.html">ScriptNum</a></li><li><a href="module-script.SigCache.html">SigCache</a></li><li><a href="module-script.Stack.html">Stack</a></li><li><a href="module-script.Witness.html">Witness</a></li><li><a href="module-ui.URI.html">URI</a></li><li><a href="module-wallet.Account.html">Account</a></li><li><a href="module-wallet.Balance.html">Balance</a></li><li><a href="module-wallet.BlockRecord.html">BlockRecord</a></li><li><a href="module-wallet.Credit.html">Credit</a></li><li><a href="module-wallet.Details.html">Details</a></li><li><a href="module-wallet.HTTP.html">HTTP</a></li><li><a href="module-wallet.MasterKey.html">MasterKey</a></li><li><a href="module-wallet.Path.html">Path</a></li><li><a href="module-wallet.Paths.html">Paths</a></li><li><a href="module-wallet.RPC.html">RPC</a></li><li><a href="module-wallet.TXDB.html">TXDB</a></li><li><a href="module-wallet.Wallet.html">Wallet</a></li><li><a href="module-wallet.WalletCoinView.html">WalletCoinView</a></li><li><a href="module-wallet.WalletDB.html">WalletDB</a></li><li><a href="module-wallet.WalletKey.html">WalletKey</a></li><li><a href="module-wallet.WalletMigratorOptions.html">WalletMigratorOptions</a></li><li><a href="module-wallet.WalletOptions.html">WalletOptions</a></li><li><a href="module-wallet_plugin-Plugin.html">Plugin</a></li><li><a href="module-wallet_records-BlockMeta.html">BlockMeta</a></li><li><a href="module-wallet_records-ChainState.html">ChainState</a></li><li><a href="module-wallet_records-MapRecord.html">MapRecord</a></li><li><a href="module-wallet_records-TXRecord.html">TXRecord</a></li><li><a href="module-workers.Framer.html">Framer</a></li><li><a href="module-workers.Master.html">Master</a></li><li><a href="module-workers.Parent.html">Parent</a></li><li><a href="module-workers.Parser.html">Parser</a></li><li><a href="module-workers.Worker.html">Worker</a></li><li><a href="module-workers.WorkerPool.html">WorkerPool</a></li><li><a href="module-workers_packets-CheckInputPacket.html">CheckInputPacket</a></li><li><a href="module-workers_packets-CheckInputResultPacket.html">CheckInputResultPacket</a></li><li><a href="module-workers_packets-CheckPacket.html">CheckPacket</a></li><li><a href="module-workers_packets-CheckResultPacket.html">CheckResultPacket</a></li><li><a href="module-workers_packets-ECSignPacket.html">ECSignPacket</a></li><li><a href="module-workers_packets-ECSignResultPacket.html">ECSignResultPacket</a></li><li><a href="module-workers_packets-ECVerifyPacket.html">ECVerifyPacket</a></li><li><a href="module-workers_packets-ECVerifyResultPacket.html">ECVerifyResultPacket</a></li><li><a href="module-workers_packets-EnvPacket.html">EnvPacket</a></li><li><a href="module-workers_packets-ErrorPacket.html">ErrorPacket</a></li><li><a href="module-workers_packets-ErrorResultPacket.html">ErrorResultPacket</a></li><li><a href="module-workers_packets-EventPacket.html">EventPacket</a></li><li><a href="module-workers_packets-LogPacket.html">LogPacket</a></li><li><a href="module-workers_packets-MinePacket.html">MinePacket</a></li><li><a href="module-workers_packets-MineResultPacket.html">MineResultPacket</a></li><li><a href="module-workers_packets-Packet.html">Packet</a></li><li><a href="module-workers_packets-ScryptPacket.html">ScryptPacket</a></li><li><a href="module-workers_packets-ScryptResultPacket.html">ScryptResultPacket</a></li><li><a href="module-workers_packets-SignInputPacket.html">SignInputPacket</a></li><li><a href="module-workers_packets-SignInputResultPacket.html">SignInputResultPacket</a></li><li><a href="module-workers_packets-SignPacket.html">SignPacket</a></li><li><a href="module-workers_packets-SignResultPacket.html">SignResultPacket</a></li><li><a href="NameDelta.html">NameDelta</a></li><li><a href="NameState.html">NameState</a></li><li><a href="NS.html">NS</a></li><li><a href="Ownership.html">Ownership</a></li><li><a href="Proof.html">Proof</a></li><li><a href="ProofData.html">ProofData</a></li><li><a href="RecursiveServer.html">RecursiveServer</a></li><li><a href="Reserved.html">Reserved</a></li><li><a href="Resource.html">Resource</a></li><li><a href="RootCache.html">RootCache</a></li><li><a href="RootServer.html">RootServer</a></li><li><a href="Seeder.html">Seeder</a></li><li><a href="SlidingWindow.html">SlidingWindow</a></li><li><a href="StateCache.html">StateCache</a></li><li><a href="SymmetricState.html">SymmetricState</a></li><li><a href="SYNTH4.html">SYNTH4</a></li><li><a href="SYNTH6.html">SYNTH6</a></li><li><a href="TXT.html">TXT</a></li><li><a href="Wallet.html">Wallet</a></li><li><a href="WalletNode.html">WalletNode</a></li></ul><h3>Global</h3><ul><li><a href="global.html#bindExit">bindExit</a></li><li><a href="global.html#checksig">checksig</a></li><li><a href="global.html#decode">decode</a></li><li><a href="global.html#encode">encode</a></li><li><a href="global.html#fromFloat">fromFloat</a></li><li><a href="global.html#groupKey">groupKey</a></li><li><a href="global.html#insert">insert</a></li><li><a href="global.html#listenExit">listenExit</a></li><li><a href="global.html#migrationLayout">migrationLayout</a></li><li><a href="global.html#oldLayout">oldLayout</a></li><li><a href="global.html#remove">remove</a></li><li><a href="global.html#search">search</a></li><li><a href="global.html#toFloat">toFloat</a></li><li><a href="global.html#validateKey">validateKey</a></li><li><a href="global.html#validateSignature">validateSignature</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-blockchain.html">blockchain</a></li><li><a href="module-blockchain_common.html">blockchain/common</a></li><li><a href="module-blockstore.html">blockstore</a></li><li><a href="module-blockstore_common.html">blockstore/common</a></li><li><a href="module-blockstore_records.html">blockstore/records</a></li><li><a href="module-client.html">client</a></li><li><a href="module-coins.html">coins</a></li><li><a href="module-covenants.html">covenants</a></li><li><a href="module-dns_common.html">dns/common</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-hd.html">hd</a></li><li><a href="module-hsd.html">hsd</a></li><li><a href="module-mempool.html">mempool</a></li><li><a href="module-mining.html">mining</a></li><li><a href="module-mining_common.html">mining/common</a></li><li><a href="module-net.html">net</a></li><li><a href="module-net_bip152.html">net/bip152</a></li><li><a href="module-net_common.html">net/common</a></li><li><a href="module-net_packets.html">net/packets</a></li><li><a href="module-node.html">node</a></li><li><a href="module-primitives.html">primitives</a></li><li><a href="module-protocol.html">protocol</a></li><li><a href="module-protocol_consensus.html">protocol/consensus</a></li><li><a href="module-protocol_errors.html">protocol/errors</a></li><li><a href="module-protocol_networks.html">protocol/networks</a></li><li><a href="module-protocol_policy.html">protocol/policy</a></li><li><a href="module-script.html">script</a></li><li><a href="module-script_common.html">script/common</a></li><li><a href="module-ui.html">ui</a></li><li><a href="module-utils.html">utils</a></li><li><a href="module-utils_util.html">utils/util</a></li><li><a href="module-wallet.html">wallet</a></li><li><a href="module-wallet_common.html">wallet/common</a></li><li><a href="module-wallet_plugin.html">wallet/plugin</a></li><li><a href="module-wallet_records.html">wallet/records</a></li><li><a href="module-workers.html">workers</a></li><li><a href="module-workers_jobs.html">workers/jobs</a></li><li><a href="module-workers_packets.html">workers/packets</a></li></ul><h3>Classes</h3><ul><li><a href="AirdropKey.html">AirdropKey</a></li><li><a href="AirdropProof.html">AirdropProof</a></li><li><a href="BidReveal.html">BidReveal</a></li><li><a href="BitField.html">BitField</a></li><li><a href="BitView.html">BitView</a></li><li><a href="BlindBid.html">BlindBid</a></li><li><a href="BlindValue.html">BlindValue</a></li><li><a href="BlockProof.html">BlockProof</a></li><li><a href="Brontide.html">Brontide</a></li><li><a href="BrontideStream.html">BrontideStream</a></li><li><a href="ChainFlags.html">ChainFlags</a></li><li><a href="ChainState.html">ChainState</a></li><li><a href="CipherState.html">CipherState</a></li><li><a href="Claim.html">Claim</a></li><li><a href="ContractState.html">ContractState</a></li><li><a href="DetailsMember.html">DetailsMember</a></li><li><a href="DS.html">DS</a></li><li><a href="Field.html">Field</a></li><li><a href="GLUE4.html">GLUE4</a></li><li><a href="GLUE6.html">GLUE6</a></li><li><a href="HandshakeState.html">HandshakeState</a></li><li><a href="HashList.html">HashList</a></li><li><a href="LockedUp.html">LockedUp</a></li><li><a href="MigrateAccountLookahead.html">MigrateAccountLookahead</a></li><li><a href="MigrateBidRevealEntries.html">MigrateBidRevealEntries</a></li><li><a href="MigrateBlockStore.html">MigrateBlockStore</a></li><li><a href="MigrateChainState.html">MigrateChainState</a></li><li><a href="MigrateChangeAddress.html">MigrateChangeAddress</a></li><li><a href="MigrateMigrations.html">MigrateMigrations</a></li><li><a href="MigrateTreeState.html">MigrateTreeState</a></li><li><a href="MigrateTXCountTimeIndex.html">MigrateTXCountTimeIndex</a></li><li><a href="MigrateTXDBBalances.html">MigrateTXDBBalances</a></li><li><a href="module.migrations.MigrationState.html">MigrationState</a></li><li><a href="module-blockchain.Chain.html">Chain</a></li><li><a href="module-blockchain.ChainDB.html">ChainDB</a></li><li><a href="module-blockchain.ChainEntry.html">ChainEntry</a></li><li><a href="module-blockchain.ChainMigrator.html">ChainMigrator</a></li><li><a href="module-blockchain.ChainMigratorOptions.html">ChainMigratorOptions</a></li><li><a href="module-blockchain.ChainOptions.html">ChainOptions</a></li><li><a href="module-blockchain.DeploymentState.html">DeploymentState</a></li><li><a href="module-blockchain.WalletMigrationResult.html">WalletMigrationResult</a></li><li><a href="module-blockchain.WalletMigrator.html">WalletMigrator</a></li><li><a href="module-blockstore.AbstractBatch.html">AbstractBatch</a></li><li><a href="module-blockstore.AbstractBlockStore.html">AbstractBlockStore</a></li><li><a href="module-blockstore.FileBatch.html">FileBatch</a></li><li><a href="module-blockstore.LevelBatch.html">LevelBatch</a></li><li><a href="module-blockstore_records-BlockRecord.html">BlockRecord</a></li><li><a href="module-blockstore_records-FileRecord.html">FileRecord</a></li><li><a href="module-blockstore_FileBlockStore.html">blockstore:FileBlockStore</a></li><li><a href="module-blockstore_LevelBlockStore.html">blockstore:LevelBlockStore</a></li><li><a href="module-client.NodeClient.html">NodeClient</a></li><li><a href="module-client.WalletClient.html">WalletClient</a></li><li><a href="module-coins.CoinEntry.html">CoinEntry</a></li><li><a href="module-coins.Coins.html">Coins</a></li><li><a href="module-coins.CoinView.html">CoinView</a></li><li><a href="module-coins.UndoCoins.html">UndoCoins</a></li><li><a href="module-currency.Amount.html">Amount</a></li><li><a href="module-errors-CriticalError.html">CriticalError</a></li><li><a href="module-hd.Mnemonic.html">Mnemonic</a></li><li><a href="module-hd.PrivateKey.html">PrivateKey</a></li><li><a href="module-hd.PublicKey.html">PublicKey</a></li><li><a href="module-http.HTTPOptions.html">HTTPOptions</a></li><li><a href="module-http.RPC.html">RPC</a></li><li><a href="module-http.Server.html">Server</a></li><li><a href="module-http.TransactionOptions.html">TransactionOptions</a></li><li><a href="module-mempool.AirdropEntry.html">AirdropEntry</a></li><li><a href="module-mempool.ClaimEntry.html">ClaimEntry</a></li><li><a href="module-mempool.ConfirmStats.html">ConfirmStats</a></li><li><a href="module-mempool.Mempool.html">Mempool</a></li><li><a href="module-mempool.MempoolEntry.html">MempoolEntry</a></li><li><a href="module-mempool.MempoolOptions.html">MempoolOptions</a></li><li><a href="module-mempool.PolicyEstimator.html">PolicyEstimator</a></li><li><a href="module-migrations.AbstractMigration.html">AbstractMigration</a></li><li><a href="module-migrations.MigrationResult.html">MigrationResult</a></li><li><a href="module-migrations.Migrator.html">Migrator</a></li><li><a href="module-mining.BlockAirdrop.html">BlockAirdrop</a></li><li><a href="module-mining.BlockClaim.html">BlockClaim</a></li><li><a href="module-mining.BlockEntry.html">BlockEntry</a></li><li><a href="module-mining.BlockTemplate.html">BlockTemplate</a></li><li><a href="module-mining.CPUMiner.html">CPUMiner</a></li><li><a href="module-mining.Miner.html">Miner</a></li><li><a href="module-mining.MinerOptions.html">MinerOptions</a></li><li><a href="module-net.BroadcastItem.html">BroadcastItem</a></li><li><a href="module-net.Framer.html">Framer</a></li><li><a href="module-net.HostEntry.html">HostEntry</a></li><li><a href="module-net.HostList.html">HostList</a></li><li><a href="module-net.HostListOptions.html">HostListOptions</a></li><li><a href="module-net.LocalAddress.html">LocalAddress</a></li><li><a href="module-net.NetAddress.html">NetAddress</a></li><li><a href="module-net.Parser.html">Parser</a></li><li><a href="module-net.Peer.html">Peer</a></li><li><a href="module-net.PeerList.html">PeerList</a></li><li><a href="module-net.PeerOptions.html">PeerOptions</a></li><li><a href="module-net.Pool.html">Pool</a></li><li><a href="module-net.PoolOptions.html">PoolOptions</a></li><li><a href="module-net_bip152-CompactBlock.html">CompactBlock</a></li><li><a href="module-net_bip152-TXRequest.html">TXRequest</a></li><li><a href="module-net_bip152-TXResponse.html">TXResponse</a></li><li><a href="module-net_packets-AddrPacket.html">AddrPacket</a></li><li><a href="module-net_packets-AirdropPacket.html">AirdropPacket</a></li><li><a href="module-net_packets-BlockPacket.html">BlockPacket</a></li><li><a href="module-net_packets-BlockTxnPacket.html">BlockTxnPacket</a></li><li><a href="module-net_packets-ClaimPacket.html">ClaimPacket</a></li><li><a href="module-net_packets-CmpctBlockPacket.html">CmpctBlockPacket</a></li><li><a href="module-net_packets-FeeFilterPacket.html">FeeFilterPacket</a></li><li><a href="module-net_packets-FilterAddPacket.html">FilterAddPacket</a></li><li><a href="module-net_packets-FilterClearPacket.html">FilterClearPacket</a></li><li><a href="module-net_packets-FilterLoadPacket.html">FilterLoadPacket</a></li><li><a href="module-net_packets-GetAddrPacket.html">GetAddrPacket</a></li><li><a href="module-net_packets-GetBlocksPacket.html">GetBlocksPacket</a></li><li><a href="module-net_packets-GetBlockTxnPacket.html">GetBlockTxnPacket</a></li><li><a href="module-net_packets-GetDataPacket.html">GetDataPacket</a></li><li><a href="module-net_packets-GetHeadersPacket.html">GetHeadersPacket</a></li><li><a href="module-net_packets-GetProofPacket.html">GetProofPacket</a></li><li><a href="module-net_packets-HeadersPacket.html">HeadersPacket</a></li><li><a href="module-net_packets-InvPacket.html">InvPacket</a></li><li><a href="module-net_packets-MempoolPacket.html">MempoolPacket</a></li><li><a href="module-net_packets-MerkleBlockPacket.html">MerkleBlockPacket</a></li><li><a href="module-net_packets-NotFoundPacket.html">NotFoundPacket</a></li><li><a href="module-net_packets-Packet.html">Packet</a></li><li><a href="module-net_packets-PingPacket.html">PingPacket</a></li><li><a href="module-net_packets-PongPacket.html">PongPacket</a></li><li><a href="module-net_packets-ProofPacket.html">ProofPacket</a></li><li><a href="module-net_packets-RejectPacket.html">RejectPacket</a></li><li><a href="module-net_packets-SendCmpctPacket.html">SendCmpctPacket</a></li><li><a href="module-net_packets-SendHeadersPacket.html">SendHeadersPacket</a></li><li><a href="module-net_packets-TXPacket.html">TXPacket</a></li><li><a href="module-net_packets-UnknownPacket.html">UnknownPacket</a></li><li><a href="module-net_packets-VerackPacket.html">VerackPacket</a></li><li><a href="module-net_packets-VersionPacket.html">VersionPacket</a></li><li><a href="module-node.FullNode.html">FullNode</a></li><li><a href="module-node.Node.html">Node</a></li><li><a href="module-node.NodeClient.html">NodeClient</a></li><li><a href="module-node.NullClient.html">NullClient</a></li><li><a href="module-node.SPVNode.html">SPVNode</a></li><li><a href="module-primitives.AbstractBlock.html">AbstractBlock</a></li><li><a href="module-primitives.Address.html">Address</a></li><li><a href="module-primitives.Block.html">Block</a></li><li><a href="module-primitives.Coin.html">Coin</a></li><li><a href="module-primitives.CoinSelector.html">CoinSelector</a></li><li><a href="module-primitives.Covenant.html">Covenant</a></li><li><a href="module-primitives.Headers.html">Headers</a></li><li><a href="module-primitives.Input.html">Input</a></li><li><a href="module-primitives.InvItem.html">InvItem</a></li><li><a href="module-primitives.KeyRing.html">KeyRing</a></li><li><a href="module-primitives.MemBlock.html">MemBlock</a></li><li><a href="module-primitives.MerkleBlock.html">MerkleBlock</a></li><li><a href="module-primitives.MTX.html">MTX</a></li><li><a href="module-primitives.Outpoint.html">Outpoint</a></li><li><a href="module-primitives.Output.html">Output</a></li><li><a href="module-primitives.TX.html">TX</a></li><li><a href="module-primitives.TXMeta.html">TXMeta</a></li><li><a href="module-protocol.Network.html">Network</a></li><li><a href="module-protocol.TimeData.html">TimeData</a></li><li><a href="module-protocol_errors-VerifyError.html">VerifyError</a></li><li><a href="module-script.Opcode.html">Opcode</a></li><li><a href="module-script.Script.html">Script</a></li><li><a href="module-script.ScriptError.html">ScriptError</a></li><li><a href="module-script.ScriptNum.html">ScriptNum</a></li><li><a href="module-script.SigCache.html">SigCache</a></li><li><a href="module-script.Stack.html">Stack</a></li><li><a href="module-script.Witness.html">Witness</a></li><li><a href="module-ui.URI.html">URI</a></li><li><a href="module-wallet.Account.html">Account</a></li><li><a href="module-wallet.Balance.html">Balance</a></li><li><a href="module-wallet.BlockRecord.html">BlockRecord</a></li><li><a href="module-wallet.Credit.html">Credit</a></li><li><a href="module-wallet.Details.html">Details</a></li><li><a href="module-wallet.HTTP.html">HTTP</a></li><li><a href="module-wallet.MasterKey.html">MasterKey</a></li><li><a href="module-wallet.Path.html">Path</a></li><li><a href="module-wallet.Paths.html">Paths</a></li><li><a href="module-wallet.RPC.html">RPC</a></li><li><a href="module-wallet.TXDB.html">TXDB</a></li><li><a href="module-wallet.Wallet.html">Wallet</a></li><li><a href="module-wallet.WalletCoinView.html">WalletCoinView</a></li><li><a href="module-wallet.WalletKey.html">WalletKey</a></li><li><a href="module-wallet.WalletMigratorOptions.html">WalletMigratorOptions</a></li><li><a href="module-wallet.WalletOptions.html">WalletOptions</a></li><li><a href="module-wallet_plugin-Plugin.html">Plugin</a></li><li><a href="module-wallet_records-BlockMeta.html">BlockMeta</a></li><li><a href="module-wallet_records-ChainState.html">ChainState</a></li><li><a href="module-wallet_records-MapRecord.html">MapRecord</a></li><li><a href="module-wallet_records-TXRecord.html">TXRecord</a></li><li><a href="module-workers.Framer.html">Framer</a></li><li><a href="module-workers.Master.html">Master</a></li><li><a href="module-workers.Parent.html">Parent</a></li><li><a href="module-workers.Parser.html">Parser</a></li><li><a href="module-workers.Worker.html">Worker</a></li><li><a href="module-workers.WorkerPool.html">WorkerPool</a></li><li><a href="module-workers_packets-CheckInputPacket.html">CheckInputPacket</a></li><li><a href="module-workers_packets-CheckInputResultPacket.html">CheckInputResultPacket</a></li><li><a href="module-workers_packets-CheckPacket.html">CheckPacket</a></li><li><a href="module-workers_packets-CheckResultPacket.html">CheckResultPacket</a></li><li><a href="module-workers_packets-ECSignPacket.html">ECSignPacket</a></li><li><a href="module-workers_packets-ECSignResultPacket.html">ECSignResultPacket</a></li><li><a href="module-workers_packets-ECVerifyPacket.html">ECVerifyPacket</a></li><li><a href="module-workers_packets-ECVerifyResultPacket.html">ECVerifyResultPacket</a></li><li><a href="module-workers_packets-EnvPacket.html">EnvPacket</a></li><li><a href="module-workers_packets-ErrorPacket.html">ErrorPacket</a></li><li><a href="module-workers_packets-ErrorResultPacket.html">ErrorResultPacket</a></li><li><a href="module-workers_packets-EventPacket.html">EventPacket</a></li><li><a href="module-workers_packets-LogPacket.html">LogPacket</a></li><li><a href="module-workers_packets-MinePacket.html">MinePacket</a></li><li><a href="module-workers_packets-MineResultPacket.html">MineResultPacket</a></li><li><a href="module-workers_packets-Packet.html">Packet</a></li><li><a href="module-workers_packets-ScryptPacket.html">ScryptPacket</a></li><li><a href="module-workers_packets-ScryptResultPacket.html">ScryptResultPacket</a></li><li><a href="module-workers_packets-SignInputPacket.html">SignInputPacket</a></li><li><a href="module-workers_packets-SignInputResultPacket.html">SignInputResultPacket</a></li><li><a href="module-workers_packets-SignPacket.html">SignPacket</a></li><li><a href="module-workers_packets-SignResultPacket.html">SignResultPacket</a></li><li><a href="NameDelta.html">NameDelta</a></li><li><a href="NameState.html">NameState</a></li><li><a href="NS.html">NS</a></li><li><a href="Ownership.html">Ownership</a></li><li><a href="Proof.html">Proof</a></li><li><a href="ProofData.html">ProofData</a></li><li><a href="RecursiveServer.html">RecursiveServer</a></li><li><a href="Reserved.html">Reserved</a></li><li><a href="Resource.html">Resource</a></li><li><a href="RootCache.html">RootCache</a></li><li><a href="RootServer.html">RootServer</a></li><li><a href="Seeder.html">Seeder</a></li><li><a href="SlidingWindow.html">SlidingWindow</a></li><li><a href="StateCache.html">StateCache</a></li><li><a href="SymmetricState.html">SymmetricState</a></li><li><a href="SYNTH4.html">SYNTH4</a></li><li><a href="SYNTH6.html">SYNTH6</a></li><li><a href="TXCount.html">TXCount</a></li><li><a href="TXT.html">TXT</a></li><li><a href="Wallet.html">Wallet</a></li><li><a href="WalletDB.html">WalletDB</a></li><li><a href="WalletNode.html">WalletNode</a></li></ul><h3>Global</h3><ul><li><a href="global.html#bindExit">bindExit</a></li><li><a href="global.html#checksig">checksig</a></li><li><a href="global.html#decode">decode</a></li><li><a href="global.html#encode">encode</a></li><li><a href="global.html#fromFloat">fromFloat</a></li><li><a href="global.html#fromU32">fromU32</a></li><li><a href="global.html#groupKey">groupKey</a></li><li><a href="global.html#insert">insert</a></li><li><a href="global.html#listenExit">listenExit</a></li><li><a href="global.html#migrationLayout">migrationLayout</a></li><li><a href="global.html#oldLayout">oldLayout</a></li><li><a href="global.html#opCache">opCache</a></li><li><a href="global.html#ownership">ownership</a></li><li><a href="global.html#remove">remove</a></li><li><a href="global.html#search">search</a></li><li><a href="global.html#splice">splice</a></li><li><a href="global.html#toFloat">toFloat</a></li><li><a href="global.html#toString">toString</a></li><li><a href="global.html#validateKey">validateKey</a></li><li><a href="global.html#validateSignature">validateSignature</a></li></ul>
 </nav>
 
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 1.1.2</a> on Thu Nov 09 2023 10:09:48 GMT+0000 (Coordinated Universal Time)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 1.1.5</a> on Mon Dec 02 2024 13:12:52 GMT+0000 (Coordinated Universal Time)
 </footer>
 
 <script> prettyPrint(); </script>

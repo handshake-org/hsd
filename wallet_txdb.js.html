@@ -42,21 +42,31 @@ const Amount = require('../ui/amount');
 const CoinView = require('../coins/coinview');
 const Coin = require('../primitives/coin');
 const Outpoint = require('../primitives/outpoint');
-const records = require('./records');
-const layout = require('./layout').txdb;
+const layouts = require('./layout');
+const layout = layouts.txdb;
 const consensus = require('../protocol/consensus');
 const policy = require('../protocol/policy');
 const rules = require('../covenants/rules');
 const NameState = require('../covenants/namestate');
 const NameUndo = require('../covenants/undo');
-const {TXRecord} = records;
+const {TXRecord} = require('./records');
 const {types} = rules;
+
+/** @typedef {import('./records').BlockMeta} BlockMeta */
+/** @typedef {import('./walletdb')} WalletDB */
+
+/**
+ * @typedef {Object} BlockExtraInfo
+ * @property {Number} medianTime
+ * @property {Number} txIndex
+ */
 
 /*
  * Constants
  */
 
 const EMPTY = Buffer.alloc(0);
+const UNCONFIRMED_HEIGHT = 0xffffffff;
 
 /**
  * TXDB
@@ -64,6 +74,9 @@ const EMPTY = Buffer.alloc(0);
  */
 
 class TXDB {
+  /** @type {WalletDB} */
+  wdb;
+
   /**
    * Create a TXDB.
    * @constructor
@@ -74,6 +87,8 @@ class TXDB {
     this.wdb = wdb;
     this.db = wdb.db;
     this.logger = wdb.logger;
+    this.nowFn = wdb.options.nowFn || util.now;
+    this.maxTXs = wdb.options.maxHistoryTXs || 100;
 
     this.wid = wid || 0;
     this.bucket = null;
@@ -110,7 +125,7 @@ class TXDB {
   /**
    * Get wallet path for output.
    * @param {Output} output
-   * @returns {Promise} - Returns {@link Path}.
+   * @returns {Promise&lt;Path?>}
    */
 
   getPath(output) {
@@ -125,7 +140,7 @@ class TXDB {
   /**
    * Test whether path exists for output.
    * @param {Output} output
-   * @returns {Promise} - Returns Boolean.
+   * @returns {Promise&lt;Boolean>}
    */
 
   hasPath(output) {
@@ -195,6 +210,17 @@ class TXDB {
   }
 
   /**
+   * Spend credit by spender/input record.
+   * Add undo coin to the input record.
+   * @param {Credit} credit
+   * @param {Outpoint} spender
+   */
+
+  addUndoToInput(b, credit, spender) {
+    b.put(layout.d.encode(spender.hash, spender.index), credit.coin.encode());
+  }
+
+  /**
    * Write input record.
    * @param {TX} tx
    * @param {Number} index
@@ -233,8 +259,9 @@ class TXDB {
 
   /**
    * Update account balance.
+   * @param {Batch} b
    * @param {Number} acct
-   * @param {Balance} delta
+   * @param {BalanceDelta} delta
    */
 
   async updateAccountBalance(b, acct, delta) {
@@ -248,7 +275,7 @@ class TXDB {
    * Test a whether a coin has been spent.
    * @param {Hash} hash
    * @param {Number} index
-   * @returns {Promise} - Returns Boolean.
+   * @returns {Promise&lt;Outpoint?>}
    */
 
   async getSpent(hash, index) {
@@ -264,7 +291,7 @@ class TXDB {
    * Test a whether a coin has been spent.
    * @param {Hash} hash
    * @param {Number} index
-   * @returns {Promise} - Returns Boolean.
+   * @returns {Promise&lt;Boolean>}
    */
 
   isSpent(hash, index) {
@@ -357,7 +384,7 @@ class TXDB {
 
   /**
    * List block records.
-   * @returns {Promise}
+   * @returns {Promise&lt;BlockRecord[]>}
    */
 
   getBlocks() {
@@ -371,7 +398,7 @@ class TXDB {
   /**
    * Get block record.
    * @param {Number} height
-   * @returns {Promise}
+   * @returns {Promise&lt;BlockRecord?>}
    */
 
   async getBlock(height) {
@@ -384,8 +411,24 @@ class TXDB {
   }
 
   /**
+   * Get block hashes size.
+   * @param {Number} height
+   * @returns {Promise&lt;Number>}
+   */
+
+  async getBlockTXsSize(height) {
+    const data = await this.bucket.get(layout.b.encode(height));
+
+    if (!data)
+      return 0;
+
+    return data.readUInt32LE(40, true);
+  }
+
+  /**
    * Append to the global block record.
-   * @param {Hash} hash
+   * @param {Batch} b
+   * @param {Hash} hash - transaction hash.
    * @param {BlockMeta} block
    * @returns {Promise}
    */
@@ -468,7 +511,7 @@ class TXDB {
   /**
    * Test whether we have a name.
    * @param {Buffer} nameHash
-   * @returns {Boolean}
+   * @returns {Promise&lt;Boolean>}
    */
 
   async hasNameState(nameHash) {
@@ -478,7 +521,7 @@ class TXDB {
   /**
    * Get a name state if present.
    * @param {Buffer} nameHash
-   * @returns {NameState}
+   * @returns {Promise&lt;NameState?>}
    */
 
   async getNameState(nameHash) {
@@ -495,7 +538,7 @@ class TXDB {
 
   /**
    * Get all names.
-   * @returns {NameState[]}
+   * @returns {Promise&lt;NameState[]>}
    */
 
   async getNames() {
@@ -521,7 +564,7 @@ class TXDB {
    * Test whether we have a bid.
    * @param {Buffer} nameHash
    * @param {Outpoint} outpoint
-   * @returns {Boolean}
+   * @returns {Promise&lt;Boolean>}
    */
 
   async hasBid(nameHash, outpoint) {
@@ -533,7 +576,7 @@ class TXDB {
    * Get a bid if present.
    * @param {Buffer} nameHash
    * @param {Outpoint} outpoint
-   * @returns {BlindBid}
+   * @returns {Promise&lt;BlindBid?>}
    */
 
   async getBid(nameHash, outpoint) {
@@ -566,6 +609,7 @@ class TXDB {
     bb.lockup = options.lockup;
     bb.blind = options.blind;
     bb.own = options.own;
+    bb.height = options.height;
     b.put(layout.i.encode(nameHash, hash, index), bb.encode());
   }
 
@@ -584,7 +628,7 @@ class TXDB {
   /**
    * Get all bids for name.
    * @param {Buffer} nameHash
-   * @returns {BlindBid[]}
+   * @returns {Promise&lt;BlindBid[]>}
    */
 
   async getBids(nameHash) {
@@ -617,6 +661,7 @@ class TXDB {
   /**
    * Remove all bids for name.
    * @param {Buffer} nameHash
+   * @returns {Promise}
    */
 
   async removeBids(b, nameHash) {
@@ -632,7 +677,7 @@ class TXDB {
    * Test whether we have a reveal.
    * @param {Buffer} nameHash
    * @param {Outpoint} outpoint
-   * @returns {Boolean}
+   * @returns {Promise&lt;Boolean>}
    */
 
   async hasReveal(nameHash, outpoint) {
@@ -644,7 +689,7 @@ class TXDB {
    * Get a reveal if present.
    * @param {Buffer} nameHash
    * @param {Outpoint} outpoint
-   * @returns {BidReveal}
+   * @returns {Promise&lt;BidReveal?>}
    */
 
   async getReveal(nameHash, outpoint) {
@@ -662,22 +707,66 @@ class TXDB {
   }
 
   /**
+   * Get reveal by bid outpoint.
+   * @param {Buffer} nameHash
+   * @param {Outpoint} bidOut
+   * @returns {Promise&lt;BidReveal?>}
+   */
+
+  async getRevealByBid(nameHash, bidOut) {
+    const rawOutpoint = await this.bucket.get(
+      layout.E.encode(nameHash, bidOut.hash, bidOut.index));
+
+    if (!rawOutpoint)
+      return null;
+
+    const outpoint = Outpoint.decode(rawOutpoint);
+    return this.getReveal(nameHash, outpoint);
+  }
+
+  /**
+   * Get bid by reveal outpoint.
+   * @param {Buffer} nameHash
+   * @param {Outpoint} revealOut
+   * @returns {Promise&lt;BlindBid?>}
+   */
+
+  async getBidByReveal(nameHash, revealOut) {
+    const reveal = await this.getReveal(nameHash, revealOut);
+
+    if (!reveal)
+      return null;
+
+    return this.getBid(nameHash, reveal.bidPrevout);
+  }
+
+  /**
    * Write a reveal.
    * @param {Object} b
    * @param {Buffer} nameHash
    * @param {Outpoint} outpoint
    * @param {Object} options
+   * @param {String} options.name
+   * @param {Amount} options.value
+   * @param {Number} options.height
+   * @param {Boolean} options.own
+   * @param {Outpoint} options.bidPrevout
+   * @returns {void}
    */
 
   putReveal(b, nameHash, outpoint, options) {
     const {hash, index} = outpoint;
+    const {bidPrevout} = options;
     const brv = new BidReveal();
     brv.nameHash = nameHash;
     brv.name = options.name;
     brv.value = options.value;
     brv.height = options.height;
     brv.own = options.own;
+    brv.bidPrevout = bidPrevout;
     b.put(layout.B.encode(nameHash, hash, index), brv.encode());
+    b.put(layout.E.encode(nameHash, bidPrevout.hash, bidPrevout.index),
+      outpoint.encode());
   }
 
   /**
@@ -685,17 +774,19 @@ class TXDB {
    * @param {Object} b
    * @param {Buffer} nameHash
    * @param {Outpoint} outpoint
+   * @param {Outpoint} bidPrevout
    */
 
-  removeReveal(b, nameHash, outpoint) {
+  removeReveal(b, nameHash, outpoint, bidPrevout) {
     const {hash, index} = outpoint;
     b.del(layout.B.encode(nameHash, hash, index));
+    b.del(layout.E.encode(nameHash, bidPrevout.hash, bidPrevout.index));
   }
 
   /**
    * Get all reveals by name.
    * @param {Buffer} nameHash
-   * @returns {BidReveal[]}
+   * @returns {Promise&lt;BidReveal[]>}
    */
 
   async getReveals(nameHash) {
@@ -722,6 +813,7 @@ class TXDB {
    * Remove all reveals by name.
    * @param {Object} b
    * @param {Buffer} nameHash
+   * @returns {Promise}
    */
 
   async removeReveals(b, nameHash) {
@@ -736,7 +828,7 @@ class TXDB {
   /**
    * Test whether a blind value is present.
    * @param {Buffer} blind - Blind hash.
-   * @returns {Boolean}
+   * @returns {Promise&lt;Boolean>}
    */
 
   async hasBlind(blind) {
@@ -746,7 +838,7 @@ class TXDB {
   /**
    * Get a blind value if present.
    * @param {Buffer} blind - Blind hash.
-   * @returns {BlindValue}
+   * @returns {Promise&lt;BlindValue?>}
    */
 
   async getBlind(blind) {
@@ -777,6 +869,7 @@ class TXDB {
    * Save blind value.
    * @param {Buffer} blind
    * @param {Object} options
+   * @returns {Promise}
    */
 
   async saveBlind(blind, options) {
@@ -797,12 +890,13 @@ class TXDB {
 
   /**
    * Add transaction without a batch.
-   * @private
    * @param {TX} tx
-   * @returns {Promise}
+   * @param {BlockMeta} [block]
+   * @param {BlockExtraInfo} [extra]
+   * @returns {Promise&lt;Details?>}
    */
 
-  async add(tx, block) {
+  async add(tx, block, extra) {
     const hash = tx.hash();
     const existing = await this.getTX(hash);
 
@@ -818,11 +912,15 @@ class TXDB {
       if (!block)
         return null;
 
+      // Get txIndex of the wallet.
+      extra.txIndex = await this.getBlockTXsSize(block.height);
+
       // Confirm transaction.
-      return this.confirm(existing, block);
+      return this.confirm(existing, block, extra);
     }
 
-    const wtx = TXRecord.fromTX(tx, block);
+    const now = this.nowFn();
+    const wtx = TXRecord.fromTX(tx, block, now);
 
     if (!block) {
       // Potentially remove double-spenders.
@@ -837,8 +935,11 @@ class TXDB {
       await this.removeDoubleOpen(tx);
     }
 
+    if (block)
+      extra.txIndex = await this.getBlockTXsSize(block.height);
+
     // Finally we can do a regular insertion.
-    return this.insert(wtx, block);
+    return this.insert(wtx, block, extra);
   }
 
   /**
@@ -877,6 +978,7 @@ class TXDB {
    * Remove duplicate opens.
    * @private
    * @param {TX} tx
+   * @returns {Promise}
    */
 
   async removeDoubleOpen(tx) {
@@ -890,6 +992,11 @@ class TXDB {
 
       if (!hash)
         continue;
+
+      const wtx = await this.getTX(hash);
+
+      if (wtx.height !== -1)
+        return;
 
       await this.remove(hash);
     }
@@ -937,11 +1044,12 @@ class TXDB {
    * Insert transaction.
    * @private
    * @param {TXRecord} wtx
-   * @param {BlockMeta} block
-   * @returns {Promise}
+   * @param {BlockMeta} [block]
+   * @param {BlockExtraInfo} [extra]
+   * @returns {Promise&lt;Details>}
    */
 
-  async insert(wtx, block) {
+  async insert(wtx, block, extra) {
     const b = this.bucket.batch();
     const {tx, hash} = wtx;
     const height = block ? block.height : -1;
@@ -985,18 +1093,7 @@ class TXDB {
         state.tx(path, 1);
         state.coin(path, -1);
         state.unconfirmed(path, -coin.value);
-
-        // FINALIZE is a special case: locked coins _leave_ the wallet.
-        if (tx.output(i) &amp;&amp; tx.covenant(i).isFinalize()) {
-          if (!block) {
-            state.ulocked(path, -tx.outputs[i].value);
-          } else {
-            state.clocked(path, -tx.outputs[i].value);
-            // This is the first time we've seen this tx and it is in a block
-            // (probably from a rescan). Update unconfirmed locked balance also.
-            state.ulocked(path, -tx.outputs[i].value);
-          }
-        }
+        this.unlockBalances(state, credit, path, -1);
 
         if (!block) {
           // If the tx is not mined, we do not
@@ -1016,6 +1113,8 @@ class TXDB {
           // coin so it can be reconnected
           // later during a reorg.
           state.confirmed(path, -coin.value);
+          this.unlockBalances(state, credit, path, height);
+
           await this.removeCredit(b, credit, path);
 
           view.addCoin(coin);
@@ -1033,14 +1132,6 @@ class TXDB {
       if (!path)
         continue;
 
-      // If the first time we see a TX is in a block
-      // (i.e. during a rescan) update the "unconfirmed" locked balance
-      // before updating the "confirmed" locked balance.
-      if (height !== -1)
-        await this.lockBalances(b, state, tx, i, path, -1);
-
-      await this.lockBalances(b, state, tx, i, path, height);
-
       details.setOutput(i, path);
 
       const credit = Credit.fromTX(tx, i, height);
@@ -1049,11 +1140,27 @@ class TXDB {
       state.tx(path, 1);
       state.coin(path, 1);
       state.unconfirmed(path, output.value);
+      this.lockBalances(state, credit, path, -1);
 
-      if (block)
+      if (block) {
         state.confirmed(path, output.value);
+        this.lockBalances(state, credit, path, height);
+      }
+
+      const spender = await this.getSpent(hash, i);
+
+      if (spender) {
+        credit.spent = true;
+        this.addUndoToInput(b, credit, spender);
+
+        // TODO: emit 'missed credit'
+        state.coin(path, -1);
+        state.unconfirmed(path, -output.value);
+        this.unlockBalances(state, credit, path, -1);
+      }
 
       await this.saveCredit(b, credit, path);
+      await this.watchOpensEarly(b, output);
     }
 
     // Handle names.
@@ -1080,7 +1187,6 @@ class TXDB {
 
     // Save and index the transaction record.
     b.put(layout.t.encode(hash), wtx.encode());
-    b.put(layout.m.encode(wtx.mtime, hash), null);
 
     if (!block)
       b.put(layout.p.encode(hash), null);
@@ -1094,7 +1200,6 @@ class TXDB {
       await this.updateAccountBalance(b, acct, delta);
 
       b.put(layout.T.encode(acct, hash), null);
-      b.put(layout.M.encode(acct, wtx.mtime, hash), null);
 
       if (!block)
         b.put(layout.P.encode(acct, hash), null);
@@ -1104,9 +1209,32 @@ class TXDB {
 
     // Update block records.
     if (block) {
+      // If confirmed in a block (e.g. coinbase tx) and not
+      // being updated or previously seen, we need to add
+      // the monotonic time and count index for the transaction
+      await this.addCountAndTimeIndex(b, {
+        accounts: state.accounts,
+        hash,
+        height: block.height,
+        blockextra: extra
+      });
+
+      // In the event that this transaction becomes unconfirmed
+      // during a reorganization, this transaction will need an
+      // unconfirmed time and unconfirmed index, however since this
+      // transaction was not previously seen previous to the block,
+      // we need to add that information.
+      // TODO: This can be skipped if TX is coinbase, but even now
+      // it will be properly cleaned up on erase.
+      await this.addCountAndTimeIndexUnconfirmedUndo(b, hash, wtx.mtime);
+
       await this.addBlockMap(b, height);
       await this.addBlock(b, tx.hash(), block);
     } else {
+      // Add indexing for unconfirmed transactions.
+      await this.addCountAndTimeIndexUnconfirmed(b, state.accounts, hash,
+        wtx.mtime);
+
       await this.addTXMap(b, hash);
     }
 
@@ -1134,10 +1262,11 @@ class TXDB {
    * @private
    * @param {TXRecord} wtx
    * @param {BlockMeta} block
-   * @returns {Promise}
+   * @param {BlockExtraInfo} extra
+   * @returns {Promise&lt;Details>}
    */
 
-  async confirm(wtx, block) {
+  async confirm(wtx, block, extra) {
     const b = this.bucket.batch();
     const {tx, hash} = wtx;
     const height = block.height;
@@ -1146,6 +1275,7 @@ class TXDB {
     const view = new CoinView();
     let own = false;
 
+    assert(block &amp;&amp; extra);
     wtx.setBlock(block);
 
     if (!tx.isCoinbase()) {
@@ -1165,6 +1295,9 @@ class TXDB {
         if (!credits[i]) {
           await this.removeInput(b, tx, i);
 
+          // NOTE: This check has been moved to the outputs
+          // processing in insert(pending), insert(block) and confirm.
+          // But will still be here just in case.
           const credit = await this.getCredit(hash, index);
 
           if (!credit)
@@ -1195,17 +1328,15 @@ class TXDB {
         if (resolved) {
           state.coin(path, -1);
           state.unconfirmed(path, -coin.value);
+          this.unlockBalances(state, credit, path, -1);
         }
+
+        state.confirmed(path, -coin.value);
+        this.unlockBalances(state, credit, path, height);
 
         // We can now safely remove the credit
         // entirely, now that we know it's also
         // been removed on-chain.
-        state.confirmed(path, -coin.value);
-
-        // FINALIZE is a special case: locked coins _leave_ the wallet.
-        if (tx.output(i) &amp;&amp; tx.covenant(i).isFinalize())
-          state.clocked(path, -tx.outputs[i].value);
-
         await this.removeCredit(b, credit, path);
 
         view.addCoin(coin);
@@ -1220,13 +1351,13 @@ class TXDB {
       if (!path)
         continue;
 
-      await this.lockBalances(b, state, tx, i, path, height);
-
       details.setOutput(i, path);
 
       let credit = await this.getCredit(hash, i);
 
       if (!credit) {
+        // TODO: Emit 'missed credit' event.
+
         // This credit didn't belong to us the first time we
         // saw the transaction (before confirmation or rescan).
         // Create new credit for database.
@@ -1236,9 +1367,17 @@ class TXDB {
         // meaning if it becomes unconfirmed, we can still confidently spend it.
         credit.own = own;
 
-        // Add coin to "unconfirmed" balance (which includes confirmed coins)
-        state.coin(path, 1);
-        state.unconfirmed(path, credit.coin.value);
+        const spender = await this.getSpent(hash, i);
+
+        if (spender) {
+          credit.spent = true;
+          this.addUndoToInput(b, credit, spender);
+        } else {
+          // Add coin to "unconfirmed" balance (which includes confirmed coins)
+          state.coin(path, 1);
+          state.unconfirmed(path, credit.coin.value);
+          this.lockBalances(state, credit, path, -1);
+        }
       }
 
       // Credits spent in the mempool add an
@@ -1251,6 +1390,8 @@ class TXDB {
       // Update coin height and confirmed
       // balance. Save once again.
       state.confirmed(path, output.value);
+      this.lockBalances(state, credit, path, height);
+
       credit.coin.height = height;
 
       await this.saveCredit(b, credit, path);
@@ -1258,6 +1399,21 @@ class TXDB {
 
     // Handle names.
     await this.connectNames(b, tx, view, height);
+
+    // Disconnect unconfirmed time index for the transaction.
+    // This must go before adding the the indexes, as the
+    // unconfirmed count needs to be copied first.
+    await this.disconnectCountAndTimeIndexUnconfirmed(b, state.accounts, hash);
+
+    // Add monotonic and count time index for transactions
+    // that already exist in the database and are now
+    // being confirmed.
+    await this.addCountAndTimeIndex(b, {
+      accounts: state.accounts,
+      hash,
+      height: block.height,
+      blockextra: extra
+    });
 
     // Save the new serialized transaction as
     // the block-related properties have been
@@ -1280,6 +1436,8 @@ class TXDB {
     // Commit the new state. The balance has updated.
     const balance = await this.updateBalance(b, state);
 
+    this.unindexOpens(b, tx);
+
     await b.write();
 
     this.unlockTX(tx);
@@ -1294,7 +1452,7 @@ class TXDB {
    * Recursively remove a transaction
    * from the database.
    * @param {Hash} hash
-   * @returns {Promise}
+   * @returns {Promise&lt;Details?>}
    */
 
   async remove(hash) {
@@ -1311,10 +1469,12 @@ class TXDB {
    * database. Disconnect inputs.
    * @private
    * @param {TXRecord} wtx
-   * @returns {Promise}
+   * @param {BlockMeta} [block]
+   * @param {Number} [medianTime]
+   * @returns {Promise&lt;Details>}
    */
 
-  async erase(wtx, block) {
+  async erase(wtx, block, medianTime) {
     const b = this.bucket.batch();
     const {tx, hash} = wtx;
     const height = block ? block.height : -1;
@@ -1348,18 +1508,12 @@ class TXDB {
         state.tx(path, -1);
         state.coin(path, 1);
         state.unconfirmed(path, coin.value);
+        this.lockBalances(state, credit, path, -1);
 
-        // FINALIZE is a special case: locked coins _leave_ the wallet.
-        // In this case a TX is erased, adding them back.
-        if (tx.output(i) &amp;&amp; tx.covenant(i).isFinalize()) {
-          if (!block)
-            state.ulocked(path, tx.outputs[i].value);
-          else
-            state.clocked(path, tx.outputs[i].value);
-        }
-
-        if (block)
+        if (block) {
           state.confirmed(path, coin.value);
+          this.lockBalances(state, credit, path, height);
+        }
 
         this.unspendCredit(b, tx, i);
 
@@ -1377,18 +1531,24 @@ class TXDB {
       if (!path)
         continue;
 
-      await this.unlockBalances(b, state, tx, i, path, height);
+      const credit = await this.getCredit(hash, i);
+
+      // If we don't have credit for the output, then we don't need
+      // to do anything, because they were getting erased anyway.
+      if (!credit)
+        continue;
 
       details.setOutput(i, path);
-
-      const credit = Credit.fromTX(tx, i, height);
 
       state.tx(path, -1);
       state.coin(path, -1);
       state.unconfirmed(path, -output.value);
+      this.unlockBalances(state, credit, path, -1);
 
-      if (block)
+      if (block) {
         state.confirmed(path, -output.value);
+        this.unlockBalances(state, credit, path, height);
+      }
 
       await this.removeCredit(b, credit, path);
     }
@@ -1402,7 +1562,6 @@ class TXDB {
     // Remove the transaction data
     // itself as well as unindex.
     b.del(layout.t.encode(hash));
-    b.del(layout.m.encode(wtx.mtime, hash));
 
     if (!block)
       b.del(layout.p.encode(hash));
@@ -1414,7 +1573,6 @@ class TXDB {
       await this.updateAccountBalance(b, acct, delta);
 
       b.del(layout.T.encode(acct, hash));
-      b.del(layout.M.encode(acct, wtx.mtime, hash));
 
       if (!block)
         b.del(layout.P.encode(acct, hash));
@@ -1424,10 +1582,22 @@ class TXDB {
 
     // Update block records.
     if (block) {
+      // Remove tx count and time indexing.
+      await this.removeCountAndTimeIndex(b, {
+        hash,
+        medianTime,
+        accounts: state.accounts
+      });
+
+      // We also need to clean up unconfirmed undos.
+      b.del(layout.Oe.encode(hash));
+
       await this.removeBlockMap(b, height);
       await this.spliceBlock(b, hash, height);
     } else {
       await this.removeTXMap(b, hash);
+      // Remove count and time indexes.
+      await this.removeCountAndTimeIndexUnconfirmed(b, state.accounts, hash);
     }
 
     // Update the transaction counter
@@ -1448,7 +1618,8 @@ class TXDB {
    * remove all of its spenders.
    * @private
    * @param {TXRecord} wtx
-   * @returns {Promise}
+   * @param {Number} medianTime
+   * @returns {Promise&lt;Details?>}
    */
 
   async removeRecursive(wtx) {
@@ -1471,14 +1642,20 @@ class TXDB {
       await this.removeRecursive(stx);
     }
 
+    const block = wtx.getBlock();
+    let medianTime;
+
+    if (block)
+      medianTime = await this.wdb.getMedianTime(block.height);
+
     // Remove the spender.
-    return this.erase(wtx, wtx.getBlock());
+    return this.erase(wtx, block, medianTime);
   }
 
   /**
    * Revert a block.
    * @param {Number} height
-   * @returns {Promise}
+   * @returns {Promise&lt;Number>} - number of txs removed.
    */
 
   async revert(height) {
@@ -1488,10 +1665,19 @@ class TXDB {
       return 0;
 
     const hashes = block.toArray();
+    const mtp = await this.wdb.getMedianTime(height);
+    assert(mtp);
 
     for (let i = hashes.length - 1; i >= 0; i--) {
       const hash = hashes[i];
-      await this.unconfirm(hash, height);
+      /** @type {BlockExtraInfo} */
+      const extra = {
+        medianTime: mtp,
+        // txIndex is not used in revert.
+        txIndex: i
+      };
+
+      await this.unconfirm(hash, height, extra);
     }
 
     return hashes.length;
@@ -1502,10 +1688,11 @@ class TXDB {
    * @private
    * @param {Hash} hash
    * @param {Number} height
-   * @returns {Promise}
+   * @param {BlockExtraInfo} extra
+   * @returns {Promise&lt;Details?>}
    */
 
-  async unconfirm(hash, height) {
+  async unconfirm(hash, height, extra) {
     const wtx = await this.getTX(hash);
 
     if (!wtx) {
@@ -1529,22 +1716,38 @@ class TXDB {
     if (wtx.height === -1)
       return null;
 
-    return this.disconnect(wtx, wtx.getBlock());
+    const tx = wtx.tx;
+
+    if (tx.isCoinbase())
+      return this.removeRecursive(wtx);
+
+    // On unconfirm, if we already have OPEN txs in the pending list we
+    // remove transaction and it's descendants instead of storing them in
+    // the pending list. This follows the mempool behaviour where the first
+    // entries in the mempool will be the ones left, instead of txs coming
+    // from the block. This ensures consistency with the double open rules.
+    if (await this.isDoubleOpen(tx))
+      return this.removeRecursive(wtx);
+
+    return this.disconnect(wtx, wtx.getBlock(), extra);
   }
 
   /**
    * Unconfirm a transaction. Necessary after a reorg.
    * @param {TXRecord} wtx
-   * @returns {Promise}
+   * @param {BlockMeta} block
+   * @param {BlockExtraInfo} extra
+   * @returns {Promise&lt;Details>}
    */
 
-  async disconnect(wtx, block) {
+  async disconnect(wtx, block, extra) {
     const b = this.bucket.batch();
     const {tx, hash, height} = wtx;
     const details = new Details(wtx, block);
     const state = new BalanceDelta();
+    let own = false;
 
-    assert(block);
+    assert(block &amp;&amp; extra);
 
     wtx.unsetBlock();
 
@@ -1572,15 +1775,12 @@ class TXDB {
         details.setInput(i, path, coin);
 
         state.confirmed(path, coin.value);
-
-        // FINALIZE is a special case: locked coins _leave_ the wallet.
-        // In this case a TX is reversed, adding them back.
-        if (tx.output(i) &amp;&amp; tx.covenant(i).isFinalize())
-            state.clocked(path, tx.outputs[i].value);
+        this.lockBalances(state, credit, path, height);
 
         // Resave the credit and mark it
         // as spent in the mempool instead.
         credit.spent = true;
+        own = true;
         await this.saveCredit(b, credit, path);
       }
     }
@@ -1594,18 +1794,40 @@ class TXDB {
       if (!path)
         continue;
 
-      await this.unlockBalances(b, state, tx, i, path, height);
-
-      const credit = await this.getCredit(hash, i);
+      let credit = await this.getCredit(hash, i);
+      let resolved = false;
 
       // Potentially update undo coin height.
       if (!credit) {
-        await this.updateSpentCoin(b, tx, i, height);
-        continue;
-      }
+        // TODO: Emit 'missed credit' event.
 
-      if (credit.spent)
-        await this.updateSpentCoin(b, tx, i, height);
+        // This credit didn't belong to us the first time we
+        // saw the transaction (after confirmation).
+        // Create new credit for database.
+        credit = Credit.fromTX(tx, i, height);
+
+        // If this tx spent any of our own coins, we "own" this output,
+        // meaning if it becomes unconfirmed, we can still confidently spend it.
+        credit.own = own;
+        resolved = true;
+
+        const spender = await this.getSpent(hash, i);
+
+        if (spender) {
+          credit.spent = true;
+          this.addUndoToInput(b, credit, spender);
+        } else {
+          // If the newly discovered Coin is not spent,
+          // we need to add these to the balance.
+          state.coin(path, 1);
+          state.unconfirmed(path, credit.coin.value);
+          this.lockBalances(state, credit, path, -1);
+        }
+      } else if (credit.spent) {
+        // The coin height of this output becomes -1
+        // as it is being unconfirmed.
+        await this.updateSpentCoin(b, tx, i, -1);
+      }
 
       details.setOutput(i, path);
 
@@ -1613,10 +1835,21 @@ class TXDB {
       // balance. Save once again.
       credit.coin.height = -1;
 
-      state.confirmed(path, -output.value);
+      // If the coin was not discovered now, it means
+      // we need to subtract the values as they were part of
+      // the balance.
+      // If the credit is new, confirmed balances did not account for it.
+      if (!resolved) {
+        state.confirmed(path, -output.value);
+        this.unlockBalances(state, credit, path, height);
+      }
 
       await this.saveCredit(b, credit, path);
     }
+
+    // Unconfirm will also index OPENs as the transaction is now part of the
+    // wallet pending transactions.
+    this.indexOpens(b, tx);
 
     // Undo name state.
     await this.undoNameState(b, tx);
@@ -1639,6 +1872,17 @@ class TXDB {
       b.del(layout.H.encode(acct, height, hash));
     }
 
+    // Remove tx count and time indexing. This must
+    // go before restoring the unconfirmed count.
+    await this.removeCountAndTimeIndex(b, {
+      hash,
+      medianTime: extra.medianTime,
+      accounts: state.accounts
+    });
+
+    // Restore count indexing for unconfirmed txs.
+    await this.restoreCountAndTimeIndexUnconfirmed(b, state.accounts, hash);
+
     // Commit state due to unconfirmed
     // vs. confirmed balance change.
     const balance = await this.updateBalance(b, state);
@@ -1651,6 +1895,775 @@ class TXDB {
     return details;
   }
 
+  /*
+   * Count and time index.
+   */
+
+  /**
+   * Get the latest unconfirmed TX count from the database. This number
+   * does not represent the count of current unconfirmed transactions,
+   * but the count of all unconfirmed transactions. As transactions are
+   * confirmed the value is deleted, however proceeding values are not
+   * decremented as to not have a large number of database updates at once.
+   * @returns {Promise&lt;TXCount>}
+   */
+
+  async getLatestUnconfirmedTXCount() {
+    const raw = await this.bucket.get(layout.Ol.encode());
+    let index = 0;
+
+    if (raw)
+      index = raw.readUInt32LE(0, true);
+
+    return new TXCount(UNCONFIRMED_HEIGHT, index);
+  }
+
+  /**
+   * Increment latest unconfirmed index.
+   * @private
+   * @param {Batch} b
+   * @param {Number} count
+   */
+
+  incrementLatestUnconfirmedTXCount(b, count) {
+    assert(count + 1 &lt;= 0xffffffff, 'Number exceeds 32-bits.');
+    b.put(layout.Ol.encode(), fromU32(count + 1));
+  }
+
+  /**
+   * Get the count of a transaction.
+   * @param {Hash} hash - Transaction hash.
+   * @returns {Promise&lt;TXCount?>}
+   */
+
+  async getCountForTX(hash) {
+    assert(Buffer.isBuffer(hash));
+
+    const raw = await this.bucket.get(layout.Oc.encode(hash));
+
+    if (!raw)
+      return null;
+
+    return TXCount.decode(raw);
+  }
+
+  /**
+   * Get the undo count of a transaction.
+   * @param {Hash} hash - Transaction hash.
+   * @returns {Promise&lt;TXCount?>}
+   */
+
+  async getUndoCountForTX(hash) {
+    assert(Buffer.isBuffer(hash));
+
+    const raw = await this.bucket.get(layout.Ou.encode(hash));
+
+    if (!raw)
+      return null;
+
+    return TXCount.decode(raw);
+  }
+
+  /**
+   * Add undo unconfirmed time and unconfirmed index to restore unconfirmed
+   * time during reorganizations.
+   * @private
+   * @param {Batch} b
+   * @param {Hash} hash - Transaction hash.
+   * @param {Number} time - Transaction time.
+   * @returns {Promise}
+   */
+
+  async addCountAndTimeIndexUnconfirmedUndo(b, hash, time) {
+    const count = await this.getLatestUnconfirmedTXCount();
+
+    b.put(layout.Oe.encode(hash), fromU32(time));
+    b.put(layout.Ou.encode(hash), count.encode());
+
+    this.incrementLatestUnconfirmedTXCount(b, count.index);
+  }
+
+  /**
+   * Add unconfirmed time indexing to support querying
+   * unconfirmed transaction history in subsets by time.
+   * @private
+   * @param {Hash} hash - Transaction hash.
+   * @returns {Promise&lt;Number>}
+   */
+
+  async getUnconfirmedTimeForTX(hash) {
+    const raw = await this.bucket.get(layout.Oe.encode(hash));
+
+    if (!raw)
+      throw new Error('Unconfirmed time not found.');
+
+    return raw.readUInt32LE(0, true);
+  }
+
+  /**
+   * Add count and time based indexing to support querying
+   * unconfirmed transaction history in subsets by time
+   * and by count.
+   * This is called when we see a new transaction that is
+   * unconfirmed. insert() w/o block.
+   * @private
+   * @param {Batch} b
+   * @param {Map&lt;Number, Balance>} accounts
+   * @param {Hash} hash - Transaction hash.
+   * @param {Number} time - Transaction time.
+   * @returns {Promise}
+   */
+
+  async addCountAndTimeIndexUnconfirmed(b, accounts, hash, time) {
+    const count = await this.getLatestUnconfirmedTXCount();
+
+    b.put(layout.Ot.encode(count.height, count.index), hash);
+    b.put(layout.Oc.encode(hash), count.encode());
+
+    b.put(layout.Oe.encode(hash), fromU32(time));
+    b.put(layout.Om.encode(time, count.index, hash));
+
+    for (const [acct] of accounts) {
+      b.put(layout.OT.encode(acct, count.height, count.index), hash);
+      b.put(layout.OM.encode(acct, time, count.index, hash));
+    }
+
+    this.incrementLatestUnconfirmedTXCount(b, count.index);
+  }
+
+  /**
+   * Remove unconfirmed count and time based indexing. This will
+   * however leave some of the information around so that it's
+   * possible to restore the index should it be necessary during a
+   * reorg. This will remove indexing into the subsets of confirmed
+   * results, it will keep the count in the database that can be
+   * queried by hash, should there be a reorg and the transaction
+   * becomes pending again.
+   * @private
+   * @param {Batch} b
+   * @param {Map&lt;Number, Balance>} accounts
+   * @param {Hash} hash - Transaction hash.
+   */
+
+  async disconnectCountAndTimeIndexUnconfirmed(b, accounts, hash) {
+    const count = await this.getCountForTX(hash);
+
+    if (!count)
+      throw new Error('Transaction count not found.');
+
+    if (count.height !== UNCONFIRMED_HEIGHT)
+      throw new Error('Transaction is confirmed.');
+
+    // Add undo information to later restore the
+    // unconfirmed count, and remove the count.
+    b.put(layout.Ou.encode(hash), count.encode());
+
+    const {height, index} = count;
+    b.del(layout.Ot.encode(height, index));
+    b.del(layout.Oc.encode(hash));
+
+    const time = await this.getUnconfirmedTimeForTX(hash);
+    b.del(layout.Om.encode(time, index, hash));
+
+    for (const [acct] of accounts) {
+      b.del(layout.OT.encode(acct, height, index));
+      b.del(layout.OM.encode(acct, time, index, hash));
+    }
+  }
+
+  /**
+   * This will restore the count and time indexing for
+   * unconfirmed transactions during reorganizations. This is
+   * possible because we leave the pre-existing count in
+   * the database.
+   * @private
+   * @param {Batch} b
+   * @param {Map&lt;Number, Balance>} accounts
+   * @param {Hash} hash - Transaction hash.
+   */
+
+  async restoreCountAndTimeIndexUnconfirmed(b, accounts, hash) {
+    const count = await this.getUndoCountForTX(hash);
+
+    if (!count)
+      throw new Error('Transaction count not found.');
+
+    b.put(layout.Oc.encode(hash), count.encode());
+    b.put(layout.Ot.encode(count.height, count.index), hash);
+
+    // We no longer need undo count as it becomes the count.
+    b.del(layout.Ou.encode(hash));
+
+    const time = await this.getUnconfirmedTimeForTX(hash);
+    b.put(layout.Om.encode(time, count.index, hash));
+
+    for (const [acct] of accounts) {
+      b.put(layout.OT.encode(acct, count.height, count.index), hash);
+      b.put(layout.OM.encode(acct, time, count.index, hash));
+    }
+  }
+
+  /**
+   * Remove all unconfirmed count and time based indexing.
+   * @private
+   * @param {Batch} b
+   * @param {Map&lt;Number, Balance>} accounts
+   * @param {Hash} hash - Transaction hash.
+   * @returns {Promise}
+   */
+
+  async removeCountAndTimeIndexUnconfirmed(b, accounts, hash) {
+    const count = await this.getCountForTX(hash);
+
+    if (!count)
+      throw new Error('Transaction count not found.');
+
+    if (count.height !== UNCONFIRMED_HEIGHT)
+      throw new Error('Transaction is confirmed.');
+
+    b.del(layout.Ot.encode(count.height, count.index));
+    b.del(layout.Oc.encode(hash));
+
+    const time = await this.getUnconfirmedTimeForTX(hash);
+    b.del(layout.Om.encode(time, count.index, hash));
+    b.del(layout.Oe.encode(hash));
+
+    for (const [acct] of accounts) {
+      b.del(layout.OT.encode(acct, count.height, count.index));
+      b.del(layout.OM.encode(acct, time, count.index, hash));
+    }
+  }
+
+  /**
+   * Add monotonic time and count based indexing to support
+   * querying transaction history in subsets and by time.
+   * @private
+   * @param {Batch} b
+   * @param {Object} options
+   * @param {Map&lt;Number, Balance>} options.accounts
+   * @param {Hash} options.hash - Transaction hash.
+   * @param {Number} options.height
+   * @param {BlockExtraInfo} options.blockextra
+   * @returns {Promise}
+   */
+
+  async addCountAndTimeIndex(b, options) {
+    const {
+      accounts,
+      hash,
+      height,
+      blockextra
+    } = options;
+
+    const index = blockextra.txIndex;
+    const count = new TXCount(height, index);
+
+    b.put(layout.Ot.encode(height, index), hash);
+    b.put(layout.Oc.encode(hash), count.encode());
+
+    const time = blockextra.medianTime;
+    b.put(layout.Oi.encode(time, height, index, hash));
+
+    for (const [acct] of accounts) {
+      b.put(layout.OT.encode(acct, height, index), hash);
+      b.put(layout.OI.encode(acct, time, height, index, hash));
+    }
+  }
+
+  /**
+   * Remove monotonic time and count based indexing.
+   * @private
+   * @param {Batch} b
+   * @param {Object} options
+   * @param {Hash} options.hash - Transaction hash.
+   * @param {Number} options.medianTime - Block median time.
+   * @param {Map&lt;Number, Balance>} options.accounts
+   * @returns {Promise}
+   */
+
+  async removeCountAndTimeIndex(b, options) {
+    const {
+      accounts,
+      hash,
+      medianTime
+    } = options;
+
+    const count = await this.getCountForTX(hash);
+
+    if (!count)
+      throw new Error('Transaction count not found.');
+
+    b.del(layout.Ot.encode(count.height, count.index));
+    b.del(layout.Oc.encode(hash));
+
+    const time = medianTime;
+    b.del(layout.Oi.encode(time, count.height,
+                          count.index, options.hash));
+
+    for (const [acct] of accounts) {
+      b.del(layout.OT.encode(acct, count.height, count.index));
+
+      b.del(layout.OI.encode(acct, time, count.height,
+                            count.index, options.hash));
+    }
+  }
+
+  /**
+   * Get all transactions in ascending or decending order
+   * limited at a configurable max transactions.
+   * @param {Number} acct
+   * @param {Object} options
+   * @param {Number} options.limit
+   * @param {Boolean} options.reverse
+   * @returns {Promise&lt;TXRecord[]>}
+   */
+
+  async listHistory(acct, options) {
+    assert(typeof acct === 'number');
+    assert(options &amp;&amp; typeof options === 'object');
+    assert(typeof options.limit === 'number');
+    assert(typeof options.reverse === 'boolean');
+
+    if (options.limit > this.maxTXs)
+      throw new Error(`Limit exceeds max of ${this.maxTXs}.`);
+
+    let hashes = [];
+
+    if (acct !== -1) {
+      hashes = await this.bucket.values({
+        gte: layout.OT.min(acct),
+        lte: layout.OT.max(acct),
+        limit: options.limit,
+        reverse: options.reverse
+      });
+    } else {
+      hashes = await this.bucket.values({
+        gte: layout.Ot.min(),
+        lte: layout.Ot.max(),
+        limit: options.limit,
+        reverse: options.reverse
+      });
+    }
+
+    return Promise.all(hashes.map(async (hash) => {
+      return await this.getTX(hash);
+    }));
+  }
+
+  /**
+   * Get all transactions in ascending or decending
+   * order from a time (inclusive) and limited at a
+   * configurable max of transactions.
+   * @param {Number} acct
+   * @param {Object} options
+   * @param {Buffer} options.time
+   * @param {Number} options.limit
+   * @param {Boolean} options.reverse
+   * @returns {Promise&lt;TXRecord[]>}
+   */
+
+  async listHistoryByTime(acct, options) {
+    assert(typeof acct === 'number');
+    assert(options &amp;&amp; typeof options === 'object');
+    assert(typeof options.time === 'number');
+    assert(typeof options.limit === 'number');
+    assert(typeof options.reverse === 'boolean');
+
+    if (options.limit > this.maxTXs)
+      throw new Error(`Limit exceeds max of ${this.maxTXs}.`);
+
+    let max = null;
+    let min = null;
+    let parse = null;
+
+    if (acct !== -1) {
+      if (options.reverse) {
+        min = layout.OI.min();
+        max = layout.OI.max(acct, options.time);
+      } else {
+        min = layout.OI.min(acct, options.time);
+        max = layout.OI.max();
+      }
+      parse = (key) => {
+        const [,,,,hash] = layout.OI.decode(key);
+        return hash;
+      };
+    } else {
+      if (options.reverse) {
+        min = layout.Oi.min();
+        max = layout.Oi.max(options.time);
+      } else {
+        min = layout.Oi.min(options.time);
+        max = layout.Oi.max();
+      }
+      parse = (key) => {
+        const [,,,hash] = layout.Oi.decode(key);
+        return hash;
+      };
+    }
+
+    const keys = await this.bucket.keys({
+      gte: min,
+      lte: max,
+      limit: 1,
+      reverse: options.reverse,
+      parse: parse
+    });
+
+    const hash = keys.length > 0 ? keys[0] : null;
+
+    if (!hash)
+      return [];
+
+    return this.listHistoryFrom(acct, {
+      hash,
+      limit: options.limit,
+      reverse: options.reverse
+    });
+  }
+
+  /**
+   * Get all transactions in ascending or decending
+   * order after a txid/hash (exclusive) and limited at a
+   * configurable max of transactions.
+   * @param {Number} acct
+   * @param {Object} options
+   * @param {Buffer} options.hash
+   * @param {Number} options.limit
+   * @param {Boolean} options.reverse
+   * @returns {Promise&lt;TXRecord[]>}
+   */
+
+  async listHistoryAfter(acct, options) {
+    assert(typeof acct === 'number');
+    assert(options &amp;&amp; typeof options === 'object');
+    return this._listHistory(acct, {
+      hash: options.hash,
+      limit: options.limit,
+      reverse: options.reverse,
+      inclusive: false
+    });
+  }
+
+  /**
+   * Get all transactions in ascending or decending
+   * order after a txid/hash (inclusive) and limited at a
+   * configurable max of transactions.
+   * @param {Number} acct
+   * @param {Object} options
+   * @param {Buffer} options.hash
+   * @param {Number} options.limit
+   * @param {Boolean} options.reverse
+   * @returns {Promise&lt;TXRecord[]>}
+   */
+
+  async listHistoryFrom(acct, options) {
+    assert(typeof acct === 'number');
+    assert(options &amp;&amp; typeof options === 'object');
+    return this._listHistory(acct, {
+      hash: options.hash,
+      limit: options.limit,
+      reverse: options.reverse,
+      inclusive: true
+    });
+  }
+
+  /**
+   * Get all transactions in ascending or decending
+   * order after or from a txid/hash, inclusive or exclusive
+   * and limited at a configurable max of transactions.
+   * @private
+   * @param {Number} acct
+   * @param {Number} options
+   * @param {Buffer} options.hash
+   * @param {Number} options.limit
+   * @param {Boolean} options.reverse
+   * @param {Boolean} options.inclusive
+   * @returns {Promise&lt;TXRecord[]>}
+   */
+
+  async _listHistory(acct, options) {
+    assert(typeof acct === 'number');
+    assert(options &amp;&amp; typeof options === 'object');
+    assert(Buffer.isBuffer(options.hash));
+    assert(typeof options.limit === 'number');
+    assert(typeof options.reverse === 'boolean');
+    assert(typeof options.inclusive === 'boolean');
+
+    if (options.limit > this.maxTXs)
+      throw new Error(`Limit exceeds max of ${this.maxTXs}.`);
+
+    const count = await this.getCountForTX(options.hash);
+
+    if (!count)
+      throw new Error('Transaction not found.');
+
+    const zopts = {
+      limit: options.limit,
+      reverse: options.reverse
+    };
+
+    const lesser = options.inclusive ? 'lte' : 'lt';
+    const greater = options.inclusive ? 'gte' : 'gt';
+
+    if (acct !== -1) {
+      if (zopts.reverse) {
+        zopts['gte'] = layout.OT.min(acct);
+        zopts[lesser] = layout.OT.encode(acct, count.height, count.index);
+      } else {
+        zopts[greater] = layout.OT.encode(acct, count.height, count.index);
+        zopts['lte'] = layout.OT.max(acct);
+      }
+    } else {
+      if (zopts.reverse) {
+        zopts['gte'] = layout.Ot.min();
+        zopts[lesser] = layout.Ot.encode(count.height, count.index);
+      } else {
+        zopts[greater] = layout.Ot.encode(count.height, count.index);
+        zopts['lte'] = layout.Ot.max();
+      }
+    }
+
+    const hashes = await this.bucket.values(zopts);
+
+    return Promise.all(hashes.map(async (hash) => {
+      return await this.getTX(hash);
+    }));
+  }
+
+  /**
+   * Get all unconfirmed transactions in ascending or
+   * decending order limited at a configurable
+   * max transactions.
+   * @param {Number} acct
+   * @param {Object} options
+   * @param {Number} options.limit
+   * @param {Boolean} options.reverse
+   * @returns {Promise&lt;TXRecord[]>}
+   */
+
+  async listUnconfirmed(acct, options) {
+    assert(typeof acct === 'number');
+    assert(options &amp;&amp; typeof options === 'object');
+    assert(typeof options.limit === 'number');
+    assert(typeof options.reverse === 'boolean');
+
+    if (options.limit > this.maxTXs)
+      throw new Error(`Limit exceeds max of ${this.maxTXs}.`);
+
+    const height = UNCONFIRMED_HEIGHT;
+
+    let hashes = [];
+
+    if (acct !== -1) {
+      hashes = await this.bucket.values({
+        gte: layout.OT.min(acct, height),
+        lte: layout.OT.max(acct, height),
+        limit: options.limit,
+        reverse: options.reverse
+      });
+    } else {
+      hashes = await this.bucket.values({
+        gte: layout.Ot.min(height),
+        lte: layout.Ot.max(height),
+        limit: options.limit,
+        reverse: options.reverse
+      });
+    }
+
+    return Promise.all(hashes.map(async (hash) => {
+      return await this.getTX(hash);
+    }));
+  }
+
+  /**
+   * Get all unconfirmed transactions in ascending or
+   * decending order limited at a configurable
+   * max transactions.
+   * @param {Number} acct
+   * @param {Object} options
+   * @param {Number} options.limit
+   * @param {Boolean} options.reverse
+   * @returns {Promise&lt;TXRecord[]>}
+   */
+
+  async listUnconfirmedByTime(acct, options) {
+    assert(typeof acct === 'number');
+    assert(options &amp;&amp; typeof options === 'object');
+    assert(typeof options.time === 'number');
+    assert(typeof options.limit === 'number');
+    assert(typeof options.reverse === 'boolean');
+
+    if (options.limit > this.maxTXs)
+      throw new Error(`Limit exceeds max of ${this.maxTXs}.`);
+
+    let max = null;
+    let min = null;
+    let parse = null;
+
+    if (acct !== -1) {
+      if (options.reverse) {
+        min = layout.OM.min();
+        max = layout.OM.max(acct, options.time);
+      } else {
+        min = layout.OM.min(acct, options.time);
+        max = layout.OM.max();
+      }
+      parse = (key) => {
+        const [,,,hash] = layout.OM.decode(key);
+        return hash;
+      };
+    } else {
+      if (options.reverse) {
+        min = layout.Om.min();
+        max = layout.Om.max(options.time);
+      } else {
+        min = layout.Om.min(options.time);
+        max = layout.Om.max();
+      }
+      parse = (key) => {
+        const [,,hash] = layout.Om.decode(key);
+        return hash;
+      };
+    }
+
+    const keys = await this.bucket.keys({
+      gte: min,
+      lte: max,
+      limit: 1,
+      reverse: options.reverse,
+      parse: parse
+    });
+
+    const hash = keys.length > 0 ? keys[0] : null;
+
+    if (!hash)
+      return [];
+
+    return this.listUnconfirmedFrom(acct, {
+      hash,
+      limit: options.limit,
+      reverse: options.reverse
+    });
+  }
+
+  /**
+   * Get all unconfirmed transactions in ascending or
+   * decending order after a txid/hash (exclusive) and limited
+   * at a max of 100 transactions.
+   * @param {Number} acct
+   * @param {Object} options
+   * @param {Buffer} options.hash
+   * @param {Number} options.limit
+   * @param {Boolean} options.reverse
+   * @returns {Promise&lt;TXRecord[]>}
+   */
+
+  async listUnconfirmedAfter(acct, options) {
+    assert(typeof acct === 'number');
+    assert(options &amp;&amp; typeof options === 'object');
+
+    return this._listUnconfirmed(acct, {
+      hash: options.hash,
+      limit: options.limit,
+      reverse: options.reverse,
+      inclusive: false
+    });
+  }
+
+  /**
+   * Get all unconfirmed transactions in ascending or
+   * decending order after a txid/hash (inclusive) and limited
+   * at a max of 100 transactions.
+   * @param {Number} acct
+   * @param {Object} options
+   * @param {Buffer} options.hash
+   * @param {Number} options.limit
+   * @param {Boolean} options.reverse
+   * @returns {Promise&lt;TXRecord[]>}
+   */
+
+  async listUnconfirmedFrom(acct, options) {
+    assert(typeof acct === 'number');
+    assert(options &amp;&amp; typeof options === 'object');
+
+    return this._listUnconfirmed(acct, {
+      hash: options.hash,
+      limit: options.limit,
+      reverse: options.reverse,
+      inclusive: true
+    });
+  }
+
+  /**
+   * Get all unconfirmed transactions in ascending or
+   * decending order after or from a txid/hash, inclusive or
+   * exclusive and limited at a configurable max
+   * of transactions
+   * @private
+   * @param {Number} acct
+   * @param {Number} options
+   * @param {Buffer} options.hash
+   * @param {Number} options.limit
+   * @param {Boolean} options.reverse
+   * @param {Boolean} options.inclusive
+   * @returns {Promise&lt;TXRecord[]>}
+   */
+
+  async _listUnconfirmed(acct, options) {
+    assert(typeof acct === 'number');
+    assert(options &amp;&amp; typeof options === 'object');
+    assert(Buffer.isBuffer(options.hash));
+    assert(typeof options.limit === 'number');
+    assert(typeof options.reverse === 'boolean');
+    assert(typeof options.inclusive === 'boolean');
+
+    if (options.limit > this.maxTXs)
+      throw new Error(`Limit exceeds max of ${this.maxTXs}.`);
+
+    const count = await this.getCountForTX(options.hash);
+
+    if (!count)
+      throw new Error('Transaction not found.');
+
+    if (count.height !== UNCONFIRMED_HEIGHT)
+      throw new Error('Transaction is confirmed.');
+
+    const {height, index} = count;
+
+    const uopts = {
+      limit: options.limit,
+      reverse: options.reverse
+    };
+
+    const lesser = options.inclusive ? 'lte' : 'lt';
+    const greater = options.inclusive ? 'gte' : 'gt';
+
+    if (acct !== -1) {
+      if (uopts.reverse) {
+        uopts['gte'] = layout.OT.min(acct, height);
+        uopts[lesser] = layout.OT.encode(acct, height, index);
+      } else {
+        uopts[greater] = layout.OT.encode(acct, height, index);
+        uopts['lte'] = layout.OT.max(acct, height);
+      }
+    } else {
+      if (uopts.reverse) {
+        uopts['gte'] = layout.Ot.min(height);
+        uopts[lesser] = layout.Ot.encode(height, index);
+      } else {
+        uopts[greater] = layout.Ot.encode(height, index);
+        uopts['lte'] = layout.Ot.max(height);
+      }
+    }
+
+    const hashes = await this.bucket.values(uopts);
+
+    return Promise.all(hashes.map(async (hash) => {
+      return await this.getTX(hash);
+    }));
+  }
+
   /**
    * Remove spenders that have not been confirmed. We do this in the
    * odd case of stuck transactions or when a coin is double-spent
@@ -1660,7 +2673,7 @@ class TXDB {
    * @private
    * @param {Hash} hash
    * @param {TX} ref - Reference tx, the tx that double-spent.
-   * @returns {Promise} - Returns Boolean.
+   * @returns {Promise&lt;Details?>} - Returns Boolean.
    */
 
   async removeConflict(wtx) {
@@ -1669,6 +2682,9 @@ class TXDB {
     this.logger.warning('Handling conflicting tx: %x.', tx.hash());
 
     const details = await this.removeRecursive(wtx);
+
+    if (!details)
+      return null;
 
     this.logger.warning('Removed conflict: %x.', tx.hash());
 
@@ -1683,7 +2699,8 @@ class TXDB {
    * double spenders, and verify inputs.
    * @private
    * @param {TX} tx
-   * @returns {Promise}
+   * @param {Boolean} conf
+   * @returns {Promise&lt;Boolean>}
    */
 
   async removeConflicts(tx, conf) {
@@ -1728,180 +2745,105 @@ class TXDB {
   }
 
   /**
-   * Lock balances according to covenants.
-   * @param {Object} b
+   * Lock balances according to covenant.
+   * Inserting or confirming: TX outputs.
+   * Removing or undoing: Coins spent by the wallet in tx inputs.
    * @param {State} state
-   * @param {TX} tx
-   * @param {Number} i
+   * @param {Credit} credit
    * @param {Path} path
    * @param {Number} height
    */
 
-  async lockBalances(b, state, tx, i, path, height) {
-    const output = tx.outputs[i];
-    const covenant = output.covenant;
+  lockBalances(state, credit, path, height) {
+    const {value, covenant} = credit.coin;
 
     switch (covenant.type) {
-      case types.CLAIM:
-      case types.BID: {
+      case types.CLAIM:    // output is locked until REGISTER
+      case types.BID:      // output is locked until REVEAL
+      case types.REVEAL:   // output is locked until REDEEM
+      case types.REGISTER: // output is now locked or "burned"
+      case types.UPDATE:   // output has been locked since REGISTER
+      case types.RENEW:
+      case types.TRANSFER:
+      case types.FINALIZE:
+      case types.REVOKE:
+      {
         if (height === -1)
-          state.ulocked(path, output.value);
+          state.ulocked(path, value);
         else
-          state.clocked(path, output.value);
+          state.clocked(path, value);
         break;
       }
 
-      case types.REVEAL: {
-        assert(i &lt; tx.inputs.length);
-
-        const nameHash = covenant.getHash(0);
-        const prevout = tx.inputs[i].prevout;
-
-        const bb = await this.getBid(nameHash, prevout);
-        if (!bb)
-          break;
-
-        if (height === -1) {
-          state.ulocked(path, -bb.lockup);
-          state.ulocked(path, output.value);
-        } else {
-          state.clocked(path, -bb.lockup);
-          state.clocked(path, output.value);
-        }
-
+      case types.REDEEM:   // noop: already unlocked by the BID in the input
         break;
-      }
-
-      case types.REDEEM: {
-        if (height === -1)
-          state.ulocked(path, -output.value);
-        else
-          state.clocked(path, -output.value);
-        break;
-      }
-
-      case types.REGISTER: {
-        assert(i &lt; tx.inputs.length);
-
-        const prevout = tx.inputs[i].prevout;
-
-        const coin = await this.getCoin(prevout.hash, prevout.index);
-        assert(coin);
-        assert(coin.covenant.isReveal() || coin.covenant.isClaim());
-
-        if (height === -1) {
-          state.ulocked(path, -coin.value);
-          state.ulocked(path, output.value);
-        } else {
-          state.clocked(path, -coin.value);
-          state.clocked(path, output.value);
-        }
-
-        break;
-      }
-
-      case types.FINALIZE: {
-        if (height === -1)
-          state.ulocked(path, output.value);
-        else
-          state.clocked(path, output.value);
-        break;
-      }
     }
   }
 
   /**
    * Unlock balances according to covenants.
-   * @param {Object} b
+   * Inserting or confirming: Coins spent by the wallet in TX inputs.
+   * Removing or undoing: TX outputs.
    * @param {State} state
-   * @param {TX} tx
-   * @param {Number} i
+   * @param {Credit} credit
    * @param {Path} path
    * @param {Number} height
    */
 
-  async unlockBalances(b, state, tx, i, path, height) {
-    const output = tx.outputs[i];
-    const covenant = output.covenant;
+  unlockBalances(state, credit, path, height) {
+    const {value, covenant} = credit.coin;
 
     switch (covenant.type) {
-      case types.CLAIM:
-      case types.BID: {
+      case types.CLAIM:    // output is locked until REGISTER
+      case types.BID:      // output is locked until REVEAL
+      case types.REVEAL:   // output is locked until REDEEM
+      case types.REGISTER: // output is now locked or "burned"
+      case types.UPDATE:   // output has been locked since REGISTER
+      case types.RENEW:
+      case types.TRANSFER:
+      case types.FINALIZE:
+      case types.REVOKE:
+      {
         if (height === -1)
-          state.ulocked(path, -output.value);
+          state.ulocked(path, -value);
         else
-          state.clocked(path, -output.value);
+          state.clocked(path, -value);
         break;
       }
-
-      case types.REVEAL: {
-        assert(i &lt; tx.inputs.length);
-
-        const nameHash = covenant.getHash(0);
-        const prevout = tx.inputs[i].prevout;
-
-        const bb = await this.getBid(nameHash, prevout);
-        if (!bb)
-          break;
-
-        if (height === -1) {
-          state.ulocked(path, bb.lockup);
-          state.ulocked(path, -output.value);
-        } else {
-          state.clocked(path, bb.lockup);
-          state.clocked(path, -output.value);
-        }
-
+      case types.REDEEM:   // noop: already unlocked by the BID in the input
         break;
-      }
-
-      case types.REDEEM: {
-        if (height === -1)
-          state.ulocked(path, output.value);
-        else
-          state.clocked(path, output.value);
-        break;
-      }
-
-      case types.REGISTER: {
-        assert(i &lt; tx.inputs.length);
-
-        const coins = await this.getSpentCoins(tx);
-        const coin = coins[i];
-        assert(coin);
-        assert(coin.covenant.isReveal() || coin.covenant.isClaim());
-
-        if (height === -1) {
-          state.ulocked(path, coin.value);
-          state.ulocked(path, -output.value);
-        } else {
-          state.clocked(path, coin.value);
-          state.clocked(path, -output.value);
-        }
-
-        break;
-      }
-
-      case types.FINALIZE: {
-        if (height === -1)
-          state.ulocked(path, -output.value);
-        else
-          state.clocked(path, -output.value);
-        break;
-      }
     }
+  }
+
+  /**
+   * Start tracking OPENs right away.
+   * This does not check if the name is owned by the wallet.
+   * @private
+   * @param {Batch} b
+   * @param {Output} tx
+   * @param {Path} path
+   * @returns {Promise}
+   */
+
+  async watchOpensEarly(b, output) {
+    const {covenant} = output;
+
+    if (!covenant.isOpen())
+      return;
+
+    const nameHash = covenant.getHash(0);
+
+    if (!await this.wdb.hasNameMap(nameHash, this.wid))
+      await this.addNameMap(b, nameHash);
   }
 
   /**
    * Handle incoming covenant.
    * @param {Object} b
    * @param {TX} tx
-   * @param {Number} i
-   * @param {Path} path
+   * @param {CoinView} view
    * @param {Number} height
-   * @returns {Object} out
-   * @returns {Boolean} out.updated
-   * @returns {Boolean} out.index
+   * @returns {Promise&lt;Boolean>} updated
    */
 
   async connectNames(b, tx, view, height) {
@@ -1958,8 +2900,7 @@ class TXDB {
         case types.OPEN: {
           if (!path) {
             // Are we "watching" this name?
-            const map = await this.wdb.getNameMap(nameHash);
-            if (!map || !map.wids.has(this.wid))
+            if (!await this.wdb.hasNameMap(nameHash, this.wid))
               break;
 
             const name = covenant.get(2);
@@ -1995,6 +2936,7 @@ class TXDB {
               name,
               lockup,
               blind,
+              height,
               own: false
             });
 
@@ -2012,6 +2954,7 @@ class TXDB {
             name,
             lockup,
             blind,
+            height,
             own: true
           });
 
@@ -2032,18 +2975,20 @@ class TXDB {
             ns.setValue(output.value);
           }
 
+          const {prevout} = tx.inputs[i];
+
           if (!path) {
             this.putReveal(b, nameHash, outpoint, {
               name: ns.name,
               value: output.value,
               height: height,
-              own: false
+              own: false,
+              bidPrevout: prevout
             });
             updated = true;
             break;
           }
 
-          const {prevout} = tx.inputs[i];
           const coin = view.getOutput(prevout);
 
           if (coin) {
@@ -2061,7 +3006,8 @@ class TXDB {
             name: ns.name,
             value: output.value,
             height: height,
-            own: true
+            own: true,
+            bidPrevout: prevout
           });
 
           updated = true;
@@ -2225,6 +3171,7 @@ class TXDB {
    * @param {Number} i
    * @param {Path} path
    * @param {Number} height
+   * @returns {Promise&lt;Boolean>} applied undo.
    */
 
   async undoNameState(b, tx) {
@@ -2244,8 +3191,9 @@ class TXDB {
           break;
         }
         case types.REVEAL: {
+          const input = tx.inputs[i];
           const nameHash = covenant.getHash(0);
-          this.removeReveal(b, nameHash, tx.outpoint(i));
+          this.removeReveal(b, nameHash, tx.outpoint(i), input.prevout);
           break;
         }
       }
@@ -2261,6 +3209,7 @@ class TXDB {
    * that is in the nameMap but does not involve wallet addresses.
    * @param {Object} b
    * @param {Hash} hash
+   * @returns {Promise&lt;Boolean>} - applied undo.
    */
 
   async applyNameUndo(b, hash) {
@@ -2294,6 +3243,65 @@ class TXDB {
     b.del(layout.U.encode(hash));
 
     return true;
+  }
+
+  /**
+   * Recalculate wallet balances.
+   * @returns {Promise}
+   */
+
+  async recalculateBalances() {
+    const state = new BalanceDelta();
+
+    const creditIter = this.bucket.iterator({
+      gte: layout.c.min(),
+      lte: layout.c.max(),
+      values: true
+    });
+
+    await creditIter.each(async (key, raw) => {
+      const credit = Credit.decode(raw);
+      const coin = credit.coin;
+      const value = coin.value;
+      const path = await this.getPath(coin);
+
+      assert(path);
+
+      state.coin(path, 1);
+      state.unconfirmed(path, value);
+      this.lockBalances(state, credit, path, -1);
+
+      // Unconfirmed coins
+      if (coin.height !== -1) {
+        state.confirmed(path, value);
+        this.lockBalances(state, credit, path, coin.height);
+      }
+
+      if (credit.spent) {
+        state.coin(path, -1);
+        state.unconfirmed(path, -value);
+        this.unlockBalances(state, credit, path, -1);
+      }
+    });
+
+    const batch = this.bucket.batch();
+
+    for (const [acct, delta] of state.accounts) {
+      const oldAccountBalance = await this.getAccountBalance(acct);
+      const finalAcctBalance = new Balance();
+      finalAcctBalance.tx = oldAccountBalance.tx;
+
+      delta.applyTo(finalAcctBalance);
+      batch.put(layout.r.encode(acct), finalAcctBalance.encode());
+    }
+
+    const walletBalance = await this.getWalletBalance();
+    const finalWalletBalance = new Balance();
+    finalWalletBalance.tx = walletBalance.tx;
+    state.applyTo(finalWalletBalance);
+    batch.put(layout.R.encode(), finalWalletBalance.encode());
+
+    await batch.write();
   }
 
   /**
@@ -2335,6 +3343,7 @@ class TXDB {
   /**
    * Unlock a single coin.
    * @param {Coin|Outpoint} coin
+   * @returns {Boolean} - whether the coin was locked.
    */
 
   unlockCoin(coin) {
@@ -2354,6 +3363,7 @@ class TXDB {
   /**
    * Test locked status of a single coin.
    * @param {Coin|Outpoint} coin
+   * @returns {Boolean}
    */
 
   isLocked(coin) {
@@ -2365,7 +3375,7 @@ class TXDB {
    * Filter array of coins or outpoints
    * for only unlocked ones.
    * @param {Coin[]|Outpoint[]}
-   * @returns {Array}
+   * @returns {Coin[]|Outpoint[]}
    */
 
   filterLocked(coins) {
@@ -2394,29 +3404,11 @@ class TXDB {
   }
 
   /**
-   * Get hashes of all transactions in the database.
-   * @param {Number} acct
-   * @returns {Promise} - Returns {@link Hash}[].
-   */
-
-  getAccountHistoryHashes(acct) {
-    assert(typeof acct === 'number');
-    return this.bucket.keys({
-      gte: layout.T.min(acct),
-      lte: layout.T.max(acct),
-      parse: (key) => {
-        const [, hash] = layout.T.decode(key);
-        return hash;
-      }
-    });
-  }
-
-  /**
    * Test whether an account owns a coin.
    * @param {Number} acct
    * @param {Hash} hash
    * @param {Index} number
-   * @returns {Promise} - Returns Boolean.
+   * @returns {Promise&lt;Boolean>}
    */
 
   hasCoinByAccount(acct, hash, index) {
@@ -2426,28 +3418,9 @@ class TXDB {
   }
 
   /**
-   * Get hashes of all transactions in the database.
-   * @param {Number} acct
-   * @returns {Promise} - Returns {@link Hash}[].
-   */
-
-  getHistoryHashes(acct) {
-    assert(typeof acct === 'number');
-
-    if (acct !== -1)
-      return this.getAccountHistoryHashes(acct);
-
-    return this.bucket.keys({
-      gte: layout.t.min(),
-      lte: layout.t.max(),
-      parse: key => layout.t.decode(key)[0]
-    });
-  }
-
-  /**
    * Get hashes of all unconfirmed transactions in the database.
    * @param {Number} acct
-   * @returns {Promise} - Returns {@link Hash}[].
+   * @returns {Promise&lt;Hash[]>}
    */
 
   getAccountPendingHashes(acct) {
@@ -2465,7 +3438,7 @@ class TXDB {
   /**
    * Get hashes of all unconfirmed transactions in the database.
    * @param {Number} acct
-   * @returns {Promise} - Returns {@link Hash}[].
+   * @returns {Promise&lt;Hash[]>}
    */
 
   getPendingHashes(acct) {
@@ -2484,7 +3457,7 @@ class TXDB {
   /**
    * Test whether the database has a pending transaction.
    * @param {Hash} hash
-   * @returns {Promise} - Returns Boolean.
+   * @returns {Promise&lt;Boolean>}
    */
 
   async hasPending(hash) {
@@ -2494,7 +3467,7 @@ class TXDB {
   /**
    * Get all coin hashes in the database.
    * @param {Number} acct
-   * @returns {Promise} - Returns {@link Hash}[].
+   * @returns {Promise&lt;Outpoint[]>}
    */
 
   getAccountOutpoints(acct) {
@@ -2512,7 +3485,7 @@ class TXDB {
   /**
    * Get all coin hashes in the database.
    * @param {Number} acct
-   * @returns {Promise} - Returns {@link Hash}[].
+   * @returns {Promise&lt;Outpoint[]>}
    */
 
   getOutpoints(acct) {
@@ -2539,7 +3512,7 @@ class TXDB {
    * @param {Number} options.end - End height.
    * @param {Number?} options.limit - Max number of records.
    * @param {Boolean?} options.reverse - Reverse order.
-   * @returns {Promise} - Returns {@link Hash}[].
+   * @returns {Promise&lt;Hash[]>}
    */
 
   getAccountHeightRangeHashes(acct, options) {
@@ -2568,7 +3541,7 @@ class TXDB {
    * @param {Number} options.end - End height.
    * @param {Number?} options.limit - Max number of records.
    * @param {Boolean?} options.reverse - Reverse order.
-   * @returns {Promise} - Returns {@link Hash}[].
+   * @returns {Promise&lt;Hash[]>}
    */
 
   getHeightRangeHashes(acct, options) {
@@ -2595,7 +3568,7 @@ class TXDB {
   /**
    * Get TX hashes by height.
    * @param {Number} height
-   * @returns {Promise} - Returns {@link Hash}[].
+   * @returns {Promise&lt;Hash[]>}
    */
 
   getHeightHashes(height) {
@@ -2603,150 +3576,9 @@ class TXDB {
   }
 
   /**
-   * Get TX hashes by timestamp range.
-   * @param {Number} acct
-   * @param {Object} options
-   * @param {Number} options.start - Start height.
-   * @param {Number} options.end - End height.
-   * @param {Number?} options.limit - Max number of records.
-   * @param {Boolean?} options.reverse - Reverse order.
-   * @returns {Promise} - Returns {@link Hash}[].
-   */
-
-  getAccountRangeHashes(acct, options) {
-    assert(typeof acct === 'number');
-
-    const start = options.start || 0;
-    const end = options.end || 0xffffffff;
-
-    return this.bucket.keys({
-      gte: layout.M.min(acct, start),
-      lte: layout.M.max(acct, end),
-      limit: options.limit,
-      reverse: options.reverse,
-      parse: (key) => {
-        const [,, hash] = layout.M.decode(key);
-        return hash;
-      }
-    });
-  }
-
-  /**
-   * Get TX hashes by timestamp range.
-   * @param {Number} acct
-   * @param {Object} options
-   * @param {Number} options.start - Start height.
-   * @param {Number} options.end - End height.
-   * @param {Number?} options.limit - Max number of records.
-   * @param {Boolean?} options.reverse - Reverse order.
-   * @returns {Promise} - Returns {@link Hash}[].
-   */
-
-  getRangeHashes(acct, options) {
-    assert(typeof acct === 'number');
-
-    if (acct !== -1)
-      return this.getAccountRangeHashes(acct, options);
-
-    const start = options.start || 0;
-    const end = options.end || 0xffffffff;
-
-    return this.bucket.keys({
-      gte: layout.m.min(start),
-      lte: layout.m.max(end),
-      limit: options.limit,
-      reverse: options.reverse,
-      parse: (key) => {
-        const [, hash] = layout.m.decode(key);
-        return hash;
-      }
-    });
-  }
-
-  /**
-   * Get transactions by timestamp range.
-   * @param {Number} acct
-   * @param {Object} options
-   * @param {Number} options.start - Start time.
-   * @param {Number} options.end - End time.
-   * @param {Number?} options.limit - Max number of records.
-   * @param {Boolean?} options.reverse - Reverse order.
-   * @returns {Promise} - Returns {@link TX}[].
-   */
-
-  async getRange(acct, options) {
-    const hashes = await this.getRangeHashes(acct, options);
-    const txs = [];
-
-    for (const hash of hashes) {
-      const tx = await this.getTX(hash);
-      assert(tx);
-      txs.push(tx);
-    }
-
-    return txs;
-  }
-
-  /**
-   * Get last N transactions.
-   * @param {Number} acct
-   * @param {Number} limit - Max number of transactions.
-   * @returns {Promise} - Returns {@link TX}[].
-   */
-
-  getLast(acct, limit) {
-    return this.getRange(acct, {
-      start: 0,
-      end: 0xffffffff,
-      reverse: true,
-      limit: limit || 10
-    });
-  }
-
-  /**
-   * Get all transactions.
-   * @param {Number} acct
-   * @returns {Promise} - Returns {@link TX}[].
-   */
-
-  getHistory(acct) {
-    assert(typeof acct === 'number');
-
-    // Slow case
-    if (acct !== -1)
-      return this.getAccountHistory(acct);
-
-    // Fast case
-    return this.bucket.values({
-      gte: layout.t.min(),
-      lte: layout.t.max(),
-      parse: data => TXRecord.decode(data)
-    });
-  }
-
-  /**
-   * Get all acct transactions.
-   * @param {Number} acct
-   * @returns {Promise} - Returns {@link TX}[].
-   */
-
-  async getAccountHistory(acct) {
-    const hashes = await this.getHistoryHashes(acct);
-    const txs = [];
-
-    for (const hash of hashes) {
-      const tx = await this.getTX(hash);
-      assert(tx);
-      txs.push(tx);
-    }
-
-    return txs;
-  }
-
-  /**
    * Get unconfirmed transactions.
    * @param {Number} acct
-   * @returns {Promise} - Returns {@link TX}[].
+   * @returns {Promise&lt;TX[]>}
    */
 
   async getPending(acct) {
@@ -2765,7 +3597,7 @@ class TXDB {
   /**
    * Get coins.
    * @param {Number} acct
-   * @returns {Promise} - Returns {@link Coin}[].
+   * @returns {Promise&lt;Credit[]>}
    */
 
   getCredits(acct) {
@@ -2792,7 +3624,7 @@ class TXDB {
   /**
    * Get coins by account.
    * @param {Number} acct
-   * @returns {Promise} - Returns {@link Coin}[].
+   * @returns {Promise&lt;Credit[]>}
    */
 
   async getAccountCredits(acct) {
@@ -2811,7 +3643,7 @@ class TXDB {
   /**
    * Fill a transaction with coins (all historical coins).
    * @param {TX} tx
-   * @returns {Promise} - Returns {@link TX}.
+   * @returns {Promise&lt;Array&lt;Credit|null>>}
    */
 
   async getSpentCredits(tx) {
@@ -2844,7 +3676,7 @@ class TXDB {
   /**
    * Get coins.
    * @param {Number} acct
-   * @returns {Promise} - Returns {@link Coin}[].
+   * @returns {Promise&lt;Credit[]>}
    */
 
   async getCoins(acct) {
@@ -2864,7 +3696,7 @@ class TXDB {
   /**
    * Get coins by account.
    * @param {Number} acct
-   * @returns {Promise} - Returns {@link Coin}[].
+   * @returns {Promise&lt;Coin[]>}
    */
 
   async getAccountCoins(acct) {
@@ -2884,7 +3716,7 @@ class TXDB {
   /**
    * Get historical coins for a transaction.
    * @param {TX} tx
-   * @returns {Promise} - Returns {@link TX}.
+   * @returns {Promise&lt;Coin[]>}
    */
 
   async getSpentCoins(tx) {
@@ -2909,7 +3741,7 @@ class TXDB {
   /**
    * Get a coin viewpoint.
    * @param {TX} tx
-   * @returns {Promise} - Returns {@link CoinView}.
+   * @returns {Promise&lt;CoinView>}
    */
 
   async getCoinView(tx) {
@@ -2934,7 +3766,7 @@ class TXDB {
   /**
    * Get historical coin viewpoint.
    * @param {TX} tx
-   * @returns {Promise} - Returns {@link CoinView}.
+   * @returns {Promise&lt;CoinView>}
    */
 
   async getSpentView(tx) {
@@ -2958,7 +3790,7 @@ class TXDB {
   /**
    * Get transaction.
    * @param {Hash} hash
-   * @returns {Promise} - Returns {@link TX}.
+   * @returns {Promise&lt;TXRecord?>}
    */
 
   async getTX(hash) {
@@ -2973,7 +3805,7 @@ class TXDB {
   /**
    * Get transaction details.
    * @param {Hash} hash
-   * @returns {Promise} - Returns {@link TXDetails}.
+   * @returns {Promise&lt;Details?>}
    */
 
   async getDetails(hash) {
@@ -2987,8 +3819,8 @@ class TXDB {
 
   /**
    * Convert transaction to transaction details.
-   * @param {TXRecord[]} wtxs
-   * @returns {Promise}
+   * @param {TXRecord[]|TXRecord} wtxs
+   * @returns {Promise&lt;Details[]|Details>}
    */
 
   async toDetails(wtxs) {
@@ -3013,7 +3845,7 @@ class TXDB {
    * Convert transaction to transaction details.
    * @private
    * @param {TXRecord} wtx
-   * @returns {Promise}
+   * @returns {Promise&lt;Details>}
    */
 
   async _toDetails(wtx) {
@@ -3045,7 +3877,7 @@ class TXDB {
   /**
    * Test whether the database has a transaction.
    * @param {Hash} hash
-   * @returns {Promise} - Returns Boolean.
+   * @returns {Promise&lt;Boolean>}
    */
 
   hasTX(hash) {
@@ -3056,7 +3888,7 @@ class TXDB {
    * Get coin.
    * @param {Hash} hash
    * @param {Number} index
-   * @returns {Promise} - Returns {@link Coin}.
+   * @returns {Promise&lt;Coin?>}
    */
 
   async getCoin(hash, index) {
@@ -3069,10 +3901,10 @@ class TXDB {
   }
 
   /**
-   * Get coin.
+   * Get credit.
    * @param {Hash} hash
    * @param {Number} index
-   * @returns {Promise} - Returns {@link Coin}.
+   * @returns {Promise&lt;Credit?>}
    */
 
   async getCredit(hash, index) {
@@ -3092,7 +3924,7 @@ class TXDB {
    * Get spender coin.
    * @param {Outpoint} spent
    * @param {Outpoint} prevout
-   * @returns {Promise} - Returns {@link Coin}.
+   * @returns {Promise&lt;Coin?>}
    */
 
   async getSpentCoin(spent, prevout) {
@@ -3112,7 +3944,7 @@ class TXDB {
   /**
    * Test whether the database has a spent coin.
    * @param {Outpoint} spent
-   * @returns {Promise} - Returns {@link Coin}.
+   * @returns {Promise&lt;Boolean>}
    */
 
   hasSpentCoin(spent) {
@@ -3147,7 +3979,7 @@ class TXDB {
   /**
    * Test whether the database has a transaction.
    * @param {Hash} hash
-   * @returns {Promise} - Returns Boolean.
+   * @returns {Promise&lt;Boolean>}
    */
 
   async hasCoin(hash, index) {
@@ -3157,7 +3989,7 @@ class TXDB {
   /**
    * Calculate balance.
    * @param {Number?} account
-   * @returns {Promise} - Returns {@link Balance}.
+   * @returns {Promise&lt;Balance>}
    */
 
   async getBalance(acct) {
@@ -3171,7 +4003,7 @@ class TXDB {
 
   /**
    * Calculate balance.
-   * @returns {Promise} - Returns {@link Balance}.
+   * @returns {Promise&lt;Balance>}
    */
 
   async getWalletBalance() {
@@ -3186,7 +4018,7 @@ class TXDB {
   /**
    * Calculate balance by account.
    * @param {Number} acct
-   * @returns {Promise} - Returns {@link Balance}.
+   * @returns {Promise&lt;Balance>}
    */
 
   async getAccountBalance(acct) {
@@ -3204,33 +4036,34 @@ class TXDB {
    * Zap pending transactions older than `age`.
    * @param {Number} acct
    * @param {Number} age - Age delta.
-   * @returns {Promise}
+   * @returns {Promise&lt;Hash[]>} - zapped tx hashes.
    */
 
   async zap(acct, age) {
     assert((age >>> 0) === age);
 
-    const now = util.now();
+    const now = this.nowFn();
+    const options = {
+      time: now - age,
+      limit: Math.min(100, this.maxTXs),
+      reverse: true
+    };
 
-    const txs = await this.getRange(acct, {
-      start: 0,
-      end: now - age
-    });
+    let txs = await this.listUnconfirmedByTime(acct, options);
 
     const hashes = [];
 
-    for (const wtx of txs) {
-      if (wtx.height !== -1)
-        continue;
+    while (txs.length) {
+      for (const wtx of txs) {
+        this.logger.debug('Zapping TX: %h (%d)',
+                          wtx.hash, this.wid);
 
-      assert(now - wtx.mtime >= age);
+        await this.remove(wtx.hash);
 
-      this.logger.debug('Zapping TX: %x (%d)',
-        wtx.tx.hash(), this.wid);
+        hashes.push(wtx.hash);
+      }
 
-      await this.remove(wtx.hash);
-
-      hashes.push(wtx.hash);
+      txs = await this.listUnconfirmedByTime(acct, options);
     }
 
     return hashes;
@@ -3239,7 +4072,7 @@ class TXDB {
   /**
    * Abandon transaction.
    * @param {Hash} hash
-   * @returns {Promise}
+   * @returns {Promise&lt;Details>} - removed tx details.
    */
 
   async abandon(hash) {
@@ -3249,6 +4082,24 @@ class TXDB {
       throw new Error('TX not eligible.');
 
     return this.remove(hash);
+  }
+
+  /**
+   * Dump database (for debugging).
+   * @returns {bdb.Iterator}
+   */
+
+  async dump() {
+    const iter = this.bucket.iterator({
+      values: true
+    });
+
+    const records = Object.create(null);
+
+    for await (const {key, value} of iter)
+      records[key.toString('hex')] = value.toString('hex');
+
+    return records;
   }
 }
 
@@ -3327,7 +4178,7 @@ class Balance extends bio.Struct {
    * Inject properties from serialized data.
    * @private
    * @param {Buffer} data
-   * @returns {TXDBState}
+   * @returns {Balance}
    */
 
   read(br) {
@@ -3342,7 +4193,7 @@ class Balance extends bio.Struct {
 
   /**
    * Convert balance to a more json-friendly object.
-   * @param {Boolean?} minimal
+   * @param {Boolean} [minimal=false]
    * @returns {Object}
    */
 
@@ -3381,6 +4232,12 @@ class Balance extends bio.Struct {
  */
 
 class BalanceDelta {
+  /** @type {Balance} */
+  wallet;
+
+  /** @type {Map&lt;Number, Balance>} */
+  accounts;
+
   /**
    * Create a balance delta.
    * @constructor
@@ -3812,7 +4669,7 @@ class BlockRecord extends bio.Struct {
   /**
    * Instantiate wallet block from serialized tip data.
    * @private
-   * @param {Buffer} data
+   * @param {bio.BufferReader} br
    */
 
   read(br) {
@@ -3917,18 +4774,25 @@ class BlindBid extends bio.Struct {
     this.value = -1;
     this.lockup = 0;
     this.blind = consensus.ZERO_HASH;
+    this.height = -1;
     this.own = false;
   }
 
   getSize() {
-    return 1 + this.name.length + 41;
+    return 1 + this.name.length + 45;
   }
 
   write(bw) {
+    let height = this.height;
+
+    if (height === -1)
+      height = 0xffffffff;
+
     bw.writeU8(this.name.length);
     bw.writeBytes(this.name);
     bw.writeU64(this.lockup);
     bw.writeBytes(this.blind);
+    bw.writeU32(height);
     bw.writeU8(this.own ? 1 : 0);
     return bw;
   }
@@ -3937,7 +4801,12 @@ class BlindBid extends bio.Struct {
     this.name = br.readBytes(br.readU8());
     this.lockup = br.readU64();
     this.blind = br.readBytes(32);
+    this.height = br.readU32();
     this.own = br.readU8() === 1;
+
+    if (this.height === 0xffffffff)
+      this.height = -1;
+
     return this;
   }
 
@@ -3949,6 +4818,7 @@ class BlindBid extends bio.Struct {
       value: this.value === -1 ? undefined : this.value,
       lockup: this.lockup,
       blind: this.blind.toString('hex'),
+      height: this.height,
       own: this.own
     };
   }
@@ -3999,13 +4869,14 @@ class BidReveal extends bio.Struct {
     this.name = EMPTY;
     this.nameHash = consensus.ZERO_HASH;
     this.prevout = new Outpoint();
+    this.bidPrevout = new Outpoint();
     this.value = 0;
     this.height = -1;
     this.own = false;
   }
 
   getSize() {
-    return 1 + this.name.length + 13;
+    return 1 + this.name.length + 13 + 36;
   }
 
   write(bw) {
@@ -4019,6 +4890,7 @@ class BidReveal extends bio.Struct {
     bw.writeU64(this.value);
     bw.writeU32(height);
     bw.writeU8(this.own ? 1 : 0);
+    this.bidPrevout.write(bw);
 
     return bw;
   }
@@ -4028,6 +4900,7 @@ class BidReveal extends bio.Struct {
     this.value = br.readU64();
     this.height = br.readU32();
     this.own = br.readU8() === 1;
+    this.bidPrevout.read(br);
 
     if (this.height === 0xffffffff)
       this.height = -1;
@@ -4040,6 +4913,7 @@ class BidReveal extends bio.Struct {
       name: this.name.toString('ascii'),
       nameHash: this.nameHash.toString('hex'),
       prevout: this.prevout.toJSON(),
+      bidPrevout: this.bidPrevout.isNull() ? null : this.bidPrevout.toJSON(),
       value: this.value,
       height: this.height,
       own: this.own
@@ -4047,9 +4921,92 @@ class BidReveal extends bio.Struct {
   }
 }
 
+/**
+ * TX Count
+ *
+ * This is used for tracking the block height and transaction
+ * index for the wallet. This is used as entry point into
+ * indexes that are organized by count.
+ */
+
+class TXCount {
+  /**
+   * Create tx count record.
+   * @constructor
+   * @param {Number} height
+   * @param {Number} index
+   */
+
+  constructor(height, index) {
+    this.height = height;
+    this.index = index;
+  }
+
+  /**
+   * Serialize.
+   * @returns {Buffer}
+   */
+
+  encode() {
+    const bw = bio.write(8);
+
+    bw.writeU32(this.height);
+    bw.writeU32(this.index);
+
+    return bw.render();
+  }
+
+  /**
+   * Deserialize.
+   * @private
+   * @param {Buffer} data
+   */
+
+  decode(data) {
+    const br = bio.read(data);
+
+    this.height = br.readU32();
+    this.index = br.readU32();
+
+    return this;
+  }
+
+  /**
+   * Instantiate a tx count from a buffer.
+   * @param {Buffer} data
+   * @returns {TXCount}
+   */
+
+  static decode(data) {
+    return new this().decode(data);
+  }
+}
+
+/**
+ * @param {Number} num
+ * @returns {Buffer}
+ */
+
+function fromU32(num) {
+  const data = Buffer.allocUnsafe(4);
+  data.writeUInt32LE(num, 0, true);
+  return data;
+}
+
 /*
  * Expose
  */
+
+TXDB.Balance = Balance;
+TXDB.BalanceDelta = BalanceDelta;
+TXDB.Credit = Credit;
+TXDB.Details = Details;
+TXDB.DetailsMember = DetailsMember;
+TXDB.BlockRecord = BlockRecord;
+TXDB.BlindBid = BlindBid;
+TXDB.BlindValue = BlindValue;
+TXDB.BidReveal = BidReveal;
+TXDB.TXCount = TXCount;
 
 module.exports = TXDB;
 </code></pre>
@@ -4062,13 +5019,13 @@ module.exports = TXDB;
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-blockchain.html">blockchain</a></li><li><a href="module-blockchain_common.html">blockchain/common</a></li><li><a href="module-blockstore.html">blockstore</a></li><li><a href="module-blockstore_common.html">blockstore/common</a></li><li><a href="module-blockstore_records.html">blockstore/records</a></li><li><a href="module-client.html">client</a></li><li><a href="module-coins.html">coins</a></li><li><a href="module-covenants.html">covenants</a></li><li><a href="module-dns_common.html">dns/common</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-hd.html">hd</a></li><li><a href="module-hsd.html">hsd</a></li><li><a href="module-mempool.html">mempool</a></li><li><a href="module-mining.html">mining</a></li><li><a href="module-mining_common.html">mining/common</a></li><li><a href="module-net.html">net</a></li><li><a href="module-net_bip152.html">net/bip152</a></li><li><a href="module-net_common.html">net/common</a></li><li><a href="module-net_packets.html">net/packets</a></li><li><a href="module-node.html">node</a></li><li><a href="module-primitives.html">primitives</a></li><li><a href="module-protocol.html">protocol</a></li><li><a href="module-protocol_consensus.html">protocol/consensus</a></li><li><a href="module-protocol_errors.html">protocol/errors</a></li><li><a href="module-protocol_networks.html">protocol/networks</a></li><li><a href="module-protocol_policy.html">protocol/policy</a></li><li><a href="module-script.html">script</a></li><li><a href="module-script_common.html">script/common</a></li><li><a href="module-ui.html">ui</a></li><li><a href="module-utils.html">utils</a></li><li><a href="module-utils_util.html">utils/util</a></li><li><a href="module-wallet.html">wallet</a></li><li><a href="module-wallet_common.html">wallet/common</a></li><li><a href="module-wallet_plugin.html">wallet/plugin</a></li><li><a href="module-wallet_records.html">wallet/records</a></li><li><a href="module-workers.html">workers</a></li><li><a href="module-workers_jobs.html">workers/jobs</a></li><li><a href="module-workers_packets.html">workers/packets</a></li></ul><h3>Classes</h3><ul><li><a href="AirdropKey.html">AirdropKey</a></li><li><a href="AirdropProof.html">AirdropProof</a></li><li><a href="BidReveal.html">BidReveal</a></li><li><a href="BitField.html">BitField</a></li><li><a href="BitView.html">BitView</a></li><li><a href="BlindBid.html">BlindBid</a></li><li><a href="BlindValue.html">BlindValue</a></li><li><a href="BlockProof.html">BlockProof</a></li><li><a href="Brontide.html">Brontide</a></li><li><a href="BrontideStream.html">BrontideStream</a></li><li><a href="ChainFlags.html">ChainFlags</a></li><li><a href="ChainState.html">ChainState</a></li><li><a href="CipherState.html">CipherState</a></li><li><a href="Claim.html">Claim</a></li><li><a href="DetailsMember.html">DetailsMember</a></li><li><a href="DS.html">DS</a></li><li><a href="Field.html">Field</a></li><li><a href="GLUE4.html">GLUE4</a></li><li><a href="GLUE6.html">GLUE6</a></li><li><a href="HandshakeState.html">HandshakeState</a></li><li><a href="HashList.html">HashList</a></li><li><a href="LockedUp.html">LockedUp</a></li><li><a href="MigrateAccountLookahead.html">MigrateAccountLookahead</a></li><li><a href="MigrateBlockStore.html">MigrateBlockStore</a></li><li><a href="MigrateChainState.html">MigrateChainState</a></li><li><a href="MigrateChangeAddress.html">MigrateChangeAddress</a></li><li><a href="MigrateMigrations.html">MigrateMigrations</a></li><li><a href="MigrateTreeState.html">MigrateTreeState</a></li><li><a href="module.migrations.MigrationState.html">MigrationState</a></li><li><a href="module-blockchain.Chain.html">Chain</a></li><li><a href="module-blockchain.ChainDB.html">ChainDB</a></li><li><a href="module-blockchain.ChainEntry.html">ChainEntry</a></li><li><a href="module-blockchain.ChainMigrator.html">ChainMigrator</a></li><li><a href="module-blockchain.ChainMigratorOptions.html">ChainMigratorOptions</a></li><li><a href="module-blockchain.ChainOptions.html">ChainOptions</a></li><li><a href="module-blockchain.DeploymentState.html">DeploymentState</a></li><li><a href="module-blockchain.WalletMigrationResult.html">WalletMigrationResult</a></li><li><a href="module-blockchain.WalletMigrator.html">WalletMigrator</a></li><li><a href="module-blockstore.AbstractBatch.html">AbstractBatch</a></li><li><a href="module-blockstore.AbstractBlockStore.html">AbstractBlockStore</a></li><li><a href="module-blockstore.FileBatch.html">FileBatch</a></li><li><a href="module-blockstore.LevelBatch.html">LevelBatch</a></li><li><a href="module-blockstore_records-BlockRecord.html">BlockRecord</a></li><li><a href="module-blockstore_records-FileRecord.html">FileRecord</a></li><li><a href="module-blockstore_FileBlockStore.html">blockstore:FileBlockStore</a></li><li><a href="module-blockstore_LevelBlockStore.html">blockstore:LevelBlockStore</a></li><li><a href="module-client.NodeClient.html">NodeClient</a></li><li><a href="module-client.WalletClient.html">WalletClient</a></li><li><a href="module-coins.CoinEntry.html">CoinEntry</a></li><li><a href="module-coins.Coins.html">Coins</a></li><li><a href="module-coins.CoinView.html">CoinView</a></li><li><a href="module-coins.UndoCoins.html">UndoCoins</a></li><li><a href="module-currency.Amount.html">Amount</a></li><li><a href="module-errors-CriticalError.html">CriticalError</a></li><li><a href="module-hd.Mnemonic.html">Mnemonic</a></li><li><a href="module-hd.PrivateKey.html">PrivateKey</a></li><li><a href="module-hd.PublicKey.html">PublicKey</a></li><li><a href="module-http.HTTPOptions.html">HTTPOptions</a></li><li><a href="module-http.RPC.html">RPC</a></li><li><a href="module-http.Server.html">Server</a></li><li><a href="module-http.TransactionOptions.html">TransactionOptions</a></li><li><a href="module-mempool.AirdropEntry.html">AirdropEntry</a></li><li><a href="module-mempool.ClaimEntry.html">ClaimEntry</a></li><li><a href="module-mempool.ConfirmStats.html">ConfirmStats</a></li><li><a href="module-mempool.Mempool.html">Mempool</a></li><li><a href="module-mempool.MempoolEntry.html">MempoolEntry</a></li><li><a href="module-mempool.MempoolOptions.html">MempoolOptions</a></li><li><a href="module-mempool.PolicyEstimator.html">PolicyEstimator</a></li><li><a href="module-migrations.AbstractMigration.html">AbstractMigration</a></li><li><a href="module-migrations.MigrationResult.html">MigrationResult</a></li><li><a href="module-migrations.Migrator.html">Migrator</a></li><li><a href="module-mining.BlockAirdrop.html">BlockAirdrop</a></li><li><a href="module-mining.BlockClaim.html">BlockClaim</a></li><li><a href="module-mining.BlockEntry.html">BlockEntry</a></li><li><a href="module-mining.BlockTemplate.html">BlockTemplate</a></li><li><a href="module-mining.CPUMiner.html">CPUMiner</a></li><li><a href="module-mining.Miner.html">Miner</a></li><li><a href="module-mining.MinerOptions.html">MinerOptions</a></li><li><a href="module-net.BroadcastItem.html">BroadcastItem</a></li><li><a href="module-net.Framer.html">Framer</a></li><li><a href="module-net.HostEntry.html">HostEntry</a></li><li><a href="module-net.HostList.html">HostList</a></li><li><a href="module-net.HostListOptions.html">HostListOptions</a></li><li><a href="module-net.LocalAddress.html">LocalAddress</a></li><li><a href="module-net.NetAddress.html">NetAddress</a></li><li><a href="module-net.Parser.html">Parser</a></li><li><a href="module-net.Peer.html">Peer</a></li><li><a href="module-net.PeerList.html">PeerList</a></li><li><a href="module-net.PeerOptions.html">PeerOptions</a></li><li><a href="module-net.Pool.html">Pool</a></li><li><a href="module-net.PoolOptions.html">PoolOptions</a></li><li><a href="module-net_bip152-CompactBlock.html">CompactBlock</a></li><li><a href="module-net_bip152-TXRequest.html">TXRequest</a></li><li><a href="module-net_bip152-TXResponse.html">TXResponse</a></li><li><a href="module-net_packets-AddrPacket.html">AddrPacket</a></li><li><a href="module-net_packets-AirdropPacket.html">AirdropPacket</a></li><li><a href="module-net_packets-BlockPacket.html">BlockPacket</a></li><li><a href="module-net_packets-BlockTxnPacket.html">BlockTxnPacket</a></li><li><a href="module-net_packets-ClaimPacket.html">ClaimPacket</a></li><li><a href="module-net_packets-CmpctBlockPacket.html">CmpctBlockPacket</a></li><li><a href="module-net_packets-FeeFilterPacket.html">FeeFilterPacket</a></li><li><a href="module-net_packets-FilterAddPacket.html">FilterAddPacket</a></li><li><a href="module-net_packets-FilterClearPacket.html">FilterClearPacket</a></li><li><a href="module-net_packets-FilterLoadPacket.html">FilterLoadPacket</a></li><li><a href="module-net_packets-GetAddrPacket.html">GetAddrPacket</a></li><li><a href="module-net_packets-GetBlocksPacket.html">GetBlocksPacket</a></li><li><a href="module-net_packets-GetBlockTxnPacket.html">GetBlockTxnPacket</a></li><li><a href="module-net_packets-GetDataPacket.html">GetDataPacket</a></li><li><a href="module-net_packets-GetHeadersPacket.html">GetHeadersPacket</a></li><li><a href="module-net_packets-GetProofPacket.html">GetProofPacket</a></li><li><a href="module-net_packets-HeadersPacket.html">HeadersPacket</a></li><li><a href="module-net_packets-InvPacket.html">InvPacket</a></li><li><a href="module-net_packets-MempoolPacket.html">MempoolPacket</a></li><li><a href="module-net_packets-MerkleBlockPacket.html">MerkleBlockPacket</a></li><li><a href="module-net_packets-NotFoundPacket.html">NotFoundPacket</a></li><li><a href="module-net_packets-Packet.html">Packet</a></li><li><a href="module-net_packets-PingPacket.html">PingPacket</a></li><li><a href="module-net_packets-PongPacket.html">PongPacket</a></li><li><a href="module-net_packets-ProofPacket.html">ProofPacket</a></li><li><a href="module-net_packets-RejectPacket.html">RejectPacket</a></li><li><a href="module-net_packets-SendCmpctPacket.html">SendCmpctPacket</a></li><li><a href="module-net_packets-SendHeadersPacket.html">SendHeadersPacket</a></li><li><a href="module-net_packets-TXPacket.html">TXPacket</a></li><li><a href="module-net_packets-UnknownPacket.html">UnknownPacket</a></li><li><a href="module-net_packets-VerackPacket.html">VerackPacket</a></li><li><a href="module-net_packets-VersionPacket.html">VersionPacket</a></li><li><a href="module-node.FullNode.html">FullNode</a></li><li><a href="module-node.Node.html">Node</a></li><li><a href="module-node.NodeClient.html">NodeClient</a></li><li><a href="module-node.NullClient.html">NullClient</a></li><li><a href="module-node.SPVNode.html">SPVNode</a></li><li><a href="module-primitives.AbstractBlock.html">AbstractBlock</a></li><li><a href="module-primitives.Address.html">Address</a></li><li><a href="module-primitives.Block.html">Block</a></li><li><a href="module-primitives.Coin.html">Coin</a></li><li><a href="module-primitives.CoinSelector.html">CoinSelector</a></li><li><a href="module-primitives.Covenant.html">Covenant</a></li><li><a href="module-primitives.Headers.html">Headers</a></li><li><a href="module-primitives.Input.html">Input</a></li><li><a href="module-primitives.InvItem.html">InvItem</a></li><li><a href="module-primitives.KeyRing.html">KeyRing</a></li><li><a href="module-primitives.MemBlock.html">MemBlock</a></li><li><a href="module-primitives.MerkleBlock.html">MerkleBlock</a></li><li><a href="module-primitives.MTX.html">MTX</a></li><li><a href="module-primitives.Outpoint.html">Outpoint</a></li><li><a href="module-primitives.Output.html">Output</a></li><li><a href="module-primitives.TX.html">TX</a></li><li><a href="module-primitives.TXMeta.html">TXMeta</a></li><li><a href="module-protocol.Network.html">Network</a></li><li><a href="module-protocol.TimeData.html">TimeData</a></li><li><a href="module-protocol_errors-VerifyError.html">VerifyError</a></li><li><a href="module-script.Opcode.html">Opcode</a></li><li><a href="module-script.Script.html">Script</a></li><li><a href="module-script.ScriptError.html">ScriptError</a></li><li><a href="module-script.ScriptNum.html">ScriptNum</a></li><li><a href="module-script.SigCache.html">SigCache</a></li><li><a href="module-script.Stack.html">Stack</a></li><li><a href="module-script.Witness.html">Witness</a></li><li><a href="module-ui.URI.html">URI</a></li><li><a href="module-wallet.Account.html">Account</a></li><li><a href="module-wallet.Balance.html">Balance</a></li><li><a href="module-wallet.BlockRecord.html">BlockRecord</a></li><li><a href="module-wallet.Credit.html">Credit</a></li><li><a href="module-wallet.Details.html">Details</a></li><li><a href="module-wallet.HTTP.html">HTTP</a></li><li><a href="module-wallet.MasterKey.html">MasterKey</a></li><li><a href="module-wallet.Path.html">Path</a></li><li><a href="module-wallet.Paths.html">Paths</a></li><li><a href="module-wallet.RPC.html">RPC</a></li><li><a href="module-wallet.TXDB.html">TXDB</a></li><li><a href="module-wallet.Wallet.html">Wallet</a></li><li><a href="module-wallet.WalletCoinView.html">WalletCoinView</a></li><li><a href="module-wallet.WalletDB.html">WalletDB</a></li><li><a href="module-wallet.WalletKey.html">WalletKey</a></li><li><a href="module-wallet.WalletMigratorOptions.html">WalletMigratorOptions</a></li><li><a href="module-wallet.WalletOptions.html">WalletOptions</a></li><li><a href="module-wallet_plugin-Plugin.html">Plugin</a></li><li><a href="module-wallet_records-BlockMeta.html">BlockMeta</a></li><li><a href="module-wallet_records-ChainState.html">ChainState</a></li><li><a href="module-wallet_records-MapRecord.html">MapRecord</a></li><li><a href="module-wallet_records-TXRecord.html">TXRecord</a></li><li><a href="module-workers.Framer.html">Framer</a></li><li><a href="module-workers.Master.html">Master</a></li><li><a href="module-workers.Parent.html">Parent</a></li><li><a href="module-workers.Parser.html">Parser</a></li><li><a href="module-workers.Worker.html">Worker</a></li><li><a href="module-workers.WorkerPool.html">WorkerPool</a></li><li><a href="module-workers_packets-CheckInputPacket.html">CheckInputPacket</a></li><li><a href="module-workers_packets-CheckInputResultPacket.html">CheckInputResultPacket</a></li><li><a href="module-workers_packets-CheckPacket.html">CheckPacket</a></li><li><a href="module-workers_packets-CheckResultPacket.html">CheckResultPacket</a></li><li><a href="module-workers_packets-ECSignPacket.html">ECSignPacket</a></li><li><a href="module-workers_packets-ECSignResultPacket.html">ECSignResultPacket</a></li><li><a href="module-workers_packets-ECVerifyPacket.html">ECVerifyPacket</a></li><li><a href="module-workers_packets-ECVerifyResultPacket.html">ECVerifyResultPacket</a></li><li><a href="module-workers_packets-EnvPacket.html">EnvPacket</a></li><li><a href="module-workers_packets-ErrorPacket.html">ErrorPacket</a></li><li><a href="module-workers_packets-ErrorResultPacket.html">ErrorResultPacket</a></li><li><a href="module-workers_packets-EventPacket.html">EventPacket</a></li><li><a href="module-workers_packets-LogPacket.html">LogPacket</a></li><li><a href="module-workers_packets-MinePacket.html">MinePacket</a></li><li><a href="module-workers_packets-MineResultPacket.html">MineResultPacket</a></li><li><a href="module-workers_packets-Packet.html">Packet</a></li><li><a href="module-workers_packets-ScryptPacket.html">ScryptPacket</a></li><li><a href="module-workers_packets-ScryptResultPacket.html">ScryptResultPacket</a></li><li><a href="module-workers_packets-SignInputPacket.html">SignInputPacket</a></li><li><a href="module-workers_packets-SignInputResultPacket.html">SignInputResultPacket</a></li><li><a href="module-workers_packets-SignPacket.html">SignPacket</a></li><li><a href="module-workers_packets-SignResultPacket.html">SignResultPacket</a></li><li><a href="NameDelta.html">NameDelta</a></li><li><a href="NameState.html">NameState</a></li><li><a href="NS.html">NS</a></li><li><a href="Ownership.html">Ownership</a></li><li><a href="Proof.html">Proof</a></li><li><a href="ProofData.html">ProofData</a></li><li><a href="RecursiveServer.html">RecursiveServer</a></li><li><a href="Reserved.html">Reserved</a></li><li><a href="Resource.html">Resource</a></li><li><a href="RootCache.html">RootCache</a></li><li><a href="RootServer.html">RootServer</a></li><li><a href="Seeder.html">Seeder</a></li><li><a href="SlidingWindow.html">SlidingWindow</a></li><li><a href="StateCache.html">StateCache</a></li><li><a href="SymmetricState.html">SymmetricState</a></li><li><a href="SYNTH4.html">SYNTH4</a></li><li><a href="SYNTH6.html">SYNTH6</a></li><li><a href="TXT.html">TXT</a></li><li><a href="Wallet.html">Wallet</a></li><li><a href="WalletNode.html">WalletNode</a></li></ul><h3>Global</h3><ul><li><a href="global.html#bindExit">bindExit</a></li><li><a href="global.html#checksig">checksig</a></li><li><a href="global.html#decode">decode</a></li><li><a href="global.html#encode">encode</a></li><li><a href="global.html#fromFloat">fromFloat</a></li><li><a href="global.html#groupKey">groupKey</a></li><li><a href="global.html#insert">insert</a></li><li><a href="global.html#listenExit">listenExit</a></li><li><a href="global.html#migrationLayout">migrationLayout</a></li><li><a href="global.html#oldLayout">oldLayout</a></li><li><a href="global.html#remove">remove</a></li><li><a href="global.html#search">search</a></li><li><a href="global.html#toFloat">toFloat</a></li><li><a href="global.html#validateKey">validateKey</a></li><li><a href="global.html#validateSignature">validateSignature</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-blockchain.html">blockchain</a></li><li><a href="module-blockchain_common.html">blockchain/common</a></li><li><a href="module-blockstore.html">blockstore</a></li><li><a href="module-blockstore_common.html">blockstore/common</a></li><li><a href="module-blockstore_records.html">blockstore/records</a></li><li><a href="module-client.html">client</a></li><li><a href="module-coins.html">coins</a></li><li><a href="module-covenants.html">covenants</a></li><li><a href="module-dns_common.html">dns/common</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-hd.html">hd</a></li><li><a href="module-hsd.html">hsd</a></li><li><a href="module-mempool.html">mempool</a></li><li><a href="module-mining.html">mining</a></li><li><a href="module-mining_common.html">mining/common</a></li><li><a href="module-net.html">net</a></li><li><a href="module-net_bip152.html">net/bip152</a></li><li><a href="module-net_common.html">net/common</a></li><li><a href="module-net_packets.html">net/packets</a></li><li><a href="module-node.html">node</a></li><li><a href="module-primitives.html">primitives</a></li><li><a href="module-protocol.html">protocol</a></li><li><a href="module-protocol_consensus.html">protocol/consensus</a></li><li><a href="module-protocol_errors.html">protocol/errors</a></li><li><a href="module-protocol_networks.html">protocol/networks</a></li><li><a href="module-protocol_policy.html">protocol/policy</a></li><li><a href="module-script.html">script</a></li><li><a href="module-script_common.html">script/common</a></li><li><a href="module-ui.html">ui</a></li><li><a href="module-utils.html">utils</a></li><li><a href="module-utils_util.html">utils/util</a></li><li><a href="module-wallet.html">wallet</a></li><li><a href="module-wallet_common.html">wallet/common</a></li><li><a href="module-wallet_plugin.html">wallet/plugin</a></li><li><a href="module-wallet_records.html">wallet/records</a></li><li><a href="module-workers.html">workers</a></li><li><a href="module-workers_jobs.html">workers/jobs</a></li><li><a href="module-workers_packets.html">workers/packets</a></li></ul><h3>Classes</h3><ul><li><a href="AirdropKey.html">AirdropKey</a></li><li><a href="AirdropProof.html">AirdropProof</a></li><li><a href="BidReveal.html">BidReveal</a></li><li><a href="BitField.html">BitField</a></li><li><a href="BitView.html">BitView</a></li><li><a href="BlindBid.html">BlindBid</a></li><li><a href="BlindValue.html">BlindValue</a></li><li><a href="BlockProof.html">BlockProof</a></li><li><a href="Brontide.html">Brontide</a></li><li><a href="BrontideStream.html">BrontideStream</a></li><li><a href="ChainFlags.html">ChainFlags</a></li><li><a href="ChainState.html">ChainState</a></li><li><a href="CipherState.html">CipherState</a></li><li><a href="Claim.html">Claim</a></li><li><a href="ContractState.html">ContractState</a></li><li><a href="DetailsMember.html">DetailsMember</a></li><li><a href="DS.html">DS</a></li><li><a href="Field.html">Field</a></li><li><a href="GLUE4.html">GLUE4</a></li><li><a href="GLUE6.html">GLUE6</a></li><li><a href="HandshakeState.html">HandshakeState</a></li><li><a href="HashList.html">HashList</a></li><li><a href="LockedUp.html">LockedUp</a></li><li><a href="MigrateAccountLookahead.html">MigrateAccountLookahead</a></li><li><a href="MigrateBidRevealEntries.html">MigrateBidRevealEntries</a></li><li><a href="MigrateBlockStore.html">MigrateBlockStore</a></li><li><a href="MigrateChainState.html">MigrateChainState</a></li><li><a href="MigrateChangeAddress.html">MigrateChangeAddress</a></li><li><a href="MigrateMigrations.html">MigrateMigrations</a></li><li><a href="MigrateTreeState.html">MigrateTreeState</a></li><li><a href="MigrateTXCountTimeIndex.html">MigrateTXCountTimeIndex</a></li><li><a href="MigrateTXDBBalances.html">MigrateTXDBBalances</a></li><li><a href="module.migrations.MigrationState.html">MigrationState</a></li><li><a href="module-blockchain.Chain.html">Chain</a></li><li><a href="module-blockchain.ChainDB.html">ChainDB</a></li><li><a href="module-blockchain.ChainEntry.html">ChainEntry</a></li><li><a href="module-blockchain.ChainMigrator.html">ChainMigrator</a></li><li><a href="module-blockchain.ChainMigratorOptions.html">ChainMigratorOptions</a></li><li><a href="module-blockchain.ChainOptions.html">ChainOptions</a></li><li><a href="module-blockchain.DeploymentState.html">DeploymentState</a></li><li><a href="module-blockchain.WalletMigrationResult.html">WalletMigrationResult</a></li><li><a href="module-blockchain.WalletMigrator.html">WalletMigrator</a></li><li><a href="module-blockstore.AbstractBatch.html">AbstractBatch</a></li><li><a href="module-blockstore.AbstractBlockStore.html">AbstractBlockStore</a></li><li><a href="module-blockstore.FileBatch.html">FileBatch</a></li><li><a href="module-blockstore.LevelBatch.html">LevelBatch</a></li><li><a href="module-blockstore_records-BlockRecord.html">BlockRecord</a></li><li><a href="module-blockstore_records-FileRecord.html">FileRecord</a></li><li><a href="module-blockstore_FileBlockStore.html">blockstore:FileBlockStore</a></li><li><a href="module-blockstore_LevelBlockStore.html">blockstore:LevelBlockStore</a></li><li><a href="module-client.NodeClient.html">NodeClient</a></li><li><a href="module-client.WalletClient.html">WalletClient</a></li><li><a href="module-coins.CoinEntry.html">CoinEntry</a></li><li><a href="module-coins.Coins.html">Coins</a></li><li><a href="module-coins.CoinView.html">CoinView</a></li><li><a href="module-coins.UndoCoins.html">UndoCoins</a></li><li><a href="module-currency.Amount.html">Amount</a></li><li><a href="module-errors-CriticalError.html">CriticalError</a></li><li><a href="module-hd.Mnemonic.html">Mnemonic</a></li><li><a href="module-hd.PrivateKey.html">PrivateKey</a></li><li><a href="module-hd.PublicKey.html">PublicKey</a></li><li><a href="module-http.HTTPOptions.html">HTTPOptions</a></li><li><a href="module-http.RPC.html">RPC</a></li><li><a href="module-http.Server.html">Server</a></li><li><a href="module-http.TransactionOptions.html">TransactionOptions</a></li><li><a href="module-mempool.AirdropEntry.html">AirdropEntry</a></li><li><a href="module-mempool.ClaimEntry.html">ClaimEntry</a></li><li><a href="module-mempool.ConfirmStats.html">ConfirmStats</a></li><li><a href="module-mempool.Mempool.html">Mempool</a></li><li><a href="module-mempool.MempoolEntry.html">MempoolEntry</a></li><li><a href="module-mempool.MempoolOptions.html">MempoolOptions</a></li><li><a href="module-mempool.PolicyEstimator.html">PolicyEstimator</a></li><li><a href="module-migrations.AbstractMigration.html">AbstractMigration</a></li><li><a href="module-migrations.MigrationResult.html">MigrationResult</a></li><li><a href="module-migrations.Migrator.html">Migrator</a></li><li><a href="module-mining.BlockAirdrop.html">BlockAirdrop</a></li><li><a href="module-mining.BlockClaim.html">BlockClaim</a></li><li><a href="module-mining.BlockEntry.html">BlockEntry</a></li><li><a href="module-mining.BlockTemplate.html">BlockTemplate</a></li><li><a href="module-mining.CPUMiner.html">CPUMiner</a></li><li><a href="module-mining.Miner.html">Miner</a></li><li><a href="module-mining.MinerOptions.html">MinerOptions</a></li><li><a href="module-net.BroadcastItem.html">BroadcastItem</a></li><li><a href="module-net.Framer.html">Framer</a></li><li><a href="module-net.HostEntry.html">HostEntry</a></li><li><a href="module-net.HostList.html">HostList</a></li><li><a href="module-net.HostListOptions.html">HostListOptions</a></li><li><a href="module-net.LocalAddress.html">LocalAddress</a></li><li><a href="module-net.NetAddress.html">NetAddress</a></li><li><a href="module-net.Parser.html">Parser</a></li><li><a href="module-net.Peer.html">Peer</a></li><li><a href="module-net.PeerList.html">PeerList</a></li><li><a href="module-net.PeerOptions.html">PeerOptions</a></li><li><a href="module-net.Pool.html">Pool</a></li><li><a href="module-net.PoolOptions.html">PoolOptions</a></li><li><a href="module-net_bip152-CompactBlock.html">CompactBlock</a></li><li><a href="module-net_bip152-TXRequest.html">TXRequest</a></li><li><a href="module-net_bip152-TXResponse.html">TXResponse</a></li><li><a href="module-net_packets-AddrPacket.html">AddrPacket</a></li><li><a href="module-net_packets-AirdropPacket.html">AirdropPacket</a></li><li><a href="module-net_packets-BlockPacket.html">BlockPacket</a></li><li><a href="module-net_packets-BlockTxnPacket.html">BlockTxnPacket</a></li><li><a href="module-net_packets-ClaimPacket.html">ClaimPacket</a></li><li><a href="module-net_packets-CmpctBlockPacket.html">CmpctBlockPacket</a></li><li><a href="module-net_packets-FeeFilterPacket.html">FeeFilterPacket</a></li><li><a href="module-net_packets-FilterAddPacket.html">FilterAddPacket</a></li><li><a href="module-net_packets-FilterClearPacket.html">FilterClearPacket</a></li><li><a href="module-net_packets-FilterLoadPacket.html">FilterLoadPacket</a></li><li><a href="module-net_packets-GetAddrPacket.html">GetAddrPacket</a></li><li><a href="module-net_packets-GetBlocksPacket.html">GetBlocksPacket</a></li><li><a href="module-net_packets-GetBlockTxnPacket.html">GetBlockTxnPacket</a></li><li><a href="module-net_packets-GetDataPacket.html">GetDataPacket</a></li><li><a href="module-net_packets-GetHeadersPacket.html">GetHeadersPacket</a></li><li><a href="module-net_packets-GetProofPacket.html">GetProofPacket</a></li><li><a href="module-net_packets-HeadersPacket.html">HeadersPacket</a></li><li><a href="module-net_packets-InvPacket.html">InvPacket</a></li><li><a href="module-net_packets-MempoolPacket.html">MempoolPacket</a></li><li><a href="module-net_packets-MerkleBlockPacket.html">MerkleBlockPacket</a></li><li><a href="module-net_packets-NotFoundPacket.html">NotFoundPacket</a></li><li><a href="module-net_packets-Packet.html">Packet</a></li><li><a href="module-net_packets-PingPacket.html">PingPacket</a></li><li><a href="module-net_packets-PongPacket.html">PongPacket</a></li><li><a href="module-net_packets-ProofPacket.html">ProofPacket</a></li><li><a href="module-net_packets-RejectPacket.html">RejectPacket</a></li><li><a href="module-net_packets-SendCmpctPacket.html">SendCmpctPacket</a></li><li><a href="module-net_packets-SendHeadersPacket.html">SendHeadersPacket</a></li><li><a href="module-net_packets-TXPacket.html">TXPacket</a></li><li><a href="module-net_packets-UnknownPacket.html">UnknownPacket</a></li><li><a href="module-net_packets-VerackPacket.html">VerackPacket</a></li><li><a href="module-net_packets-VersionPacket.html">VersionPacket</a></li><li><a href="module-node.FullNode.html">FullNode</a></li><li><a href="module-node.Node.html">Node</a></li><li><a href="module-node.NodeClient.html">NodeClient</a></li><li><a href="module-node.NullClient.html">NullClient</a></li><li><a href="module-node.SPVNode.html">SPVNode</a></li><li><a href="module-primitives.AbstractBlock.html">AbstractBlock</a></li><li><a href="module-primitives.Address.html">Address</a></li><li><a href="module-primitives.Block.html">Block</a></li><li><a href="module-primitives.Coin.html">Coin</a></li><li><a href="module-primitives.CoinSelector.html">CoinSelector</a></li><li><a href="module-primitives.Covenant.html">Covenant</a></li><li><a href="module-primitives.Headers.html">Headers</a></li><li><a href="module-primitives.Input.html">Input</a></li><li><a href="module-primitives.InvItem.html">InvItem</a></li><li><a href="module-primitives.KeyRing.html">KeyRing</a></li><li><a href="module-primitives.MemBlock.html">MemBlock</a></li><li><a href="module-primitives.MerkleBlock.html">MerkleBlock</a></li><li><a href="module-primitives.MTX.html">MTX</a></li><li><a href="module-primitives.Outpoint.html">Outpoint</a></li><li><a href="module-primitives.Output.html">Output</a></li><li><a href="module-primitives.TX.html">TX</a></li><li><a href="module-primitives.TXMeta.html">TXMeta</a></li><li><a href="module-protocol.Network.html">Network</a></li><li><a href="module-protocol.TimeData.html">TimeData</a></li><li><a href="module-protocol_errors-VerifyError.html">VerifyError</a></li><li><a href="module-script.Opcode.html">Opcode</a></li><li><a href="module-script.Script.html">Script</a></li><li><a href="module-script.ScriptError.html">ScriptError</a></li><li><a href="module-script.ScriptNum.html">ScriptNum</a></li><li><a href="module-script.SigCache.html">SigCache</a></li><li><a href="module-script.Stack.html">Stack</a></li><li><a href="module-script.Witness.html">Witness</a></li><li><a href="module-ui.URI.html">URI</a></li><li><a href="module-wallet.Account.html">Account</a></li><li><a href="module-wallet.Balance.html">Balance</a></li><li><a href="module-wallet.BlockRecord.html">BlockRecord</a></li><li><a href="module-wallet.Credit.html">Credit</a></li><li><a href="module-wallet.Details.html">Details</a></li><li><a href="module-wallet.HTTP.html">HTTP</a></li><li><a href="module-wallet.MasterKey.html">MasterKey</a></li><li><a href="module-wallet.Path.html">Path</a></li><li><a href="module-wallet.Paths.html">Paths</a></li><li><a href="module-wallet.RPC.html">RPC</a></li><li><a href="module-wallet.TXDB.html">TXDB</a></li><li><a href="module-wallet.Wallet.html">Wallet</a></li><li><a href="module-wallet.WalletCoinView.html">WalletCoinView</a></li><li><a href="module-wallet.WalletKey.html">WalletKey</a></li><li><a href="module-wallet.WalletMigratorOptions.html">WalletMigratorOptions</a></li><li><a href="module-wallet.WalletOptions.html">WalletOptions</a></li><li><a href="module-wallet_plugin-Plugin.html">Plugin</a></li><li><a href="module-wallet_records-BlockMeta.html">BlockMeta</a></li><li><a href="module-wallet_records-ChainState.html">ChainState</a></li><li><a href="module-wallet_records-MapRecord.html">MapRecord</a></li><li><a href="module-wallet_records-TXRecord.html">TXRecord</a></li><li><a href="module-workers.Framer.html">Framer</a></li><li><a href="module-workers.Master.html">Master</a></li><li><a href="module-workers.Parent.html">Parent</a></li><li><a href="module-workers.Parser.html">Parser</a></li><li><a href="module-workers.Worker.html">Worker</a></li><li><a href="module-workers.WorkerPool.html">WorkerPool</a></li><li><a href="module-workers_packets-CheckInputPacket.html">CheckInputPacket</a></li><li><a href="module-workers_packets-CheckInputResultPacket.html">CheckInputResultPacket</a></li><li><a href="module-workers_packets-CheckPacket.html">CheckPacket</a></li><li><a href="module-workers_packets-CheckResultPacket.html">CheckResultPacket</a></li><li><a href="module-workers_packets-ECSignPacket.html">ECSignPacket</a></li><li><a href="module-workers_packets-ECSignResultPacket.html">ECSignResultPacket</a></li><li><a href="module-workers_packets-ECVerifyPacket.html">ECVerifyPacket</a></li><li><a href="module-workers_packets-ECVerifyResultPacket.html">ECVerifyResultPacket</a></li><li><a href="module-workers_packets-EnvPacket.html">EnvPacket</a></li><li><a href="module-workers_packets-ErrorPacket.html">ErrorPacket</a></li><li><a href="module-workers_packets-ErrorResultPacket.html">ErrorResultPacket</a></li><li><a href="module-workers_packets-EventPacket.html">EventPacket</a></li><li><a href="module-workers_packets-LogPacket.html">LogPacket</a></li><li><a href="module-workers_packets-MinePacket.html">MinePacket</a></li><li><a href="module-workers_packets-MineResultPacket.html">MineResultPacket</a></li><li><a href="module-workers_packets-Packet.html">Packet</a></li><li><a href="module-workers_packets-ScryptPacket.html">ScryptPacket</a></li><li><a href="module-workers_packets-ScryptResultPacket.html">ScryptResultPacket</a></li><li><a href="module-workers_packets-SignInputPacket.html">SignInputPacket</a></li><li><a href="module-workers_packets-SignInputResultPacket.html">SignInputResultPacket</a></li><li><a href="module-workers_packets-SignPacket.html">SignPacket</a></li><li><a href="module-workers_packets-SignResultPacket.html">SignResultPacket</a></li><li><a href="NameDelta.html">NameDelta</a></li><li><a href="NameState.html">NameState</a></li><li><a href="NS.html">NS</a></li><li><a href="Ownership.html">Ownership</a></li><li><a href="Proof.html">Proof</a></li><li><a href="ProofData.html">ProofData</a></li><li><a href="RecursiveServer.html">RecursiveServer</a></li><li><a href="Reserved.html">Reserved</a></li><li><a href="Resource.html">Resource</a></li><li><a href="RootCache.html">RootCache</a></li><li><a href="RootServer.html">RootServer</a></li><li><a href="Seeder.html">Seeder</a></li><li><a href="SlidingWindow.html">SlidingWindow</a></li><li><a href="StateCache.html">StateCache</a></li><li><a href="SymmetricState.html">SymmetricState</a></li><li><a href="SYNTH4.html">SYNTH4</a></li><li><a href="SYNTH6.html">SYNTH6</a></li><li><a href="TXCount.html">TXCount</a></li><li><a href="TXT.html">TXT</a></li><li><a href="Wallet.html">Wallet</a></li><li><a href="WalletDB.html">WalletDB</a></li><li><a href="WalletNode.html">WalletNode</a></li></ul><h3>Global</h3><ul><li><a href="global.html#bindExit">bindExit</a></li><li><a href="global.html#checksig">checksig</a></li><li><a href="global.html#decode">decode</a></li><li><a href="global.html#encode">encode</a></li><li><a href="global.html#fromFloat">fromFloat</a></li><li><a href="global.html#fromU32">fromU32</a></li><li><a href="global.html#groupKey">groupKey</a></li><li><a href="global.html#insert">insert</a></li><li><a href="global.html#listenExit">listenExit</a></li><li><a href="global.html#migrationLayout">migrationLayout</a></li><li><a href="global.html#oldLayout">oldLayout</a></li><li><a href="global.html#opCache">opCache</a></li><li><a href="global.html#ownership">ownership</a></li><li><a href="global.html#remove">remove</a></li><li><a href="global.html#search">search</a></li><li><a href="global.html#splice">splice</a></li><li><a href="global.html#toFloat">toFloat</a></li><li><a href="global.html#toString">toString</a></li><li><a href="global.html#validateKey">validateKey</a></li><li><a href="global.html#validateSignature">validateSignature</a></li></ul>
 </nav>
 
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 1.1.2</a> on Thu Nov 09 2023 10:09:48 GMT+0000 (Coordinated Universal Time)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 1.1.5</a> on Mon Dec 02 2024 13:12:52 GMT+0000 (Coordinated Universal Time)
 </footer>
 
 <script> prettyPrint(); </script>
