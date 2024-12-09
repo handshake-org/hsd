@@ -283,3 +283,4 @@ The following methods have been deprecated
   - \[[`4e87fb1d`](https://github.com/handshake-org/hsd/commit/4e87fb1d)] - [#850](https://github.com/handshake-org/hsd/pull/850) - **script**: add redundant tests to math ops. - (@nodech - Nodari Chkuaselidze)
   - \[[`ab611036`](https://github.com/handshake-org/hsd/commit/ab611036)] - [#849](https://github.com/handshake-org/hsd/pull/849) - **pkg**: ci no longer update npm on build. - (@nodech - Nodari Chkuaselidze)
   - \[[`61ae19c2`](https://github.com/handshake-org/hsd/commit/61ae19c2)] - [#844](https://github.com/handshake-org/hsd/pull/844) - **docs**: backport release schedule and v6.x notes. - (@nodech - Nodari Chkuaselidze)
+  - \[[`9b70c294`](https://github.com/handshake-org/hsd/commit/9b70c294)] - [#910](https://github.com/handshake-org/hsd/pull/844) - **net**: remove unstable seed. (@nodech - Nodari Chkuaselidze)
