@@ -4,7 +4,6 @@ HSD
 ## Links
   - [Install](./install.md)
   - [Configuration](https://hsd-dev.org/guides/config.html)
-  - [Release schedule](./release-schedule.md)
   - [Release process](./release-process.md)
   - [Release files](./release-files.md)
 

@@ -25,8 +25,8 @@ This document describes the release process and branching strategy
 for hsd.
 
 ## Release schedule and release candidates
-  We release 2 major versions of the hsd per year (October and April). We
-release the `release candidate` for the next major version one month early to
+  We release up to 2 major versions of the hsd per year. We release
+the `release candidate` for the next major version one week early to
 allow others to join the testing of the `hsd`. `Release candidates` can be
 released several times until the final release date.
 
@@ -42,7 +42,6 @@ This document uses following definitions for the versions:
   - `next` version (`major+1.x.x`) - The version that will be released
     on the next major release date.
   - `previous` version (`major-1.x.x`).
-  - `life-support` version (`major-2.x.x`).
 
 Some useful tips for PRs:
   - Does it need database migration ? - major upgrade.
@@ -53,17 +52,12 @@ Some useful tips for PRs:
     get removed from the `next` release.
 
 ## Support period
-  We release 2 major version per year and we want to support each version at
-least for a year. This means that we will support 2 more versions on top of the
-`latest` version. For example current version `3.x.x` will get at least security
-fixes, until version `6.x.x` is released. Support types:
+  We release up to 2 major version per year, but only latest 2 will be
+supported (`latest` and `previous`).
+Support types:
   - `latest` version (`major.x.x`) - active minor and patche releases.
-  - `previous` version (`major-1.x.x`) - backport patches and minor fixes
-    only if it improves performance or has high impact.
-  - `life-support` version (`major-2.x.x`)- only backport security fixes.
+  - `previous` version (`major-1.x.x`) - only backport critical fixes.
   - Anything prior to these is discontinued.
-
-NOTE: We should also collect stats for the active node versions in the network.
 
 ## Changelog and release notes
   CHANGELOG will only report backwards-incompatible API changes and actions
@@ -79,7 +73,6 @@ version.
 be used in production. Each released version lives in a separate branch:
   - `latest` in `major.x` branch.
   - `previous` in `major-1.x` branch.
-  - `life-support` in `major-2.x` branch.
 
 Minor and patch releases of these versions are released from these branches and
 updates are backported from the `master`. Merges to the released version
@@ -91,7 +84,6 @@ Process below will be described as procedures for the situations:
   - release `next` major version. (becomes `latest`)
   - release `latest` minor and patch versions.
   - release `previous` minor and patch versions.
-  - release `life-support` minor and patch versions.
 
 Process for the `latest` and `previous` minor/patch releases is the same.
 At the same time only these branches should exist in the repo
@@ -101,9 +93,6 @@ At the same time only these branches should exist in the repo
   - `v4.x-proposal` - active backport and PR base.
   - `v3.x` - just become `previous` version.
   - `v3.x-proposal` - import minor/patch backport and PR base.
-  - `v2.x` - just become `life-support` version.
-  - `v2` does not have proposal, because it only supports critical fixes, which
-    wont go through standard PR release process.
 
 ### master branch and package.json version
   `master` branch only accumulates changes from PRs and is mostly untested(other
@@ -133,8 +122,8 @@ Process example (e.g. `latest` was `3.1.0` and we are releasing `4.0.0-rc.1`):
   - update `package-lock.json` by running `npm install`.
   - optional: In case we want to omit some changes from the `master`,
     you can also rebase and discard those commits.
-  - Create Release doc file for the
-    `docs/release-notes/release-notes-4.x-draft.md`.
+  - Create Release doc
+    `docs/release-notes/release-notes-4.x.md`.
   - Update CHANGELOG file with the incompatibilities and actions to take.
   - Create PR: `Release v4.0.0-rc.1` from branch `4.x-proposal` to `4.x`.
     - PR description containing list of PRs (similar to release notes)
@@ -155,7 +144,7 @@ Process example:
   - update `package.json` version to `4.0.0-rc.2` in the `4.x-proposal`.
   - update `package-lock.json` by running `npm install`.
   - Update Release doc file for the
-    `docs/release-notes/release-notes-4.x-draft.md`.
+    `docs/release-notes/release-notes-4.x.md`.
   - Update CHANGELOG file with the incompatibilities and actions to take.
     (should not be any)
   - Create PR `Release v4.0.0-rc.2` from branch `4.x-proposal` to `4.x`.
@@ -169,18 +158,13 @@ Process example:
 Above process continues until last week where we do the actual release:
   - update `package.json` version to `4.0.0` in the `4.x-proposal` branch.
   - update `package-lock.json` by running `npm install`.
-  - Rename relase doc file from
-    `docs/release-notes/release-notes-4.x-draft.md` to
-    `docs/release-notes/release-notes-4.x.md`
   - CHANGELOG should be up to date.
   - Create PR `Release v4.0.0` from the branch `4.x-proposal` to `4.x`.
     - PR list from prev PRs.
   - Final review before release
   - [Release files][release-files] for the `4.0.0`
-  - Update [schedule][schedule] if necessary
   - Update `latest` tag.
   - Update `previous` tag.
-  - Update `life-support` tag.
   - Backport release notes to `master`.
 
 ### Release minor and patches
@@ -201,8 +185,6 @@ release minor(process is the same for `previous` minor and patch releases):
   - Depending on the version we are upgrading, update relevant tag:
     - `latest` if we are releasing from the last `major`.
     - `previous` if we are updating `previous` versions `minor`.
-    - `life-support` if we are updating `life-support` versions `minor`.
   - Backport release notes to `master`.
 
 [release-files]: ./release-files.md
-[schedule]: ./release-schedule.md
