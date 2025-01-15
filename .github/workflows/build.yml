@@ -68,6 +68,12 @@ jobs:
       if: contains(matrix.os, 'ubuntu')
       run: sudo apt-get update && sudo apt-get install -y libunbound-dev
 
+    # Pythong 3.10->3.11 broke node-gyp. This upgrades node-gyp for older nodejs.
+    # https://github.com/nodejs/node-gyp/issues/2219
+    - name: Update npm.
+      if: contains(matrix.node, '14.x')
+      run: npm i -g npm@9
+
     - name: Install dependencies
       run: npm install
 
