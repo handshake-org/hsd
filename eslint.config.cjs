@@ -26,12 +26,8 @@ module.exports = [
       'bin/hsd-cli',
       'bin/hsw-cli',
       'etc/genesis',
-      '**/*.cjs',
-      '**/*.mjs',
       '**/*.js',
-      '*.js',
-      '*.mjs',
-      '*.cjs'
+      '*.js'
     ],
     languageOptions: {
       sourceType: 'commonjs'
