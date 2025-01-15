@@ -20,6 +20,7 @@
     "node": ">=14.0.0"
   },
   "dependencies": {
+    "@handshake-org/bfilter": "~2.3.0",
     "bcfg": "~0.2.2",
     "bcrypto": "~5.4.0",
     "bcurl": "~0.2.1",
@@ -27,7 +28,6 @@
     "bdns": "~0.1.5",
     "bevent": "~0.1.6",
     "bfile": "~0.2.3",
-    "@handshake-org/bfilter": "~2.3.0",
     "bheep": "~0.1.6",
     "binet": "~0.3.9",
     "blgr": "~0.2.1",
@@ -49,7 +49,8 @@
     "urkel": "~1.0.3"
   },
   "devDependencies": {
-    "bmocha": "^2.2.0"
+    "bmocha": "^2.2.0",
+    "bslintrc": "^0.0.3"
   },
   "main": "./lib/hsd.js",
   "bin": {
