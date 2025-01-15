@@ -8,10 +8,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Setup
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: 18.x
 
@@ -29,12 +29,12 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Setup
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
-        node-version: 18.x
+        node-version: 20.x
 
     - name: Install dependencies
       run: sudo apt-get update && sudo apt-get install -y libunbound-dev |
@@ -54,19 +54,25 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        node: [14.x, 16.x, 18.x, 20.x]
+        node: [14.x, 16.x, 18.x, 20.x, 22.x]
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Setup Node.js
-      uses: actions/setup-node@v3
+      uses: actions/setup-node@v4
       with:
         node-version: ${{ matrix.node }}
 
     - name: Install libunbound
       if: contains(matrix.os, 'ubuntu')
       run: sudo apt-get update && sudo apt-get install -y libunbound-dev
+
+    # Pythong 3.10->3.11 broke node-gyp. This upgrades node-gyp for older nodejs.
+    # https://github.com/nodejs/node-gyp/issues/2219
+    - name: Update npm.
+      if: contains(matrix.node, '14.x')
+      run: npm i -g npm@9
 
     - name: Install dependencies
       run: npm install
