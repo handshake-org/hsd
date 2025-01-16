@@ -19,6 +19,8 @@ v7.x Release notes
         * [Wallet CLI (hsw-cli)](#wallet-cli-hsw-cli)
     + [hs-client wallet](#hs-client-wallet)
   * [Changelog](#changelog)
+- [v7.0.1](#v701)
+  * [Changelog](#changelog-1)
 
 <!-- tocstop -->
 
@@ -283,5 +285,8 @@ The following methods have been deprecated
   - \[[`4e87fb1d`](https://github.com/handshake-org/hsd/commit/4e87fb1d)] - [#850](https://github.com/handshake-org/hsd/pull/850) - **script**: add redundant tests to math ops. - (@nodech - Nodari Chkuaselidze)
   - \[[`ab611036`](https://github.com/handshake-org/hsd/commit/ab611036)] - [#849](https://github.com/handshake-org/hsd/pull/849) - **pkg**: ci no longer update npm on build. - (@nodech - Nodari Chkuaselidze)
   - \[[`61ae19c2`](https://github.com/handshake-org/hsd/commit/61ae19c2)] - [#844](https://github.com/handshake-org/hsd/pull/844) - **docs**: backport release schedule and v6.x notes. - (@nodech - Nodari Chkuaselidze)
-  - \[[`9b70c294`](https://github.com/handshake-org/hsd/commit/9b70c294)] - [#910](https://github.com/handshake-org/hsd/pull/844) - **net**: remove unstable seed. (@nodech - Nodari Chkuaselidze)
+  - \[[`9b70c294`](https://github.com/handshake-org/hsd/commit/9b70c294)] - [#910](https://github.com/handshake-org/hsd/pull/910) - **net**: remove unstable seed. (@nodech - Nodari Chkuaselidze)
 
+# v7.0.1
+## Changelog
+  - \[[`36899e2a`](https://github.com/handshake-org/hsd/commit/9b70c294)] - [#914](https://github.com/handshake-org/hsd/pull/914) - **net**: Add checkpoint between 160k and 225k. (@nodech - Nodari Chkuaselidze)
