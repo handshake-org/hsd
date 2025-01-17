@@ -5,12 +5,15 @@
 .eslint*
 .git*
 .mocharc*
+.nyc_output/
 .yarnignore
 bench/
 browser/hsd*
 build/
+coverage/
 docker_data/
 docs/
+eslint.config.cjs
 node_modules/
 npm-debug.log
 package-lock.json

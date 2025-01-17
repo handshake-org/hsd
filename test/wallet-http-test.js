@@ -525,18 +525,22 @@ describe('Wallet HTTP', function() {
     it('should allow covenants with create tx', async () => {
       const {address} = await wallet.createChange('default');
 
-      const output = openOutput(name, address);
+      const output = openOutput(name, address, network);
 
-      const tx = await wallet.createTX({outputs: [output]});
+      const tx = await wallet.createTX({
+        outputs: [output.getJSON(network)]
+      });
       assert.equal(tx.outputs[0].covenant.type, types.OPEN);
     });
 
     it('should allow covenants with send tx', async () => {
       const {address} = await wallet.createChange('default');
 
-      const output = openOutput(name, address);
+      const output = openOutput(name, address, network);
 
-      const tx = await wallet.send({outputs: [output]});;
+      const tx = await wallet.send({
+        outputs: [output.getJSON(network)]
+      });;
       assert.equal(tx.outputs[0].covenant.type, types.OPEN);
     });
 
@@ -2703,12 +2707,12 @@ describe('Wallet HTTP', function() {
 });
 
 // create an OPEN output
-function openOutput(name, address) {
+function openOutput(name, address, network) {
   const nameHash = rules.hashName(name);
   const rawName = Buffer.from(name, 'ascii');
 
   const output = new Output();
-  output.address = Address.fromString(address);
+  output.address = Address.fromString(address, network);
   output.value = 0;
   output.covenant.setOpen(nameHash, rawName);
 
