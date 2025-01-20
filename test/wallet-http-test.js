@@ -448,6 +448,61 @@ describe('Wallet HTTP', function() {
     });
   });
 
+  describe('Zap TXs', function() {
+    const TEST_WALLET = 'test';
+    const DEFAULT = 'default';
+    const ALT = 'alt';
+
+    let testWallet;
+
+    const resetPending = async () => {
+      await wallet.zap(null, 0);
+      nodeCtx.mempool.reset();
+    };
+
+    before(async () => {
+      await beforeAll();
+
+      await wclient.createWallet(TEST_WALLET);
+      testWallet = wclient.wallet(TEST_WALLET);
+
+      await testWallet.createAccount(ALT);
+
+      await nodeCtx.mineBlocks(10, cbAddress);
+    });
+
+    afterEach(resetPending);
+
+    after(afterAll);
+
+    it('should zap all txs (wallet)', async () => {
+      for (const account of [DEFAULT, ALT]) {
+        const {address} = await testWallet.createAddress(account);
+
+        for (let i = 0; i < 3; i++)
+          await wallet.send({outputs: [{address, value: 1e4}]});
+      }
+
+      const result = await testWallet.zap(null, 0);
+      assert.strictEqual(result.zapped, 6);
+    });
+
+    it('should zap all txs (account)', async () => {
+      for (const account of [DEFAULT, ALT]) {
+        const {address} = await testWallet.createAddress(account);
+
+        for (let i = 0; i < 3; i++)
+          await wallet.send({outputs: [{address, value: 1e4}]});
+      }
+
+      const resultDefault = await testWallet.zap(DEFAULT, 0);
+      assert.strictEqual(resultDefault.zapped, 3);
+
+      const resultAlt = await testWallet.zap(ALT, 0);
+      assert.strictEqual(resultAlt.zapped, 3);
+    });
+  });
+
   describe('Create account (Integration)', function() {
     before(beforeAll);
     after(afterAll);
@@ -525,18 +580,23 @@ describe('Wallet HTTP', function() {
     it('should allow covenants with create tx', async () => {
       const {address} = await wallet.createChange('default');
 
-      const output = openOutput(name, address);
+      const output = openOutput(name, address, network);
 
-      const tx = await wallet.createTX({outputs: [output]});
+      const tx = await wallet.createTX({
+        outputs: [output.getJSON(network)]
+      });
       assert.equal(tx.outputs[0].covenant.type, types.OPEN);
     });
 
     it('should allow covenants with send tx', async () => {
       const {address} = await wallet.createChange('default');
 
-      const output = openOutput(name, address);
+      const output = openOutput(name, address, network);
 
-      const tx = await wallet.send({outputs: [output]});;
+      const tx = await wallet.send({
+        outputs: [output.getJSON(network)]
+      });
+
       assert.equal(tx.outputs[0].covenant.type, types.OPEN);
     });
 
@@ -2703,12 +2763,12 @@ describe('Wallet HTTP', function() {
 });
 
 // create an OPEN output
-function openOutput(name, address) {
+function openOutput(name, address, network) {
   const nameHash = rules.hashName(name);
   const rawName = Buffer.from(name, 'ascii');
 
   const output = new Output();
-  output.address = Address.fromString(address);
+  output.address = Address.fromString(address, network);
   output.value = 0;
   output.covenant.setOpen(nameHash, rawName);
 

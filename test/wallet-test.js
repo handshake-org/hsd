@@ -3989,7 +3989,7 @@ describe('Wallet', function() {
       //  Age becomes: 5 - 4 = 1. So, zap will zap all txs with age 1
       //  - so first 2 txs.
       const zapped = await wallet.zap(-1, time - 1);
-      assert.strictEqual(zapped.length, 2);
+      assert.strictEqual(zapped, 2);
 
       const txsAfterZap = await wallet.listUnconfirmed(-1, {
         limit: 20,
@@ -4015,7 +4015,7 @@ describe('Wallet', function() {
 
       // two transactions from default (calculation above.)
       const zapped = await wallet.zap(DEFAULT, time - 3);
-      assert.strictEqual(zapped.length, 2);
+      assert.strictEqual(zapped, 2);
 
       const txsAfterZap = await wallet.listUnconfirmed(DEFAULT, {
         limit: 20,

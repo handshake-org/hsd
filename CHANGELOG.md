@@ -1,5 +1,17 @@
 # HSD Release Notes & Changelog
 
+## Unreleased
+
+### Wallet Changes
+
+#### Wallet HTTP API
+  - `POST /wallet/:id/zap` returned object has a new property: `zapped: number`,
+    indicating the number of transactions that were zapped.
+
+#### Wallet/WalletDB API
+  - Wallet.zap now returns number of transactions zapped instead of hashes.
+
+
 ## v7.0.0
 
 **When upgrading to this version of hsd, you must pass `--wallet-migrate=5` when
