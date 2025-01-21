@@ -1903,6 +1903,21 @@ describe('Wallet HTTP', function() {
         assert(ownedNames.includes(name));
       }
     });
+
+    it('should get owned names name info', async () => {
+      const ownedNSes = await wallet.getNames({ own: true });
+      const ownedNames = new Map(ownedNSes.map(ns => [ns.name, ns]));
+
+      for (const name of allNames) {
+        const isOwned = ownedNames.has(name);
+        const ns = await wallet.getName(name, { own: true });
+
+        assert.strictEqual(ns != null, isOwned);
+
+        if (isOwned)
+          assert.deepEqual(ns, ownedNames.get(name));
+      }
+    });
   });
 
   describe('HTTP tx races (Integration)', function() {
