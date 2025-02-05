@@ -5,11 +5,16 @@
 ### Wallet Changes
 
 #### Wallet HTTP API
-  - `POST /wallet/:id/zap` returned object has a new property: `zapped: number`,
+  - `POST /wallet/:id/zap` response object has a new property: `zapped: number`,
     indicating the number of transactions that were zapped.
+  - `GET /wallet/:id/name/:name` now accepts an `own` parameter and only returns
+    the namestate when the wallet owns the name.
 
 #### Wallet/WalletDB API
-  - Wallet.zap now returns number of transactions zapped instead of hashes.
+  - `Wallet.zap` now returns the number of transactions zapped instead of their hashes.
+
+#### hs-client Wallet
+  - `getName` now accepts an `options` object with an `own` property.
 
 
 ## v7.0.0
