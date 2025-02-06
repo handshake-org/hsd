@@ -388,7 +388,7 @@ describe('Chain', function() {
   });
 
   it('should fail to connect bad tx merkle root', async () => {
-    const flags = common.flags.DEFAULT_FLAGS & ~common.flags.VERIFY_POW;
+    const flags = common.DEFAULT_FLAGS & ~common.flags.VERIFY_POW;
     const block = await cpu.mineBlock();
 
     block.merkleRoot = Buffer.from(block.merkleRoot);
@@ -614,7 +614,7 @@ describe('Chain', function() {
       // We are going to modify blocks after mining,
       // just to get UTXO for the next test.
       // These blocks don't have to be strictly 100% valid.
-      const flags = common.flags.DEFAULT_FLAGS & ~common.flags.VERIFY_POW;
+      const flags = common.DEFAULT_FLAGS & ~common.flags.VERIFY_POW;
 
       // Generate 80 blocks where each coinbase transaction
       // has 10 outputs to the 100-sigop address.
