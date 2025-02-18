@@ -164,11 +164,15 @@ describe('Migrations', function() {
       });
 
       const error = migrationError(migrations, [1], DB_FLAG_ERROR);
-      await assert.rejects(async () => {
+      let err;
+      try {
         await db.open();
-      }, {
-        message: error
-      });
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message, error);
     });
   });
 
