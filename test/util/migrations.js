@@ -58,19 +58,19 @@ class MockChainDB {
 
     this.spv = this.options.spv;
     this.prune = this.options.prune;
-
-    // This is here for testing purposes.
-    this.migrations = new MockChainDBMigrator({
-      ...this.options,
-      db: this,
-      dbVersion: this.dbVersion
-    });
   }
 
   async open() {
     this.logger.debug('Opening mock chaindb.');
     await this.db.open();
-    await this.migrations.migrate();
+    // This is here for testing purposes.
+    const migrations = new MockChainDBMigrator({
+      ...this.options,
+      db: this,
+      dbVersion: this.dbVersion
+    });
+
+    await migrations.migrate();
     await this.db.verify(mockLayout.V.encode(), 'chain', this.dbVersion);
   }
 

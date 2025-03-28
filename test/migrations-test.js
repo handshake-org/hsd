@@ -12,7 +12,8 @@ const {
 const {
   DB_FLAG_ERROR,
   MockChainDB,
-  migrationError
+  migrationError,
+  mockLayout
 } = require('./util/migrations');
 const {rimraf, testdir} = require('./util/common');
 
@@ -202,19 +203,17 @@ describe('Migrations', function() {
     it('should initialize fresh migration state', async () => {
       await rimraf(location);
 
-      const db = new MockChainDB(defaultOptions);
-      const {migrations} = db;
-
-      migrations.logger = {
-        info: () => {},
-        debug: () => {},
-        warning: (msg) => {
-          throw new Error(`Unexpected warning: ${msg}`);
-        }
-      };
+      const db = new MockChainDB({
+        ...defaultOptions,
+        logger: getLogger({
+          warning: (msg) => {
+            throw new Error(`Unexpected warning: ${msg}`);
+          }
+        })
+      });
 
       await db.open();
-      const state = await migrations.getState();
+      const state = await getMigrationState(db);
       assert.strictEqual(state.inProgress, false);
       assert.strictEqual(state.nextMigration, 0);
       await db.close();
@@ -223,26 +222,21 @@ describe('Migrations', function() {
     it('should ignore migration flag on non-existent db', async () => {
       await rimraf(location);
 
+      let warning = null;
       const db = new MockChainDB({
         ...defaultOptions,
         migrations: { 0: MockMigration1 },
-        migrateFlag: 0
+        migrateFlag: 0,
+        logger: getLogger({
+          warning: (msg) => {
+            warning = msg;
+          }
+        })
       });
-
-      const {migrations} = db;
-
-      let warning = null;
-      migrations.logger = {
-        info: () => {},
-        debug: () => {},
-        warning: (msg) => {
-          warning = msg;
-        }
-      };
 
       await db.open();
       assert.strictEqual(warning, 'Fresh start, ignoring migration flag.');
-      const state = await migrations.getState();
+      const state = await getMigrationState(db);
       assert.strictEqual(state.inProgress, false);
       assert.strictEqual(state.nextMigration, 1);
       await db.close();
@@ -343,11 +337,8 @@ describe('Migrations', function() {
 
       await db.open();
 
-      const lastID = db.migrations.getLastMigrationID();
-      const state = await db.migrations.getState();
-
+      const state = await getMigrationState(db);
       assert.strictEqual(state.nextMigration, 2);
-      assert.strictEqual(lastID, 1);
       assert.strictEqual(migrated1, true);
       assert.strictEqual(migrated2, true);
       await db.close();
@@ -399,7 +390,7 @@ describe('Migrations', function() {
         // check the state is correct.
         await db.db.open();
 
-        const state = await db.migrations.getState();
+        const state = await getMigrationState(db);
         assert.strictEqual(state.inProgress, true);
         assert.strictEqual(state.nextMigration, 0);
 
@@ -418,7 +409,7 @@ describe('Migrations', function() {
         // check the state is correct.
         await db.db.open();
 
-        const state = await db.migrations.getState();
+        const state = await getMigrationState(db);
         assert.strictEqual(state.inProgress, true);
         assert.strictEqual(state.nextMigration, 1);
 
@@ -426,7 +417,7 @@ describe('Migrations', function() {
       }
 
       await db.open();
-      const state = await db.migrations.getState();
+      const state = await getMigrationState(db);
       assert.strictEqual(state.inProgress, false);
       assert.strictEqual(state.nextMigration, 2);
       assert.strictEqual(migrated1, true);
@@ -454,7 +445,7 @@ describe('Migrations', function() {
 
       await db.open();
 
-      const state = await db.migrations.getState();
+      const state = await getMigrationState(db);
       assert.strictEqual(state.inProgress, false);
       assert.strictEqual(state.nextMigration, 1);
       assert.strictEqual(migrate, false);
@@ -490,7 +481,7 @@ describe('Migrations', function() {
 
       await db.open();
 
-      const state = await db.migrations.getState();
+      const state = await getMigrationState(db);
       assert.strictEqual(state.inProgress, false);
       assert.strictEqual(state.nextMigration, 1);
       assert.deepStrictEqual(state.skipped, [0]);
@@ -501,9 +492,9 @@ describe('Migrations', function() {
 
       await db.close();
 
-      db.migrations.migrateFlag = -1;
+      db.options.migrateFlag = -1;
       await db.open();
-      const state2 = await db.migrations.getState();
+      const state2 = await getMigrationState(db);
       assert.strictEqual(state2.inProgress, false);
       assert.strictEqual(state2.nextMigration, 1);
       assert.deepStrictEqual(state2.skipped, [0]);
@@ -532,6 +523,141 @@ describe('Migrations', function() {
       }, {
         message: 'Unknown migration type.'
       });
+    });
+
+    it('should allow nextMigration modification, skip next', async () => {
+      let migrated1 = false;
+      let migrated2 = false;
+
+      const db = new MockChainDB({
+        ...defaultOptions,
+        migrateFlag: 1,
+        migrations: {
+          0: class extends AbstractMigration {
+            async check() {
+              return types.MIGRATE;
+            }
+            async migrate(b, ctx) {
+              migrated1 = true;
+              ctx.state.nextMigration = 2;
+            }
+          },
+          1: class extends AbstractMigration {
+            async check() {
+              return types.MIGRATE;
+            }
+            async migrate() {
+              migrated2 = true;
+            }
+          }
+        }
+      });
+
+      await db.open();
+
+      assert.strictEqual(migrated1, true);
+      assert.strictEqual(migrated2, false);
+      await db.close();
+    });
+
+    it('should store inProgressData in version 1 and clean up', async () => {
+      let thrown1 = false;
+      let migrated1 = false;
+      let data1 = null;
+
+      let thrown3 = false;
+      let migrated3 = false;
+      let data3 = null;
+
+      let migrated4 = false;
+      let data4 = null;
+
+      const db = new MockChainDB({
+        ...defaultOptions,
+        migrateFlag: 4,
+        migrations: {
+          0: class extends AbstractMigration {
+            async check() {
+              return types.MIGRATE;
+            }
+            async migrate(b, ctx) {
+              ctx.state.version = 0;
+            }
+          },
+          1: class extends AbstractMigration {
+            async check() {
+              return types.MIGRATE;
+            }
+            async migrate(b, ctx) {
+              if (!thrown1) {
+                // This wont be saved, state.version = 0.
+                ctx.state.inProgressData = Buffer.from('data1');
+                await ctx.saveState();
+                thrown1 = true;
+                throw new Error('error1');
+              }
+
+              migrated1 = true;
+              data1 = ctx.state.inProgressData;
+            }
+          },
+          2: class extends AbstractMigration {
+            async check() {
+              return types.MIGRATE;
+            }
+            async migrate(b, ctx) {
+              ctx.state.version = 1;
+            }
+          },
+          3: class extends AbstractMigration {
+            async check() {
+              return types.MIGRATE;
+            }
+            async migrate(b, ctx) {
+              if (!thrown3) {
+                ctx.state.inProgressData = Buffer.from('data3');
+                await ctx.saveState();
+                thrown3 = true;
+                throw new Error('error3');
+              }
+
+              migrated3 = true;
+              data3 = ctx.state.inProgressData;
+            }
+          },
+          4: class extends AbstractMigration {
+            async check() {
+              return types.MIGRATE;
+            }
+            async migrate(b, ctx) {
+              migrated4 = true;
+              data4 = ctx.state.inProgressData;
+            }
+          }
+        },
+        logger: getLogger()
+      });
+
+      for (let i = 0; i < 2; i++) {
+        try {
+          await db.open();
+        } catch (e) {
+          await db.close();
+        }
+      }
+
+      await db.open();
+
+      assert.strictEqual(migrated1, true);
+      assert.strictEqual(data1.length, 0);
+
+      assert.strictEqual(migrated3, true);
+      assert.bufferEqual(data3, Buffer.from('data3'));
+
+      assert.strictEqual(migrated4, true);
+      assert.strictEqual(data4.length, 0);
+
+      await db.close();
     });
   });
 
@@ -563,11 +689,34 @@ describe('Migrations', function() {
       state1.inProgress = 1;
       state1.nextMigration = 3;
       state1.skipped = [1, 2];
+      state1.inProgressData = Buffer.from('data');
 
       const state2 = state1.clone();
 
       assert.notEqual(state2.skipped, state1.skipped);
       assert.deepStrictEqual(state2, state1);
+    });
+
+    it('should not encode progress data if version is 0', () => {
+      const state = new MigrationState();
+      state.version = 0;
+      state.inProgressData = Buffer.from('data');
+
+      const encoded = state.encode();
+      const decoded = MigrationState.decode(encoded);
+
+      assert.strictEqual(decoded.inProgressData.length, 0);
+    });
+
+    it('should encode progress data if version is not 0', () => {
+      const state = new MigrationState();
+      state.version = 1;
+      state.inProgressData = Buffer.from('data');
+
+      const encoded = state.encode();
+      const decoded = MigrationState.decode(encoded);
+
+      assert.bufferEqual(decoded.inProgressData, state.inProgressData);
     });
   });
 
@@ -630,3 +779,29 @@ describe('Migrations', function() {
     }
   });
 });
+
+const nop = () => {};
+
+function getLogger(opts = {}) {
+  return {
+    debug: nop,
+    info: nop,
+    warning: nop,
+    error: nop,
+
+    context: () => {
+      return {
+        debug: opts.debug || nop,
+        info: opts.info || nop,
+        warning: opts.warning || nop,
+        error: opts.error || nop
+      };
+    }
+  };
+}
+
+async function getMigrationState(db) {
+  const raw = await db.db.get(mockLayout.M.encode());
+
+  return MigrationState.decode(raw);
+}
