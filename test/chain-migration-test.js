@@ -18,13 +18,15 @@ const {
   types,
   oldLayout
 } = require('../lib/migrations/migrator');
+
+const migutils = require('./util/migrations');
 const {
   migrationError,
   writeVersion,
   getVersion,
   fillEntries,
   checkEntries
-} = require('./util/migrations');
+} = migutils;
 const common = require('./util/common');
 const {rimraf, testdir} = common;
 
@@ -629,7 +631,6 @@ describe('Chain Migrations', function() {
     for (const tcase of data.cases) {
       it(`should migrate ${tcase.description}`, async () => {
         const before = tcase.before;
-        const after = tcase.after;
         const version = tcase.dbVersion;
         const mustMigrate1 = tcase.migrate1;
         assert(typeof version === 'number');
@@ -681,7 +682,12 @@ describe('Chain Migrations', function() {
 
         if (mustMigrate1)
           assert(migrated, 'Migration 1 did not run.');
-        await checkEntries(ldb, after);
+
+        await checkEntries(ldb, {
+          before: data.before,
+          after: data.after,
+          throw: true
+        });
       });
     }
   });
@@ -749,7 +755,12 @@ describe('Chain Migrations', function() {
         ;
       }
 
-      await checkEntries(ldb, data.after);
+      await checkEntries(ldb, {
+        before: data.before,
+        after: data.after,
+        throw: true
+      });
+
       await chain.close();
     });
   });
@@ -1298,7 +1309,69 @@ describe('Chain Migrations', function() {
         ;
       }
 
-      await checkEntries(ldb, data.after);
+      await checkEntries(ldb, {
+        before: data.before,
+        after: data.after,
+        throw: true
+      });
+
+      await chain.close();
+    });
+  });
+
+  describe('Migrate Migration state v1 (data)', function() {
+    const location = testdir('migrate-migration-state-v1');
+    const data = require('./data/migrations/chain-4-migrationstate-v1.json');
+    const migrationsBAK = ChainMigrator.migrations;
+    const Migration = ChainMigrator.MigrateMigrationStateV1;
+    const store = BlockStore.create({
+      memory: true,
+      network
+    });
+
+    const chainOptions = {
+      prefix: location,
+      memory: false,
+      blocks: store,
+      logger: Logger.global,
+      network
+    };
+
+    let chain, ldb;
+    before(async () => {
+      ChainMigrator.migrations = {};
+      chain = new Chain(chainOptions);
+      ldb = chain.db.db;
+
+      await fs.mkdirp(location);
+      await store.open();
+      await chain.open();
+
+      await fillEntries(ldb, data.before);
+
+      await chain.close();
+      await store.close();
+    });
+
+    after(async () => {
+      ChainMigrator.migrations = migrationsBAK;
+      await rimraf(location);
+    });
+
+    it('should migrate', async () => {
+      ChainMigrator.migrations = {
+        0: Migration
+      };
+
+      chain.options.chainMigrate = 0;
+
+      await chain.open();
+      await checkEntries(ldb, {
+        before: data.before,
+        after: data.after,
+        logErrors: true,
+        throw: true
+      });
       await chain.close();
     });
   });
