@@ -9,6 +9,8 @@
     indicating the number of transactions that were zapped.
   - `GET /wallet/:id/name/:name` now accepts an `own` parameter and only returns
     the namestate when the wallet owns the name.
+  - Introduce admin `POST /recalculate-balances`, useful if the post-migration
+    recalculation was not triggered and wallet balances are not correct.
 
 #### Wallet/WalletDB API
   - `Wallet.zap` now returns the number of transactions zapped instead of their hashes.
