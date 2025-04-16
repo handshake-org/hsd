@@ -1,0 +1,9 @@
+{
+  "description": "Migration state update",
+  "before": {
+    "4d": "000000000000"
+  },
+  "after": {
+    "4d": "00000100010000"
+  }
+}

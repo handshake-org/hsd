@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+**When upgrading to this version of hsd, you must pass `--chain-migrate=4`
+and `--wallet-migrate=6` when you run it for the first time.**
+
 ### Wallet Changes
 
 #### Wallet HTTP API

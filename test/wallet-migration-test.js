@@ -18,6 +18,7 @@ const {
   types,
   oldLayout
 } = require('../lib/migrations/migrator');
+const migutils = require('./util/migrations');
 const {
   migrationError,
   writeVersion,
@@ -25,7 +26,7 @@ const {
   checkVersion,
   checkEntries,
   fillEntries
-} = require('./util/migrations');
+} = migutils;
 const {rimraf, testdir} = require('./util/common');
 
 const NETWORK = 'regtest';
@@ -1056,6 +1057,53 @@ describe('Wallet Migrations', function() {
         logErrors: true
       });
 
+      await walletDB.close();
+    });
+  });
+
+  describe('Migrate Migration state v1 (data)', function() {
+    const location = testdir('wallet-migrate-migration-state-v1');
+    const data = require('./data/migrations/wallet-6-migrationstate-v1.json');
+    const migrationsBAK = WalletMigrator.migrations;
+    const Migration = WalletMigrator.MigrateMigrationStateV1;
+
+    const walletOptions = {
+      prefix: location,
+      memory: false,
+      network
+    };
+
+    let walletDB, ldb;
+    before(async () => {
+      WalletMigrator.migrations = {};
+      await fs.mkdirp(location);
+
+      walletDB = new WalletDB(walletOptions);
+      ldb = walletDB.db;
+
+      await walletDB.open();
+      await fillEntries(walletDB.db, data.before);
+      await walletDB.close();
+    });
+
+    after(async () => {
+      WalletMigrator.migrations = migrationsBAK;
+      await rimraf(location);
+    });
+
+    it('should migrate', async () => {
+      WalletMigrator.migrations = {
+        0: Migration
+      };
+
+      walletDB.options.walletMigrate = 0;
+
+      await walletDB.open();
+      await checkEntries(ldb, {
+        before: data.before,
+        after: data.after,
+        throw: true
+      });
       await walletDB.close();
     });
   });
