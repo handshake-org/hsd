@@ -1,13 +1,13 @@
 'use strict';
 
 const assert = require('bsert');
-const random = require('bcrypto/lib/random');
 const CoinView = require('../lib/coins/coinview');
 const WalletCoinView = require('../lib/wallet/walletcoinview');
-const Coin = require('../lib/primitives/coin');
 const MTX = require('../lib/primitives/mtx');
 const Path = require('../lib/wallet/path');
 const MemWallet = require('./util/memwallet');
+const primutils = require('./util/primitives');
+const {randomP2PKAddress, makeCoin} = primutils;
 
 const mtx1json = require('./data/mtx1.json');
 const mtx2json = require('./data/mtx2.json');
@@ -138,16 +138,318 @@ describe('MTX', function() {
     });
   });
 
-  describe('Fund', function() {
+  describe('Fund with in memory coin selectors', function() {
+    const createCoins = (values) => {
+      return values.map(value => makeCoin({ value }));
+    };
+
+    it('should fund with sorted values', async () => {
+      const coins = createCoins([1e6, 2e6, 3e6, 4e6, 5e6]);
+
+      const mtx = new MTX();
+      mtx.addOutput(randomP2PKAddress(), 7e6);
+
+      await mtx.fund(coins, {
+        changeAddress: randomP2PKAddress(),
+        hardFee: 0
+      });
+
+      assert.strictEqual(mtx.inputs.length, 2);
+      assert.strictEqual(mtx.outputs.length, 2);
+      assert.strictEqual(mtx.outputs[0].value, 7e6);
+      assert.strictEqual(mtx.outputs[1].value, 2e6);
+    });
+
+    it('should fund with random selection', async () => {
+      const coins = createCoins([1e6, 1e6, 1e6, 1e6, 1e6, 1e6, 1e6, 1e6]);
+
+      const mtx = new MTX();
+      mtx.addOutput(randomP2PKAddress(), 5e6);
+
+      await mtx.fund(coins, {
+        changeAddress: randomP2PKAddress(),
+        hardFee: 1e5,
+        selection: 'random'
+      });
+
+      assert.strictEqual(mtx.inputs.length, 6);
+      assert.strictEqual(mtx.outputs.length, 2);
+      assert.strictEqual(mtx.outputs[0].value, 5e6);
+      assert.strictEqual(mtx.getFee(), 1e5);
+      assert.strictEqual(mtx.outputs[1].value, 9e5);
+    });
+
+    it('should fund with all selection type', async () => {
+      const coins = createCoins([1e6, 2e6, 3e6, 4e6, 5e6, 6e6]);
+
+      const mtx = new MTX();
+      mtx.addOutput(randomP2PKAddress(), 2e6);
+
+      await mtx.fund(coins, {
+        changeAddress: randomP2PKAddress(),
+        hardFee: 0,
+        selection: 'all'
+      });
+
+      assert.strictEqual(mtx.inputs.length, 6);
+      assert.strictEqual(mtx.outputs.length, 2);
+      assert.strictEqual(mtx.outputs[0].value, 2e6);
+      assert.strictEqual(mtx.getFee(), 0);
+      assert.strictEqual(mtx.outputs[1].value, 19e6);
+    });
+
+    it('should fund with age-based selection', async () => {
+      const coins = [
+        makeCoin({ value: 2e6, height: 100 }),
+        makeCoin({ value: 3e6, height: 200 }),
+        makeCoin({ value: 1e6, height: 50 })
+      ];
+
+      const mtx = new MTX();
+      mtx.addOutput(randomP2PKAddress(), 1e6);
+
+      await mtx.fund(coins, {
+        changeAddress: randomP2PKAddress(),
+        hardFee: 1e5,
+        selection: 'age'
+      });
+
+      assert.strictEqual(mtx.inputs.length, 2);
+      assert.strictEqual(mtx.outputs.length, 2);
+      assert.strictEqual(mtx.getFee(), 1e5);
+      // Should select the oldest (lowest height) coins first
+      assert.strictEqual(mtx.inputs[0].prevout.hash.equals(coins[2].hash), true);
+      assert.strictEqual(mtx.inputs[1].prevout.hash.equals(coins[0].hash), true);
+    });
+
+    it('should fund with value-based selection', async () => {
+      const coins = [
+        makeCoin({ value: 1e6 }),
+        makeCoin({ value: 5e6 }),
+        makeCoin({ value: 2e6 })
+      ];
+
+      const mtx = new MTX();
+      mtx.addOutput(randomP2PKAddress(), 4e6);
+
+      await mtx.fund(coins, {
+        changeAddress: randomP2PKAddress(),
+        hardFee: 1e5,
+        selection: 'value'
+      });
+
+      assert.strictEqual(mtx.inputs.length, 1);
+      assert.strictEqual(mtx.outputs.length, 2);
+      assert.strictEqual(mtx.getFee(), 1e5);
+      // Should select the highest value coin first
+      assert.strictEqual(mtx.inputs[0].prevout.hash.equals(coins[1].hash), true);
+    });
+
+    it('should handle subtractFee option', async () => {
+      const coins = createCoins([2e6, 3e6]);
+
+      const mtx = new MTX();
+      mtx.addOutput(randomP2PKAddress(), 5e6);
+
+      await mtx.fund(coins, {
+        changeAddress: randomP2PKAddress(),
+        hardFee: 1e5,
+        subtractFee: true
+      });
+
+      assert.strictEqual(mtx.inputs.length, 2);
+      assert.strictEqual(mtx.outputs.length, 1);
+      assert.strictEqual(mtx.outputs[0].value, 4.9e6); // 5e6 - 1e5 = 4.9e6
+      assert.strictEqual(mtx.getFee(), 1e5);
+    });
+
+    it('should handle subtractIndex option', async () => {
+      const coins = createCoins([3e6, 3e6]);
+
+      const mtx = new MTX();
+      mtx.addOutput(randomP2PKAddress(), 3e6);
+      mtx.addOutput(randomP2PKAddress(), 3e6);
+
+      await mtx.fund(coins, {
+        changeAddress: randomP2PKAddress(),
+        hardFee: 2e5,
+        subtractFee: true,
+        subtractIndex: 1
+      });
+
+      assert.strictEqual(mtx.inputs.length, 2);
+      assert.strictEqual(mtx.outputs.length, 2);
+      assert.strictEqual(mtx.outputs[0].value, 3e6);
+      assert.strictEqual(mtx.outputs[1].value, 2.8e6); // 3e6 - 2e5 = 2.8e6
+      assert.strictEqual(mtx.getFee(), 2e5);
+    });
+
+    it('should throw with insufficient funds', async () => {
+      const coins = createCoins([1e6, 1e6]);
+
+      const mtx = new MTX();
+      mtx.addOutput(randomP2PKAddress(), 5e6);
+
+      let err;
+      try {
+        await mtx.fund(coins, {
+          changeAddress: randomP2PKAddress(),
+          hardFee: 0
+        });
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message.includes('Not enough funds'), true);
+    });
+
+    it('should throw when fee is too high', async () => {
+      const coins = createCoins([1e6, 1e6, 1e6]);
+
+      const mtx = new MTX();
+      mtx.addOutput(randomP2PKAddress(), 2e6);
+
+      let err;
+      try {
+        await mtx.fund(coins, {
+          changeAddress: randomP2PKAddress(),
+          rate: 1e6, // Extremely high fee rate
+          maxFee: 1e5 // But with a low maxFee
+        });
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message.includes('Fee is too high'), true);
+    });
+
+    it('should handle dust change', async () => {
+      const coins = createCoins([1e6, 1e6]);
+
+      const mtx = new MTX();
+      mtx.addOutput(randomP2PKAddress(), 1.999e6);
+
+      await mtx.fund(coins, {
+        changeAddress: randomP2PKAddress(),
+        hardFee: 1e3
+      });
+
+      assert.strictEqual(mtx.inputs.length, 2);
+      assert.strictEqual(mtx.outputs.length, 1);
+      assert.strictEqual(mtx.getFee(), 1e3);
+      assert.strictEqual(mtx.changeIndex, -1);
+    });
+
+    it('should fund with exact amount needed', async () => {
+      const coins = createCoins([1e6, 2e6, 3e6]);
+
+      const mtx = new MTX();
+      mtx.addOutput(randomP2PKAddress(), 3e6);
+
+      await mtx.fund(coins, {
+        changeAddress: randomP2PKAddress(),
+        hardFee: 0
+      });
+
+      assert.strictEqual(mtx.inputs.length, 1);
+      assert.strictEqual(mtx.outputs.length, 1);
+      assert.strictEqual(mtx.outputs[0].value, 3e6);
+      assert.strictEqual(mtx.getFee(), 0);
+      assert.strictEqual(mtx.changeIndex, -1);
+    });
+
+    it('should add coin based on minimum required', async () => {
+      const wallet = new MemWallet();
+      const coins = [
+        makeCoin({ address: wallet.getAddress(), value: 1e5 }),
+        makeCoin({ address: wallet.getAddress(), value: 2e5 }),
+        makeCoin({ address: wallet.getAddress(), value: 5e5 }),
+        makeCoin({ address: wallet.getAddress(), value: 1e6 }),
+        makeCoin({ address: wallet.getAddress(), value: 2e6 })
+      ];
+
+      const mtx = new MTX();
+      mtx.addOutput(randomP2PKAddress(), 1.5e6);
+
+      await mtx.fund(coins, {
+        changeAddress: wallet.getChange(),
+        hardFee: 1e4
+      });
+
+      // Should select the 2e6 coin (largest value first selection)
+      assert.strictEqual(mtx.inputs.length, 1);
+      assert.strictEqual(mtx.outputs.length, 2);
+      assert.strictEqual(mtx.outputs[0].value, 1.5e6);
+      assert.strictEqual(mtx.outputs[1].value, 2e6 - 1.5e6 - 1e4);
+      assert.bufferEqual(mtx.inputs[0].prevout.hash, coins[4].hash);
+    });
+
+    it('should combine multiple coins when necessary', async () => {
+      const coins = createCoins([1e5, 2e5, 3e5, 4e5, 5e5]);
+
+      const mtx = new MTX();
+      mtx.addOutput(randomP2PKAddress(), 1e6);
+
+      await mtx.fund(coins, {
+        changeAddress: randomP2PKAddress(),
+        hardFee: 5e4
+      });
+
+      // Should need to combine multiple coins to reach 1e6 + 5e4
+      assert.ok(mtx.inputs.length > 1);
+      assert.strictEqual(mtx.outputs.length, 2);
+      assert.strictEqual(mtx.outputs[0].value, 1e6);
+      assert.strictEqual(mtx.getFee(), 5e4);
+    });
+
+    it('should correctly set changeIndex', async () => {
+      const coins = createCoins([5e6]);
+
+      const mtx = new MTX();
+      mtx.addOutput(randomP2PKAddress(), 2e6);
+
+      await mtx.fund(coins, {
+        changeAddress: randomP2PKAddress(),
+        hardFee: 1e5
+      });
+
+      assert.strictEqual(mtx.inputs.length, 1);
+      assert.strictEqual(mtx.outputs.length, 2);
+      assert.strictEqual(mtx.changeIndex, 1);
+      assert.strictEqual(mtx.outputs[1].value, 2.9e6); // 5e6 - 2e6 - 1e5 = 2.9e6
+    });
+
+    it('should handle fee rates properly', async () => {
+      const coins = createCoins([1e6, 2e6, 3e6]);
+
+      const mtx = new MTX();
+      mtx.addOutput(randomP2PKAddress(), 4e6);
+
+      await mtx.fund(coins, {
+        changeAddress: randomP2PKAddress(),
+        rate: 5000 // dollarydoos per kb
+      });
+
+      // The exact fee will depend on the estimated tx size
+      assert.strictEqual(mtx.inputs.length, 2);
+      assert.strictEqual(mtx.outputs.length, 2);
+      assert.ok(mtx.getFee() > 0);
+      assert.ok(mtx.getFee() < 1e5); // Reasonable upper bound for test
+    });
+  });
+
+  describe('Fund preferred & existing', function() {
     const wallet1 = new MemWallet();
     const wallet2 = new MemWallet();
 
     const coins1 = [
-      dummyCoin(wallet1.getAddress(), 1000000),
-      dummyCoin(wallet1.getAddress(), 1000000),
-      dummyCoin(wallet1.getAddress(), 1000000),
-      dummyCoin(wallet1.getAddress(), 1000000),
-      dummyCoin(wallet1.getAddress(), 1000000)
+      makeCoin({ address: wallet1.getAddress(), value: 1000000 }),
+      makeCoin({ address: wallet1.getAddress(), value: 1000000 }),
+      makeCoin({ address: wallet1.getAddress(), value: 1000000 }),
+      makeCoin({ address: wallet1.getAddress(), value: 1000000 }),
+      makeCoin({ address: wallet1.getAddress(), value: 1000000 })
     ];
 
     const last1 = coins1[coins1.length - 1];
@@ -239,7 +541,10 @@ describe('MTX', function() {
 
     it('should fund with preferred inputs - view', async () => {
       const mtx = new MTX();
-      const coin = dummyCoin(wallet1.getAddress(), 1000000);
+      const coin = makeCoin({
+        address: wallet1.getAddress(),
+        value: 1000000
+      });
 
       mtx.addOutput(wallet2.getAddress(), 1500000);
       mtx.view.addCoin(coin);
@@ -266,7 +571,10 @@ describe('MTX', function() {
 
     it('should fund with preferred inputs - coins && view', async () => {
       const mtx = new MTX();
-      const viewCoin = dummyCoin(wallet1.getAddress(), 1000000);
+      const viewCoin = makeCoin({
+        address: wallet1.getAddress(),
+        value: 1000000
+      });
       const lastCoin = last1;
 
       mtx.addOutput(wallet2.getAddress(), 1500000);
@@ -304,7 +612,10 @@ describe('MTX', function() {
 
     it('should not fund with preferred inputs and no coin info', async () => {
       const mtx = new MTX();
-      const coin = dummyCoin(wallet1.getAddress(), 1000000);
+      const coin = makeCoin({
+        address: wallet1.getAddress(),
+        value: 1000000
+      });
 
       mtx.addOutput(wallet2.getAddress(), 1500000);
 
@@ -357,7 +668,10 @@ describe('MTX', function() {
 
     it('should fund with existing inputs view - view', async () => {
       const mtx = new MTX();
-      const coin = dummyCoin(wallet1.getAddress(), 1000000);
+      const coin = makeCoin({
+        address: wallet1.getAddress(),
+        value: 1000000
+      });
 
       mtx.addInput({
         prevout: {
@@ -388,7 +702,10 @@ describe('MTX', function() {
 
     it('should fund with existing inputs view - coins && view', async () => {
       const mtx = new MTX();
-      const viewCoin = dummyCoin(wallet1.getAddress(), 1000000);
+      const viewCoin = makeCoin({
+        address: wallet1.getAddress(),
+        value: 1000000
+      });
       const lastCoin = last1;
 
       mtx.addInput({
@@ -434,7 +751,10 @@ describe('MTX', function() {
 
     it('should not fund with existing inputs and no coin info', async () => {
       const mtx = new MTX();
-      const coin = dummyCoin(wallet1.getAddress(), 1000000);
+      const coin = makeCoin({
+        address: wallet1.getAddress(),
+        value: 1000000
+      });
 
       mtx.addInput({
         prevout: {
@@ -502,8 +822,14 @@ describe('MTX', function() {
 
     it('should fund with preferred & existing inputs - view', async () => {
       const mtx = new MTX();
-      const coin1 = dummyCoin(wallet1.getAddress(), 1000000);
-      const coin2 = dummyCoin(wallet1.getAddress(), 1000000);
+      const coin1 = makeCoin({
+        address: wallet1.getAddress(),
+        value: 1000000
+      });
+      const coin2 = makeCoin({
+        address: wallet1.getAddress(),
+        value: 1000000
+      });
 
       mtx.addInput({
         prevout: {
@@ -546,11 +872,17 @@ describe('MTX', function() {
     it('should fund with preferred & existing inputs', async () => {
       const mtx = new MTX();
       // existing
-      const coin1 = dummyCoin(wallet1.getAddress(), 1000000);
+      const coin1 = makeCoin({
+        address: wallet1.getAddress(),
+        value: 1000000
+      });
       const coinLast1 = last1;
 
       // preferred
-      const coin2 = dummyCoin(wallet1.getAddress(), 1000000);
+      const coin2 = makeCoin({
+        address: wallet1.getAddress(),
+        value: 1000000
+      });
       const coinLast2 = last2;
 
       mtx.addInput({
@@ -620,11 +952,17 @@ describe('MTX', function() {
     it('should not fund with missing coin info (both)', async () => {
       const mtx = new MTX();
       // existing
-      const coin1 = dummyCoin(wallet1.getAddress(), 1000000);
+      const coin1 = makeCoin({
+        address: wallet1.getAddress(),
+        value: 1000000
+      });
       const coinLast1 = last1;
 
       // preferred
-      const coin2 = dummyCoin(wallet1.getAddress(), 1000000);
+      const coin2 = makeCoin({
+        address: wallet1.getAddress(),
+        value: 1000000
+      });
       const coinLast2 = last2;
 
       mtx.addInput({
@@ -666,11 +1004,17 @@ describe('MTX', function() {
     it('should not fund with missing coin info(only existing)', async () => {
       const mtx = new MTX();
       // existing
-      const coin1 = dummyCoin(wallet1.getAddress(), 1000000);
+      const coin1 = makeCoin({
+        address: wallet1.getAddress(),
+        value: 1000000
+      });
       const coinLast1 = last1;
 
       // preferred
-      const coin2 = dummyCoin(wallet1.getAddress(), 1000000);
+      const coin2 = makeCoin({
+        address: wallet1.getAddress(),
+        value: 1000000
+      });
       const coinLast2 = last2;
 
       mtx.addInput({
@@ -713,11 +1057,17 @@ describe('MTX', function() {
     it('should not fund with missing coin info(only preferred)', async () => {
       const mtx = new MTX();
       // existing
-      const coin1 = dummyCoin(wallet1.getAddress(), 1000000);
+      const coin1 = makeCoin({
+        address: wallet1.getAddress(),
+        value: 1000000
+      });
       const coinLast1 = last1;
 
       // preferred
-      const coin2 = dummyCoin(wallet1.getAddress(), 1000000);
+      const coin2 = makeCoin({
+        address: wallet1.getAddress(),
+        value: 1000000
+      });
       const coinLast2 = last2;
 
       mtx.addInput({
@@ -758,10 +1108,3 @@ describe('MTX', function() {
     });
   });
 });
-
-function dummyCoin(address, value) {
-  const hash = random.randomBytes(32);
-  const index = 0;
-
-  return new Coin({address, value, hash, index});
-}

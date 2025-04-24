@@ -7,10 +7,8 @@ const WalletDB = require('../lib/wallet/walletdb');
 const consensus = require('../lib/protocol/consensus');
 const util = require('../lib/utils/util');
 const wutils = require('./util/wallet');
-const {
-  dummyInput,
-  nextEntry
-} = wutils;
+const {nextEntry} = wutils;
+const {dummyInput} = require('./util/primitives');
 
 /** @typedef {import('../lib/wallet/wallet')} Wallet */
 

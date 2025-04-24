@@ -1,72 +1,130 @@
 'use strict';
 
 const assert = require('bsert');
-const {BlockMeta} = require('../lib/wallet/records');
-const util = require('../lib/utils/util');
 const Network = require('../lib/protocol/network');
 const MTX = require('../lib/primitives/mtx');
+const Covenant = require('../lib/primitives/covenant');
 const WalletDB = require('../lib/wallet/walletdb');
 const policy = require('../lib/protocol/policy');
+const wutils = require('./util/wallet');
+const {nextBlock} = wutils;
+const primutils = require('./util/primitives');
+const {coinbaseInput, dummyInput} = primutils;
+
+/** @typedef {import('../lib/wallet/wallet')} Wallet */
+/** @typedef {import('../lib/covenants/rules').types} covenantTypes */
 
 // Use main instead of regtest because (deprecated)
 // CoinSelector.MAX_FEE was network agnostic
 const network = Network.get('main');
 
-function dummyBlock(tipHeight) {
-  const height = tipHeight + 1;
-  const hash = Buffer.alloc(32);
-  hash.writeUInt16BE(height);
+describe('Wallet Coin Selection', function () {
+  const TX_START_BAK = network.txStart;
+  /** @type {WalletDB?} */
+  let wdb;
+  /** @type {Wallet?} */
+  let wallet;
 
-  const prevHash = Buffer.alloc(32);
-  prevHash.writeUInt16BE(tipHeight);
+  const beforeFn = async () => {
+    network.txStart = 0;
+    wdb = new WalletDB({ network });
 
-  const dummyBlock = {
-    hash,
-    height,
-    time: util.now(),
-    prevBlock: prevHash
+    await wdb.open();
+    await wdb.addBlock(nextBlock(wdb), []);
+    wallet = wdb.primary;
   };
 
-  return dummyBlock;
-}
+  const afterFn = async () => {
+    network.txStart = TX_START_BAK;
+    await wdb.close();
 
-async function fundWallet(wallet, amounts) {
-  assert(Array.isArray(amounts));
+    wdb = null;
+    wallet = null;
+  };
 
-  const mtx = new MTX();
-  const addr = await wallet.receiveAddress();
-  for (const amt of amounts) {
-    mtx.addOutput(addr, amt);
-  }
+  describe('Selection types', function () {
+    beforeEach(beforeFn);
+    afterEach(afterFn);
 
-  const dummy = dummyBlock(wallet.wdb.height);
-  await wallet.wdb.addBlock(dummy, [mtx.toTX()]);
-}
+    it('should select all spendable coins', async () => {
+      const spendableCovs = [
+        Covenant.types.NONE,
+        Covenant.types.OPEN,
+        Covenant.types.REDEEM
+      ];
 
-describe('Wallet Coin Selection', function () {
+      const nonSpendableCovs = [
+        Covenant.types.BID,
+        Covenant.types.REVEAL,
+        Covenant.types.REGISTER,
+        Covenant.types.UPDATE,
+        Covenant.types.RENEW,
+        Covenant.types.TRANSFER,
+        Covenant.types.FINALIZE,
+        Covenant.types.REVOKE
+      ];
+
+      const mkopt = type => ({ value: 1e6, covenant: { type }});
+      await fundWallet(wallet, [...nonSpendableCovs, ...spendableCovs].map(mkopt));
+
+      const coins = await wallet.getCoins();
+      assert.strictEqual(coins.length, spendableCovs.length + nonSpendableCovs.length);
+
+      const mtx = new MTX();
+      await wallet.fund(mtx, {
+        selection: 'all'
+      });
+
+      assert.strictEqual(mtx.inputs.length, spendableCovs.length);
+    });
+
+    it('should select coin by descending value', async () => {
+      const values = [5e6, 4e6, 3e6, 2e6, 1e6];
+      await fundWallet(wallet, values.map(value => ({ value })));
+
+      const mtx = new MTX();
+      mtx.addOutput(primutils.randomP2PKAddress(), 9e6);
+
+      await wallet.fund(mtx, {
+        selection: 'value',
+        hardFee: 0
+      });
+
+      assert.strictEqual(mtx.inputs.length, 2);
+      assert.strictEqual(mtx.outputs.length, 1);
+      assert.strictEqual(mtx.outputs[0].value, 9e6);
+    });
+
+    it('should select coins by descending age', async () => {
+      const values = [1e6, 2e6, 3e6, 4e6, 5e6];
+
+      for (const value of values)
+        await fundWallet(wallet, [{ value }]);
+
+      const mtx = new MTX();
+      mtx.addOutput(primutils.randomP2PKAddress(), 9e6);
+      await wallet.fund(mtx, {
+        selection: 'age',
+        hardFee: 0
+      });
+
+      // 1 + 2 + 3 + 4 = 10
+      assert.strictEqual(mtx.inputs.length, 4);
+      assert.strictEqual(mtx.outputs.length, 2);
+      assert.strictEqual(mtx.outputs[0].value, 9e6);
+      assert.strictEqual(mtx.outputs[1].value, 1e6);
+    });
+  });
+
   describe('Fees', function () {
-    const wdb = new WalletDB({network});
-    let wallet;
-
-    before(async () => {
-      await wdb.open();
-      wdb.height = network.txStart + 1;
-      wdb.state.height = wdb.height;
-
-      const dummy = dummyBlock(network.txStart + 1);
-      const record = BlockMeta.fromEntry(dummy);
-      await wdb.setTip(record);
-      wallet = wdb.primary;
-    });
-
-    after(async () => {
-      await wdb.close();
-    });
+    before(beforeFn);
+    after(afterFn);
 
     it('should fund wallet', async () => {
-      await fundWallet(wallet, [100e6, 10e6, 1e6, 100000, 10000]);
+      const vals = [100e6, 10e6, 1e6, 0.1e6, 0.01e6];
+      await fundWallet(wallet, vals.map(value => ({ value })));
       const bal = await wallet.getBalance();
-      assert.strictEqual(bal.confirmed, 111110000);
+      assert.strictEqual(bal.confirmed, 111.11e6);
     });
 
     it('should pay default fee rate for small tx', async () => {
@@ -121,16 +179,22 @@ describe('Wallet Coin Selection', function () {
 
     it('should fail to pay absurd fee rate for small tx', async () => {
       const address = await wallet.receiveAddress();
-      await assert.rejects(
-        wallet.send({
+      let err;
+
+      try {
+        await wallet.send({
           outputs: [{
             address,
             value: 5e6
           }],
           rate: (policy.ABSURD_FEE_FACTOR + 1) * network.minRelay
-        }),
-        {message: 'Fee exceeds absurd limit.'}
-      );
+        });
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err, 'Error not thrown.');
+      assert.strictEqual(err.message, 'Fee exceeds absurd limit.');
     });
 
     it('should pay fee just under the absurd limit', async () => {
@@ -177,3 +241,60 @@ describe('Wallet Coin Selection', function () {
     });
   });
 });
+
+/**
+ * @typedef {Object} OutputInfo
+ * @property {String} [address]
+ * @property {Number} [value]
+ * @property {covenantTypes} [covenant]
+ * @property {Boolean} [coinbase=false]
+ */
+
+/**
+ * @param {Wallet} wallet
+ * @param {primutils.OutputOptions} outputInfo
+ * @returns {Promise<Output>}
+ */
+
+async function mkOutput(wallet, outputInfo) {
+  if (!outputInfo.address)
+    outputInfo.address = await wallet.receiveAddress();
+
+  return primutils.makeOutput(outputInfo);
+}
+
+/**
+ * @param {Wallet} wallet
+ * @param {OutputInfo[]} outputInfos
+ */
+
+async function fundWallet(wallet, outputInfos) {
+  assert(Array.isArray(outputInfos));
+
+  let hadCoinbase = false;
+
+  const txs = [];
+  for (const info of outputInfos) {
+    const mtx = new MTX();
+
+    if (info.coinbase && hadCoinbase)
+      throw new Error('Coinbase already added.');
+
+    if (info.coinbase && !hadCoinbase) {
+      hadCoinbase = true;
+      mtx.addInput(coinbaseInput());
+    } else {
+      mtx.addInput(dummyInput());
+    }
+
+    const output = await mkOutput(wallet, info);
+    mtx.addOutput(output);
+
+    if (output.covenant.isLinked())
+      mtx.addInput(dummyInput());
+
+    txs.push(mtx.toTX());
+  }
+
+  await wallet.wdb.addBlock(nextBlock(wallet.wdb), txs);
+}

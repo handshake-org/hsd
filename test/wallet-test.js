@@ -28,12 +28,12 @@ const wutils = require('./util/wallet');
 const {ownership} = require('../lib/covenants/ownership');
 const {CachedStubResolver, STUB_SERVERS} = require('./util/stub');
 const {
-  dummyInput,
   curBlock,
   nextBlock,
   curEntry,
   nextEntry
 } = wutils;
+const {dummyInput} = require('./util/primitives');
 
 const KEY1 = 'xprv9s21ZrQH143K3Aj6xQBymM31Zb4BVc7wxqfUhMZrzewdDVCt'
   + 'qUP9iWfcHgJofs25xbaUpCps9GDXj83NiWvQCAkWQhVj5J4CorfnpKX94AZ';
@@ -2224,23 +2224,16 @@ describe('Wallet', function() {
     // Store balance data before rescan to ensure rescan was complete
     let recipBalBefore, senderBalBefore;
 
-    // Hack required to focus test on txdb mechanics.
-    // We don't otherwise need WalletDB or Blockchain
-    // TODO: Remove this after #888 is merged.
-    wdb.getRenewalBlock = () => {
-      return network.genesis.hash;
-    };
-
     before(async () => {
       await wdb.open();
       await wdb.connect();
       wallet = await wdb.create();
       recip = await wdb.create();
-      // rollout all names
-      wdb.height = 52 * 144 * 7;
+      network.names.noRollout = true;
     });
 
     after(async () => {
+      network.names.noRollout = false;
       await wdb.disconnect();
       await wdb.close();
     });
@@ -2610,21 +2603,15 @@ describe('Wallet', function() {
     let start;
     let wallet;
 
-    // Hack required to focus test on txdb mechanics.
-    // We don't otherwise need WalletDB or Blockchain
-    // TODO: Remove this after #888 is merged.
-    wdb.getRenewalBlock = () => {
-      return network.genesis.hash;
-    };
-
     before(async () => {
       await wdb.open();
       wallet = await wdb.create();
       // rollout all names
-      wdb.height = 52 * 144 * 7;
+      network.names.noRollout = true;
     });
 
     after(async () => {
+      network.names.noRollout = false;
       await wdb.close();
     });
 
@@ -3293,21 +3280,15 @@ describe('Wallet', function() {
     let wallet;
     let unsentReveal;
 
-    // Hack required to focus test on txdb mechanics.
-    // We don't otherwise need WalletDB or Blockchain
-    // TODO: Remove this after #888 is merged.
-    wdb.getRenewalBlock = () => {
-      return network.genesis.hash;
-    };
-
     before(async () => {
       await wdb.open();
       wallet = await wdb.create();
       // rollout all names
-      wdb.height = 52 * 144 * 7;
+      network.names.noRollout = true;
     });
 
     after(async () => {
+      network.names.noRollout = false;
       await wdb.close();
     });
 
@@ -3747,13 +3728,6 @@ describe('Wallet', function() {
   describe('Bid and Reveal by Reveal and Bid', function () {
     const network = Network.get('regtest');
     const wdb = new WalletDB({ network });
-
-    // Hack required to focus test on txdb mechanics.
-    // We don't otherwise need WalletDB or Blockchain
-    // TODO: Remove this after #888 is merged.
-    wdb.getRenewalBlock = () => {
-      return network.genesis.hash;
-    };
 
     const mineBlocks = async (count) => {
       for (let i = 0; i < count; i++) {

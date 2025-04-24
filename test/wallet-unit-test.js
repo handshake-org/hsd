@@ -13,7 +13,8 @@ const WalletDB = require('../lib/wallet/walletdb');
 const Wallet = require('../lib/wallet/wallet');
 const Account = require('../lib/wallet/account');
 const wutils = require('./util/wallet');
-const {nextEntry, fakeEntry} = require('./util/wallet');
+const {nextEntry, fakeEntry} = wutils;
+const {dummyInput} = require('./util/primitives');
 const MemWallet = require('./util/memwallet');
 
 /** @typedef {import('../lib/primitives/tx')} TX */
@@ -541,7 +542,7 @@ describe('Wallet Unit Tests', () => {
 
 function fakeTX(addr) {
   const tx = new MTX();
-  tx.addInput(wutils.dummyInput());
+  tx.addInput(dummyInput());
   tx.addOutput({
     address: addr,
     value: 5460
