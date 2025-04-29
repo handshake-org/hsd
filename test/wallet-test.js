@@ -401,7 +401,7 @@ describe('Wallet', function() {
     assert.strictEqual(balanceBefore.tx, 2);
     assert.strictEqual(balanceBefore.coin, 2);
 
-    await wdb.removeBlock(block, [cbTX.toTX(), normalTX.toTX()]);
+    await wdb.removeBlock(block);
     const pending = await wallet.getPending();
 
     assert.strictEqual(pending.length, 1);
