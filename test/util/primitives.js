@@ -14,7 +14,7 @@ const Covenant = require('../../lib/primitives/covenant');
 /** @typedef {import('../../lib/types').Hash} Hash */
 
 exports.coinbaseInput = () => {
-  return Input.fromOutpoint(new Outpoint(Buffer.alloc(32), 0));
+  return Input.fromOutpoint(new Outpoint());
 };
 
 exports.dummyInput = () => {

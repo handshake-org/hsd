@@ -14,6 +14,7 @@ const {coinbaseInput, dummyInput} = primutils;
 /** @typedef {import('../lib/wallet/wallet')} Wallet */
 /** @typedef {import('../lib/covenants/rules').types} covenantTypes */
 /** @typedef {import('../lib/primitives/output')} Output */
+/** @typedef {import('../lib/primitives/tx')} TX */
 
 // Use main instead of regtest because (deprecated)
 // CoinSelector.MAX_FEE was network agnostic
@@ -238,42 +239,6 @@ describe('Wallet Coin Selection', function() {
       }
     });
 
-    it('should index disconnect tx output (spent)', async () => {
-      await fundWallet(wallet, TX_OPTIONS, false);
-      const currentBlock = curBlock(wdb);
-
-      const spendAll = await wallet.createTX({
-        hardFee: 0,
-        outputs: [{ value: TOTAL_FUNDS, address: primutils.randomP2PKAddress() }]
-      });
-
-      await wdb.addTX(spendAll.toTX());
-
-      let iter = wallet.getAccountCreditIterByValue(0);
-      let creditsByValue = await collectIter(iter);
-      assert.strictEqual(creditsByValue.length, TOTAL_COINS);
-      assert(isSortedByValue(creditsByValue), 'Credits not sorted.');
-
-      for (const credit of creditsByValue) {
-        assert.strictEqual(credit.coin.height, currentBlock.height);
-        assert.strictEqual(credit.spent, true);
-      }
-
-      // disconnect last block.
-      await wdb.removeBlock(currentBlock);
-
-      // Only thing that must change is the HEIGHT.
-      iter = wallet.getAccountCreditIterByValue(0);
-      creditsByValue = await collectIter(iter);
-      assert.strictEqual(creditsByValue.length, TOTAL_COINS);
-      assert(isSortedByValue(creditsByValue), 'Credits not sorted.');
-
-      for (const credit of creditsByValue) {
-        assert.strictEqual(credit.coin.height, -1);
-        assert.strictEqual(credit.spent, true);
-      }
-    });
-
     it('should index disconnect tx input', async () => {
       await fundWallet(wallet, TX_OPTIONS, false);
       const createCoinHeight = curBlock(wdb).height;
@@ -361,6 +326,32 @@ describe('Wallet Coin Selection', function() {
       creditsByValue = await collectIter(iter);
       assert.strictEqual(creditsByValue.length, 0);
     });
+
+    it('should index erase (block) tx output', async () => {
+      const txOptions = [...TX_OPTIONS];
+      txOptions[0].coinbase = true;
+      const txs = await fundWallet(wallet, txOptions, false);
+      assert(txs[0].isCoinbase());
+      assert.strictEqual(txs.length, 1);
+
+      const currentBlock = curBlock(wdb);
+
+      let iter = wallet.getAccountCreditIterByValue(0);
+      let creditsByValue = await collectIter(iter);
+      assert.strictEqual(creditsByValue.length, TOTAL_COINS);
+      assert(isSortedByValue(creditsByValue), 'Credits not sorted.');
+
+      for (const credit of creditsByValue) {
+        assert.strictEqual(credit.coin.height, currentBlock.height);
+        assert.strictEqual(credit.spent, false);
+      }
+
+      await wdb.removeBlock(currentBlock);
+
+      iter = wallet.getAccountCreditIterByValue(0);
+      creditsByValue = await collectIter(iter);
+      assert.strictEqual(creditsByValue.length, 0);
+    });
   });
 
   describe('Selection types', function() {
@@ -437,7 +428,7 @@ describe('Wallet Coin Selection', function() {
     });
   });
 
-  describe('Fees', function () {
+  describe('Fees', function() {
     before(beforeFn);
     after(afterFn);
 
@@ -613,7 +604,7 @@ async function createInboundTXs(wallet, outputInfos, txPerOutput = true) {
     if (info.coinbase && !hadCoinbase) {
       hadCoinbase = true;
       mtx.addInput(coinbaseInput());
-    } else {
+    } else if (!hadCoinbase) {
       mtx.addInput(dummyInput());
     }
 
