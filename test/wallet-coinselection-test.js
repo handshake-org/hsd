@@ -9,7 +9,7 @@ const policy = require('../lib/protocol/policy');
 const wutils = require('./util/wallet');
 const {nextBlock, curBlock} = wutils;
 const primutils = require('./util/primitives');
-const {coinbaseInput, dummyInput} = primutils;
+const {coinbaseInput, dummyInput, randomP2PKAddress} = primutils;
 
 /** @typedef {import('../lib/wallet/wallet')} Wallet */
 /** @typedef {import('../lib/covenants/rules').types} covenantTypes */
@@ -52,16 +52,24 @@ describe('Wallet Coin Selection', function() {
   for (const indexType of indexes) {
   describe(`Coin Selection Indexes (${indexType})`, function() {
     const TX_OPTIONS = [
-      { value: 2e6, address: primutils.randomP2PKAddress() },
+      { value: 2e6, address: randomP2PKAddress() },
       // address will be generated using wallet.
-      { value: 1e6 },
-      { value: 4e6 },
-      { value: 3e6 },
-      { value: 2e6 }
+      { value: 1e6, covenant: { type: Covenant.types.OPEN } },
+      { value: 3e6, covenant: { type: Covenant.types.REDEEM } },
+      { value: 2e6 },
+      // non spendable coins must not get indexed.
+      { value: 4e6, covenant: { type: Covenant.types.BID } },
+      { value: 5e6, covenant: { type: Covenant.types.REVEAL } },
+      { value: 6e6, covenant: { type: Covenant.types.REGISTER } },
+      { value: 7e6, covenant: { type: Covenant.types.UPDATE } },
+      { value: 8e6, covenant: { type: Covenant.types.RENEW } },
+      { value: 9e6, covenant: { type: Covenant.types.TRANSFER } },
+      { value: 10e6, covenant: { type: Covenant.types.FINALIZE } },
+      { value: 11e6, covenant: { type: Covenant.types.REVOKE } }
     ];
 
-    const TOTAL_COINS = 4;
-    const TOTAL_FUNDS = 1e6 + 2e6 + 3e6 + 4e6;
+    const TOTAL_COINS = 3;
+    const TOTAL_FUNDS = 1e6 + 2e6 + 3e6;
 
     let isSorted, getIterMethodName;
 
@@ -103,7 +111,7 @@ describe('Wallet Coin Selection', function() {
 
       const spendAll = await wallet.createTX({
         hardFee: 0,
-        outputs: [{ value: TOTAL_FUNDS, address: primutils.randomP2PKAddress() }]
+        outputs: [{ value: TOTAL_FUNDS, address: randomP2PKAddress() }]
       });
 
       await wdb.addTX(spendAll.toTX());
@@ -141,7 +149,7 @@ describe('Wallet Coin Selection', function() {
 
       const spendAll = await wallet.createTX({
         hardFee: 0,
-        outputs: [{ value: TOTAL_FUNDS, address: primutils.randomP2PKAddress() }]
+        outputs: [{ value: TOTAL_FUNDS, address: randomP2PKAddress() }]
       });
 
       let iter = wallet[getIterMethodName](0);
@@ -195,7 +203,7 @@ describe('Wallet Coin Selection', function() {
 
       const spendAll = await wallet.createTX({
         hardFee: 0,
-        outputs: [{ value: TOTAL_FUNDS, address: primutils.randomP2PKAddress() }]
+        outputs: [{ value: TOTAL_FUNDS, address: randomP2PKAddress() }]
       });
       const spendAllTX = spendAll.toTX();
 
@@ -254,7 +262,7 @@ describe('Wallet Coin Selection', function() {
 
       const spendAll = await wallet.createTX({
         hardFee: 0,
-        outputs: [{ value: TOTAL_FUNDS, address: primutils.randomP2PKAddress() }]
+        outputs: [{ value: TOTAL_FUNDS, address: randomP2PKAddress() }]
       });
 
       const spendAllTX = spendAll.toTX();
@@ -294,7 +302,7 @@ describe('Wallet Coin Selection', function() {
       // double spend original tx.
       const mtx = new MTX();
       mtx.addInput(txs[0].inputs[0]);
-      mtx.addOutput(primutils.randomP2PKAddress(), 1e6);
+      mtx.addOutput(randomP2PKAddress(), 1e6);
 
       await wdb.addBlock(nextBlock(wdb), [mtx.toTX()]);
 
@@ -309,7 +317,7 @@ describe('Wallet Coin Selection', function() {
 
       const spendAll = await wallet.createTX({
         hardFee: 0,
-        outputs: [{ value: TOTAL_FUNDS, address: primutils.randomP2PKAddress() }]
+        outputs: [{ value: TOTAL_FUNDS, address: randomP2PKAddress() }]
       });
 
       await wdb.addTX(spendAll.toTX());
@@ -327,7 +335,7 @@ describe('Wallet Coin Selection', function() {
       // double spend original tx.
       const mtx = new MTX();
       mtx.addInput(txs[0].inputs[0]);
-      mtx.addOutput(primutils.randomP2PKAddress(), 1e6);
+      mtx.addOutput(randomP2PKAddress(), 1e6);
 
       await wdb.addBlock(nextBlock(wdb), [mtx.toTX()]);
 
@@ -392,6 +400,9 @@ describe('Wallet Coin Selection', function() {
       const coins = await wallet.getCoins();
       assert.strictEqual(coins.length, spendableCovs.length + nonSpendableCovs.length);
 
+      const spendables = await collectIter(wallet.getAccountCreditIterByValue(0));
+      assert.strictEqual(spendables.length, spendableCovs.length);
+
       const mtx = new MTX();
       await wallet.fund(mtx, {
         selection: 'all'
@@ -405,7 +416,7 @@ describe('Wallet Coin Selection', function() {
       await fundWallet(wallet, values.map(value => ({ value })));
 
       const mtx = new MTX();
-      mtx.addOutput(primutils.randomP2PKAddress(), 9e6);
+      mtx.addOutput(randomP2PKAddress(), 9e6);
 
       await wallet.fund(mtx, {
         selection: 'value',
@@ -424,7 +435,7 @@ describe('Wallet Coin Selection', function() {
         await fundWallet(wallet, [{ value }]);
 
       const mtx = new MTX();
-      mtx.addOutput(primutils.randomP2PKAddress(), 9e6);
+      mtx.addOutput(randomP2PKAddress(), 9e6);
       await wallet.fund(mtx, {
         selection: 'age',
         hardFee: 0
