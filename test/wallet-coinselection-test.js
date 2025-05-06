@@ -20,6 +20,8 @@ const {coinbaseInput, dummyInput, randomP2PKAddress} = primutils;
 // CoinSelector.MAX_FEE was network agnostic
 const network = Network.get('main');
 
+const ALT_ACCOUNT = 'alt';
+
 describe('Wallet Coin Selection', function() {
   const TX_START_BAK = network.txStart;
   /** @type {WalletDB?} */
@@ -34,6 +36,10 @@ describe('Wallet Coin Selection', function() {
     await wdb.open();
     await wdb.addBlock(nextBlock(wdb), []);
     wallet = wdb.primary;
+
+    await wallet.createAccount({
+      name: ALT_ACCOUNT
+    });
   };
 
   const afterFn = async () => {
@@ -45,18 +51,24 @@ describe('Wallet Coin Selection', function() {
   };
 
   const indexes = [
-    'value',
-    'height'
+    'value-asc',
+    'value-desc',
+    'height-asc',
+    'height-desc'
   ];
 
   for (const indexType of indexes) {
-  describe(`Coin Selection Indexes (${indexType})`, function() {
+  describe.only(`Coin Selection Indexes (${indexType})`, function() {
     const TX_OPTIONS = [
       { value: 2e6, address: randomP2PKAddress() },
       // address will be generated using wallet.
       { value: 1e6, covenant: { type: Covenant.types.OPEN } },
-      { value: 3e6, covenant: { type: Covenant.types.REDEEM } },
+      { value: 5e6, covenant: { type: Covenant.types.REDEEM } },
       { value: 2e6 },
+      // alt account
+      { value: 4e6, account: ALT_ACCOUNT },
+      { value: 6e6, account: ALT_ACCOUNT, covenant: { type: Covenant.types.OPEN } },
+      { value: 3e6, account: ALT_ACCOUNT, covenant: { type: Covenant.types.REDEEM } },
       // non spendable coins must not get indexed.
       { value: 4e6, covenant: { type: Covenant.types.BID } },
       { value: 5e6, covenant: { type: Covenant.types.REVEAL } },
@@ -68,26 +80,46 @@ describe('Wallet Coin Selection', function() {
       { value: 11e6, covenant: { type: Covenant.types.REVOKE } }
     ];
 
-    const TOTAL_COINS = 3;
-    const TOTAL_FUNDS = 1e6 + 2e6 + 3e6;
+    const ACCT_0_COINS = 3;
+    const ACCT_0_FUNDS = 1e6 + 2e6 + 5e6;
+    const ACCT_1_COINS = 3;
+    const ACCT_1_FUNDS = 3e6 + 4e6 + 6e6;
+    const TOTAL_COINS = ACCT_0_COINS + ACCT_1_COINS;
+    const TOTAL_FUNDS = ACCT_0_FUNDS + ACCT_1_FUNDS;
 
     let isSorted, getCredits;
+    const sumCredits = credits => credits.reduce((acc, c) => acc + c.coin.value, 0);
 
     before(() => {
       switch (indexType) {
-        case 'value':
-          isSorted = isSortedByValue;
+        case 'value-asc':
+          isSorted = isSortedByValueAsc;
+          getCredits = (wallet, acct = 0, opts = {}) => {
+            return collectIter(wallet.getAccountCreditIterByValue(acct, opts));
+          };
+          break;
+        case 'value-desc':
+          isSorted = isSortedByValueDesc;
           getCredits = (wallet, acct = 0, opts = {}) => {
             return collectIter(wallet.getAccountCreditIterByValue(acct, {
-              reverse: true,
-              ...opts
+                ...opts,
+                reverse: true
             }));
           };
           break;
-        case 'height':
-          isSorted = isSortedByHeight;
+        case 'height-asc':
+          isSorted = isSortedByHeightAsc;
           getCredits = (wallet, acct = 0, opts = {}) => {
             return collectIter(wallet.getAccountCreditIterByHeight(acct, opts));;
+          };
+          break;
+        case 'height-desc':
+          isSorted = isSortedByHeightDesc;
+          getCredits = (wallet, acct = 0, opts = {}) => {
+            return collectIter(wallet.getAccountCreditIterByHeight(acct, {
+                ...opts,
+                reverse: true
+            }));
           };
           break;
         default:
@@ -102,11 +134,22 @@ describe('Wallet Coin Selection', function() {
       const txs = await createInboundTXs(wallet, TX_OPTIONS, false);
       await wallet.wdb.addTX(txs[0]);
 
-      const credits = await getCredits(wallet);
-      assert.strictEqual(credits.length, TOTAL_COINS);
-      assert(isSorted(credits), 'Credits not sorted.');
+      const credits0 = await getCredits(wallet);
+      assert.strictEqual(credits0.length, ACCT_0_COINS);
+      assert(isSorted(credits0), 'Credits not sorted.');
+      assert(sumCredits(credits0) === ACCT_0_FUNDS);
 
-      for (const credit of credits) {
+      const credits1 = await getCredits(wallet, 1);
+      assert.strictEqual(credits1.length, ACCT_1_COINS);
+      assert(isSorted(credits1), 'Credits not sorted.');
+      assert(sumCredits(credits1) === ACCT_1_FUNDS);
+
+      const both = await getCredits(wallet, -1);
+      assert.strictEqual(both.length, TOTAL_COINS);
+      assert(isSorted(both), 'Credits not sorted.');
+      assert(sumCredits(both) === TOTAL_FUNDS);
+
+      for (const credit of [...credits0, ...credits1, ...both]) {
         assert.strictEqual(credit.coin.height, -1);
         assert.strictEqual(credit.spent, false);
       }
@@ -123,11 +166,22 @@ describe('Wallet Coin Selection', function() {
       await wdb.addTX(spendAll.toTX());
 
       // We still have the coin, even thought it is flagged: .spent = true
-      const credits = await getCredits(wallet);
-      assert.strictEqual(credits.length, TOTAL_COINS);
-      assert(isSorted(credits), 'Credits not sorted.');
+      const credits0 = await getCredits(wallet);
+      assert.strictEqual(credits0.length, ACCT_0_COINS);
+      assert(isSorted(credits0), 'Credits not sorted.');
+      assert(sumCredits(credits0) === ACCT_0_FUNDS);
 
-      for (const credit of credits) {
+      const credits1 = await getCredits(wallet, 1);
+      assert.strictEqual(credits1.length, ACCT_1_COINS);
+      assert(isSorted(credits1), 'Credits not sorted.');
+      assert(sumCredits(credits1) === ACCT_1_FUNDS);
+
+      const both = await getCredits(wallet, -1);
+      assert.strictEqual(both.length, TOTAL_COINS);
+      assert(isSorted(both), 'Credits not sorted.');
+      assert(sumCredits(both) === TOTAL_FUNDS);
+
+      for (const credit of [...credits0, ...credits1, ...both]) {
         assert.strictEqual(credit.coin.height, curBlock(wdb).height);
         assert.strictEqual(credit.spent, true);
       }
@@ -137,11 +191,22 @@ describe('Wallet Coin Selection', function() {
       await fundWallet(wallet, TX_OPTIONS, false);
       const currentBlock = curBlock(wdb);
 
-      const credits = await getCredits(wallet);
-      assert.strictEqual(credits.length, TOTAL_COINS);
-      assert(isSorted(credits), 'Credits not sorted.');
+      const credits0 = await getCredits(wallet);
+      assert.strictEqual(credits0.length, ACCT_0_COINS);
+      assert(isSorted(credits0), 'Credits not sorted.');
+      assert(sumCredits(credits0) === ACCT_0_FUNDS);
 
-      for (const credit of credits) {
+      const credits1 = await getCredits(wallet, 1);
+      assert.strictEqual(credits1.length, ACCT_1_COINS);
+      assert(isSorted(credits1), 'Credits not sorted.');
+      assert(sumCredits(credits1) === ACCT_1_FUNDS);
+
+      const both = await getCredits(wallet, -1);
+      assert.strictEqual(both.length, TOTAL_COINS);
+      assert(isSorted(both), 'Credits not sorted.');
+      assert(sumCredits(both) === TOTAL_FUNDS);
+
+      for (const credit of [...credits0, ...credits1, ...both]) {
         assert.strictEqual(credit.coin.height, currentBlock.height);
         assert.strictEqual(credit.spent, false);
       }
@@ -156,30 +221,58 @@ describe('Wallet Coin Selection', function() {
         outputs: [{ value: TOTAL_FUNDS, address: randomP2PKAddress() }]
       });
 
-      let credits = await getCredits(wallet);
-      assert.strictEqual(credits.length, TOTAL_COINS);
-      assert(isSorted(credits), 'Credits not sorted.');
+      let credits0 = await getCredits(wallet);
+      assert.strictEqual(credits0.length, ACCT_0_COINS);
+      assert(isSorted(credits0), 'Credits not sorted.');
+      assert(sumCredits(credits0) === ACCT_0_FUNDS);
 
-      for (const credit of credits) {
+      let credits1 = await getCredits(wallet, 1);
+      assert.strictEqual(credits1.length, ACCT_1_COINS);
+      assert(isSorted(credits1), 'Credits not sorted.');
+      assert(sumCredits(credits1) === ACCT_1_FUNDS);
+
+      let both = await getCredits(wallet, -1);
+      assert.strictEqual(both.length, TOTAL_COINS);
+      assert(isSorted(both), 'Credits not sorted.');
+      assert(sumCredits(both) === TOTAL_FUNDS);
+
+      for (const credit of [...credits0, ...credits1, ...both]) {
         assert.strictEqual(credit.coin.height, currentBlock.height);
         assert.strictEqual(credit.spent, false);
       }
 
       await wdb.addBlock(nextBlock(wdb), [spendAll.toTX()]);
 
-      credits = await getCredits(wallet);
-      assert.strictEqual(credits.length, 0);
+      credits0 = await getCredits(wallet);
+      assert.strictEqual(credits0.length, 0);
+
+      credits1 = await getCredits(wallet, 1);
+      assert.strictEqual(credits1.length, 0);
+
+      both = await getCredits(wallet, -1);
+      assert.strictEqual(both.length, 0);
     });
 
     it('should index confirm tx output', async () => {
       const txs = await createInboundTXs(wallet, TX_OPTIONS, false);
       await wdb.addTX(txs[0]);
 
-      let credits = await getCredits(wallet);
-      assert.strictEqual(credits.length, TOTAL_COINS);
-      assert(isSorted(credits), 'Credits not sorted.');
+      let credits0 = await getCredits(wallet);
+      assert.strictEqual(credits0.length, ACCT_0_COINS);
+      assert(isSorted(credits0), 'Credits not sorted.');
+      assert(sumCredits(credits0) === ACCT_0_FUNDS);
 
-      for (const credit of credits) {
+      let credits1 = await getCredits(wallet, 1);
+      assert.strictEqual(credits1.length, ACCT_1_COINS);
+      assert(isSorted(credits1), 'Credits not sorted.');
+      assert(sumCredits(credits1) === ACCT_1_FUNDS);
+
+      let both = await getCredits(wallet, -1);
+      assert.strictEqual(both.length, TOTAL_COINS);
+      assert(isSorted(both), 'Credits not sorted.');
+      assert(sumCredits(both) === TOTAL_FUNDS);
+
+      for (const credit of [...credits0, ...credits1, ...both]) {
         assert.strictEqual(credit.coin.height, -1);
         assert.strictEqual(credit.spent, false);
       }
@@ -187,11 +280,22 @@ describe('Wallet Coin Selection', function() {
       await wdb.addBlock(nextBlock(wdb), txs);
       const currentBlock = curBlock(wdb);
 
-      credits = await getCredits(wallet);
-      assert.strictEqual(credits.length, TOTAL_COINS);
-      assert(isSorted(credits), 'Credits not sorted.');
+      credits0 = await getCredits(wallet);
+      assert.strictEqual(credits0.length, ACCT_0_COINS);
+      assert(isSorted(credits0), 'Credits not sorted.');
+      assert(sumCredits(credits0) === ACCT_0_FUNDS);
 
-      for (const credit of credits) {
+      credits1 = await getCredits(wallet, 1);
+      assert.strictEqual(credits1.length, ACCT_1_COINS);
+      assert(isSorted(credits1), 'Credits not sorted.');
+      assert(sumCredits(credits1) === ACCT_1_FUNDS);
+
+      both = await getCredits(wallet, -1);
+      assert.strictEqual(both.length, TOTAL_COINS);
+      assert(isSorted(both), 'Credits not sorted.');
+      assert(sumCredits(both) === TOTAL_FUNDS);
+
+      for (const credit of [...credits0, ...credits1, ...both]) {
         assert.strictEqual(credit.coin.height, currentBlock.height);
         assert.strictEqual(credit.spent, false);
       }
@@ -209,19 +313,36 @@ describe('Wallet Coin Selection', function() {
 
       await wdb.addTX(spendAllTX);
 
-      let credits = await getCredits(wallet);
-      assert.strictEqual(credits.length, TOTAL_COINS);
-      assert(isSorted(credits), 'Credits not sorted.');
+      let credits0 = await getCredits(wallet);
+      assert.strictEqual(credits0.length, ACCT_0_COINS);
+      assert(isSorted(credits0), 'Credits not sorted.');
+      assert(sumCredits(credits0) === ACCT_0_FUNDS);
 
-      for (const credit of credits) {
+      let credits1 = await getCredits(wallet, 1);
+      assert.strictEqual(credits1.length, ACCT_1_COINS);
+      assert(isSorted(credits1), 'Credits not sorted.');
+      assert(sumCredits(credits1) === ACCT_1_FUNDS);
+
+      let both = await getCredits(wallet, -1);
+      assert.strictEqual(both.length, TOTAL_COINS);
+      assert(isSorted(both), 'Credits not sorted.');
+      assert(sumCredits(both) === TOTAL_FUNDS);
+
+      for (const credit of [...credits0, ...credits1, ...both]) {
         assert.strictEqual(credit.coin.height, currentBlock.height);
         assert.strictEqual(credit.spent, true);
       }
 
       await wdb.addBlock(nextBlock(wdb), [spendAllTX]);
 
-      credits = await getCredits(wallet);
-      assert.strictEqual(credits.length, 0);
+      credits0 = await getCredits(wallet);
+      assert.strictEqual(credits0.length, 0);
+
+      credits1 = await getCredits(wallet, 1);
+      assert.strictEqual(credits1.length, 0);
+
+      both = await getCredits(wallet, -1);
+      assert.strictEqual(both.length, 0);
     });
 
     it('should index disconnect tx output', async () => {
@@ -229,11 +350,22 @@ describe('Wallet Coin Selection', function() {
 
       const currentBlock = curBlock(wdb);
 
-      let credits = await getCredits(wallet);
-      assert.strictEqual(credits.length, TOTAL_COINS);
-      assert(isSorted(credits), 'Credits not sorted.');
+      let credits0 = await getCredits(wallet);
+      assert.strictEqual(credits0.length, ACCT_0_COINS);
+      assert(isSorted(credits0), 'Credits not sorted.');
+      assert(sumCredits(credits0) === ACCT_0_FUNDS);
 
-      for (const credit of credits) {
+      let credits1 = await getCredits(wallet, 1);
+      assert.strictEqual(credits1.length, ACCT_1_COINS);
+      assert(isSorted(credits1), 'Credits not sorted.');
+      assert(sumCredits(credits1) === ACCT_1_FUNDS);
+
+      let both = await getCredits(wallet, -1);
+      assert.strictEqual(both.length, TOTAL_COINS);
+      assert(isSorted(both), 'Credits not sorted.');
+      assert(sumCredits(both) === TOTAL_FUNDS);
+
+      for (const credit of [...credits0, ...credits1, ...both]) {
         assert.strictEqual(credit.coin.height, currentBlock.height);
         assert.strictEqual(credit.spent, false);
       }
@@ -242,11 +374,22 @@ describe('Wallet Coin Selection', function() {
       await wdb.removeBlock(currentBlock);
 
       // Only thing that must change is the HEIGHT.
-      credits = await getCredits(wallet);
-      assert.strictEqual(credits.length, TOTAL_COINS);
-      assert(isSorted(credits), 'Credits not sorted.');
+      credits0 = await getCredits(wallet);
+      assert.strictEqual(credits0.length, ACCT_0_COINS);
+      assert(isSorted(credits0), 'Credits not sorted.');
+      assert(sumCredits(credits0) === ACCT_0_FUNDS);
 
-      for (const credit of credits) {
+      credits1 = await getCredits(wallet, 1);
+      assert.strictEqual(credits1.length, ACCT_1_COINS);
+      assert(isSorted(credits1), 'Credits not sorted.');
+      assert(sumCredits(credits1) === ACCT_1_FUNDS);
+
+      both = await getCredits(wallet, -1);
+      assert.strictEqual(both.length, TOTAL_COINS);
+      assert(isSorted(both), 'Credits not sorted.');
+      assert(sumCredits(both) === TOTAL_FUNDS);
+
+      for (const credit of [...credits0, ...credits1, ...both]) {
         assert.strictEqual(credit.coin.height, -1);
         assert.strictEqual(credit.spent, false);
       }
@@ -264,16 +407,33 @@ describe('Wallet Coin Selection', function() {
       const spendAllTX = spendAll.toTX();
       await wdb.addBlock(nextBlock(wdb), [spendAllTX]);
 
-      let credits = await getCredits(wallet);
-      assert.strictEqual(credits.length, 0);
+      let credits0 = await getCredits(wallet);
+      assert.strictEqual(credits0.length, 0);
+
+      let credits1 = await getCredits(wallet, 1);
+      assert.strictEqual(credits1.length, 0);
+
+      let both = await getCredits(wallet, -1);
+      assert.strictEqual(both.length, 0);
 
       await wdb.removeBlock(curBlock(wdb));
 
-      credits = await getCredits(wallet);
-      assert.strictEqual(credits.length, TOTAL_COINS);
-      assert(isSorted(credits), 'Credits not sorted.');
+      credits0 = await getCredits(wallet);
+      assert.strictEqual(credits0.length, ACCT_0_COINS);
+      assert(isSorted(credits0), 'Credits not sorted.');
+      assert(sumCredits(credits0) === ACCT_0_FUNDS);
 
-      for (const credit of credits) {
+      credits1 = await getCredits(wallet, 1);
+      assert.strictEqual(credits1.length, ACCT_1_COINS);
+      assert(isSorted(credits1), 'Credits not sorted.');
+      assert(sumCredits(credits1) === ACCT_1_FUNDS);
+
+      both = await getCredits(wallet, -1);
+      assert.strictEqual(both.length, TOTAL_COINS);
+      assert(isSorted(both), 'Credits not sorted.');
+      assert(sumCredits(both) === TOTAL_FUNDS);
+
+      for (const credit of [...credits0, ...credits1, ...both]) {
         assert.strictEqual(credit.coin.height, createCoinHeight);
         assert.strictEqual(credit.spent, true);
       }
@@ -283,11 +443,22 @@ describe('Wallet Coin Selection', function() {
       const txs = await createInboundTXs(wallet, TX_OPTIONS, false);
       await wdb.addTX(txs[0]);
 
-      let credits = await getCredits(wallet);
-      assert.strictEqual(credits.length, TOTAL_COINS);
-      assert(isSorted(credits), 'Credits not sorted.');
+      let credits0 = await getCredits(wallet);
+      assert.strictEqual(credits0.length, ACCT_0_COINS);
+      assert(isSorted(credits0), 'Credits not sorted.');
+      assert(sumCredits(credits0) === ACCT_0_FUNDS);
 
-      for (const credit of credits) {
+      let credits1 = await getCredits(wallet, 1);
+      assert.strictEqual(credits1.length, ACCT_1_COINS);
+      assert(isSorted(credits1), 'Credits not sorted.');
+      assert(sumCredits(credits1) === ACCT_1_FUNDS);
+
+      let both = await getCredits(wallet, -1);
+      assert.strictEqual(both.length, TOTAL_COINS);
+      assert(isSorted(both), 'Credits not sorted.');
+      assert(sumCredits(both) === TOTAL_FUNDS);
+
+      for (const credit of [...credits0, ...credits1, ...both]) {
         assert.strictEqual(credit.coin.height, -1);
         assert.strictEqual(credit.spent, false);
       }
@@ -299,8 +470,14 @@ describe('Wallet Coin Selection', function() {
 
       await wdb.addBlock(nextBlock(wdb), [mtx.toTX()]);
 
-      credits = await getCredits(wallet);
-      assert.strictEqual(credits.length, 0);
+      credits0 = await getCredits(wallet);
+      assert.strictEqual(credits0.length, 0);
+
+      credits1 = await getCredits(wallet, 1);
+      assert.strictEqual(credits1.length, 0);
+
+      both = await getCredits(wallet, -1);
+      assert.strictEqual(both.length, 0);
     });
 
     it('should index erase tx input', async () => {
@@ -314,11 +491,22 @@ describe('Wallet Coin Selection', function() {
 
       await wdb.addTX(spendAll.toTX());
 
-      let credits = await getCredits(wallet);
-      assert.strictEqual(credits.length, TOTAL_COINS);
-      assert(isSorted(credits), 'Credits not sorted.');
+      let credits0 = await getCredits(wallet);
+      assert.strictEqual(credits0.length, ACCT_0_COINS);
+      assert(isSorted(credits0), 'Credits not sorted.');
+      assert(sumCredits(credits0) === ACCT_0_FUNDS);
 
-      for (const credit of credits) {
+      let credits1 = await getCredits(wallet, 1);
+      assert.strictEqual(credits1.length, ACCT_1_COINS);
+      assert(isSorted(credits1), 'Credits not sorted.');
+      assert(sumCredits(credits1) === ACCT_1_FUNDS);
+
+      let both = await getCredits(wallet, -1);
+      assert.strictEqual(both.length, TOTAL_COINS);
+      assert(isSorted(both), 'Credits not sorted.');
+      assert(sumCredits(both) === TOTAL_FUNDS);
+
+      for (const credit of [...credits0, ...credits1, ...both]) {
         assert.strictEqual(credit.coin.height, -1);
         assert.strictEqual(credit.spent, true);
       }
@@ -330,8 +518,14 @@ describe('Wallet Coin Selection', function() {
 
       await wdb.addBlock(nextBlock(wdb), [mtx.toTX()]);
 
-      credits = await getCredits(wallet);
-      assert.strictEqual(credits.length, 0);
+      credits0 = await getCredits(wallet);
+      assert.strictEqual(credits0.length, 0);
+
+      credits1 = await getCredits(wallet, 1);
+      assert.strictEqual(credits1.length, 0);
+
+      both = await getCredits(wallet, -1);
+      assert.strictEqual(both.length, 0);
     });
 
     it('should index erase (block) tx output', async () => {
@@ -343,38 +537,73 @@ describe('Wallet Coin Selection', function() {
 
       const currentBlock = curBlock(wdb);
 
-      let credits = await getCredits(wallet);
-      assert.strictEqual(credits.length, TOTAL_COINS);
-      assert(isSorted(credits), 'Credits not sorted.');
+      let credits0 = await getCredits(wallet);
+      assert.strictEqual(credits0.length, ACCT_0_COINS);
+      assert(isSorted(credits0), 'Credits not sorted.');
+      assert(sumCredits(credits0) === ACCT_0_FUNDS);
 
-      for (const credit of credits) {
+      let credits1 = await getCredits(wallet, 1);
+      assert.strictEqual(credits1.length, ACCT_1_COINS);
+      assert(isSorted(credits1), 'Credits not sorted.');
+      assert(sumCredits(credits1) === ACCT_1_FUNDS);
+
+      let both = await getCredits(wallet, -1);
+      assert.strictEqual(both.length, TOTAL_COINS);
+      assert(isSorted(both), 'Credits not sorted.');
+      assert(sumCredits(both) === TOTAL_FUNDS);
+
+      for (const credit of [...credits0, ...credits1, ...both]) {
         assert.strictEqual(credit.coin.height, currentBlock.height);
         assert.strictEqual(credit.spent, false);
       }
 
       await wdb.removeBlock(currentBlock);
 
-      credits = await getCredits(wallet);
-      assert.strictEqual(credits.length, 0);
+      credits0 = await getCredits(wallet);
+      assert.strictEqual(credits0.length, 0);
+
+      credits1 = await getCredits(wallet, 1);
+      assert.strictEqual(credits1.length, 0);
+
+      both = await getCredits(wallet, -1);
+      assert.strictEqual(both.length, 0);
     });
 
     it('should index block and mempool', async () => {
       const txOptionsConfirmed = [
         { value: 4e6 },
-        { value: 3e6 }
+        { value: 7e6 },
+        { value: 2e6, account: ALT_ACCOUNT },
+        { value: 5e6, account: ALT_ACCOUNT }
       ];
       await fundWallet(wallet, txOptionsConfirmed, false);
 
       const txOptionsUnconfirmed = [
-        { value: 2e6 },
-        { value: 1e6 }
+        { value: 8e6 },
+        { value: 3e6 },
+        { value: 6e6, account: ALT_ACCOUNT },
+        { value: 1e6, account: ALT_ACCOUNT }
       ];
       const txs = await createInboundTXs(wallet, txOptionsUnconfirmed, false);
       await wdb.addTX(txs[0]);
 
-      const credits = await getCredits(wallet);
-      assert.strictEqual(credits.length, 4);
-      assert(isSorted(credits), 'Credits not sorted.');
+      const sum0 = 3e6 + 4e6 + 7e6 + 8e6;
+      const sum1 = 1e6 + 2e6 + 5e6 + 6e6;
+
+      const credits0 = await getCredits(wallet);
+      assert.strictEqual(credits0.length, 4);
+      assert(isSorted(credits0), 'Credits not sorted.');
+      assert(sumCredits(credits0) === sum0);
+
+      const credits1 = await getCredits(wallet, 1);
+      assert.strictEqual(credits1.length, 4);
+      assert(isSorted(credits1), 'Credits not sorted.');
+      assert(sumCredits(credits1) === sum1);
+
+      const both = await getCredits(wallet, -1);
+      assert.strictEqual(both.length, 8);
+      assert(isSorted(both), 'Credits not sorted.');
+      assert(sumCredits(both) === sum0 + sum1);
     });
   });
   }
@@ -686,9 +915,27 @@ async function collectIter(iter) {
  * @returns {Boolean}
  */
 
-function isSortedByValue(credits) {
+function isSortedByValueAsc(credits) {
   for (let i = 1; i < credits.length; i++) {
-    if (credits[i].value > credits[i - 1].value)
+    const isSorted = isSortedValueAsc(credits[i - 1].coin, credits[i].coin);
+
+    if (!isSorted)
+      return false;
+  }
+
+  return true;
+}
+
+/**
+ * @param {Credit[]} credits
+ * @returns {Boolean}
+ */
+
+function isSortedByValueDesc(credits) {
+  for (let i = 1; i < credits.length; i++) {
+    const isSorted = sortValue(credits[i].coin, credits[i - 1].coin);
+
+    if (isSorted < 0)
       return false;
   }
 
@@ -700,7 +947,7 @@ function isSortedByValue(credits) {
  * @returns {Boolean}
  */
 
-function isSortedByHeight(credits) {
+function isSortedByHeightAsc(credits) {
   for (let i = 1; i < credits.length; i++) {
     if (credits[i].coin.height > credits[i - 1].coin.height)
       return false;
@@ -708,3 +955,49 @@ function isSortedByHeight(credits) {
 
   return true;
 };
+
+/**
+ * @param {Credit[]} credits
+ * @returns {Boolean}
+ */
+
+function isSortedByHeightDesc(credits) {
+  for (let i = 1; i < credits.length; i++) {
+    if (credits[i].coin.height < credits[i - 1].coin.height)
+      return false;
+  }
+
+  return true;
+};
+
+/**
+ * @param {Coin} a
+ * @param {Coin} b
+ * @returns {Boolean}
+ */
+
+function isSortedValueAsc(a, b) {
+  if (a.height === -1 && b.height !== -1)
+    return false;
+
+  if (a.height !== -1 && b.height === -1)
+    return true;
+
+  return (b.value - a.value) > 0;
+}
+
+/**
+ * @param {Coin} a
+ * @param {Coin} b
+ * @returns {Number}
+ */
+
+function sortValue(a, b) {
+  if (a.height === -1 && b.height !== -1)
+    return 1;
+
+  if (a.height !== -1 && b.height === -1)
+    return -1;
+
+  return b.value - a.value;
+}
