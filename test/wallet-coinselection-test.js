@@ -58,7 +58,7 @@ describe('Wallet Coin Selection', function() {
   ];
 
   for (const indexType of indexes) {
-  describe.only(`Coin Selection Indexes (${indexType})`, function() {
+  describe(`Coin Selection Indexes (${indexType})`, function() {
     const TX_OPTIONS = [
       { value: 2e6, address: randomP2PKAddress() },
       // address will be generated using wallet.
@@ -110,7 +110,7 @@ describe('Wallet Coin Selection', function() {
         case 'height-asc':
           isSorted = isSortedByHeightAsc;
           getCredits = (wallet, acct = 0, opts = {}) => {
-            return collectIter(wallet.getAccountCreditIterByHeight(acct, opts));;
+            return collectIter(wallet.getAccountCreditIterByHeight(acct, opts));
           };
           break;
         case 'height-desc':
@@ -648,7 +648,7 @@ describe('Wallet Coin Selection', function() {
     });
 
     it('should select coin by descending value', async () => {
-      const values = [5e6, 4e6, 3e6, 2e6, 1e6];
+      const values = [1e6, 4e6, 3e6, 5e6, 2e6];
       await fundWallet(wallet, values.map(value => ({ value })));
 
       const mtx = new MTX();
@@ -659,6 +659,7 @@ describe('Wallet Coin Selection', function() {
         hardFee: 0
       });
 
+      // 4 + 5
       assert.strictEqual(mtx.inputs.length, 2);
       assert.strictEqual(mtx.outputs.length, 1);
       assert.strictEqual(mtx.outputs[0].value, 9e6);
