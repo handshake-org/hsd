@@ -13,7 +13,7 @@ jobs:
     - name: Setup
       uses: actions/setup-node@v4
       with:
-        node-version: 22.x
+        node-version: 24.x
 
     - name: Install dependencies
       run: npm install --location=global bslint @hns-dev/bsdoc
@@ -37,7 +37,7 @@ jobs:
     - name: Setup
       uses: actions/setup-node@v4
       with:
-        node-version: 22.x
+        node-version: 24.x
 
     - name: Install dependencies
       run: sudo apt-get update && sudo apt-get install -y libunbound-dev |
@@ -57,7 +57,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        node: [14.x, 16.x, 18.x, 20.x, 22.x]
+        node: [14.x, 16.x, 18.x, 20.x, 22.x, 24.x]
 
     steps:
     - uses: actions/checkout@v4
