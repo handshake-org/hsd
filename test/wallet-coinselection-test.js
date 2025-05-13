@@ -1,9 +1,11 @@
 'use strict';
 
 const assert = require('bsert');
+const {BufferMap} = require('buffer-map');
 const Network = require('../lib/protocol/network');
 const MTX = require('../lib/primitives/mtx');
 const Covenant = require('../lib/primitives/covenant');
+const Coin = require('../lib/primitives/coin');
 const WalletDB = require('../lib/wallet/walletdb');
 const policy = require('../lib/protocol/policy');
 const wutils = require('./util/wallet');
@@ -22,6 +24,7 @@ const UNCONFIRMED_HEIGHT = 0xffffffff;
 // CoinSelector.MAX_FEE was network agnostic
 const network = Network.get('main');
 
+const DEFAULT_ACCOUNT = 'default';
 const ALT_ACCOUNT = 'alt';
 
 describe('Wallet Coin Selection', function() {
@@ -104,8 +107,8 @@ describe('Wallet Coin Selection', function() {
           isSorted = isSortedByValueDesc;
           getCredits = (wallet, acct = 0, opts = {}) => {
             return collectIter(wallet.getAccountCreditIterByValue(acct, {
-                ...opts,
-                reverse: true
+              ...opts,
+              reverse: true
             }));
           };
           break;
@@ -119,8 +122,8 @@ describe('Wallet Coin Selection', function() {
           isSorted = isSortedByHeightDesc;
           getCredits = (wallet, acct = 0, opts = {}) => {
             return collectIter(wallet.getAccountCreditIterByHeight(acct, {
-                ...opts,
-                reverse: true
+              ...opts,
+              reverse: true
             }));
           };
           break;
@@ -626,6 +629,328 @@ describe('Wallet Coin Selection', function() {
     });
   });
   }
+
+  describe('Selection value', function() {
+    // coins: 1-12
+    // fund wallet.
+    const PER_BLOCK_COINS = [
+      // confirmed per block.
+      { value: 2e6 },
+      { value: 2e6 },
+      { value: 12e6 }, // LOCKED
+      { value: 8e6 },
+      { value: 1e6, account: ALT_ACCOUNT },
+      { value: 10e6, account: ALT_ACCOUNT }, // LOCKED
+      { value: 5e6, account: ALT_ACCOUNT }
+    ];
+
+    const UNCONFIRMED_COINS = [
+      // unconfirmed
+      { value: 3e6 },
+      { value: 6e6 }, // own
+      { value: 11e6 }, // LOCKED
+      { value: 4e6, account: ALT_ACCOUNT },
+      { value: 7e6, account: ALT_ACCOUNT }, // own
+      { value: 9e6, account: ALT_ACCOUNT } // LOCKED
+    ];
+
+    const LOCK = [9e6, 10e6, 11e6, 12e6];
+    const OWN = [
+      { account: DEFAULT_ACCOUNT, value: 6e6 },
+      { account: ALT_ACCOUNT, value: 7e6 }
+    ];
+
+    const ACCT_0_FUNDS = 2e6 + 2e6 + 8e6 + 3e6 + 6e6; // 19e6
+    const ACCT_0_CONFIRMED = 2e6 + 2e6 + 8e6; // 10e6
+
+    const ACCT_1_FUNDS = 1e6 + 4e6 + 5e6 + 7e6; // 17e6
+    const ACCT_1_CONFIRMED = 1e6 + 5e6; // 6e6
+
+    const valueByCoin = new BufferMap();
+    const coinByValue = new Map();
+
+    // fund the same coin in multiple different ways.
+    const fundCoinOptions = (value, account = 0) => {
+      const spendables = [
+        Covenant.types.NONE,
+        Covenant.types.OPEN,
+        Covenant.types.REDEEM
+      ];
+
+      const nonSpendables = [
+        Covenant.types.BID,
+        Covenant.types.REVEAL,
+        Covenant.types.REGISTER,
+        Covenant.types.UPDATE,
+        Covenant.types.RENEW,
+        Covenant.types.TRANSFER,
+        Covenant.types.FINALIZE,
+        Covenant.types.REVOKE
+      ];
+
+      const oneSpendable = spendables[Math.floor(Math.random() * spendables.length)];
+
+      return [{ value, account, covenant: { type: oneSpendable }}]
+        .concat(nonSpendables.map(t => ({ value, account, covenant: { type: t }})));
+    };
+
+    const assertInputsMatch = (mtx, values) => {
+      const inputsVals = mtx.inputs.map(input => valueByCoin.get(input.prevout.toKey()));
+      assert.deepEqual(inputsVals, values);
+    };
+
+    const FUND_BY_VALUE_TESTS = [
+      // wallet by value
+      {
+        name: 'select 1 coin (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0
+        },
+        value: 1e6,
+        expectedSelected: [8e6]
+      },
+      {
+        name: 'select all confirmed coins (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0
+        },
+        value: ACCT_0_CONFIRMED + ACCT_1_CONFIRMED,
+        expectedSelected: [8e6, 5e6, 2e6, 2e6, 1e6]
+      },
+      {
+        name: 'select all confirmed and an unconfirmed (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0
+        },
+        value: ACCT_0_CONFIRMED + ACCT_1_CONFIRMED + 1e6,
+        expectedSelected: [8e6, 5e6, 2e6, 2e6, 1e6, 7e6]
+      },
+      {
+        name: 'select all coins (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0
+        },
+        value: ACCT_0_FUNDS + ACCT_1_FUNDS,
+        expectedSelected: [8e6, 5e6, 2e6, 2e6, 1e6, 7e6, 6e6, 4e6, 3e6]
+      },
+      {
+        // test locked filters.
+        name: 'throw funding error (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0
+        },
+        value: ACCT_0_FUNDS + ACCT_1_FUNDS + 1e6,
+        error: {
+          availableFunds: ACCT_0_FUNDS + ACCT_1_FUNDS,
+          requiredFunds: ACCT_0_FUNDS + ACCT_1_FUNDS + 1e6,
+          type: 'FundingError'
+        }
+      },
+
+      // default account by value
+      {
+        name: 'select 1 coin (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0
+        },
+        value: 1e6,
+        expectedSelected: [8e6]
+      },
+      {
+        name: 'select all confirmed coins (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0
+        },
+        value: ACCT_0_CONFIRMED,
+        expectedSelected: [8e6, 2e6, 2e6]
+      },
+      {
+        name: 'select all confirmed and an unconfirmed (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0
+        },
+        value: ACCT_0_CONFIRMED + 1e6,
+        expectedSelected: [8e6, 2e6, 2e6, 6e6]
+      },
+      {
+        name: 'select all coins (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0
+        },
+        value: ACCT_0_FUNDS,
+        expectedSelected: [8e6, 2e6, 2e6, 6e6, 3e6]
+      },
+      {
+        // test locked filters.
+        name: 'throw funding error (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0
+        },
+        value: ACCT_0_FUNDS + 1e6,
+        error: {
+          availableFunds: ACCT_0_FUNDS,
+          requiredFunds: ACCT_0_FUNDS + 1e6,
+          type: 'FundingError'
+        }
+      },
+
+      // alt account by value
+      {
+        name: 'select 1 coin (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0
+        },
+        value: 1e6,
+        expectedSelected: [5e6]
+      },
+      {
+        name: 'select all confirmed coins (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0
+        },
+        value: ACCT_1_CONFIRMED,
+        expectedSelected: [5e6, 1e6]
+      },
+      {
+        name: 'select all confirmed and an unconfirmed (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0
+        },
+        value: ACCT_1_CONFIRMED + 1e6,
+        expectedSelected: [5e6, 1e6, 7e6]
+      },
+      {
+        name: 'select all coins (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0
+        },
+        value: ACCT_1_FUNDS,
+        expectedSelected: [5e6, 1e6, 7e6, 4e6]
+      },
+      {
+        // test locked filters.
+        name: 'throw funding error (default)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0
+        },
+        value: ACCT_1_FUNDS + 1e6,
+        error: {
+          availableFunds: ACCT_1_FUNDS,
+          requiredFunds: ACCT_1_FUNDS + 1e6,
+          type: 'FundingError'
+        }
+      }
+    ];
+
+    beforeEach(async () => {
+      await beforeFn();
+
+      valueByCoin.clear();
+
+      for (const coinOptions of PER_BLOCK_COINS) {
+        const outputInfos = fundCoinOptions(coinOptions.value, coinOptions.account);
+        const txs = await fundWallet(wallet, outputInfos, {
+          blockPerTX: true
+        });
+
+        for (const [i, tx] of txs.entries()) {
+          if (tx.outputs.length !== 1)
+            continue;
+
+          if (tx.output(0).isUnspendable() || tx.output(0).covenant.isNonspendable())
+            continue;
+
+          const coin = Coin.fromTX(tx, 0, i + 1);
+          valueByCoin.set(coin.toKey(), tx.output(0).value);
+          coinByValue.set(tx.output(0).value, coin);
+        }
+      }
+
+      for (const coinOptions of UNCONFIRMED_COINS) {
+        const options = fundCoinOptions(coinOptions.value, coinOptions.account);
+        const txs = await createInboundTXs(wallet, options);
+
+        for (const tx of txs) {
+          await wallet.wdb.addTX(tx);
+
+          if (tx.outputs.length !== 1)
+            continue;
+
+          if (tx.output(0).isUnspendable() || tx.output(0).covenant.isNonspendable())
+            continue;
+
+          const coin = Coin.fromTX(tx, 0, -1);
+          valueByCoin.set(coin.toKey(), tx.output(0).value);
+          coinByValue.set(tx.output(0).value, coin);
+        }
+      }
+
+      for (const value of LOCK) {
+        const coin = coinByValue.get(value);
+        wallet.lockCoin(coin);
+      }
+
+      for (const {account, value} of OWN) {
+        const coin = coinByValue.get(value);
+        const mtx = new MTX();
+        mtx.addOutput(await wallet.receiveAddress(account), value);
+        mtx.addCoin(coin);
+        await wallet.finalize(mtx);
+        await wallet.sign(mtx);
+        const tx = mtx.toTX();
+        await wdb.addTX(tx);
+
+        valueByCoin.delete(coin.toKey());
+        coinByValue.delete(coin.value);
+
+        const ownedCoin = Coin.fromTX(mtx, 0, -1);
+        valueByCoin.set(ownedCoin.toKey(), mtx.output(0).value);
+        coinByValue.set(mtx.output(0).value, ownedCoin);
+      }
+    });
+
+    afterEach(afterFn);
+
+    for (const fundingTest of FUND_BY_VALUE_TESTS) {
+      it(`should ${fundingTest.name}`, async () => {
+        const mtx = new MTX();
+        mtx.addOutput(randomP2PKAddress(), fundingTest.value);
+
+        let err;
+
+        try {
+          await wallet.fund(mtx, fundingTest.options);
+        } catch (e) {
+          err = e;
+        }
+
+        if (fundingTest.error) {
+          assert(err);
+          assert.strictEqual(err.type, fundingTest.error.type);
+          assert.strictEqual(err.availableFunds, fundingTest.error.availableFunds);
+          assert.strictEqual(err.requiredFunds, fundingTest.error.requiredFunds);
+          return;
+        }
+
+        assertInputsMatch(mtx, fundingTest.expectedSelected);
+      });
+    }
+  });
 
   describe('Selection types', function() {
     beforeEach(beforeFn);
