@@ -361,7 +361,7 @@ describe('Wallet Coin Selection', function() {
     it('should index disconnect tx output', async () => {
       const currentBlock = curBlock(wdb);
       await fundWallet(wallet, TX_OPTIONS, {
-          blockPerTX: true
+        blockPerTX: true
       });
 
       let credits0 = await getCredits(wallet);
@@ -1293,12 +1293,278 @@ describe('Wallet Coin Selection', function() {
           type: 'FundingError'
         }
       }
+    ],
+    'all': [
+      // wallet by all
+      {
+        name: 'select all coins (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: 'all'
+        },
+        value: 1e6, // should select all regardless.
+        expectedOrdered: [],
+        expectedSome: {
+          count: 9,
+          items: [
+            2e6, 2e6, 1e6, 8e6, 5e6,
+            3e6, 6e6, 4e6, 7e6
+          ]
+        }
+      },
+      {
+        name: 'select all coins + smart (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: 'all',
+          smart: true
+        },
+        value: 1e6, // should select all regardless.
+        expectedOrdered: [],
+        expectedSome: {
+          count: 7,
+          items: [
+            2e6, 2e6, 1e6, 8e6, 5e6,
+            3e6, 4e6
+          ]
+        }
+      },
+      {
+        name: 'select all coins + depth = 0 (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: 'all',
+          depth: 0
+        },
+        value: 1e6, // should select all regardless.
+        expectedOrdered: [],
+        expectedSome: {
+          count: 9,
+          items: [
+            2e6, 2e6, 1e6, 8e6, 5e6,
+            3e6, 6e6, 4e6, 7e6
+          ]
+        }
+      },
+      {
+        name: 'select all coins + depth = 1 (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: 'all',
+          depth: 1
+        },
+        value: 1e6, // should select all regardless.
+        expectedOrdered: [],
+        expectedSome: {
+          count: 5,
+          items: [
+            2e6, 2e6, 1e6, 8e6, 5e6
+          ]
+        }
+      },
+      {
+        name: 'select all coins + depth = 3 (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: 'all',
+          depth: 3
+        },
+        value: 1e6, // should select all regardless.
+        expectedOrdered: [],
+        expectedSome: {
+          count: 4,
+          items: [
+            2e6, 2e6, 1e6, 8e6
+          ]
+        }
+      },
+
+      // wallet by default
+      {
+        name: 'select all coins (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: 'all'
+        },
+        value: 1e6, // should select all regardless.
+        expectedOrdered: [],
+        expectedSome: {
+          count: 5,
+          items: [
+            2e6, 2e6, 8e6,
+            3e6, 6e6
+          ]
+        }
+      },
+      {
+        name: 'select all coins + smart (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: 'all',
+          smart: true
+        },
+        value: 1e6, // should select all regardless.
+        expectedOrdered: [],
+        expectedSome: {
+          count: 4,
+          items: [
+            2e6, 2e6, 8e6,
+            3e6
+          ]
+        }
+      },
+      {
+        name: 'select all coins + depth = 0 (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: 'all',
+          depth: 0
+        },
+        value: 1e6, // should select all regardless.
+        expectedOrdered: [],
+        expectedSome: {
+          count: 5,
+          items: [
+            2e6, 2e6, 8e6,
+            3e6, 6e6
+          ]
+        }
+      },
+      {
+        name: 'select all coins + depth = 1 (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: 'all',
+          depth: 1
+        },
+        value: 1e6, // should select all regardless.
+        expectedOrdered: [],
+        expectedSome: {
+          count: 3,
+          items: [
+            2e6, 2e6, 8e6
+          ]
+        }
+      },
+      {
+        name: 'select all coins + depth = 4 (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: 'all',
+          depth: 4
+        },
+        value: 1e6, // should select all regardless.
+        expectedOrdered: [],
+        expectedSome: {
+          count: 2,
+          items: [
+            2e6, 2e6
+          ]
+        }
+      },
+
+      // wallet by alt
+      {
+        name: 'select all coins (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: 'all'
+        },
+        value: 1e6, // should select all regardless.
+        expectedOrdered: [],
+        expectedSome: {
+          count: 4,
+          items: [
+            1e6, 5e6,
+            4e6, 7e6
+          ]
+        }
+      },
+      {
+        name: 'select all coins + smart (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: 'all',
+          smart: true
+        },
+        value: 1e6, // should select all regardless.
+        expectedOrdered: [],
+        expectedSome: {
+          count: 3,
+          items: [
+            1e6, 5e6,
+            4e6
+          ]
+        }
+      },
+      {
+        name: 'select all coins + depth = 0 (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: 'all',
+          depth: 0
+        },
+        value: 1e6, // should select all regardless.
+        expectedOrdered: [],
+        expectedSome: {
+          count: 4,
+          items: [
+            1e6, 5e6,
+            4e6, 7e6
+          ]
+        }
+      },
+      {
+        name: 'select all coins + depth = 1 (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: 'all',
+          depth: 1
+        },
+        value: 1e6, // should select all regardless.
+        expectedOrdered: [],
+        expectedSome: {
+          count: 2,
+          items: [
+            1e6, 5e6
+          ]
+        }
+      },
+      {
+        name: 'select all coins + depth = 4 (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: 'all',
+          depth: 4
+        },
+        value: 1e6, // should select all regardless.
+        expectedOrdered: [],
+        expectedSome: {
+          count: 1,
+          items: [
+            1e6
+          ]
+        }
+      }
     ]
   };
 
   for (const [name, testCase] of Object.entries(SELECTION_TESTS)) {
-    if (name.startsWith('_'))
-      continue;
   describe(`Wallet Coin Selection by ${name}`, function() {
     // coins: 1-12
     // fund wallet.
@@ -1338,7 +1604,7 @@ describe('Wallet Coin Selection', function() {
       for (const coinOptions of PER_BLOCK_COINS) {
         const outputInfos = fundCoinOptions(coinOptions.value, coinOptions.account);
         const txs = await fundWallet(wallet, outputInfos, {
-          blockPerTX: true
+          txPerOutput: true
         });
 
         for (const [i, tx] of txs.entries()) {
@@ -1439,13 +1705,14 @@ describe('Wallet Coin Selection', function() {
         }
 
         let count = fundingTest.expectedSome.count;
-        const items = new Set(fundingTest.expectedSome.items);
+        const items = fundingTest.expectedSome.items.slice();
 
         for (const value of left) {
-          assert(items.has(value), `Value ${value} not in expected.`);
+          assert(items.includes(value), `Value ${value} not in expected.`);
           assert(count > 0, 'Too many inputs selected.');
 
-          items.delete(value);
+          const idx = items.indexOf(value);
+          items.splice(idx, 1);
           count--;
         }
 
@@ -1820,7 +2087,7 @@ function isSortedByValueDesc(credits) {
   }
 
   return true;
-};
+}
 
 /**
  * @param {Credit[]} credits
@@ -1843,7 +2110,7 @@ function isSortedByHeightAsc(credits) {
   }
 
   return true;
-};
+}
 
 /**
  * @param {Credit[]} credits
@@ -1866,4 +2133,4 @@ function isSortedByHeightDesc(credits) {
   }
 
   return true;
-};
+}
