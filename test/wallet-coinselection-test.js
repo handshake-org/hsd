@@ -646,25 +646,29 @@ describe('Wallet Coin Selection', function() {
 
     const UNCONFIRMED_COINS = [
       // unconfirmed
-      { value: 3e6 },
-      { value: 6e6 }, // own
+      { value: 3e6 }, // own
+      { value: 6e6 },
       { value: 11e6 }, // LOCKED
-      { value: 4e6, account: ALT_ACCOUNT },
-      { value: 7e6, account: ALT_ACCOUNT }, // own
+      { value: 4e6, account: ALT_ACCOUNT }, // own
+      { value: 7e6, account: ALT_ACCOUNT },
       { value: 9e6, account: ALT_ACCOUNT } // LOCKED
     ];
 
     const LOCK = [9e6, 10e6, 11e6, 12e6];
     const OWN = [
-      { account: DEFAULT_ACCOUNT, value: 6e6 },
-      { account: ALT_ACCOUNT, value: 7e6 }
+      { account: DEFAULT_ACCOUNT, value: 3e6 },
+      { account: ALT_ACCOUNT, value: 4e6 }
     ];
 
-    const ACCT_0_FUNDS = 2e6 + 2e6 + 8e6 + 3e6 + 6e6; // 19e6
     const ACCT_0_CONFIRMED = 2e6 + 2e6 + 8e6; // 10e6
+    const ACCT_0_UNCONFIRMED = 3e6 + 6e6; // 9e6
+    const ACCT_0_FOREIGN = 6e6;
+    const ACCT_0_FUNDS = ACCT_0_CONFIRMED + ACCT_0_UNCONFIRMED; // 19e6
 
-    const ACCT_1_FUNDS = 1e6 + 4e6 + 5e6 + 7e6; // 17e6
     const ACCT_1_CONFIRMED = 1e6 + 5e6; // 6e6
+    const ACCT_1_UNCONFIRMED = 4e6 + 7e6; // 11e6
+    const ACCT_1_FOREIGN = 7e6;
+    const ACCT_1_FUNDS = ACCT_1_CONFIRMED + ACCT_1_UNCONFIRMED; // 17e6
 
     const valueByCoin = new BufferMap();
     const coinByValue = new Map();
@@ -738,6 +742,26 @@ describe('Wallet Coin Selection', function() {
         expectedSelected: [8e6, 5e6, 2e6, 2e6, 1e6, 7e6, 6e6, 4e6, 3e6]
       },
       {
+        name: 'select all confirmed and an unconfirmed + smart (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          smart: true
+        },
+        value: ACCT_0_CONFIRMED + ACCT_1_CONFIRMED + 1e6,
+        expectedSelected: [8e6, 5e6, 2e6, 2e6, 1e6, 4e6]
+      },
+      {
+        name: 'select all coins + smart (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          smart: true
+        },
+        value: ACCT_0_FUNDS + ACCT_1_FUNDS - ACCT_0_FOREIGN - ACCT_1_FOREIGN,
+        expectedSelected: [8e6, 5e6, 2e6, 2e6, 1e6, 4e6, 3e6]
+      },
+      {
         // test locked filters.
         name: 'throw funding error (wallet)',
         options: {
@@ -748,6 +772,20 @@ describe('Wallet Coin Selection', function() {
         error: {
           availableFunds: ACCT_0_FUNDS + ACCT_1_FUNDS,
           requiredFunds: ACCT_0_FUNDS + ACCT_1_FUNDS + 1e6,
+          type: 'FundingError'
+        }
+      },
+      {
+        name: 'throw funding error + smart (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          smart: true
+        },
+        value: ACCT_0_FUNDS + ACCT_1_FUNDS,
+        error: {
+          availableFunds: ACCT_0_FUNDS + ACCT_1_FUNDS - ACCT_0_FOREIGN - ACCT_1_FOREIGN,
+          requiredFunds: ACCT_0_FUNDS + ACCT_1_FUNDS,
           type: 'FundingError'
         }
       },
@@ -790,6 +828,26 @@ describe('Wallet Coin Selection', function() {
         expectedSelected: [8e6, 2e6, 2e6, 6e6, 3e6]
       },
       {
+        name: 'select all confirmed and an unconfirmed + smart (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          smart: true
+        },
+        value: ACCT_0_CONFIRMED + 1e6,
+        expectedSelected: [8e6, 2e6, 2e6, 3e6]
+      },
+      {
+        name: 'select all coins + smart (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          smart: true
+        },
+        value: ACCT_0_FUNDS - ACCT_0_FOREIGN,
+        expectedSelected: [8e6, 2e6, 2e6, 3e6]
+      },
+      {
         // test locked filters.
         name: 'throw funding error (default)',
         options: {
@@ -800,6 +858,20 @@ describe('Wallet Coin Selection', function() {
         error: {
           availableFunds: ACCT_0_FUNDS,
           requiredFunds: ACCT_0_FUNDS + 1e6,
+          type: 'FundingError'
+        }
+      },
+      {
+        name: 'throw funding error + smart (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          smart: true
+        },
+        value: ACCT_0_FUNDS,
+        error: {
+          availableFunds: ACCT_0_FUNDS - ACCT_0_FOREIGN,
+          requiredFunds: ACCT_0_FUNDS,
           type: 'FundingError'
         }
       },
@@ -842,8 +914,28 @@ describe('Wallet Coin Selection', function() {
         expectedSelected: [5e6, 1e6, 7e6, 4e6]
       },
       {
+        name: 'select all confirmed and an unconfirmed + smart (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          smart: true
+        },
+        value: ACCT_1_CONFIRMED + 1e6,
+        expectedSelected: [5e6, 1e6, 4e6]
+      },
+      {
+        name: 'select all coins + smart (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          smart: true
+        },
+        value: ACCT_1_FUNDS - ACCT_1_FOREIGN,
+        expectedSelected: [5e6, 1e6, 4e6]
+      },
+      {
         // test locked filters.
-        name: 'throw funding error (default)',
+        name: 'throw funding error (alt)',
         options: {
           account: ALT_ACCOUNT,
           hardFee: 0
@@ -852,6 +944,20 @@ describe('Wallet Coin Selection', function() {
         error: {
           availableFunds: ACCT_1_FUNDS,
           requiredFunds: ACCT_1_FUNDS + 1e6,
+          type: 'FundingError'
+        }
+      },
+      {
+        name: 'throw funding error + smart (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          smart: true
+        },
+        value: ACCT_1_FUNDS,
+        error: {
+          availableFunds: ACCT_1_FUNDS - ACCT_1_FOREIGN,
+          requiredFunds: ACCT_1_FUNDS,
           type: 'FundingError'
         }
       }
@@ -947,6 +1053,7 @@ describe('Wallet Coin Selection', function() {
           return;
         }
 
+        assert(!err, err);
         assertInputsMatch(mtx, fundingTest.expectedSelected);
       });
     }
