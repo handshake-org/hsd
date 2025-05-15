@@ -17,6 +17,7 @@ const {coinbaseInput, dummyInput, randomP2PKAddress} = primutils;
 /** @typedef {import('../lib/covenants/rules').types} covenantTypes */
 /** @typedef {import('../lib/primitives/output')} Output */
 /** @typedef {import('../lib/primitives/tx')} TX */
+/** @typedef {import('./util/primitives').CoinOptions} CoinOptions */
 
 const UNCONFIRMED_HEIGHT = 0xffffffff;
 
@@ -630,6 +631,7 @@ describe('Wallet Coin Selection', function() {
   });
   }
 
+  /** @type {OutputInfo[]} */
   const PER_BLOCK_COINS = [
     // confirmed per block.
     { value: 2e6 },
@@ -641,6 +643,7 @@ describe('Wallet Coin Selection', function() {
     { value: 5e6, account: ALT_ACCOUNT }
   ];
 
+  /** @type {OutputInfo[]} */
   const UNCONFIRMED_COINS = [
     // unconfirmed
     { value: 3e6 }, // own
@@ -672,6 +675,7 @@ describe('Wallet Coin Selection', function() {
    * @property {String} name
    * @property {Object} options
    * @property {Number} value
+   * @property {CoinOptions[]} existingCoins
    * @property {Number[]} expectedOrdered
    * @property {Object} [expectedSome] - Some of this must exist in mtx.
    * @property {Number} expectedSome.count - Number of items that must exist.
@@ -723,28 +727,6 @@ describe('Wallet Coin Selection', function() {
         expectedOrdered: [8e6, 5e6, 2e6, 2e6, 1e6, 7e6, 6e6, 4e6, 3e6]
       },
       {
-        name: 'select all confirmed and an unconfirmed + smart (wallet)',
-        options: {
-          account: -1,
-          hardFee: 0,
-          selection: 'value',
-          smart: true
-        },
-        value: ACCT_0_CONFIRMED + ACCT_1_CONFIRMED + 1e6,
-        expectedOrdered: [8e6, 5e6, 2e6, 2e6, 1e6, 4e6]
-      },
-      {
-        name: 'select all coins + smart (wallet)',
-        options: {
-          account: -1,
-          hardFee: 0,
-          selection: 'value',
-          smart: true
-        },
-        value: ACCT_0_FUNDS + ACCT_1_FUNDS - ACCT_0_FOREIGN - ACCT_1_FOREIGN,
-        expectedOrdered: [8e6, 5e6, 2e6, 2e6, 1e6, 4e6, 3e6]
-      },
-      {
         // test locked filters.
         name: 'throw funding error (wallet)',
         options: {
@@ -756,21 +738,6 @@ describe('Wallet Coin Selection', function() {
         error: {
           availableFunds: ACCT_0_FUNDS + ACCT_1_FUNDS,
           requiredFunds: ACCT_0_FUNDS + ACCT_1_FUNDS + 1e6,
-          type: 'FundingError'
-        }
-      },
-      {
-        name: 'throw funding error + smart (wallet)',
-        options: {
-          account: -1,
-          hardFee: 0,
-          selection: 'value',
-          smart: true
-        },
-        value: ACCT_0_FUNDS + ACCT_1_FUNDS,
-        error: {
-          availableFunds: ACCT_0_FUNDS + ACCT_1_FUNDS - ACCT_0_FOREIGN - ACCT_1_FOREIGN,
-          requiredFunds: ACCT_0_FUNDS + ACCT_1_FUNDS,
           type: 'FundingError'
         }
       },
@@ -817,28 +784,6 @@ describe('Wallet Coin Selection', function() {
         expectedOrdered: [8e6, 2e6, 2e6, 6e6, 3e6]
       },
       {
-        name: 'select all confirmed and an unconfirmed + smart (default)',
-        options: {
-          account: DEFAULT_ACCOUNT,
-          hardFee: 0,
-          selection: 'value',
-          smart: true
-        },
-        value: ACCT_0_CONFIRMED + 1e6,
-        expectedOrdered: [8e6, 2e6, 2e6, 3e6]
-      },
-      {
-        name: 'select all coins + smart (default)',
-        options: {
-          account: DEFAULT_ACCOUNT,
-          hardFee: 0,
-          selection: 'value',
-          smart: true
-        },
-        value: ACCT_0_FUNDS - ACCT_0_FOREIGN,
-        expectedOrdered: [8e6, 2e6, 2e6, 3e6]
-      },
-      {
         // test locked filters.
         name: 'throw funding error (default)',
         options: {
@@ -850,21 +795,6 @@ describe('Wallet Coin Selection', function() {
         error: {
           availableFunds: ACCT_0_FUNDS,
           requiredFunds: ACCT_0_FUNDS + 1e6,
-          type: 'FundingError'
-        }
-      },
-      {
-        name: 'throw funding error + smart (default)',
-        options: {
-          account: DEFAULT_ACCOUNT,
-          hardFee: 0,
-          selection: 'value',
-          smart: true
-        },
-        value: ACCT_0_FUNDS,
-        error: {
-          availableFunds: ACCT_0_FUNDS - ACCT_0_FOREIGN,
-          requiredFunds: ACCT_0_FUNDS,
           type: 'FundingError'
         }
       },
@@ -911,6 +841,101 @@ describe('Wallet Coin Selection', function() {
         expectedOrdered: [5e6, 1e6, 7e6, 4e6]
       },
       {
+        // test locked filters.
+        name: 'throw funding error (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: 'value'
+        },
+        value: ACCT_1_FUNDS + 1e6,
+        error: {
+          availableFunds: ACCT_1_FUNDS,
+          requiredFunds: ACCT_1_FUNDS + 1e6,
+          type: 'FundingError'
+        }
+      }
+    ],
+    'value + smart': [
+      // Test smart option.
+      // smart selection (wallet)
+      {
+        name: 'select all confirmed and an unconfirmed + smart (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: 'value',
+          smart: true
+        },
+        value: ACCT_0_CONFIRMED + ACCT_1_CONFIRMED + 1e6,
+        expectedOrdered: [8e6, 5e6, 2e6, 2e6, 1e6, 4e6]
+      },
+      {
+        name: 'select all coins + smart (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: 'value',
+          smart: true
+        },
+        value: ACCT_0_FUNDS + ACCT_1_FUNDS - ACCT_0_FOREIGN - ACCT_1_FOREIGN,
+        expectedOrdered: [8e6, 5e6, 2e6, 2e6, 1e6, 4e6, 3e6]
+      },
+      {
+        name: 'throw funding error + smart (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: 'value',
+          smart: true
+        },
+        value: ACCT_0_FUNDS + ACCT_1_FUNDS,
+        error: {
+          availableFunds: ACCT_0_FUNDS + ACCT_1_FUNDS - ACCT_0_FOREIGN - ACCT_1_FOREIGN,
+          requiredFunds: ACCT_0_FUNDS + ACCT_1_FUNDS,
+          type: 'FundingError'
+        }
+      },
+      // smart selection (default)
+      {
+        name: 'select all confirmed and an unconfirmed + smart (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: 'value',
+          smart: true
+        },
+        value: ACCT_0_CONFIRMED + 1e6,
+        expectedOrdered: [8e6, 2e6, 2e6, 3e6]
+      },
+      {
+        name: 'select all coins + smart (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: 'value',
+          smart: true
+        },
+        value: ACCT_0_FUNDS - ACCT_0_FOREIGN,
+        expectedOrdered: [8e6, 2e6, 2e6, 3e6]
+      },
+      {
+        name: 'throw funding error + smart (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: 'value',
+          smart: true
+        },
+        value: ACCT_0_FUNDS,
+        error: {
+          availableFunds: ACCT_0_FUNDS - ACCT_0_FOREIGN,
+          requiredFunds: ACCT_0_FUNDS,
+          type: 'FundingError'
+        }
+      },
+      // smart selection (alt)
+      {
         name: 'select all confirmed and an unconfirmed + smart (alt)',
         options: {
           account: ALT_ACCOUNT,
@@ -933,21 +958,6 @@ describe('Wallet Coin Selection', function() {
         expectedOrdered: [5e6, 1e6, 4e6]
       },
       {
-        // test locked filters.
-        name: 'throw funding error (alt)',
-        options: {
-          account: ALT_ACCOUNT,
-          hardFee: 0,
-          selection: 'value'
-        },
-        value: ACCT_1_FUNDS + 1e6,
-        error: {
-          availableFunds: ACCT_1_FUNDS,
-          requiredFunds: ACCT_1_FUNDS + 1e6,
-          type: 'FundingError'
-        }
-      },
-      {
         name: 'throw funding error + smart (alt)',
         options: {
           account: ALT_ACCOUNT,
@@ -960,6 +970,63 @@ describe('Wallet Coin Selection', function() {
           availableFunds: ACCT_1_FUNDS - ACCT_1_FOREIGN,
           requiredFunds: ACCT_1_FUNDS,
           type: 'FundingError'
+        }
+      }
+    ],
+    'value + existing inputs': [
+      // existing coins (wallet)
+      {
+        name: 'select coins + existing coins (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: 'value'
+        },
+        value: 10e6,
+        existingCoins: [
+          {
+            height: -1,
+            value: 1e6
+          }
+        ],
+        expectedOrdered: [1e6, 8e6, 5e6]
+      },
+      // existing coins (default)
+      {
+        name: 'select coins + existing coins (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: 'value'
+        },
+        value: 10e6,
+        existingCoins: [
+          {
+            height: -1,
+            value: 1e6
+          }
+        ],
+        expectedOrdered: [1e6, 8e6, 2e6]
+      },
+      // existing coins (alt)
+      {
+        name: 'select coins + existing coins (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: 'value'
+        },
+        value: 10e6,
+        existingCoins: [
+          {
+            height: -1,
+            value: 1e6
+          }
+        ],
+        expectedOrdered: [1e6, 5e6, 1e6],
+        expectedSome: {
+          count: 1,
+          items: [4e6, 7e6]
         }
       }
     ],
@@ -1014,36 +1081,6 @@ describe('Wallet Coin Selection', function() {
         }
       },
       {
-        name: 'select all confirmed and an unconfirmed + smart (wallet)',
-        options: {
-          account: -1,
-          hardFee: 0,
-          selection: 'age',
-          smart: true
-        },
-        value: ACCT_0_CONFIRMED + ACCT_1_CONFIRMED + 1e6,
-        expectedOrdered: [2e6, 2e6, 1e6, 8e6, 5e6],
-        expectedSome: {
-          count: 1,
-          items: [3e6, 6e6, 4e6, 7e6]
-        }
-      },
-      {
-        name: 'select all coins + smart (wallet)',
-        options: {
-          account: -1,
-          hardFee: 0,
-          selection: 'age',
-          smart: true
-        },
-        value: ACCT_0_FUNDS + ACCT_1_FUNDS - ACCT_0_FOREIGN - ACCT_1_FOREIGN,
-        expectedOrdered: [2e6, 2e6, 1e6, 8e6, 5e6],
-        expectedSome: {
-          count: 2,
-          items: [3e6, 4e6]
-        }
-      },
-      {
         // test locked filters.
         name: 'throw funding error (wallet)',
         options: {
@@ -1055,21 +1092,6 @@ describe('Wallet Coin Selection', function() {
         error: {
           availableFunds: ACCT_0_FUNDS + ACCT_1_FUNDS,
           requiredFunds: ACCT_0_FUNDS + ACCT_1_FUNDS + 1e6,
-          type: 'FundingError'
-        }
-      },
-      {
-        name: 'throw funding error + smart (wallet)',
-        options: {
-          account: -1,
-          hardFee: 0,
-          selection: 'age',
-          smart: true
-        },
-        value: ACCT_0_FUNDS + ACCT_1_FUNDS,
-        error: {
-          availableFunds: ACCT_0_FUNDS + ACCT_1_FUNDS - ACCT_0_FOREIGN - ACCT_1_FOREIGN,
-          requiredFunds: ACCT_0_FUNDS + ACCT_1_FUNDS,
           type: 'FundingError'
         }
       },
@@ -1124,36 +1146,6 @@ describe('Wallet Coin Selection', function() {
         }
       },
       {
-        name: 'select all confirmed and an unconfirmed + smart (default)',
-        options: {
-          account: DEFAULT_ACCOUNT,
-          hardFee: 0,
-          selection: 'age',
-          smart: true
-        },
-        value: ACCT_0_CONFIRMED + 1e6,
-        expectedOrdered: [2e6, 2e6, 8e6],
-        expectedSome: {
-          count: 1,
-          items: [3e6]
-        }
-      },
-      {
-        name: 'select all coins + smart (default)',
-        options: {
-          account: DEFAULT_ACCOUNT,
-          hardFee: 0,
-          selection: 'age',
-          smart: true
-        },
-        value: ACCT_0_FUNDS - ACCT_0_FOREIGN,
-        expectedOrdered: [2e6, 2e6, 8e6],
-        expectedSome: {
-          count: 1,
-          items: [3e6]
-        }
-      },
-      {
         // test locked filters.
         name: 'throw funding error (default)',
         options: {
@@ -1165,21 +1157,6 @@ describe('Wallet Coin Selection', function() {
         error: {
           availableFunds: ACCT_0_FUNDS,
           requiredFunds: ACCT_0_FUNDS + 1e6,
-          type: 'FundingError'
-        }
-      },
-      {
-        name: 'throw funding error + smart (default)',
-        options: {
-          account: DEFAULT_ACCOUNT,
-          hardFee: 0,
-          selection: 'age',
-          smart: true
-        },
-        value: ACCT_0_FUNDS,
-        error: {
-          availableFunds: ACCT_0_FUNDS - ACCT_0_FOREIGN,
-          requiredFunds: ACCT_0_FUNDS,
           type: 'FundingError'
         }
       },
@@ -1234,6 +1211,117 @@ describe('Wallet Coin Selection', function() {
         }
       },
       {
+        // test locked filters.
+        name: 'throw funding error (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: 'age'
+        },
+        value: ACCT_1_FUNDS + 1e6,
+        error: {
+          availableFunds: ACCT_1_FUNDS,
+          requiredFunds: ACCT_1_FUNDS + 1e6,
+          type: 'FundingError'
+        }
+      }
+    ],
+    'age + smart': [
+      // Test smart option.
+      // smart selection (wallet)
+      {
+        name: 'select all confirmed and an unconfirmed + smart (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: 'age',
+          smart: true
+        },
+        value: ACCT_0_CONFIRMED + ACCT_1_CONFIRMED + 1e6,
+        expectedOrdered: [2e6, 2e6, 1e6, 8e6, 5e6],
+        expectedSome: {
+          count: 1,
+          items: [3e6, 6e6, 4e6, 7e6]
+        }
+      },
+      {
+        name: 'select all coins + smart (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: 'age',
+          smart: true
+        },
+        value: ACCT_0_FUNDS + ACCT_1_FUNDS - ACCT_0_FOREIGN - ACCT_1_FOREIGN,
+        expectedOrdered: [2e6, 2e6, 1e6, 8e6, 5e6],
+        expectedSome: {
+          count: 2,
+          items: [3e6, 4e6]
+        }
+      },
+      {
+        name: 'throw funding error + smart (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: 'age',
+          smart: true
+        },
+        value: ACCT_0_FUNDS + ACCT_1_FUNDS,
+        error: {
+          availableFunds: ACCT_0_FUNDS + ACCT_1_FUNDS - ACCT_0_FOREIGN - ACCT_1_FOREIGN,
+          requiredFunds: ACCT_0_FUNDS + ACCT_1_FUNDS,
+          type: 'FundingError'
+        }
+      },
+      // smart selection (default)
+      {
+        name: 'select all confirmed and an unconfirmed + smart (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: 'age',
+          smart: true
+        },
+        value: ACCT_0_CONFIRMED + 1e6,
+        expectedOrdered: [2e6, 2e6, 8e6],
+        expectedSome: {
+          count: 1,
+          items: [3e6]
+        }
+      },
+      {
+        name: 'select all coins + smart (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: 'age',
+          smart: true
+        },
+        value: ACCT_0_FUNDS - ACCT_0_FOREIGN,
+        expectedOrdered: [2e6, 2e6, 8e6],
+        expectedSome: {
+          count: 1,
+          items: [3e6]
+        }
+      },
+      {
+        name: 'throw funding error + smart (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: 'age',
+          smart: true
+        },
+        value: ACCT_0_FUNDS,
+        error: {
+          availableFunds: ACCT_0_FUNDS - ACCT_0_FOREIGN,
+          requiredFunds: ACCT_0_FUNDS,
+          type: 'FundingError'
+        }
+      },
+      // smart selection (alt)
+      {
         name: 'select all confirmed and an unconfirmed + smart (alt)',
         options: {
           account: ALT_ACCOUNT,
@@ -1264,21 +1352,6 @@ describe('Wallet Coin Selection', function() {
         }
       },
       {
-        // test locked filters.
-        name: 'throw funding error (alt)',
-        options: {
-          account: ALT_ACCOUNT,
-          hardFee: 0,
-          selection: 'age'
-        },
-        value: ACCT_1_FUNDS + 1e6,
-        error: {
-          availableFunds: ACCT_1_FUNDS,
-          requiredFunds: ACCT_1_FUNDS + 1e6,
-          type: 'FundingError'
-        }
-      },
-      {
         name: 'throw funding error + smart (alt)',
         options: {
           account: ALT_ACCOUNT,
@@ -1291,6 +1364,63 @@ describe('Wallet Coin Selection', function() {
           availableFunds: ACCT_1_FUNDS - ACCT_1_FOREIGN,
           requiredFunds: ACCT_1_FUNDS,
           type: 'FundingError'
+        }
+      }
+    ],
+    'age + existing inputs': [
+      // existing coins (wallet)
+      {
+        name: 'select coins + existing coins (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: 'age'
+        },
+        value: 10e6,
+        existingCoins: [
+          {
+            height: -1,
+            value: 1e6
+          }
+        ],
+        expectedOrdered: [1e6, 2e6, 2e6, 1e6, 8e6]
+      },
+      // existing coins (default)
+      {
+        name: 'select coins + existing coins (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: 'age'
+        },
+        value: 10e6,
+        existingCoins: [
+          {
+            height: -1,
+            value: 1e6
+          }
+        ],
+        expectedOrdered: [1e6, 2e6, 2e6, 8e6]
+      },
+      // existing coins (alt)
+      {
+        name: 'select coins + existing coins (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: 'age'
+        },
+        value: 10e6,
+        existingCoins: [
+          {
+            height: -1,
+            value: 1e6
+          }
+        ],
+        expectedOrdered: [1e6, 1e6, 5e6],
+        expectedSome: {
+          count: 1,
+          items: [4e6, 7e6]
         }
       }
     ],
@@ -1561,18 +1691,95 @@ describe('Wallet Coin Selection', function() {
           ]
         }
       }
+    ],
+    'all + existing inputs': [
+      {
+        name: 'select 1 coin (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: 'all'
+        },
+        value: 2e6,
+        existingCoins: [
+          {
+            height: -1,
+            value: 1e6
+          }
+        ],
+        expectedOrdered: [1e6],
+        expectedSome: {
+          count: 9,
+          items: [
+            2e6, 2e6, 1e6, 8e6, 5e6,
+            3e6, 6e6, 4e6, 7e6
+          ]
+        }
+      },
+      {
+        name: 'select 1 coin (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: 'all'
+        },
+        value: 2e6,
+        existingCoins: [
+          {
+            height: -1,
+            value: 1e6
+          }
+        ],
+        expectedOrdered: [1e6],
+        expectedSome: {
+          count: 5,
+          items: [
+            2e6, 2e6, 8e6,
+            3e6, 6e6
+          ]
+        }
+      },
+      {
+        name: 'select 1 coin (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: 'all'
+        },
+        value: 2e6,
+        existingCoins: [
+          {
+            height: -1,
+            value: 1e6
+          }
+        ],
+        expectedOrdered: [1e6],
+        expectedSome: {
+          count: 4,
+          items: [
+            1e6, 5e6,
+            4e6, 7e6
+          ]
+        }
+      }
     ]
   };
 
   for (const [name, testCase] of Object.entries(SELECTION_TESTS)) {
   describe(`Wallet Coin Selection by ${name}`, function() {
-    // coins: 1-12
     // fund wallet.
     const valueByCoin = new BufferMap();
+    // This is used for OWN and LOCK descriptions.
+    // The values must be unique in the UTXO set.
     const coinByValue = new Map();
 
-    // fund the same coin in multiple different ways.
-    const fundCoinOptions = (value, account = 0) => {
+    /**
+     * Fund the same coin in multiple different ways.
+     * @param {OutputInfo} output
+     * @returns {OutputInfo[]}
+     */
+
+    const fundCoinOptions = (output) => {
       const spendables = [
         Covenant.types.NONE,
         Covenant.types.OPEN,
@@ -1590,19 +1797,24 @@ describe('Wallet Coin Selection', function() {
         Covenant.types.REVOKE
       ];
 
+      const account = output.account || 0;
+      const value  = output.value;
       const oneSpendable = spendables[Math.floor(Math.random() * spendables.length)];
 
       return [{ value, account, covenant: { type: oneSpendable }}]
         .concat(nonSpendables.map(t => ({ value, account, covenant: { type: t }})));
     };
 
-    beforeEach(async () => {
+    // NOTE: tests themselves don't modify the wallet state, so before instead
+    // of beforeEach should be fine.
+    before(async () => {
       await beforeFn();
 
       valueByCoin.clear();
+      coinByValue.clear();
 
       for (const coinOptions of PER_BLOCK_COINS) {
-        const outputInfos = fundCoinOptions(coinOptions.value, coinOptions.account);
+        const outputInfos = fundCoinOptions(coinOptions);
         const txs = await fundWallet(wallet, outputInfos, {
           txPerOutput: true
         });
@@ -1621,7 +1833,7 @@ describe('Wallet Coin Selection', function() {
       }
 
       for (const coinOptions of UNCONFIRMED_COINS) {
-        const options = fundCoinOptions(coinOptions.value, coinOptions.account);
+        const options = fundCoinOptions(coinOptions);
         const txs = await createInboundTXs(wallet, options);
 
         for (const tx of txs) {
@@ -1663,12 +1875,20 @@ describe('Wallet Coin Selection', function() {
       }
     });
 
-    afterEach(afterFn);
+    after(afterFn);
 
     for (const fundingTest of testCase) {
       it(`should ${fundingTest.name}`, async () => {
         const mtx = new MTX();
         mtx.addOutput(randomP2PKAddress(), fundingTest.value);
+
+        if (fundingTest.existingCoins) {
+          for (const coinOptions of fundingTest.existingCoins) {
+            const coin = primutils.makeCoin(coinOptions);
+            valueByCoin.set(coin.toKey(), coin.value);
+            mtx.addCoin(coin);
+          }
+        }
 
         let err;
 

@@ -28,16 +28,6 @@ exports.deterministicInput = (id) => {
 };
 
 /**
- * @typedef {Object} CovenantOptions
- * @property {String} [name]
- * @property {Hash} [nameHash]
- * @property {Covenant.types} [type=Covenant.types.NONE]
- * @property {Number} [height]
- * @property {Array} [args] - leftover args for the covenant except
- *                          for nameHash, name and height.
- */
-
-/**
  * @typedef {Object} OutputOptions
  * @property {Number} value
  * @property {Address} [address]
@@ -60,6 +50,16 @@ exports.makeOutput = (options) => {
 
   return output;
 };
+
+/**
+ * @typedef {Object} CovenantOptions
+ * @property {String} [name]
+ * @property {Hash} [nameHash]
+ * @property {Covenant.types} [type=Covenant.types.NONE]
+ * @property {Number} [height]
+ * @property {Array} [args] - leftover args for the covenant except
+ *                            for nameHash, name and height.
+ */
 
 /**
  * @param {CovenantOptions} options
@@ -171,7 +171,7 @@ exports.randomP2PKAddress = () => {
 };
 
 /**
- * @param {Object} options
+ * @typedef {Object} CoinOptions
  * @param {String} [options.version=1]
  * @param {String} [options.height=-1]
  * @param {String} [options.value=0]
@@ -180,6 +180,10 @@ exports.randomP2PKAddress = () => {
  * @param {Boolean} [options.coinbase=false]
  * @param {Buffer} [options.hash]
  * @param {Number} [options.index=0]
+ */
+
+/**
+ * @param {CoinOptions} options
  * @returns {Coin}
  */
 
