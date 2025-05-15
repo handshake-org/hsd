@@ -77,6 +77,9 @@ describe('BIP-9 - Airstop (integration)', function () {
     const node = createNode();
 
     before(async () => {
+      network.deployments[SOFT_FORK_NAME].startTime = 0;
+      network.deployments[SOFT_FORK_NAME].timeout = 0xffffffff;
+
       await node.blocks.open();
       await node.chain.open();
       await node.miner.open();
