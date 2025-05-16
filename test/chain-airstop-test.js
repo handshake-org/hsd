@@ -186,7 +186,7 @@ describe('BIP-9 - Airstop (integration)', function () {
       }
     });
 
-    it('should not be able to mine airdrop proof anymore', async () => {
+    it('should not be able to mine airdrop & faucet proofs anymore', async () => {
       await assert.rejects(
         tryClaimingAirdropProofs(node, [airdropProof]),
         {
@@ -194,10 +194,13 @@ describe('BIP-9 - Airstop (integration)', function () {
           reason: 'bad-airdrop-disabled'
         }
       );
-    });
-
-    it('should still be able to mine faucet proof', async () => {
-      await tryClaimingAirdropProofs(node, [faucetproof]);
+      await assert.rejects(
+        tryClaimingAirdropProofs(node, [faucetproof]),
+        {
+          code: 'invalid',
+          reason: 'bad-airdrop-disabled'
+        }
+      );
     });
   });
 
