@@ -13,8 +13,13 @@ config.load({
 });
 
 const network = config.str(['-n', '--network'], 'main');
-const prefix = path.join(os.homedir(), '.hsd',
-                         network === 'main' ? '' : network);
+
+const defaultPrefix = path.join(
+  os.homedir(),
+  '.hsd',
+  network === 'main' ? '' : network
+);
+const prefix = config.str('prefix', defaultPrefix);
 
 (async () => {
   const seeder = new Seeder({
