@@ -2,10 +2,7 @@
 
 const assert = require('bsert');
 const blake2b = require('bcrypto/lib/blake2b');
-const random = require('bcrypto/lib/random');
 const ChainEntry = require('../../lib/blockchain/chainentry');
-const Input = require('../../lib/primitives/input');
-const Outpoint = require('../../lib/primitives/outpoint');
 const {ZERO_HASH} = require('../../lib/protocol/consensus');
 
 const walletUtils = exports;
@@ -33,16 +30,6 @@ walletUtils.fakeBlock = (height, prevSeed = 0, seed = prevSeed) => {
     extraNonce: Buffer.alloc(24),
     mask: Buffer.alloc(32)
   };
-};
-
-walletUtils.dummyInput = () => {
-  const hash = random.randomBytes(32);
-  return Input.fromOutpoint(new Outpoint(hash, 0));
-};
-
-walletUtils.deterministicInput = (id) => {
-  const hash = blake2b.digest(fromU32(id));
-  return Input.fromOutpoint(new Outpoint(hash, 0));
 };
 
 walletUtils.nextBlock = (wdb, prevSeed = 0, seed = prevSeed) => {

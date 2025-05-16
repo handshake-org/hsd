@@ -7,10 +7,8 @@ const MTX = require('../lib/primitives/mtx');
 const WorkerPool = require('../lib/workers/workerpool');
 const WalletDB = require('../lib/wallet/walletdb');
 const wutils = require('./util/wallet');
-const {
-  dummyInput,
-  nextEntry
-} = wutils;
+const {nextEntry} = wutils;
+const {dummyInput} = require('./util/primitives');
 
 const enabled = true;
 const size = 2;
