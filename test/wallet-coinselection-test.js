@@ -6,6 +6,7 @@ const Network = require('../lib/protocol/network');
 const MTX = require('../lib/primitives/mtx');
 const Covenant = require('../lib/primitives/covenant');
 const Coin = require('../lib/primitives/coin');
+const Input = require('../lib/primitives/input');
 const WalletDB = require('../lib/wallet/walletdb');
 const policy = require('../lib/protocol/policy');
 const wutils = require('./util/wallet');
@@ -18,6 +19,7 @@ const {coinbaseInput, dummyInput, randomP2PKAddress} = primutils;
 /** @typedef {import('../lib/primitives/output')} Output */
 /** @typedef {import('../lib/primitives/tx')} TX */
 /** @typedef {import('./util/primitives').CoinOptions} CoinOptions */
+/** @typedef {import('../lib/types').Amount} Amount */
 
 const UNCONFIRMED_HEIGHT = 0xffffffff;
 
@@ -674,12 +676,14 @@ describe('Wallet Coin Selection', function() {
    * @typedef {Object} SelectionTest
    * @property {String} name
    * @property {Object} options
-   * @property {Number} value
-   * @property {CoinOptions[]} existingCoins
-   * @property {Number[]} expectedOrdered
+   * @property {Amount} value
+   * @property {Amount[]} [existingInputs] - use some coins that are resolved later.
+   *                                        Use only unique value Coins.
+   * @property {CoinOptions[]} [existingCoins]
+   * @property {Amount[]} expectedOrdered
    * @property {Object} [expectedSome] - Some of this must exist in mtx.
    * @property {Number} expectedSome.count - Number of items that must exist.
-   * @property {Number[]} expectedSome.items
+   * @property {Amount[]} expectedSome.items
    */
 
   /** @type {Object<string, SelectionTest[]>} */
@@ -973,7 +977,9 @@ describe('Wallet Coin Selection', function() {
         }
       }
     ],
-    'value + existing inputs': [
+    // Existing coins = views + inputs
+    // Existing inputs = inputs (no view, needs extra resolving)
+    'value + existing coins and inputs': [
       // existing coins (wallet)
       {
         name: 'select coins + existing coins (wallet)',
@@ -1027,6 +1033,55 @@ describe('Wallet Coin Selection', function() {
         expectedSome: {
           count: 1,
           items: [4e6, 7e6]
+        }
+      },
+      {
+        name: 'select coins + existing inputs (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: 'value'
+        },
+        value: 10e6,
+        existingInputs: [5e6],
+        expectedOrdered: [5e6, 8e6]
+      },
+      // existing coins (default)
+      {
+        name: 'select coins + existing inputs (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: 'value'
+        },
+        value: 10e6,
+        existingInputs: [3e6],
+        expectedOrdered: [3e6, 8e6]
+      },
+      // existing coins (alt)
+      {
+        name: 'select coins + existing coins (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: 'value'
+        },
+        value: 10e6,
+        existingInputs: [4e6],
+        expectedOrdered: [4e6, 5e6, 1e6]
+      },
+      // fail existing inputs (cross account)
+      {
+        name: 'fail cross account existing inputs (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: 'value'
+        },
+        value: 10e6,
+        existingInputs: [5e6], // this belongs to alt account
+        error: {
+          message: 'Could not resolve preferred inputs.'
         }
       }
     ],
@@ -1367,6 +1422,8 @@ describe('Wallet Coin Selection', function() {
         }
       }
     ],
+    // Existing coins = views + inputs
+    // Existing inputs = inputs (no view, needs extra resolving)
     'age + existing inputs': [
       // existing coins (wallet)
       {
@@ -1421,6 +1478,55 @@ describe('Wallet Coin Selection', function() {
         expectedSome: {
           count: 1,
           items: [4e6, 7e6]
+        }
+      },
+      {
+        name: 'select coins + existing inputs (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: 'age'
+        },
+        value: 10e6,
+        existingInputs: [5e6],
+        expectedOrdered: [5e6, 2e6, 2e6, 1e6]
+      },
+      // existing coins (default)
+      {
+        name: 'select coins + existing inputs (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: 'age'
+        },
+        value: 10e6,
+        existingInputs: [3e6],
+        expectedOrdered: [3e6, 2e6, 2e6, 8e6]
+      },
+      // existing coins (alt)
+      {
+        name: 'select coins + existing coins (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: 'age'
+        },
+        value: 10e6,
+        existingInputs: [4e6],
+        expectedOrdered: [4e6, 1e6, 5e6]
+      },
+      // fail existing inputs (cross account)
+      {
+        name: 'fail cross account existing inputs (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: 'age'
+        },
+        value: 10e6,
+        existingInputs: [5e6], // this belongs to alt account
+        error: {
+          message: 'Could not resolve preferred inputs.'
         }
       }
     ],
@@ -1692,9 +1798,11 @@ describe('Wallet Coin Selection', function() {
         }
       }
     ],
+    // Existing coins = views + inputs
+    // Existing inputs = inputs (no view, needs extra resolving)
     'all + existing inputs': [
       {
-        name: 'select 1 coin (wallet)',
+        name: 'select all + existing coin (wallet)',
         options: {
           account: -1,
           hardFee: 0,
@@ -1717,7 +1825,7 @@ describe('Wallet Coin Selection', function() {
         }
       },
       {
-        name: 'select 1 coin (default)',
+        name: 'select all + existing coin (default)',
         options: {
           account: DEFAULT_ACCOUNT,
           hardFee: 0,
@@ -1740,7 +1848,7 @@ describe('Wallet Coin Selection', function() {
         }
       },
       {
-        name: 'select 1 coin (alt)',
+        name: 'select all + existing coin (alt)',
         options: {
           account: ALT_ACCOUNT,
           hardFee: 0,
@@ -1750,16 +1858,98 @@ describe('Wallet Coin Selection', function() {
         existingCoins: [
           {
             height: -1,
-            value: 1e6
+            value: 3e6
           }
         ],
-        expectedOrdered: [1e6],
+        expectedOrdered: [3e6],
         expectedSome: {
           count: 4,
           items: [
             1e6, 5e6,
             4e6, 7e6
           ]
+        }
+      },
+      {
+        name: 'select all + existing input (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: 'all'
+        },
+        value: 2e6,
+        existingInputs: [8e6],
+        expectedOrdered: [8e6],
+        expectedSome: {
+          count: 8,
+          items: [
+            2e6, 2e6, 1e6, 5e6,
+            3e6, 6e6, 4e6, 7e6
+          ]
+        }
+      },
+      {
+        name: 'select all + existing input (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: 'all'
+        },
+        value: 2e6,
+        existingInputs: [8e6],
+        expectedOrdered: [8e6],
+        expectedSome: {
+          count: 4,
+          items: [
+            2e6, 2e6,
+            3e6, 6e6
+          ]
+        }
+      },
+      {
+        name: 'select all + existing input (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: 'all'
+        },
+        value: 2e6,
+        existingInputs: [5e6],
+        expectedOrdered: [5e6],
+        expectedSome: {
+          count: 3,
+          items: [1e6, 4e6, 7e6]
+        }
+      },
+      {
+        name: 'select all + existing input + estimate (wallet)',
+        options: {
+          account: -1,
+          selection: 'all',
+          rate: 5e7
+        },
+        value: 2e6,
+        existingInputs: [8e6],
+        expectedOrdered: [8e6],
+        expectedSome: {
+          count: 8,
+          items: [
+            2e6, 2e6, 1e6, 5e6,
+            3e6, 6e6, 4e6, 7e6
+          ]
+        }
+      },
+      {
+        name: 'fail cross account existing inputs (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: 'all'
+        },
+        value: 2e6,
+        existingInputs: [5e6], // this belongs to alt account
+        error: {
+          message: 'Could not resolve preferred inputs.'
         }
       }
     ]
@@ -1882,6 +2072,16 @@ describe('Wallet Coin Selection', function() {
         const mtx = new MTX();
         mtx.addOutput(randomP2PKAddress(), fundingTest.value);
 
+        if (fundingTest.existingInputs) {
+          for (const inputVal of fundingTest.existingInputs) {
+            const coin = coinByValue.get(inputVal);
+            assert(coin, `Coin not found for value ${inputVal}.`);
+
+            const input = Input.fromCoin(coin);
+            mtx.addInput(input);
+          }
+        }
+
         if (fundingTest.existingCoins) {
           for (const coinOptions of fundingTest.existingCoins) {
             const coin = primutils.makeCoin(coinOptions);
@@ -1903,6 +2103,9 @@ describe('Wallet Coin Selection', function() {
           assert.strictEqual(err.type, fundingTest.error.type);
           assert.strictEqual(err.availableFunds, fundingTest.error.availableFunds);
           assert.strictEqual(err.requiredFunds, fundingTest.error.requiredFunds);
+
+          if (fundingTest.error.message)
+            assert.strictEqual(err.message, fundingTest.error.message);
           return;
         }
 
@@ -2150,7 +2353,7 @@ describe('Wallet Coin Selection', function() {
  * @typedef {Object} OutputInfo
  * @property {String} [address]
  * @property {Number} [account=0] - address generation account.
- * @property {Number} [value]
+ * @property {Amount} [value]
  * @property {covenantTypes} [covenant]
  * @property {Boolean} [coinbase=false]
  */
