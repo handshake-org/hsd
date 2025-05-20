@@ -1955,6 +1955,36 @@ describe('Wallet Coin Selection', function() {
     ]
   };
 
+  const reselect = (tests, selection) => {
+    return tests.map((t) => {
+      const options = {
+        ...t.options,
+        selection
+      };
+
+      return {
+        ...t,
+        options
+      };
+    });
+  };
+
+  // Selection `value` and `dbvalue` are the same.
+  SELECTION_TESTS['dbvalue'] = reselect(SELECTION_TESTS['value'], 'dbvalue');
+  SELECTION_TESTS['dbvalue + smart'] = reselect(SELECTION_TESTS['value + smart'], 'dbvalue');
+  SELECTION_TESTS['dbvalue + existing coins and inputs'] = reselect(
+    SELECTION_TESTS['value + existing coins and inputs'], 'dbvalue');
+
+  // Same with `age` and `dbage`.
+  SELECTION_TESTS['dbage'] = reselect(SELECTION_TESTS['age'], 'dbage');
+  SELECTION_TESTS['dbage + smart'] = reselect(SELECTION_TESTS['age + smart'], 'dbage');
+  SELECTION_TESTS['dbage + existing inputs'] = reselect(
+    SELECTION_TESTS['age + existing inputs'], 'dbage');
+
+  SELECTION_TESTS['dball'] = reselect(SELECTION_TESTS['all'], 'dball');
+  SELECTION_TESTS['dball + existing inputs'] = reselect(
+    SELECTION_TESTS['all + existing inputs'], 'dball');
+
   for (const [name, testCase] of Object.entries(SELECTION_TESTS)) {
   describe(`Wallet Coin Selection by ${name}`, function() {
     // fund wallet.

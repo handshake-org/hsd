@@ -3277,6 +3277,7 @@ describe('Wallet', function() {
     const fund = 10e6;
     // Store height of auction OPEN to be used in second bid.
     // The main test wallet, and wallet that will receive the FINALIZE.
+    /** @type {Wallet} */
     let wallet;
     let unsentReveal;
 
