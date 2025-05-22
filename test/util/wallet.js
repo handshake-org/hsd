@@ -3,7 +3,15 @@
 const assert = require('bsert');
 const blake2b = require('bcrypto/lib/blake2b');
 const ChainEntry = require('../../lib/blockchain/chainentry');
+const MTX = require('../../lib/primitives/mtx');
 const {ZERO_HASH} = require('../../lib/protocol/consensus');
+const primutils = require('./primitives');
+const {coinbaseInput, dummyInput, makeOutput} = primutils;
+
+/** @typedef {import('../../lib/types').Amount} Amount */
+/** @typedef {import('../../lib/covenants/rules').types} covenantTypes */
+/** @typedef {import('../../lib/primitives/output')} Output */
+/** @typedef {import('../../lib/wallet/wallet')} Wallet */
 
 const walletUtils = exports;
 
@@ -74,4 +82,130 @@ walletUtils.dumpWDB = async (wdb, prefixes) => {
   }
 
   return filtered;
+};
+
+/**
+ * @typedef {Object} OutputInfo
+ * @property {String} [address]
+ * @property {Number} [account=0] - address generation account.
+ * @property {Amount} [value]
+ * @property {covenantTypes} [covenant]
+ * @property {Boolean} [coinbase=false]
+ */
+
+/**
+ * @param {Wallet} wallet
+ * @param {primutils.OutputOptions} outputInfo
+ * @param {Object} options
+ * @param {Boolean} [options.createAddress=true] - create address if not provided.
+ * @returns {Promise<Output>}
+ */
+
+async function mkOutput(wallet, outputInfo, options = {}) {
+  const info = { ...outputInfo };
+
+  const {
+    createAddress = true
+  } = options;
+
+  if (!info.address && !createAddress) {
+    info.address = await wallet.receiveAddress(outputInfo.account || 0);
+  } else if (!info.address && createAddress) {
+    const walletKey = await wallet.createReceive(outputInfo.account || 0);
+    info.address = walletKey.getAddress();
+  }
+
+  return makeOutput(info);
+}
+
+/**
+ * Create Inbound TX Options
+ * @typedef {Object} InboundTXOptions
+ * @property {Boolean} [txPerOutput=true]
+ * @property {Boolean} [createAddress=true]
+ */
+
+/**
+ * Create funding MTXs for a wallet.
+ * @param {Wallet} wallet
+ * @param {OutputInfo[]} outputInfos
+ * @param {Boolean} [txPerOutput=true]
+ * @param {InboundTXOptions} options
+ * @returns {Promise<TX[]>}
+ */
+
+walletUtils.createInboundTXs = async function createInboundTXs(wallet, outputInfos, options = {}) {
+  assert(Array.isArray(outputInfos));
+
+  const {
+    txPerOutput = true,
+    createAddress = true
+  } = options;
+
+  let hadCoinbase = false;
+
+  const txs = [];
+
+  let mtx = new MTX();
+
+  for (const info of outputInfos) {
+    if (txPerOutput)
+      mtx = new MTX();
+
+    if (info.coinbase && hadCoinbase)
+      throw new Error('Coinbase already added.');
+
+    if (info.coinbase && !hadCoinbase) {
+      if (!txPerOutput)
+        hadCoinbase = true;
+      mtx.addInput(coinbaseInput());
+    } else if (!hadCoinbase) {
+      mtx.addInput(dummyInput());
+    }
+
+    const output = await mkOutput(wallet, info, { createAddress });
+    mtx.addOutput(output);
+
+    if (output.covenant.isLinked())
+      mtx.addInput(dummyInput());
+
+    if (txPerOutput)
+      txs.push(mtx.toTX());
+  }
+
+  if (!txPerOutput)
+    txs.push(mtx.toTX());
+
+  return txs;
+};
+
+/**
+ * Fund wallet options
+ * @typedef {Object} FundOptions
+ * @property {Boolean} [txPerOutput=true]
+ * @property {Boolean} [createAddress=true]
+ * @property {Boolean} [blockPerTX=false]
+ */
+
+/**
+ * @param {Wallet} wallet
+ * @param {OutputInfo[]} outputInfos
+ * @param {FundOptions} options
+ * @returns {Promise<TX[]>}
+ */
+
+walletUtils.fundWallet = async function fundWallet(wallet, outputInfos, options = {}) {
+  const txs = await walletUtils.createInboundTXs(wallet, outputInfos, options);
+
+  if (!options.blockPerTX) {
+    await wallet.wdb.addBlock(walletUtils.nextBlock(wallet.wdb), txs);
+    return txs;
+  }
+
+  for (const tx of txs) {
+    await wallet.wdb.addTX(tx);
+    await wallet.wdb.addBlock(walletUtils.nextBlock(wallet.wdb), [tx]);
+  }
+
+  return txs;
 };

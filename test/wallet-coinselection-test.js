@@ -10,16 +10,19 @@ const Input = require('../lib/primitives/input');
 const WalletDB = require('../lib/wallet/walletdb');
 const policy = require('../lib/protocol/policy');
 const wutils = require('./util/wallet');
-const {nextBlock, curBlock} = wutils;
 const primutils = require('./util/primitives');
-const {coinbaseInput, dummyInput, randomP2PKAddress} = primutils;
+const {randomP2PKAddress} = primutils;
+const {
+  nextBlock,
+  curBlock,
+  createInboundTXs,
+  fundWallet
+} = wutils;
 
 /** @typedef {import('../lib/wallet/wallet')} Wallet */
-/** @typedef {import('../lib/covenants/rules').types} covenantTypes */
-/** @typedef {import('../lib/primitives/output')} Output */
 /** @typedef {import('../lib/primitives/tx')} TX */
 /** @typedef {import('./util/primitives').CoinOptions} CoinOptions */
-/** @typedef {import('../lib/types').Amount} Amount */
+/** @typedef {wutils.OutputInfo} OutputInfo */
 
 const UNCONFIRMED_HEIGHT = 0xffffffff;
 
@@ -609,7 +612,9 @@ describe('Wallet Coin Selection', function() {
         { value: 6e6, account: ALT_ACCOUNT },
         { value: 1e6, account: ALT_ACCOUNT }
       ];
-      const txs = await createInboundTXs(wallet, txOptionsUnconfirmed, false);
+      const txs = await createInboundTXs(wallet, txOptionsUnconfirmed, {
+        txPerOutput: false
+      });
       await wdb.addTX(txs[0]);
 
       const sum0 = 3e6 + 4e6 + 7e6 + 8e6;
@@ -2378,107 +2383,6 @@ describe('Wallet Coin Selection', function() {
     });
   });
 });
-
-/**
- * @typedef {Object} OutputInfo
- * @property {String} [address]
- * @property {Number} [account=0] - address generation account.
- * @property {Amount} [value]
- * @property {covenantTypes} [covenant]
- * @property {Boolean} [coinbase=false]
- */
-
-/**
- * @param {Wallet} wallet
- * @param {primutils.OutputOptions} outputInfo
- * @returns {Promise<Output>}
- */
-
-async function mkOutput(wallet, outputInfo) {
-  const info = { ...outputInfo };
-
-  if (!info.address)
-    info.address = await wallet.receiveAddress(outputInfo.account || 0);
-
-  return primutils.makeOutput(info);
-}
-
-/**
- * Create funding MTXs for a wallet.
- * @param {Wallet} wallet
- * @param {OutputInfo[]} outputInfos
- * @param {Boolean} [txPerOutput=true]
- * @returns {Promise<TX[]>}
- */
-async function createInboundTXs(wallet, outputInfos, txPerOutput = true) {
-  assert(Array.isArray(outputInfos));
-
-  let hadCoinbase = false;
-
-  const txs = [];
-
-  let mtx = new MTX();
-
-  for (const info of outputInfos) {
-    if (txPerOutput)
-      mtx = new MTX();
-
-    if (info.coinbase && hadCoinbase)
-      throw new Error('Coinbase already added.');
-
-    if (info.coinbase && !hadCoinbase) {
-      if (!txPerOutput)
-        hadCoinbase = true;
-      mtx.addInput(coinbaseInput());
-    } else if (!hadCoinbase) {
-      mtx.addInput(dummyInput());
-    }
-
-    const output = await mkOutput(wallet, info);
-    mtx.addOutput(output);
-
-    if (output.covenant.isLinked())
-      mtx.addInput(dummyInput());
-
-    if (txPerOutput)
-      txs.push(mtx.toTX());
-  }
-
-  if (!txPerOutput)
-    txs.push(mtx.toTX());
-
-  return txs;
-}
-
-/**
- * Fund wallet options
- * @typedef {Object} FundOptions
- * @property {Boolean} [txPerOutput=true]
- * @property {Boolean} [blockPerTX=false]
- */
-
-/**
- * @param {Wallet} wallet
- * @param {OutputInfo[]} outputInfos
- * @param {FundOptions} options
- * @returns {Promise<TX[]>}
- */
-
-async function fundWallet(wallet, outputInfos, options = {}) {
-  const txs = await createInboundTXs(wallet, outputInfos, options.txPerOutput);
-
-  if (!options.blockPerTX) {
-    await wallet.wdb.addBlock(nextBlock(wallet.wdb), txs);
-    return txs;
-  }
-
-  for (const tx of txs) {
-    await wallet.wdb.addTX(tx);
-    await wallet.wdb.addBlock(nextBlock(wallet.wdb), [tx]);
-  }
-
-  return txs;
-}
 
 /**
  * Collect iterator items.
