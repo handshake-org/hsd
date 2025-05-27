@@ -78,7 +78,7 @@ exports.makeCovenant = (options) => {
   if (name) {
     nameHash = rules.hashName(name);
   } else if (!nameHash) {
-    name = randomString(30);
+    name = exports.randomName(30);
     nameHash = rules.hashName(name);
   }
 
@@ -201,7 +201,7 @@ function fromU32(num) {
   return data;
 }
 
-function randomString(len) {
+exports.randomName = function randomName(len) {
   assert((len >>> 0) === len);
 
   let s = '';
@@ -214,4 +214,4 @@ function randomString(len) {
   }
 
   return s;
-}
+};
