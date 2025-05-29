@@ -56,9 +56,11 @@ const Network = require('../lib/protocol/network');
 const WalletDB = require('../lib/wallet/walletdb');
 const NameState = require('../lib/covenants/namestate');
 const {Resource} = require('../lib/dns/resource');
+const wcommon = require('../lib/wallet/common');
 const wutils = require('../test/util/wallet');
 const random = require('bcrypto/lib/random');
 const primutils = require('../test/util/primitives');
+const {DB_VALUE, DB_AGE} = wcommon.coinSelectionTypes;
 
 /** @typedef {import('../lib/covenants/rules').types} covenantTypes */
 /** @typedef {import('../lib/wallet/wallet')} Wallet */
@@ -75,12 +77,12 @@ const primutils = require('../test/util/primitives');
   const tmp = path.join(os.tmpdir(), 'hsd-bench');
   const prefix = cfg.str('prefix', tmp);
   const options = {
-    opens: cfg.int('opens', 10_000),
-    spendable: cfg.int('spendable', 20_000),
-    unspendable: cfg.int('unspendable', 15_000),
+    opens: cfg.int('opens', 1_000),
+    spendable: cfg.int('spendable', 2_000),
+    unspendable: cfg.int('unspendable', 1_500),
     perBlock: cfg.int('per-block', 400),
     cleanup: cfg.bool('cleanup', false),
-    opsPerType: cfg.int('ops-per-type', 1_000),
+    opsPerType: cfg.int('ops-per-type', 500),
     maxPending: cfg.int('max-pending', 200),
     skipInit: cfg.bool('skip-init', false),
     noPrint: cfg.bool('no-print', false),
@@ -260,9 +262,9 @@ const primutils = require('../test/util/primitives');
   const selections = [
     'random',
     'value',
-    'dbvalue',
+    DB_VALUE,
     'age',
-    'dbage'
+    DB_AGE
   ];
 
   for (const selection of selections) {

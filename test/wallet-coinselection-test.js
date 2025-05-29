@@ -7,11 +7,13 @@ const MTX = require('../lib/primitives/mtx');
 const Covenant = require('../lib/primitives/covenant');
 const Coin = require('../lib/primitives/coin');
 const Input = require('../lib/primitives/input');
+const wcommon = require('../lib/wallet/common');
 const WalletDB = require('../lib/wallet/walletdb');
 const policy = require('../lib/protocol/policy');
 const wutils = require('./util/wallet');
 const primutils = require('./util/primitives');
 const {randomP2PKAddress} = primutils;
+const {DB_VALUE, DB_AGE, DB_ALL} = wcommon.coinSelectionTypes;
 const {
   nextBlock,
   curBlock,
@@ -229,7 +231,9 @@ describe('Wallet Coin Selection', function() {
     });
 
     it('should index insert (block) tx input', async () => {
-      await fundWallet(wallet, TX_OPTIONS, false);
+      await fundWallet(wallet, TX_OPTIONS, {
+        blockPerTX: false
+      });
       const currentBlock = curBlock(wdb);
 
       const spendAll = await wallet.createTX({
@@ -604,7 +608,9 @@ describe('Wallet Coin Selection', function() {
         { value: 2e6, account: ALT_ACCOUNT },
         { value: 5e6, account: ALT_ACCOUNT }
       ];
-      await fundWallet(wallet, txOptionsConfirmed, false);
+      await fundWallet(wallet, txOptionsConfirmed, {
+        blockPerTX: false
+      });
 
       const txOptionsUnconfirmed = [
         { value: 8e6 },
@@ -1975,20 +1981,20 @@ describe('Wallet Coin Selection', function() {
   };
 
   // Selection `value` and `dbvalue` are the same.
-  SELECTION_TESTS['dbvalue'] = reselect(SELECTION_TESTS['value'], 'dbvalue');
-  SELECTION_TESTS['dbvalue + smart'] = reselect(SELECTION_TESTS['value + smart'], 'dbvalue');
+  SELECTION_TESTS['dbvalue'] = reselect(SELECTION_TESTS['value'], DB_VALUE);
+  SELECTION_TESTS['dbvalue + smart'] = reselect(SELECTION_TESTS['value + smart'], DB_VALUE);
   SELECTION_TESTS['dbvalue + existing coins and inputs'] = reselect(
-    SELECTION_TESTS['value + existing coins and inputs'], 'dbvalue');
+    SELECTION_TESTS['value + existing coins and inputs'], DB_VALUE);
 
   // Same with `age` and `dbage`.
-  SELECTION_TESTS['dbage'] = reselect(SELECTION_TESTS['age'], 'dbage');
-  SELECTION_TESTS['dbage + smart'] = reselect(SELECTION_TESTS['age + smart'], 'dbage');
-  SELECTION_TESTS['dbage + existing inputs'] = reselect(
-    SELECTION_TESTS['age + existing inputs'], 'dbage');
+  SELECTION_TESTS['db-age'] = reselect(SELECTION_TESTS['age'], DB_AGE);
+  SELECTION_TESTS['db-age + smart'] = reselect(SELECTION_TESTS['age + smart'], DB_AGE);
+  SELECTION_TESTS['db-age + existing inputs'] = reselect(
+    SELECTION_TESTS['age + existing inputs'], DB_AGE);
 
-  SELECTION_TESTS['dball'] = reselect(SELECTION_TESTS['all'], 'dball');
-  SELECTION_TESTS['dball + existing inputs'] = reselect(
-    SELECTION_TESTS['all + existing inputs'], 'dball');
+  SELECTION_TESTS['db-all'] = reselect(SELECTION_TESTS['all'], DB_ALL);
+  SELECTION_TESTS['db-all + existing inputs'] = reselect(
+    SELECTION_TESTS['all + existing inputs'], DB_ALL);
 
   for (const [name, testCase] of Object.entries(SELECTION_TESTS)) {
   describe(`Wallet Coin Selection by ${name}`, function() {

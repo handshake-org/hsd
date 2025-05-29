@@ -92,14 +92,14 @@ exports.makeCovenant = (options) => {
       break;
     }
     case Covenant.types.BID: {
-      assert(args.length < 1, 'Pass [blind?] instead.');
+      assert(args.length <= 1, 'Pass [blind?] instead.');
       const blind = args[0] || random.randomBytes(32);
       const rawName = Buffer.from(name, 'ascii');
       covenant.setBid(nameHash, height, rawName, blind);
       break;
     }
     case Covenant.types.REVEAL: {
-      assert(args.length < 1, 'Pass [nonce?] instead.');
+      assert(args.length <= 1, 'Pass [nonce?] instead.');
       const nonce = args[0] || random.randomBytes(32);
       covenant.setReveal(nameHash, height, nonce);
       break;
@@ -110,32 +110,32 @@ exports.makeCovenant = (options) => {
       break;
     }
     case Covenant.types.REGISTER: {
-      assert(args.length < 2, 'Pass [record?, blockHash?] instead.');
+      assert(args.length <= 2, 'Pass [record?, blockHash?] instead.');
       const record = args[0] || Buffer.alloc(0);
       const blockHash = args[1] || random.randomBytes(32);
       covenant.setRegister(nameHash, height, record, blockHash);
       break;
     }
     case Covenant.types.UPDATE: {
-      assert(args.length < 1, 'Pass [resource?] instead.');
+      assert(args.length <= 1, 'Pass [resource?] instead.');
       const resource = args[0] || Buffer.alloc(0);
       covenant.setUpdate(nameHash, height, resource);
       break;
     }
     case Covenant.types.RENEW: {
-      assert(args.length < 1, 'Pass [blockHash?] instead.');
+      assert(args.length <= 1, 'Pass [blockHash?] instead.');
       const blockHash = args[0] || random.randomBytes(32);
       covenant.setRenew(nameHash, height, blockHash);
       break;
     }
     case Covenant.types.TRANSFER: {
-      assert(args.length < 1, 'Pass [address?] instead.');
+      assert(args.length <= 1, 'Pass [address?] instead.');
       const address = args[0] || exports.randomP2PKAddress();
       covenant.setTransfer(nameHash, height, address);
       break;
     }
     case Covenant.types.FINALIZE: {
-      assert(args.length < 4, 'Pass [flags?, claimed?, renewal?, blockHash?] instead.');
+      assert(args.length <= 4, 'Pass [flags?, claimed?, renewal?, blockHash?] instead.');
       const rawName = Buffer.from(name, 'ascii');
       const flags = args[0] || 0;
       const claimed = args[1] || 0;
