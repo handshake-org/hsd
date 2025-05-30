@@ -509,7 +509,7 @@ class BenchmarkResults {
         unspendable: this.unspendable,
         maxPending: this.maxPending,
         ops: entries.length,
-        min: BigInt(Number.MAX_VALUE),
+        min: BigInt(Number.MAX_SAFE_INTEGER),
         max: 0n,
         median: 0n,
         percentile95: 0n,

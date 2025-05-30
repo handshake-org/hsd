@@ -25,7 +25,8 @@ const ChainEntry = require('../../../lib/blockchain/chainentry');
 const WalletDB = require('../../../lib/wallet/walletdb');
 const MTX = require('../../../lib/primitives/mtx');
 const rules = require('../../../lib/covenants/rules');
-const wutils = require('../../../test/util/wallet');
+const wutils = require('../../util/wallet');
+const primutils = require('../../util/primitives');
 
 const layout = {
   wdb: {
@@ -282,7 +283,7 @@ async function fundThree(wallet1, wallet2) {
   for (const [wallet, acct] of funds) {
     timeCounter++;
     const mtx1 = new MTX();
-    mtx1.addInput(wutils.deterministicInput(txID++));
+    mtx1.addInput(primutils.deterministicInput(txID++));
     mtx1.addOutput(await wallet.receiveAddress(acct), 10e6);
     mtx1.addOutput(OUT_ADDR, 1e6);
     txs.push(mtx1.toTX());

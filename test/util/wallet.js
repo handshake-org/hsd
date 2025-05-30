@@ -6,7 +6,7 @@ const ChainEntry = require('../../lib/blockchain/chainentry');
 const MTX = require('../../lib/primitives/mtx');
 const {ZERO_HASH} = require('../../lib/protocol/consensus');
 const primutils = require('./primitives');
-const {coinbaseInput, dummyInput, makeOutput} = primutils;
+const {coinbaseInput, makeOutput} = primutils;
 
 /** @typedef {import('../../lib/types').Amount} Amount */
 /** @typedef {import('../../lib/covenants/rules').types} covenantTypes */
@@ -118,18 +118,20 @@ async function mkOutput(wallet, outputInfo, options = {}) {
   return makeOutput(info);
 }
 
+walletUtils.deterministicId = 0;
+
 /**
  * Create Inbound TX Options
  * @typedef {Object} InboundTXOptions
  * @property {Boolean} [txPerOutput=true]
  * @property {Boolean} [createAddress=true]
+ * @property {Boolean} [deterministicInput=false]
  */
 
 /**
  * Create funding MTXs for a wallet.
  * @param {Wallet} wallet
  * @param {OutputInfo[]} outputInfos
- * @param {Boolean} [txPerOutput=true]
  * @param {InboundTXOptions} options
  * @returns {Promise<TX[]>}
  */
@@ -148,6 +150,15 @@ walletUtils.createInboundTXs = async function createInboundTXs(wallet, outputInf
 
   let mtx = new MTX();
 
+  let getInput = primutils.dummyInput;
+
+  if (options.deterministicInput) {
+    getInput = () => {
+      const id = walletUtils.deterministicId++;
+      return primutils.deterministicInput(id);
+    };
+  }
+
   for (const info of outputInfos) {
     if (txPerOutput)
       mtx = new MTX();
@@ -160,14 +171,14 @@ walletUtils.createInboundTXs = async function createInboundTXs(wallet, outputInf
         hadCoinbase = true;
       mtx.addInput(coinbaseInput());
     } else if (!hadCoinbase) {
-      mtx.addInput(dummyInput());
+      mtx.addInput(getInput());
     }
 
     const output = await mkOutput(wallet, info, { createAddress });
     mtx.addOutput(output);
 
     if (output.covenant.isLinked())
-      mtx.addInput(dummyInput());
+      mtx.addInput(getInput());
 
     if (txPerOutput)
       txs.push(mtx.toTX());
