@@ -13,6 +13,10 @@ const consensus = require('../../lib/protocol/consensus');
 const BlockTemplate = require('../../lib/mining/template');
 const bdb = require('bdb');
 
+/** @typedef {import('../../lib/blockchain/chain')} Chain */
+/** @typedef {import('../../lib/mining/miner')} Miner */
+/** @typedef {import('../../lib/primitives/address')} Address */
+
 let Migrator = class {};
 
 try {
@@ -190,7 +194,7 @@ exports.mockLayout = mockLayout;
 exports.oldMockLayout = oldMockLayout;
 exports.DB_FLAG_ERROR = DB_FLAG_ERROR;
 
-exports.migrationError = (migrations, ids, flagError) => {
+exports.migrationError = function migrationError(migrations, ids, flagError) {
   let error = 'Database needs migration(s):\n';
 
   for (const id of ids) {
@@ -207,8 +211,12 @@ exports.prefix2hex = function prefix2hex(prefix) {
   return Buffer.from(prefix, 'ascii').toString('hex');
 };
 
-exports.dumpDB = async (db, prefixes) => {
+exports.dumpDB = async function dumpDB(db, prefixes) {
   const data = await db.dump();
+  return exports.filteredObject(data, prefixes);
+};
+
+exports.filteredObject = function filteredObject(data, prefixes) {
   const filtered = {};
 
   for (const [key, value] of Object.entries(data)) {
@@ -223,7 +231,7 @@ exports.dumpDB = async (db, prefixes) => {
   return filtered;
 };
 
-exports.dumpChainDB = async (chaindb, prefixes) => {
+exports.dumpChainDB = async function dumpChainDB(chaindb, prefixes) {
   return exports.dumpDB(chaindb.db, prefixes);
 };
 
@@ -238,7 +246,7 @@ exports.dumpChainDB = async (chaindb, prefixes) => {
  * @returns {Promise<String[]>} - errors.
  */
 
-exports.checkEntries = async (ldb, options) => {
+exports.checkEntries = async function checkEntries(ldb, options) {
   const errors = [];
 
   options.before = options.before || {};
@@ -296,7 +304,7 @@ exports.checkEntries = async (ldb, options) => {
   return errors;
 };
 
-exports.fillEntries = async (ldb, data) => {
+exports.fillEntries = async function fillEntries(ldb, data) {
   const batch = await ldb.batch();
 
   for (const [key, value] of Object.entries(data)) {
@@ -309,7 +317,7 @@ exports.fillEntries = async (ldb, data) => {
   await batch.write();
 };
 
-exports.writeVersion = (b, key, name, version) => {
+exports.writeVersion = function writeVersion(b, key, name, version) {
     const value = Buffer.alloc(name.length + 4);
 
     value.write(name, 0, 'ascii');
@@ -318,7 +326,7 @@ exports.writeVersion = (b, key, name, version) => {
     b.put(key, value);
 };
 
-exports.getVersion = (data, name) => {
+exports.getVersion = function getVersion(data, name) {
   const error = 'version mismatch';
 
   if (data.length !== name.length + 4)
@@ -330,7 +338,7 @@ exports.getVersion = (data, name) => {
   return data.readUInt32LE(name.length);
 };
 
-exports.checkVersion = async (ldb, versionDBKey, expectedVersion) => {
+exports.checkVersion = async function checkVersion(ldb, versionDBKey, expectedVersion) {
   const data = await ldb.get(versionDBKey);
   const version = exports.getVersion(data, 'wallet');
 
@@ -352,7 +360,7 @@ const getBlockTime = height => REGTEST_TIME + (height * 10 * 60);
  * @returns {BlockTemplate}
  */
 
-exports.createBlock = async (options) => {
+exports.createBlock = async function createBlock(options) {
   const {
     chain,
     miner,

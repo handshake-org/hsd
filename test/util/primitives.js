@@ -13,16 +13,16 @@ const Covenant = require('../../lib/primitives/covenant');
 
 /** @typedef {import('../../lib/types').Hash} Hash */
 
-exports.coinbaseInput = () => {
+exports.coinbaseInput = function coinbaseInput() {
   return Input.fromOutpoint(new Outpoint());
 };
 
-exports.dummyInput = () => {
+exports.dummyInput = function dummyInput () {
   const hash = random.randomBytes(32);
   return Input.fromOutpoint(new Outpoint(hash, 0));
 };
 
-exports.deterministicInput = (id) => {
+exports.deterministicInput = function deterministicInput(id) {
   const hash = blake2b.digest(fromU32(id));
   return Input.fromOutpoint(new Outpoint(hash, 0));
 };
@@ -39,7 +39,7 @@ exports.deterministicInput = (id) => {
  * @returns {Output}
  */
 
-exports.makeOutput = (options) => {
+exports.makeOutput = function makeOutput(options) {
   const address = options.address || exports.randomP2PKAddress();
   const output = new Output();
   output.address = address;
@@ -66,7 +66,7 @@ exports.makeOutput = (options) => {
  * @returns {Covenant}
  */
 
-exports.makeCovenant = (options) => {
+exports.makeCovenant = function makeCovenant(options) {
   const covenant = new Covenant();
   covenant.type = options.type || Covenant.types.NONE;
 
@@ -165,7 +165,7 @@ exports.makeCovenant = (options) => {
   return covenant;
 };
 
-exports.randomP2PKAddress = () => {
+exports.randomP2PKAddress = function randomP2PKAddress() {
   const key = random.randomBytes(33);
   return Address.fromPubkey(key);
 };
@@ -187,7 +187,7 @@ exports.randomP2PKAddress = () => {
  * @returns {Coin}
  */
 
-exports.makeCoin = (options) => {
+exports.makeCoin = function makeCoin(options) {
   return Coin.fromOptions({
     hash: options.hash || random.randomBytes(32),
     address: options.address || Address.fromPubkey(random.randomBytes(33)),
