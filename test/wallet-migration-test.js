@@ -25,6 +25,7 @@ const {
   getVersion,
   checkVersion,
   checkEntries,
+  checkExactEntries,
   fillEntries
 } = migutils;
 const {rimraf, testdir} = require('./util/common');
@@ -957,7 +958,6 @@ describe('Wallet Migrations', function() {
   describe(`TX Count and time indexing migration (integration ${i})`, function() {
     const location = testdir('wallet-tx-count-time');
     const migrationsBAK = WalletMigrator.migrations;
-    // const data = require('./data/migrations/wallet-5-pagination.json');
     const Migration = WalletMigrator.MigrateTXCountTimeIndex;
     const layout = Migration.layout();
 
@@ -1104,6 +1104,64 @@ describe('Wallet Migrations', function() {
         after: data.after,
         throw: true
       });
+      await walletDB.close();
+    });
+  });
+
+  describe('Migrate coin selection (data)', function() {
+    const location = testdir('wallet-migrate-coin-selection');
+    const data = require('./data/migrations/wallet-7-coinselector.json');
+    const migrationsBAK = WalletMigrator.migrations;
+    const Migration = WalletMigrator.MigrateCoinSelection;
+
+    const walletOptions = {
+      prefix: location,
+      memory: false,
+      network
+    };
+
+    let walletDB, ldb;
+    before(async () => {
+      WalletMigrator.migrations = {};
+      await fs.mkdirp(location);
+
+      walletDB = new WalletDB(walletOptions);
+      ldb = walletDB.db;
+
+      await walletDB.open();
+      await fillEntries(walletDB.db, data.before);
+      await walletDB.close();
+    });
+
+    after(async () => {
+      WalletMigrator.migrations = migrationsBAK;
+      await rimraf(location);
+    });
+
+    it('should migrate', async () => {
+      WalletMigrator.migrations = {
+        0: Migration
+      };
+
+      walletDB.options.walletMigrate = 0;
+
+      await walletDB.open();
+
+      // Check that we have removed and added
+      // the expected entries.
+      await checkEntries(ldb, {
+        before: data.before,
+        after: data.after,
+        throw: true
+      });
+
+      // check that we have not created extra entries in the db
+      // that is not present in the data dump.
+      await checkExactEntries(ldb, data.prefixes, {
+        after: { ...data.after },
+        throw: true
+      });
+
       await walletDB.close();
     });
   });

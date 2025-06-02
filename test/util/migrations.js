@@ -304,6 +304,63 @@ exports.checkEntries = async function checkEntries(ldb, options) {
   return errors;
 };
 
+/**
+ * @param {bdb.DB} ldb
+ * @param {String[]} prefixes
+ * @param {Object} options
+ * @param {Object} options.after - key value pairs to check.
+ * @param {Boolean} options.throw - throw on error.
+ * @param {Boolean} options.bail - bail on first error.
+ * @param {Boolean} options.logErrors - log errors.
+ * @returns {Promise<String[]>} - errors.
+ */
+
+exports.checkExactEntries = async function checkExactEntries(ldb, prefixes, options) {
+  const dumped = await exports.dumpDB(ldb, prefixes);
+  const after = exports.filteredObject(options.after, prefixes);
+
+  const checks = new Set(Object.keys(after));
+  const errors = [];
+
+  for (const [key, value] of Object.entries(dumped)) {
+    if (errors.length > 0 && options.bail) {
+      if (options.throw)
+        throw new Error(errors[0]);
+
+      break;
+    }
+
+    if (!checks.has(key)) {
+      errors.push(`Unexpected key found in db: ${key}`);
+      continue;
+    }
+
+    if (value !== after[key]) {
+      errors.push(`Value for ${key}: ${value} does not match expected: ${after[key]}`);
+      continue;
+    }
+
+    checks.delete(key);
+  }
+
+  if (checks.size > 0) {
+    for (const key of checks) {
+      errors.push(`Expected key ${key} not found in db.`);
+    }
+  }
+
+  if (options.logErrors && errors.length !== 0) {
+    console.error(
+      JSON.stringify(errors, null, 2)
+    );
+  }
+
+  if (errors.length > 0 && options.throw)
+    throw new Error(`Check exact entries failed with ${errors.length} errors.`);
+
+  return errors;
+};
+
 exports.fillEntries = async function fillEntries(ldb, data) {
   const batch = await ldb.batch();
 

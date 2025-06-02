@@ -4,6 +4,7 @@ const assert = require('bsert');
 const bdb = require('bdb');
 const Network = require('../../../lib/protocol/network');
 const MTX = require('../../../lib/primitives/mtx');
+const {Resource} = require('../../../lib/dns/resource');
 const WalletDB = require('../../../lib/wallet/walletdb');
 const wutils = require('../../util/wallet');
 
@@ -79,7 +80,7 @@ const wallet2priv = 'rprvKE8qsHtkmUxUSR4jE7Lti9XV77hv7xxacAShw5MvxY6RfsAYVeB1WL'
     master: wallet2priv
   });
 
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < 50; i++) {
     await wdb.addBlock(wutils.nextEntry(wdb), []);
   }
 
@@ -254,8 +255,50 @@ const wallet2priv = 'rprvKE8qsHtkmUxUSR4jE7Lti9XV77hv7xxacAShw5MvxY6RfsAYVeB1WL'
     ]);
   }
 
-  const dump = await getMigrationDump(wdb);
+  // do some non spendables as well.
+  {
+    const sendOpts = { selection };
+
+    const availableName = 'testname-1';
+    await wallet1.importName(availableName);
+    await wallet2.importName(availableName);
+
+    const openTX = await wallet1.sendOpen(availableName, sendOpts);
+
+    await wdb.addBlock(wutils.nextEntry(wdb), [openTX]);
+
+    for (let i = 0; i < network.names.treeInterval + 1; i++)
+      await wdb.addBlock(wutils.nextEntry(wdb), []);
+
+    const bid1 = await wallet1.sendBid(availableName, 1e4, 1e4, sendOpts);
+    const bid2 = await wallet2.sendBid(availableName, 2e4, 2e5, sendOpts);
+
+    await wdb.addBlock(wutils.nextEntry(wdb), [bid1, bid2]);
+    for (let i = 0; i < network.names.biddingPeriod; i++)
+      await wdb.addBlock(wutils.nextEntry(wdb), []);
+
+    const reveal1 = await wallet1.sendReveal(availableName, sendOpts);
+    const reveal2 = await wallet2.sendReveal(availableName, sendOpts);
+
+    await wdb.addBlock(wutils.nextEntry(wdb), [reveal1, reveal2]);
+
+    for (let i = 0; i < network.names.revealPeriod; i++)
+      await wdb.addBlock(wutils.nextEntry(wdb), []);
+
+    // Don't send this one, have it locked
+    // const redeem1 = await wallet1.sendRedeem(availableName, sendOpts);
+    const resource = Resource.fromJSON({records: []});
+    const register = await wallet2.sendUpdate(availableName, resource, sendOpts);
+
+    await wdb.addBlock(wutils.nextEntry(wdb), [register]);
+  }
+
+  const {
+    dump,
+    prefixes
+  } = await getMigrationDump(wdb);
   console.log(JSON.stringify({
+    prefixes,
     data: dump
   }, null, 2));
 
@@ -297,7 +340,10 @@ async function getMigrationDump(wdb) {
 
   const dump = await wutils.dumpWDB(wdb, prefixes);
 
-  return dump;
+  return {
+    dump,
+    prefixes
+  };
 }
 
 function str2hex(key) {
