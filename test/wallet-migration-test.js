@@ -1121,7 +1121,7 @@ describe('Wallet Migrations', function() {
     };
 
     let walletDB, ldb;
-    before(async () => {
+    beforeEach(async () => {
       WalletMigrator.migrations = {};
       await fs.mkdirp(location);
 
@@ -1133,7 +1133,7 @@ describe('Wallet Migrations', function() {
       await walletDB.close();
     });
 
-    after(async () => {
+    afterEach(async () => {
       WalletMigrator.migrations = migrationsBAK;
       await rimraf(location);
     });
@@ -1163,6 +1163,88 @@ describe('Wallet Migrations', function() {
       });
 
       await walletDB.close();
+    });
+
+    it('should resume the progress of migration if interrupted', async () => {
+      // patch the db buckets to throw after each write.
+      const patchDB = () => {
+        // throw after each bucket write.
+        const ldbBucket = walletDB.db.bucket;
+
+        walletDB.db.bucket = (prefix) => {
+          const bucket = ldbBucket.call(ldb, prefix);
+          const bucketBatch = bucket.batch;
+
+          bucket.batch = () => {
+            const batch = bucketBatch.call(bucket);
+            const originalWrite = batch.write;
+
+            batch.write = async () => {
+              await originalWrite.call(batch);
+              throw new Error('Interrupt migration');
+            };
+
+            return batch;
+          };
+
+          return bucket;
+        };
+
+        return () => {
+          walletDB.db.bucket = ldbBucket;
+        };
+      };
+
+      WalletMigrator.migrations = {
+        0: class extends Migration {
+          constructor(options) {
+            super(options);
+
+            this.batchSize = 10;
+          }
+
+          async migrate(b, ctx) {
+            const unpatch = patchDB();
+            await super.migrate(b, ctx);
+            unpatch();
+          }
+        }
+      };
+
+      await walletDB.db.open();
+
+      const migrator = new WalletMigrator({
+        walletMigrate: 0,
+        walletDB: walletDB,
+        dbVersion: 5
+      });
+
+      let err;
+
+      do {
+        try {
+          await migrator.migrate();
+          err = null;
+        } catch (e) {
+          if (e.message !== 'Interrupt migration')
+            throw e;
+
+          err = e;
+        }
+      } while (err);
+
+      await checkEntries(ldb, {
+        before: data.before,
+        after: data.after,
+        throw: true
+      });
+
+      await checkExactEntries(ldb, data.prefixes, {
+        after: data.after,
+        throw: true
+      });
+
+      await walletDB.db.close();
     });
   });
 });
