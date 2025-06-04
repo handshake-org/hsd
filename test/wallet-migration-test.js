@@ -1158,7 +1158,7 @@ describe('Wallet Migrations', function() {
       // check that we have not created extra entries in the db
       // that is not present in the data dump.
       await checkExactEntries(ldb, data.prefixes, {
-        after: { ...data.after },
+        after: data.after,
         throw: true
       });
 
