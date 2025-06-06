@@ -13,7 +13,7 @@ const policy = require('../lib/protocol/policy');
 const wutils = require('./util/wallet');
 const primutils = require('./util/primitives');
 const {randomP2PKAddress} = primutils;
-const {DB_VALUE, DB_AGE, DB_ALL} = wcommon.coinSelectionTypes;
+const {DB_VALUE, DB_AGE, DB_ALL, DB_SWEEPDUST} = wcommon.coinSelectionTypes;
 const {
   nextBlock,
   curBlock,
@@ -690,9 +690,11 @@ describe('Wallet Coin Selection', function() {
    * @property {Amount} value
    * @property {Amount[]} [existingInputs] - use some coins that are resolved later.
    *                                        Use only unique value Coins.
-   * @property {CoinOptions[]} [existingCoins]
+   * @property {CoinOptions[]} [existingCoins] - Coins that don't belong to the wallet,
+   *                                        but are used in the mtx.
    * @property {Amount[]} expectedOrdered
    * @property {Object} [expectedSome] - Some of this must exist in mtx.
+   * * This is for AGE unconfirmed, which is not deterministic.
    * @property {Number} expectedSome.count - Number of items that must exist.
    * @property {Amount[]} expectedSome.items
    */
@@ -1040,11 +1042,7 @@ describe('Wallet Coin Selection', function() {
             value: 1e6
           }
         ],
-        expectedOrdered: [1e6, 5e6, 1e6],
-        expectedSome: {
-          count: 1,
-          items: [4e6, 7e6]
-        }
+        expectedOrdered: [1e6, 5e6, 1e6, 7e6]
       },
       {
         name: 'select coins + existing inputs (wallet)',
@@ -1958,6 +1956,769 @@ describe('Wallet Coin Selection', function() {
           selection: 'all'
         },
         value: 2e6,
+        existingInputs: [5e6], // this belongs to alt account
+        error: {
+          message: 'Could not resolve preferred inputs.'
+        }
+      }
+    ],
+    'sweepdust': [
+      // wallet by sweep
+      {
+        name: 'select 1 coin (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: DB_SWEEPDUST
+        },
+        value: 1e6,
+        expectedOrdered: [1e6]
+      },
+      {
+        name: 'select 1 coin, minvalue (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 1e6 + 1
+        },
+        value: 1e6,
+        expectedOrdered: [2e6]
+      },
+      {
+        name: 'select all confirmed coins (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: DB_SWEEPDUST
+        },
+        value: ACCT_0_CONFIRMED + ACCT_1_CONFIRMED,
+        expectedOrdered: [1e6, 2e6, 2e6, 5e6, 8e6]
+      },
+      {
+        name: 'select all confirmed coins, minvalue (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 1e6 + 1
+        },
+        value: ACCT_0_CONFIRMED + ACCT_1_CONFIRMED - 1e6,
+        expectedOrdered: [2e6, 2e6, 5e6, 8e6]
+      },
+      {
+        name: 'select all confirmed and an unconfirmed (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: DB_SWEEPDUST
+        },
+        value: ACCT_0_CONFIRMED + ACCT_1_CONFIRMED + 1e6,
+        expectedOrdered: [1e6, 2e6, 2e6, 5e6, 8e6, 3e6]
+      },
+      {
+        name: 'select all confirmed and an unconfirmed, minvalue (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 2e6 + 1
+        },
+        value: ACCT_0_CONFIRMED + ACCT_1_CONFIRMED - 5e6 + 1e6,
+        expectedOrdered: [5e6, 8e6, 3e6]
+      },
+      {
+        name: 'select all coins (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: DB_SWEEPDUST
+        },
+        value: ACCT_0_FUNDS + ACCT_1_FUNDS,
+        expectedOrdered: [1e6, 2e6, 2e6, 5e6, 8e6, 3e6, 4e6, 6e6, 7e6]
+      },
+      {
+        name: 'select all coins, minvalue (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 2e6 + 1
+        },
+        value: ACCT_0_FUNDS + ACCT_1_FUNDS - 5e6,
+        expectedOrdered: [5e6, 8e6, 3e6, 4e6, 6e6, 7e6]
+      },
+      {
+        // test locked filters.
+        name: 'throw funding error (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: DB_SWEEPDUST
+        },
+        value: ACCT_0_FUNDS + ACCT_1_FUNDS + 1e6,
+        error: {
+          availableFunds: ACCT_0_FUNDS + ACCT_1_FUNDS,
+          requiredFunds: ACCT_0_FUNDS + ACCT_1_FUNDS + 1e6,
+          type: 'FundingError'
+        }
+      },
+      {
+        // test locked filters.
+        name: 'throw funding error, filterall (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 100e6
+        },
+        value: 1e6,
+        error: {
+          availableFunds: 0,
+          requiredFunds: 1e6,
+          type: 'FundingError'
+        }
+      },
+
+      // default account by value
+      {
+        name: 'select 1 coin (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST
+        },
+        value: 1e6,
+        expectedOrdered: [2e6]
+      },
+      {
+        name: 'select 1 coin, minvalue (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 2e6 + 1
+        },
+        value: 2e6,
+        expectedOrdered: [8e6]
+      },
+      {
+        name: 'select all confirmed coins (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST
+        },
+        value: ACCT_0_CONFIRMED,
+        expectedOrdered: [2e6, 2e6, 8e6]
+      },
+      {
+        name: 'select all confirmed coins, minvalue (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 2e6 + 1
+        },
+        value: 8e6,
+        expectedOrdered: [8e6]
+      },
+      {
+        name: 'select all confirmed and an unconfirmed (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST
+        },
+        value: ACCT_0_CONFIRMED + 1e6,
+        expectedOrdered: [2e6, 2e6, 8e6, 3e6]
+      },
+      {
+        name: 'select all confirmed and an unconfirmed, minvalue (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 3e6 + 1
+        },
+        value: 8e6 + 1e6,
+        expectedOrdered: [8e6, 6e6]
+      },
+      {
+        name: 'select all coins (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST
+        },
+        value: ACCT_0_FUNDS,
+        expectedOrdered: [2e6, 2e6, 8e6, 3e6, 6e6]
+      },
+      {
+        name: 'select all coins, minvalue (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 3e6 + 1
+        },
+        value: 8e6 + 6e6,
+        expectedOrdered: [8e6, 6e6]
+      },
+      {
+        // test locked filters.
+        name: 'throw funding error (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST
+        },
+        value: ACCT_0_FUNDS + 1e6,
+        error: {
+          availableFunds: ACCT_0_FUNDS,
+          requiredFunds: ACCT_0_FUNDS + 1e6,
+          type: 'FundingError'
+        }
+      },
+      {
+        // test locked filters.
+        name: 'throw funding error, minvalue (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 2e6 + 1
+        },
+        value: ACCT_0_FUNDS + 1e6 - (4e6),
+        error: {
+          availableFunds: ACCT_0_FUNDS - 4e6,
+          requiredFunds: ACCT_0_FUNDS - 4e6 + 1e6,
+          type: 'FundingError'
+        }
+      },
+
+      // alt account by value
+      {
+        name: 'select 1 coin (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST
+        },
+        value: 1e6,
+        expectedOrdered: [1e6]
+      },
+      {
+        name: 'select 1 coin, minvalue (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 1e6 + 1
+        },
+        value: 1e6,
+        expectedOrdered: [5e6]
+      },
+      {
+        name: 'select all confirmed coins (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST
+        },
+        value: ACCT_1_CONFIRMED,
+        expectedOrdered: [1e6, 5e6]
+      },
+      {
+        name: 'select all confirmed coins, minvalue (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 1e6 + 1
+        },
+        value: ACCT_1_CONFIRMED - 1e6,
+        expectedOrdered: [5e6]
+      },
+      {
+        name: 'select all confirmed and an unconfirmed (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST
+        },
+        value: ACCT_1_CONFIRMED + 1e6,
+        expectedOrdered: [1e6, 5e6, 4e6]
+      },
+      {
+        name: 'select all confirmed and an unconfirmed (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 4e6 + 1
+        },
+        value: ACCT_1_CONFIRMED + 1e6,
+        expectedOrdered: [5e6, 7e6]
+      },
+      {
+        name: 'select all coins (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST
+        },
+        value: ACCT_1_FUNDS,
+        expectedOrdered: [1e6, 5e6, 4e6, 7e6]
+      },
+      {
+        name: 'select all coins, minvalue (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 4e6 + 1
+        },
+        value: ACCT_1_FUNDS - 5e6,
+        expectedOrdered: [5e6, 7e6]
+      },
+      {
+        // test locked filters.
+        name: 'throw funding error (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST
+        },
+        value: ACCT_1_FUNDS + 1e6,
+        error: {
+          availableFunds: ACCT_1_FUNDS,
+          requiredFunds: ACCT_1_FUNDS + 1e6,
+          type: 'FundingError'
+        }
+      },
+      {
+        // test locked filters.
+        name: 'throw funding error (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 4e6 + 1
+        },
+        value: ACCT_1_FUNDS + 1e6,
+        error: {
+          availableFunds: ACCT_1_FUNDS - 5e6,
+          requiredFunds: ACCT_1_FUNDS + 1e6,
+          type: 'FundingError'
+        }
+      }
+    ],
+    'sweepdust + smart': [
+      // Test smart option.
+      // smart selection (wallet)
+      {
+        name: 'select all confirmed and an unconfirmed + smart (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          smart: true
+        },
+        value: ACCT_0_CONFIRMED + ACCT_1_CONFIRMED + 1e6,
+        expectedOrdered: [1e6, 2e6, 2e6, 5e6, 8e6, 3e6]
+      },
+      {
+        name: 'select all confirmed and an unconfirmed + smart, minvalue (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 3e6 + 1,
+          smart: true
+        },
+        value: ACCT_0_CONFIRMED + ACCT_1_CONFIRMED + 1e6 - 5e6,
+        expectedOrdered: [5e6, 8e6, 4e6]
+      },
+      {
+        name: 'select all coins + smart (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          smart: true
+        },
+        value: ACCT_0_FUNDS + ACCT_1_FUNDS - ACCT_0_FOREIGN - ACCT_1_FOREIGN,
+        expectedOrdered: [1e6, 2e6, 2e6, 5e6, 8e6, 3e6, 4e6]
+      },
+      {
+        name: 'select all coins + smart, minvalue (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 3e6 + 1,
+          smart: true
+        },
+        value: ACCT_0_FUNDS + ACCT_1_FUNDS - ACCT_0_FOREIGN - ACCT_1_FOREIGN - 5e6 - 3e6,
+        expectedOrdered: [5e6, 8e6, 4e6]
+      },
+      {
+        name: 'throw funding error + smart (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          smart: true
+        },
+        value: ACCT_0_FUNDS + ACCT_1_FUNDS,
+        error: {
+          availableFunds: ACCT_0_FUNDS + ACCT_1_FUNDS - ACCT_0_FOREIGN - ACCT_1_FOREIGN,
+          requiredFunds: ACCT_0_FUNDS + ACCT_1_FUNDS,
+          type: 'FundingError'
+        }
+      },
+      {
+        name: 'throw funding error + smart, minvalue (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 3e6 + 1,
+          smart: true
+        },
+        value: ACCT_0_FUNDS + ACCT_1_FUNDS,
+        error: {
+          availableFunds: ACCT_0_FUNDS + ACCT_1_FUNDS - ACCT_0_FOREIGN - ACCT_1_FOREIGN - 5e6 - 3e6,
+          requiredFunds: ACCT_0_FUNDS + ACCT_1_FUNDS,
+          type: 'FundingError'
+        }
+      },
+      // smart selection (default)
+      {
+        name: 'select all confirmed and an unconfirmed + smart (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          smart: true
+        },
+        value: ACCT_0_CONFIRMED + 1e6,
+        expectedOrdered: [2e6, 2e6, 8e6, 3e6]
+      },
+      {
+        name: 'select all confirmed and an unconfirmed + smart, minvalue (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 2e6 + 1,
+          smart: true
+        },
+        value: ACCT_0_CONFIRMED + 1e6 - 4e6,
+        expectedOrdered: [8e6, 3e6]
+      },
+      {
+        name: 'select all coins + smart (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          smart: true
+        },
+        value: ACCT_0_FUNDS - ACCT_0_FOREIGN,
+        expectedOrdered: [2e6, 2e6, 8e6, 3e6]
+      },
+      {
+        name: 'select all coins + smart, minvalue (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 2e6 + 1,
+          smart: true
+        },
+        value: ACCT_0_FUNDS - ACCT_0_FOREIGN - 4e6,
+        expectedOrdered: [8e6, 3e6]
+      },
+      {
+        name: 'throw funding error + smart (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          smart: true
+        },
+        value: ACCT_0_FUNDS,
+        error: {
+          availableFunds: ACCT_0_FUNDS - ACCT_0_FOREIGN,
+          requiredFunds: ACCT_0_FUNDS,
+          type: 'FundingError'
+        }
+      },
+      {
+        name: 'throw funding error + smart, minvalue (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 2e6 + 1,
+          smart: true
+        },
+        value: ACCT_0_FUNDS,
+        error: {
+          availableFunds: ACCT_0_FUNDS - ACCT_0_FOREIGN - 4e6,
+          requiredFunds: ACCT_0_FUNDS,
+          type: 'FundingError'
+        }
+      },
+      // smart selection (alt)
+      {
+        name: 'select all confirmed and an unconfirmed + smart (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          smart: true
+        },
+        value: ACCT_1_CONFIRMED + 1e6,
+        expectedOrdered: [1e6, 5e6, 4e6]
+      },
+      {
+        name: 'select all confirmed and an unconfirmed + smart, minvalue (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 1e6 + 1,
+          smart: true
+        },
+        value: ACCT_1_CONFIRMED + 1e6 - 1e6,
+        expectedOrdered: [5e6, 4e6]
+      },
+      {
+        name: 'select all coins + smart (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          smart: true
+        },
+        value: ACCT_1_FUNDS - ACCT_1_FOREIGN,
+        expectedOrdered: [1e6, 5e6, 4e6]
+      },
+      {
+        name: 'select all coins + smart, minvalue (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 1e6 + 1,
+          smart: true
+        },
+        value: ACCT_1_FUNDS - ACCT_1_FOREIGN - 1e6,
+        expectedOrdered: [5e6, 4e6]
+      },
+      {
+        name: 'throw funding error + smart (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          smart: true
+        },
+        value: ACCT_1_FUNDS,
+        error: {
+          availableFunds: ACCT_1_FUNDS - ACCT_1_FOREIGN,
+          requiredFunds: ACCT_1_FUNDS,
+          type: 'FundingError'
+        }
+      },
+      {
+        name: 'throw funding error + smart, minvalue (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 1e6 + 1,
+          smart: true
+        },
+        value: ACCT_1_FUNDS,
+        error: {
+          availableFunds: ACCT_1_FUNDS - ACCT_1_FOREIGN - 1e6,
+          requiredFunds: ACCT_1_FUNDS,
+          type: 'FundingError'
+        }
+      }
+    ],
+    // Existing coins = views + inputs
+    // Existing inputs = inputs (no view, needs extra resolving)
+    'sweepdust + existing coins and inputs': [
+      // existing coins (wallet)
+      {
+        name: 'select coins + existing coins (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: DB_SWEEPDUST
+        },
+        value: 10e6,
+        existingCoins: [
+          {
+            height: -1,
+            value: 8e6
+          }
+        ],
+        expectedOrdered: [8e6, 1e6, 2e6]
+      },
+      {
+        name: 'select coins + existing coins, minvalue (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 2e6 + 1
+        },
+        value: 10e6,
+        existingCoins: [
+          {
+            height: -1,
+            value: 8e6
+          }
+        ],
+        expectedOrdered: [8e6, 5e6]
+      },
+      // existing coins (default)
+      {
+        name: 'select coins + existing coins (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST
+        },
+        value: 10e6,
+        existingCoins: [
+          {
+            height: -1,
+            value: 7e6
+          }
+        ],
+        expectedOrdered: [7e6, 2e6, 2e6]
+      },
+      {
+        name: 'select coins + existing coins, minvalue (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 2e6 + 1
+        },
+        value: 10e6,
+        existingCoins: [
+          {
+            height: -1,
+            value: 7e6
+          }
+        ],
+        expectedOrdered: [7e6, 8e6]
+      },
+      // existing coins (alt)
+      {
+        name: 'select coins + existing coins (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST
+        },
+        value: 10e6,
+        existingCoins: [
+          {
+            height: -1,
+            value: 1e6
+          }
+        ],
+        expectedOrdered: [1e6, 1e6, 5e6, 4e6]
+      },
+      {
+        name: 'select coins + existing inputs (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: DB_SWEEPDUST
+        },
+        value: 10e6,
+        existingInputs: [5e6],
+        expectedOrdered: [5e6, 1e6, 2e6, 2e6]
+      },
+      {
+        name: 'select coins + existing inputs, minvalue (wallet)',
+        options: {
+          account: -1,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 2e6 + 1
+        },
+        value: 10e6,
+        existingInputs: [5e6],
+        expectedOrdered: [5e6, 8e6]
+      },
+      // existing coins (default)
+      {
+        name: 'select coins + existing inputs (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST
+        },
+        value: 10e6,
+        existingInputs: [3e6],
+        expectedOrdered: [3e6, 2e6, 2e6, 8e6]
+      },
+      {
+        name: 'select coins + existing inputs, minvalue (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 2e6 + 1
+        },
+        value: 10e6,
+        existingInputs: [2e6, 3e6],
+        expectedOrdered: [2e6, 3e6, 8e6]
+      },
+      // existing coins (alt)
+      {
+        name: 'select coins + existing coins (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST
+        },
+        value: 10e6,
+        existingInputs: [4e6],
+        expectedOrdered: [4e6, 1e6, 5e6]
+      },
+      {
+        name: 'select coins + existing coins, minvalue (alt)',
+        options: {
+          account: ALT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST,
+          sweepdustMinValue: 1e6 + 1
+        },
+        value: 9e6,
+        existingInputs: [4e6],
+        expectedOrdered: [4e6, 5e6]
+      },
+      // fail existing inputs (cross account)
+      {
+        name: 'fail cross account existing inputs (default)',
+        options: {
+          account: DEFAULT_ACCOUNT,
+          hardFee: 0,
+          selection: DB_SWEEPDUST
+        },
+        value: 10e6,
         existingInputs: [5e6], // this belongs to alt account
         error: {
           message: 'Could not resolve preferred inputs.'
