@@ -108,11 +108,15 @@ async function mkOutput(wallet, outputInfo, options = {}) {
     createAddress = true
   } = options;
 
-  if (!info.address && !createAddress) {
-    info.address = await wallet.receiveAddress(outputInfo.account || 0);
-  } else if (!info.address && createAddress) {
-    const walletKey = await wallet.createReceive(outputInfo.account || 0);
-    info.address = walletKey.getAddress();
+  if (!info.address) {
+    const account = outputInfo.account || 0;
+
+    if (createAddress) {
+      const walletKey = await wallet.createReceive(account);
+      info.address = walletKey.getAddress();
+    } else {
+      info.address = await wallet.receiveAddress(account);
+    }
   }
 
   return makeOutput(info);

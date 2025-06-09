@@ -7,6 +7,7 @@ const MTX = require('../../../lib/primitives/mtx');
 const {Resource} = require('../../../lib/dns/resource');
 const WalletDB = require('../../../lib/wallet/walletdb');
 const wutils = require('../../util/wallet');
+const mutils = require('../../util/migrations');
 
 const network = Network.get('regtest');
 
@@ -331,9 +332,8 @@ async function getMigrationDump(wdb) {
 
       const val = layout.txdb[key];
 
-      assert(val.id.toString('hex') === str2hex(key));
-      // const prefix = str2hex(key);
-      const prefix = key.charCodeAt(0).toString(16);
+      assert(val.id.toString('hex') === mutils.prefix2hex(key));
+      const prefix = mutils.prefix2hex(key);
       prefixes.push(tprefix + prefix);
     }
   }
@@ -344,8 +344,4 @@ async function getMigrationDump(wdb) {
     dump,
     prefixes
   };
-}
-
-function str2hex(key) {
-  return Buffer.from(key, 'utf8').toString('hex');
 }
