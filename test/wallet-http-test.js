@@ -14,6 +14,7 @@ const secp256k1 = require('bcrypto/lib/secp256k1');
 const network = Network.get('regtest');
 const assert = require('bsert');
 const {BufferSet} = require('buffer-map');
+const util = require('../lib/utils/util');
 const common = require('./util/common');
 const Outpoint = require('../lib/primitives/outpoint');
 const consensus = require('../lib/protocol/consensus');
@@ -93,6 +94,92 @@ describe('Wallet HTTP', function() {
         await wclient.getAccount('cartera1', 'default'),
         await wclient.getAccount('cartera2', 'default')
       );
+    });
+  });
+
+  describe('Unlock wallet', function() {
+    const WNAME = 'lockedWallet';
+    const PASSPHRASE = 'test1234';
+    let walletClient, wallet;
+
+    before(async () => {
+      await beforeAll();
+
+      await wclient.createWallet(WNAME, {
+        passphrase: PASSPHRASE
+      });
+
+      walletClient = wclient.wallet(WNAME);
+      wallet = await nodeCtx.wdb.get(WNAME);
+
+      await wallet.lock();
+    });
+
+    after(afterAll);
+
+    afterEach(async () => {
+      await walletClient.lock();
+    });
+
+    it('unlock wallet', async () => {
+      assert.strictEqual(wallet.master.encrypted, true);
+      await walletClient.unlock(PASSPHRASE, 1);
+      const until = util.now() + 1;
+
+      assert(wallet.master.until <= until);
+      assert(wallet.master.key);
+
+      await sleep(1000);
+      assert(!wallet.master.key);
+    });
+
+    it('should fail to unlock with wrong passphrase', async () => {
+      let err;
+      try {
+        await walletClient.unlock('wrong', 100);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.message, 'Could not decrypt.');
+    });
+
+    it('should unlock for an hour', async () => {
+      // Unlock for an hour
+      await walletClient.unlock(PASSPHRASE, 3600);
+      const until = util.now() + 3600;
+
+      assert(wallet.master.until <= until);
+      assert(wallet.master.key);
+    });
+
+    it('should unlock for max duration', async () => {
+      const MAX = 2073600;
+      await walletClient.unlock(PASSPHRASE, MAX);
+    });
+
+    it('should fail unlock for invalid durations', async () => {
+      const MAX = 2073600;
+      const invalid = [
+        ['text', 'timeout must be a int.'],
+        [-1, 'timeout must be a uint.'],
+        [-100, 'timeout must be a uint.'],
+        [MAX + 1, 'Timeout must be less than 24 days.']
+      ];
+
+      for (const [duration, message] of invalid) {
+        let err;
+
+        try {
+          await walletClient.unlock(PASSPHRASE, duration);
+        } catch (e) {
+          err = e;
+        }
+
+        assert(err, `Expected error for duration: ${duration}`);
+        assert.strictEqual(err.message, message);
+      }
     });
   });
 
