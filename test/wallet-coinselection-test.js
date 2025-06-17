@@ -102,6 +102,17 @@ describe('Wallet Coin Selection', function() {
 
     let isSorted, getCredits;
     const sumCredits = credits => credits.reduce((acc, c) => acc + c.coin.value, 0);
+    const checkWithLimits = async (credits, wallet, acct) => {
+      for (let i = 1; i < credits.length; i++) {
+        const creditsLimit = await getCredits(wallet, acct, {
+          limit: i
+        });
+        assert.strictEqual(creditsLimit.length, i);
+        assert(isSorted(creditsLimit), 'Credits not sorted.');
+        assert.deepStrictEqual(creditsLimit, credits.slice(0, i));
+        assert(sumCredits(creditsLimit) === sumCredits(credits.slice(0, i)));
+      }
+    };
 
     before(() => {
       switch (indexType) {
@@ -631,15 +642,21 @@ describe('Wallet Coin Selection', function() {
       assert(isSorted(credits0), 'Credits not sorted.');
       assert(sumCredits(credits0) === sum0);
 
+      await checkWithLimits(credits0, wallet);
+
       const credits1 = await getCredits(wallet, 1);
       assert.strictEqual(credits1.length, 4);
       assert(isSorted(credits1), 'Credits not sorted.');
       assert(sumCredits(credits1) === sum1);
 
+      await checkWithLimits(credits1, wallet, 1);
+
       const both = await getCredits(wallet, -1);
       assert.strictEqual(both.length, 8);
       assert(isSorted(both), 'Credits not sorted.');
       assert(sumCredits(both) === sum0 + sum1);
+
+      await checkWithLimits(both, wallet, -1);
     });
   });
   }
