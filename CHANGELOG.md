@@ -20,6 +20,8 @@ and `--wallet-migrate=7` when you run it for the first time.**
     - `db-value` - This is a database alternative to `value` and new default.
     - `db-age` - A database alternative `age`.
     - `db-all` - A database alternative `all`.
+    - `db-sweepdust` - Select smallest coins first.
+      - Add `sweepdustMinValue` option for TX creation endpoints, default 1.
 
 #### Wallet/WalletDB API
   - `Wallet.zap` now returns the number of transactions zapped instead of their hashes.
