@@ -3,7 +3,7 @@
 ## Unreleased
 
 **When upgrading to this version of hsd, you must pass `--chain-migrate=4`
-and `--wallet-migrate=6` when you run it for the first time.**
+and `--wallet-migrate=7` when you run it for the first time.**
 
 ### Wallet Changes
 
@@ -14,6 +14,14 @@ and `--wallet-migrate=6` when you run it for the first time.**
     the namestate when the wallet owns the name.
   - Introduce admin `POST /recalculate-balances`, useful if the post-migration
     recalculation was not triggered and wallet balances are not correct.
+  - The TX creation HTTP Endpoints now supports new values for the `selection`
+    property. These new strategies use database iterators instead of loading all
+    coins into RAM.
+    - `db-value` - This is a database alternative to `value` and new default.
+    - `db-age` - A database alternative `age`.
+    - `db-all` - A database alternative `all`.
+    - `db-sweepdust` - Select smallest coins first.
+      - Add `sweepdustMinValue` option for TX creation endpoints, default 1.
 
 #### Wallet/WalletDB API
   - `Wallet.zap` now returns the number of transactions zapped instead of their hashes.

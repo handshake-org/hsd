@@ -3,7 +3,7 @@
 const assert = require('bsert');
 const {forEventCondition} = require('./common');
 
-exports.generateInitialBlocks = async (options) => {
+exports.generateInitialBlocks = async function generateInitialBlocks(options) {
   const {
     nodeCtx,
     coinbase,
