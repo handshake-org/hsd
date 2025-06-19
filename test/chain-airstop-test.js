@@ -3,12 +3,10 @@
 const fs = require('fs');
 const { resolve } = require('path');
 const assert = require('bsert');
-const Chain = require('../lib/blockchain/chain');
 const chainCommon = require('../lib/blockchain/common');
-const BlockStore = require('../lib/blockstore/level');
-const Miner = require('../lib/mining/miner');
 const Network = require('../lib/protocol/network');
 const AirdropProof = require('../lib/primitives/airdropproof');
+const NodeContext = require('./util/node-context');
 const { thresholdStates } = chainCommon;
 
 const network = Network.get('regtest');
@@ -29,26 +27,13 @@ const rawProof = read(AIRDROP_PROOF_FILE);
 const rawFaucetProof = read(FAUCET_PROOF_FILE); // hs1qmjpjjgpz7dmg37paq9uksx4yjp675690dafg3q
 
 const airdropProof = AirdropProof.decode(rawProof);
-const faucetproof = AirdropProof.decode(rawFaucetProof);
+const faucetProof = AirdropProof.decode(rawFaucetProof);
 
 const SOFT_FORK_NAME = 'airstop';
 
-function createNode() {
-  const blocks = new BlockStore({
-    memory: true,
-    network
-  });
-
-  const chain = new Chain({
-    memory: true,
-    blocks,
-    network
-  });
-
-  const miner = new Miner({ chain });
-
-  return { chain, blocks, miner };
-}
+const networkDeployments = network.deployments;
+const ACTUAL_START = networkDeployments[SOFT_FORK_NAME].startTime;
+const ACTUAL_TIMEOUT = networkDeployments[SOFT_FORK_NAME].timeout;
 
 describe('BIP-9 - Airstop (integration)', function () {
   const checkBIP9Info = (info, expected) => {
@@ -74,53 +59,59 @@ describe('BIP-9 - Airstop (integration)', function () {
   };
 
   describe('Success (integration)', function () {
-    const node = createNode();
+    const nodeCtx = new NodeContext();
 
     before(async () => {
       network.deployments[SOFT_FORK_NAME].startTime = 0;
       network.deployments[SOFT_FORK_NAME].timeout = 0xffffffff;
 
-      await node.blocks.open();
-      await node.chain.open();
-      await node.miner.open();
+      await nodeCtx.open();
     });
 
     after(async () => {
-      await node.miner.close();
-      await node.chain.close();
-      await node.blocks.close();
+      network.deployments[SOFT_FORK_NAME].startTime = ACTUAL_START;
+      network.deployments[SOFT_FORK_NAME].timeout = ACTUAL_TIMEOUT;
+
+      await nodeCtx.close();
+    });
+
+    it('should be able to add airdrop & faucet proofs to the mempool', async () => {
+      await nodeCtx.mempool.addAirdrop(airdropProof);
+      await nodeCtx.mempool.addAirdrop(faucetProof);
+      assert.strictEqual(nodeCtx.mempool.airdrops.size, 2);
+      nodeCtx.mempool.dropAirdrops();
     });
 
     it('should be able to mine airdrop & faucet proofs', async () => {
-      await tryClaimingAirdropProofs(node, [airdropProof, faucetproof]);
+      await tryClaimingAirdropProofs(nodeCtx, [airdropProof, faucetProof]);
     });
 
     it('should be in DEFINED state', async () => {
-      const state = await getForkDeploymentState(node.chain);
-      const bip9info = await getBIP9Info(network, node.chain);
+      const state = await getForkDeploymentState(nodeCtx.chain);
+      const bip9info = await getBIP9Info(nodeCtx);
 
       assert.strictEqual(state, chainCommon.thresholdStates.DEFINED);
       checkBIP9Info(bip9info, { status: 'defined' });
     });
 
     it('should start the soft-fork', async () => {
-      await mineNBlocks(network.minerWindow - 2, node);
+      await mineNBlocks(network.minerWindow - 2, nodeCtx);
 
       // We are now at the threshold of the window.
       {
-        const state = await getForkDeploymentState(node.chain);
-        const bip9info = await getBIP9Info(network, node.chain);
+        const state = await getForkDeploymentState(nodeCtx.chain);
+        const bip9info = await getBIP9Info(nodeCtx);
         assert.strictEqual(state, thresholdStates.DEFINED);
 
         checkBIP9Info(bip9info, { status: 'defined' });
       }
 
       // go into new window and change the state to started.
-      await mineBlock(node);
+      await mineBlock(nodeCtx);
 
       {
-        const state = await getForkDeploymentState(node.chain);
-        const bip9info = await getBIP9Info(network, node.chain);
+        const state = await getForkDeploymentState(nodeCtx.chain);
+        const bip9info = await getBIP9Info(nodeCtx);
         assert.strictEqual(state, thresholdStates.STARTED);
         checkBIP9Info(bip9info, { status: 'started' });
 
@@ -132,17 +123,24 @@ describe('BIP-9 - Airstop (integration)', function () {
       }
     });
 
+    it('should still be able to add airdrop & faucet proofs to the mempool', async () => {
+      await nodeCtx.mempool.addAirdrop(airdropProof);
+      await nodeCtx.mempool.addAirdrop(faucetProof);
+      assert.strictEqual(nodeCtx.mempool.airdrops.size, 2);
+      nodeCtx.mempool.dropAirdrops();
+    });
+
     it('should still be able to mine airdrop & faucet proofs', async () => {
-      await tryClaimingAirdropProofs(node, [airdropProof, faucetproof]);
+      await tryClaimingAirdropProofs(nodeCtx, [airdropProof, faucetProof]);
     });
 
     it('should lock in the soft-fork', async () => {
       // Reach the height just before the start of the next window
-      await mineNBlocks(network.minerWindow - 1, node, { signalFork: true });
+      await mineNBlocks(network.minerWindow - 1, nodeCtx, { signalFork: true });
 
       {
-        const state = await getForkDeploymentState(node.chain);
-        const bip9info = await getBIP9Info(network, node.chain);
+        const state = await getForkDeploymentState(nodeCtx.chain);
+        const bip9info = await getBIP9Info(nodeCtx);
         assert.strictEqual(state, thresholdStates.STARTED);
         checkBIP9Info(bip9info, { status: 'started' });
 
@@ -154,11 +152,11 @@ describe('BIP-9 - Airstop (integration)', function () {
       }
 
       // After this the deployment goes to LOCKED_IN state.
-      await mineBlock(node, { signalFork: true });
+      await mineBlock(nodeCtx, { signalFork: true });
 
       {
-        const state = await getForkDeploymentState(node.chain);
-        const bip9info = await getBIP9Info(network, node.chain);
+        const state = await getForkDeploymentState(nodeCtx.chain);
+        const bip9info = await getBIP9Info(nodeCtx);
 
         assert.strictEqual(state, thresholdStates.LOCKED_IN);
         checkBIP9Info(bip9info, { status: 'locked_in' });
@@ -167,17 +165,35 @@ describe('BIP-9 - Airstop (integration)', function () {
       }
     });
 
+    it('should still be able to add airdrop & faucet proofs to the mempool', async () => {
+      await nodeCtx.mempool.addAirdrop(airdropProof);
+      await nodeCtx.mempool.addAirdrop(faucetProof);
+      assert.strictEqual(nodeCtx.mempool.airdrops.size, 2);
+      nodeCtx.mempool.dropAirdrops();
+    });
+
     it('should still be able to mine airdrop & faucet proofs', async () => {
-      await tryClaimingAirdropProofs(node, [airdropProof, faucetproof]);
+      await tryClaimingAirdropProofs(nodeCtx, [airdropProof, faucetProof]);
     });
 
     it('should activate the soft-fork', async () => {
       // Advance to ACTIVE state.
-      await mineNBlocks(network.minerWindow, node);
+      await mineNBlocks(network.minerWindow - 1, nodeCtx);
+
+      const blockToAdd = await nodeCtx.miner.mineBlock(nodeCtx.chain.tip);
+
+      await nodeCtx.mempool.addAirdrop(airdropProof);
+      await nodeCtx.mempool.addAirdrop(faucetProof);
+      assert.strictEqual(nodeCtx.mempool.airdrops.size, 2);
+
+      await nodeCtx.chain.add(blockToAdd);
+      // mempool must drop airdrops if next block no longer
+      // allows them.
+      assert.strictEqual(nodeCtx.mempool.airdrops.size, 0);
 
       {
-        const state = await getForkDeploymentState(node.chain);
-        const bip9info = await getBIP9Info(network, node.chain);
+        const state = await getForkDeploymentState(nodeCtx.chain);
+        const bip9info = await getBIP9Info(nodeCtx);
 
         assert.strictEqual(state, thresholdStates.ACTIVE);
         checkBIP9Info(bip9info, { status: 'active' });
@@ -186,69 +202,119 @@ describe('BIP-9 - Airstop (integration)', function () {
       }
     });
 
+    it('should not be able to add airdrops to the mempool', async () => {
+      let err;
+
+      try {
+        await nodeCtx.mempool.addAirdrop(airdropProof);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.code, 'invalid');
+      assert.strictEqual(err.reason, 'bad-airdrop-disabled');
+      assert.strictEqual(err.score, 0);
+
+      err = null;
+
+      try {
+        await nodeCtx.mempool.addAirdrop(faucetProof);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.code, 'invalid');
+      assert.strictEqual(err.reason, 'bad-airdrop-disabled');
+      assert.strictEqual(err.score, 0);
+    });
+
     it('should not be able to mine airdrop & faucet proofs anymore', async () => {
-      await assert.rejects(
-        tryClaimingAirdropProofs(node, [airdropProof]),
-        {
-          code: 'invalid',
-          reason: 'bad-airdrop-disabled'
-        }
-      );
-      await assert.rejects(
-        tryClaimingAirdropProofs(node, [faucetproof]),
-        {
-          code: 'invalid',
-          reason: 'bad-airdrop-disabled'
-        }
-      );
+      let err;
+
+      try {
+        await tryClaimingAirdropProofs(nodeCtx, [airdropProof, faucetProof]);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.code, 'invalid');
+      assert.strictEqual(err.reason, 'bad-airdrop-disabled');
+      assert.strictEqual(err.score, 100);
+
+      nodeCtx.mempool.dropAirdrops();
+
+      err = null;
+
+      try {
+        await tryClaimingAirdropProofs(nodeCtx, [faucetProof]);
+      } catch (e) {
+        err = e;
+      }
+
+      assert(err);
+      assert.strictEqual(err.code, 'invalid');
+      assert.strictEqual(err.reason, 'bad-airdrop-disabled');
+      assert.strictEqual(err.score, 100);
     });
   });
 
   describe('Failure (integration)', function () {
-    const node = createNode();
+    const nodeCtx = new NodeContext();
 
     before(async () => {
-      await node.blocks.open();
-      await node.chain.open();
-      await node.miner.open();
+      network.deployments[SOFT_FORK_NAME].startTime = 0;
+      network.deployments[SOFT_FORK_NAME].timeout = 0xffffffff;
+
+      await nodeCtx.open();
     });
 
     after(async () => {
-      await node.miner.close();
-      await node.chain.close();
-      await node.blocks.close();
+      network.deployments[SOFT_FORK_NAME].startTime = ACTUAL_START;
+      network.deployments[SOFT_FORK_NAME].timeout = ACTUAL_TIMEOUT;
+
+      await nodeCtx.close();
+    });
+
+    it('should be able to add airdrop & faucet proofs to the mempool', async () => {
+      await nodeCtx.mempool.addAirdrop(airdropProof);
+      await nodeCtx.mempool.addAirdrop(faucetProof);
+      assert.strictEqual(nodeCtx.mempool.airdrops.size, 2);
+      nodeCtx.mempool.dropAirdrops();
     });
 
     it('should be able to mine airdrop & faucet proofs', async () => {
-      await tryClaimingAirdropProofs(node, [airdropProof, faucetproof]);
+      await tryClaimingAirdropProofs(nodeCtx, [airdropProof, faucetProof]);
     });
 
     it('should be in DEFINED state', async () => {
-      const state = await getForkDeploymentState(node.chain);
-      const bip9info = await getBIP9Info(network, node.chain);
+      const state = await getForkDeploymentState(nodeCtx.chain);
+      const bip9info = await getBIP9Info(nodeCtx);
 
       assert.strictEqual(state, chainCommon.thresholdStates.DEFINED);
       checkBIP9Info(bip9info, { status: 'defined' });
     });
 
     it('should start the soft-fork', async () => {
-      await mineNBlocks(network.minerWindow - 2, node);
+      await mineNBlocks(network.minerWindow - 2, nodeCtx);
 
       // We are now at the threshold of the window.
       {
-        const state = await getForkDeploymentState(node.chain);
-        const bip9info = await getBIP9Info(network, node.chain);
+        const state = await getForkDeploymentState(nodeCtx.chain);
+        const bip9info = await getBIP9Info(nodeCtx);
         assert.strictEqual(state, thresholdStates.DEFINED);
 
         checkBIP9Info(bip9info, { status: 'defined' });
       }
 
       // go into new window and change the state to started.
-      await mineBlock(node);
+      await mineBlock(nodeCtx);
 
       {
-        const state = await getForkDeploymentState(node.chain);
-        const bip9info = await getBIP9Info(network, node.chain);
+        const state = await getForkDeploymentState(nodeCtx.chain);
+        const bip9info = await getBIP9Info(nodeCtx);
         assert.strictEqual(state, thresholdStates.STARTED);
         checkBIP9Info(bip9info, { status: 'started' });
 
@@ -261,16 +327,16 @@ describe('BIP-9 - Airstop (integration)', function () {
     });
 
     it('should still be able to mine airdrop & faucet proofs', async () => {
-      await tryClaimingAirdropProofs(node, [airdropProof, faucetproof]);
+      await tryClaimingAirdropProofs(nodeCtx, [airdropProof, faucetProof]);
     });
 
     it('should fail to lock in the soft-fork', async () => {
       // Reach the height just before the start of the next window
-      await mineNBlocks(network.minerWindow - 1, node, { signalFork: false });
+      await mineNBlocks(network.minerWindow - 1, nodeCtx, { signalFork: false });
 
       {
-        const state = await getForkDeploymentState(node.chain);
-        const bip9info = await getBIP9Info(network, node.chain);
+        const state = await getForkDeploymentState(nodeCtx.chain);
+        const bip9info = await getBIP9Info(nodeCtx);
         assert.strictEqual(state, thresholdStates.STARTED);
         checkBIP9Info(bip9info, { status: 'started' });
 
@@ -282,11 +348,11 @@ describe('BIP-9 - Airstop (integration)', function () {
       }
 
       // After this the deployment stays in STARTED state.
-      await mineBlock(node, { signalFork: false });
+      await mineBlock(nodeCtx, { signalFork: false });
 
       {
-        const state = await getForkDeploymentState(node.chain);
-        const bip9info = await getBIP9Info(network, node.chain);
+        const state = await getForkDeploymentState(nodeCtx.chain);
+        const bip9info = await getBIP9Info(nodeCtx);
 
         assert.strictEqual(state, thresholdStates.STARTED);
         checkBIP9Info(bip9info, { status: 'started' });
@@ -299,8 +365,15 @@ describe('BIP-9 - Airstop (integration)', function () {
       }
     });
 
+    it('should still be able to add airdrop & faucet proofs to the mempool', async () => {
+      await nodeCtx.mempool.addAirdrop(airdropProof);
+      await nodeCtx.mempool.addAirdrop(faucetProof);
+      assert.strictEqual(nodeCtx.mempool.airdrops.size, 2);
+      nodeCtx.mempool.dropAirdrops();
+    });
+
     it('should still be able to mine airdrop & faucet proofs', async () => {
-      await tryClaimingAirdropProofs(node, [airdropProof, faucetproof]);
+      await tryClaimingAirdropProofs(nodeCtx, [airdropProof, faucetProof]);
     });
   });
 });
@@ -311,48 +384,37 @@ describe('BIP-9 - Airstop (integration)', function () {
  *
  * Throws errors if chain fails to add the block.
  *
- * @param {object} node
- * @param {Chain} node.chain
- * @param {Miner} node.miner
+ * @param {NodeContext} nodeCtx
  * @param {AirdropProof[]} proofs
- * @returns {Promise<boolean>}
+ * @returns {Promise}
  */
-async function tryClaimingAirdropProofs(node, proofs) {
+async function tryClaimingAirdropProofs(nodeCtx, proofs) {
   assert.ok(Array.isArray(proofs) && proofs.length > 0);
 
-  const job = await node.miner.createJob();
-  for (const proof of proofs) {
-    job.addAirdrop(proof);
-  }
-  job.refresh();
+  // We don't want mempool to safeguard miner.
+  const bakAirstop = nodeCtx.mempool.nextState.hasAirstop;
+  nodeCtx.mempool.nextState.hasAirstop = false;
 
-  const block = await job.mineAsync();
+  for (const proof of proofs)
+    await nodeCtx.mempool.addAirdrop(proof);
 
-  assert(block.txs.length === 1);
+  nodeCtx.mempool.nextState.hasAirstop = bakAirstop;
 
-  const [cb] = block.txs;
+  assert.strictEqual(nodeCtx.mempool.airdrops.size, proofs.length);
 
-  assert(cb.inputs.length === proofs.length + 1);
-  assert(cb.outputs.length === proofs.length + 1);
+  const [block] = await nodeCtx.mineBlocks(1);
+  assert(block.txs[0].inputs.length === 3);
+  assert(block.txs[0].outputs.length === 3);
+  assert.strictEqual(nodeCtx.mempool.airdrops.size, 0);
 
-  const [, input] = cb.inputs;
-  assert(input);
-  assert(input.prevout.isNull());
-  assert(input.witness.length === 1);
-
-  assert(await node.chain.add(block));
-
-  // Block with proof accepted, so
-  // Revert chain to remove the block.
-  await node.chain.reset(node.chain.height - 1);
-
-  return true;
+  // NOTE: reset WONT re-add proofs to the mempool.
+  await nodeCtx.chain.reset(nodeCtx.height - 1);
 }
 
 /**
  * Mine N new blocks
  * @param {number} n number of blocks to mine
- * @param {object} node
+ * @param {NodeContext} node
  * @param {Chain} node.chain
  * @param {Miner} node.miner
  * @param {object} opts
@@ -365,9 +427,7 @@ async function mineNBlocks(n, node, opts = {}) {
 
 /**
  * Mine a new block
- * @param {object} node
- * @param {Chain} node.chain
- * @param {Miner} node.miner
+ * @param {NodeContext} node
  * @param {object} opts
  * @param {boolean} opts.signalFork whether to signal the fork
  */
@@ -406,50 +466,9 @@ async function getForkDeploymentState(chain) {
 }
 
 /**
- * Get BIP9 info for the fork
- *
- * adapted from lib/node/rpc.js#getSoftforks()
- *
- * @param {Network} network
- * @param {Chain} chain
+ * @param {NodeContext} nodeCtx
  */
-async function getBIP9Info(network, chain) {
-  const tip = chain.tip;
-  const deployment = network.deploys.find(d => d.name === SOFT_FORK_NAME);
-
-  const state = await chain.getState(tip, deployment);
-  let status;
-
-  switch (state) {
-    case chainCommon.thresholdStates.DEFINED:
-      status = 'defined';
-      break;
-    case chainCommon.thresholdStates.STARTED:
-      status = 'started';
-      break;
-    case chainCommon.thresholdStates.LOCKED_IN:
-      status = 'locked_in';
-      break;
-    case chainCommon.thresholdStates.ACTIVE:
-      status = 'active';
-      break;
-    case chainCommon.thresholdStates.FAILED:
-      status = 'failed';
-      break;
-    default:
-      assert(false, 'Bad state.');
-      break;
-  }
-
-  let statistics = undefined;
-  if (status === 'started')
-    statistics = await chain.getBIP9Stats(tip, deployment);
-
-  return {
-    status: status,
-    bit: deployment.bit,
-    startTime: deployment.startTime,
-    timeout: deployment.timeout,
-    statistics
-  };
+async function getBIP9Info(nodeCtx) {
+  const info = await nodeCtx.nrpc('getblockchaininfo');
+  return info.softforks[SOFT_FORK_NAME];
 }
