@@ -48,7 +48,7 @@ describe('BIP-9 - Airstop (integration)', function () {
     assert.strictEqual(info.timeout, expected.timeout);
   };
 
-  const checkBIP9Statistcs = (stats, expected) => {
+  const checkBIP9Statistics = (stats, expected) => {
     expected = expected || {};
 
     assert.strictEqual(stats.period, expected.period || network.minerWindow);
@@ -75,11 +75,14 @@ describe('BIP-9 - Airstop (integration)', function () {
       await nodeCtx.close();
     });
 
+    afterEach(() => {
+      nodeCtx.mempool.dropAirdrops();
+    });
+
     it('should be able to add airdrop & faucet proofs to the mempool', async () => {
       await nodeCtx.mempool.addAirdrop(airdropProof);
       await nodeCtx.mempool.addAirdrop(faucetProof);
       assert.strictEqual(nodeCtx.mempool.airdrops.size, 2);
-      nodeCtx.mempool.dropAirdrops();
     });
 
     it('should be able to mine airdrop & faucet proofs', async () => {
@@ -90,7 +93,7 @@ describe('BIP-9 - Airstop (integration)', function () {
       const state = await getForkDeploymentState(nodeCtx.chain);
       const bip9info = await getBIP9Info(nodeCtx);
 
-      assert.strictEqual(state, chainCommon.thresholdStates.DEFINED);
+      assert.strictEqual(state, thresholdStates.DEFINED);
       checkBIP9Info(bip9info, { status: 'defined' });
     });
 
@@ -115,7 +118,7 @@ describe('BIP-9 - Airstop (integration)', function () {
         assert.strictEqual(state, thresholdStates.STARTED);
         checkBIP9Info(bip9info, { status: 'started' });
 
-        checkBIP9Statistcs(bip9info.statistics, {
+        checkBIP9Statistics(bip9info.statistics, {
           elapsed: 0,
           count: 0,
           possible: true
@@ -127,7 +130,6 @@ describe('BIP-9 - Airstop (integration)', function () {
       await nodeCtx.mempool.addAirdrop(airdropProof);
       await nodeCtx.mempool.addAirdrop(faucetProof);
       assert.strictEqual(nodeCtx.mempool.airdrops.size, 2);
-      nodeCtx.mempool.dropAirdrops();
     });
 
     it('should still be able to mine airdrop & faucet proofs', async () => {
@@ -144,7 +146,7 @@ describe('BIP-9 - Airstop (integration)', function () {
         assert.strictEqual(state, thresholdStates.STARTED);
         checkBIP9Info(bip9info, { status: 'started' });
 
-        checkBIP9Statistcs(bip9info.statistics, {
+        checkBIP9Statistics(bip9info.statistics, {
           elapsed: network.minerWindow - 1,
           count: network.minerWindow - 1,
           possible: true
@@ -169,7 +171,6 @@ describe('BIP-9 - Airstop (integration)', function () {
       await nodeCtx.mempool.addAirdrop(airdropProof);
       await nodeCtx.mempool.addAirdrop(faucetProof);
       assert.strictEqual(nodeCtx.mempool.airdrops.size, 2);
-      nodeCtx.mempool.dropAirdrops();
     });
 
     it('should still be able to mine airdrop & faucet proofs', async () => {
@@ -234,7 +235,7 @@ describe('BIP-9 - Airstop (integration)', function () {
       let err;
 
       try {
-        await tryClaimingAirdropProofs(nodeCtx, [airdropProof, faucetProof]);
+        await tryClaimingAirdropProofs(nodeCtx, [airdropProof]);
       } catch (e) {
         err = e;
       }
@@ -278,11 +279,14 @@ describe('BIP-9 - Airstop (integration)', function () {
       await nodeCtx.close();
     });
 
+    afterEach(() => {
+      nodeCtx.mempool.dropAirdrops();
+    });
+
     it('should be able to add airdrop & faucet proofs to the mempool', async () => {
       await nodeCtx.mempool.addAirdrop(airdropProof);
       await nodeCtx.mempool.addAirdrop(faucetProof);
       assert.strictEqual(nodeCtx.mempool.airdrops.size, 2);
-      nodeCtx.mempool.dropAirdrops();
     });
 
     it('should be able to mine airdrop & faucet proofs', async () => {
@@ -318,7 +322,7 @@ describe('BIP-9 - Airstop (integration)', function () {
         assert.strictEqual(state, thresholdStates.STARTED);
         checkBIP9Info(bip9info, { status: 'started' });
 
-        checkBIP9Statistcs(bip9info.statistics, {
+        checkBIP9Statistics(bip9info.statistics, {
           elapsed: 0,
           count: 0,
           possible: true
@@ -340,7 +344,7 @@ describe('BIP-9 - Airstop (integration)', function () {
         assert.strictEqual(state, thresholdStates.STARTED);
         checkBIP9Info(bip9info, { status: 'started' });
 
-        checkBIP9Statistcs(bip9info.statistics, {
+        checkBIP9Statistics(bip9info.statistics, {
           elapsed: network.minerWindow - 1,
           count: 0,
           possible: false
@@ -357,7 +361,7 @@ describe('BIP-9 - Airstop (integration)', function () {
         assert.strictEqual(state, thresholdStates.STARTED);
         checkBIP9Info(bip9info, { status: 'started' });
 
-        checkBIP9Statistcs(bip9info.statistics, {
+        checkBIP9Statistics(bip9info.statistics, {
           elapsed: 0,
           count: 0,
           possible: true
@@ -369,7 +373,6 @@ describe('BIP-9 - Airstop (integration)', function () {
       await nodeCtx.mempool.addAirdrop(airdropProof);
       await nodeCtx.mempool.addAirdrop(faucetProof);
       assert.strictEqual(nodeCtx.mempool.airdrops.size, 2);
-      nodeCtx.mempool.dropAirdrops();
     });
 
     it('should still be able to mine airdrop & faucet proofs', async () => {
