@@ -5,6 +5,11 @@
 **When upgrading to this version of hsd, you must pass `--chain-migrate=4`
 and `--wallet-migrate=6` when you run it for the first time.**
 
+### Network
+
+**End Airdrop soft fork has been included. ([#927](https://github.com/handshake-org/hsd/pull/927))
+Miners who want to support the soft-fork need to start signalling with `airstop` bit.**
+
 ### Wallet Changes
 
 #### Wallet HTTP API
@@ -204,6 +209,11 @@ The following methods have been deprecated:
     `getHistory` above.
 
 ## v6.0.0
+
+### Network
+
+**ICANN Lockup soft fork has been included. ([#819](https://github.com/handshake-org/hsd/pull/819), [#828](https://github.com/handshake-org/hsd/pull/828), [#834](https://github.com/handshake-org/hsd/pull/834))
+Miners who want to support the soft-fork need to start signalling with `icannlockup` bit.**
 
 ### Node and Wallet HTTP API
   Validation errors, request paremeter errors or bad HTTP requests will no
