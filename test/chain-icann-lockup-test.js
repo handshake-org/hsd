@@ -849,7 +849,7 @@ describe('BIP9 - ICANN lockup (integration)', function() {
         });
       }
 
-      // After this it should go to the ACTIVE state.
+      // After this it should go to the LOCKED_IN state.
       await mineBlock(node);
 
       {
