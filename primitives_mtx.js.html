@@ -36,7 +36,6 @@
 
 const assert = require('bsert');
 const {encoding} = require('bufio');
-const {BufferMap} = require('buffer-map');
 const Script = require('../script/script');
 const TX = require('./tx');
 const Input = require('./input');
@@ -46,14 +45,17 @@ const Outpoint = require('./outpoint');
 const CoinView = require('../coins/coinview');
 const Path = require('../wallet/path');
 const WalletCoinView = require('../wallet/walletcoinview');
-const Address = require('./address');
 const consensus = require('../protocol/consensus');
 const policy = require('../protocol/policy');
-const Amount = require('../ui/amount');
 const Stack = require('../script/stack');
 const rules = require('../covenants/rules');
 const util = require('../utils/util');
 const {types} = rules;
+
+const {
+  CoinSelector,
+  InMemoryCoinSource
+} = require('../utils/coinselector');
 
 /** @typedef {import('../types').SighashType} SighashType */
 /** @typedef {import('../types').Hash} Hash */
@@ -62,6 +64,8 @@ const {types} = rules;
 /** @typedef {import('../protocol/network')} Network */
 /** @typedef {import('../workers/workerpool')} WorkerPool */
 /** @typedef {import('./keyring')} KeyRing */
+/** @typedef {import('./address')} Address */
+/** @typedef {import('../utils/coinselector')} coinselector */
 
 /**
  * MTX
@@ -253,6 +257,18 @@ class MTX extends TX {
     this.outputs.push(output);
 
     return output;
+  }
+
+  /**
+   * Get the value of the change output.
+   * @returns {AmountValue} value - Returns -1 if no change output.
+   */
+
+  getChangeValue() {
+    if (this.changeIndex === -1)
+      return -1;
+
+    return this.outputs[this.changeIndex].value;
   }
 
   /**
@@ -1046,14 +1062,26 @@ class MTX extends TX {
   /**
    * Select necessary coins based on total output value.
    * @param {Coin[]} coins
-   * @param {Object?} options
+   * @param {Object} options
    * @returns {Promise&lt;CoinSelector>}
    * @throws on not enough funds available.
    */
 
-  selectCoins(coins, options) {
-    const selector = new CoinSelector(this, options);
-    return selector.select(coins);
+  async selectCoins(coins, options) {
+    const source = new InMemoryCoinSource({
+      coins,
+      selection: options.selection
+    });
+
+    await source.init();
+
+    if (options.selection === 'all')
+      options.selectAll = true;
+
+    const selector = new CoinSelector(this, source, options);
+    await selector.select();
+
+    return selector;
   }
 
   /**
@@ -1140,7 +1168,9 @@ class MTX extends TX {
   /**
    * Select coins and fill the inputs.
    * @param {Coin[]} coins
-   * @param {Object} options - See {@link MTX#selectCoins} options.
+   * @param {Object} options - See
+   *    {@link CoinSelectorOptions} and
+   *    {@link CoinSourceOptions} options.
    * @returns {Promise&lt;CoinSelector>}
    */
 
@@ -1150,7 +1180,17 @@ class MTX extends TX {
 
     // Select necessary coins.
     const select = await this.selectCoins(coins, options);
+    this.fill(select);
+    return select;
+  }
 
+  /**
+   * Fill transaction with the selected inputs.
+   * @param {CoinSelector} select
+   * @returns {void}
+   */
+
+  fill(select) {
     // Make sure we empty the input array.
     this.inputs.length = 0;
 
@@ -1181,8 +1221,6 @@ class MTX extends TX {
       this.changeIndex = this.outputs.length - 1;
       assert.strictEqual(this.getFee(), select.fee);
     }
-
-    return select;
   }
 
   /**
@@ -1203,7 +1241,14 @@ class MTX extends TX {
     const inputs = [];
     /** @type {Output[]} */
     const outputs = [];
-    // [Input, Output][]
+
+    /**
+     * @typedef {Array} Linked
+     * @property {Input} 0
+     * @property {Output} 1
+     */
+
+    /** @type {Linked[]} */
     const linked = [];
 
     let i = 0;
@@ -1439,524 +1484,25 @@ class MTX extends TX {
   }
 }
 
-/**
- * Coin Selector
- * @alias module:primitives.CoinSelector
- */
-
-class CoinSelector {
-  /**
-   * Create a coin selector.
-   * @constructor
-   * @param {MTX} tx
-   * @param {Object?} options
-   */
-
-  constructor(tx, options) {
-    this.tx = tx.clone();
-    this.view = tx.view;
-    this.coins = [];
-    this.outputValue = 0;
-    this.index = 0;
-    this.chosen = [];
-    this.change = 0;
-    this.fee = CoinSelector.MIN_FEE;
-
-    this.selection = 'value';
-    this.subtractFee = false;
-    this.subtractIndex = -1;
-    this.height = -1;
-    this.depth = -1;
-    this.hardFee = -1;
-    this.rate = CoinSelector.FEE_RATE;
-    this.maxFee = -1;
-    this.round = false;
-    this.coinbaseMaturity = 400;
-    this.changeAddress = null;
-    this.inputs = new BufferMap();
-
-    // Needed for size estimation.
-    this.estimate = null;
-
-    this.injectInputs();
-
-    if (options)
-      this.fromOptions(options);
-  }
-
-  /**
-   * Initialize selector options.
-   * @param {Object} options
-   * @private
-   */
-
-  fromOptions(options) {
-    if (options.selection) {
-      assert(typeof options.selection === 'string');
-      this.selection = options.selection;
-    }
-
-    if (options.subtractFee != null) {
-      if (typeof options.subtractFee === 'number') {
-        assert(Number.isSafeInteger(options.subtractFee));
-        assert(options.subtractFee >= -1);
-        this.subtractIndex = options.subtractFee;
-        this.subtractFee = this.subtractIndex !== -1;
-      } else {
-        assert(typeof options.subtractFee === 'boolean');
-        this.subtractFee = options.subtractFee;
-      }
-    }
-
-    if (options.subtractIndex != null) {
-      assert(Number.isSafeInteger(options.subtractIndex));
-      assert(options.subtractIndex >= -1);
-      this.subtractIndex = options.subtractIndex;
-      this.subtractFee = this.subtractIndex !== -1;
-    }
-
-    if (options.height != null) {
-      assert(Number.isSafeInteger(options.height));
-      assert(options.height >= -1);
-      this.height = options.height;
-    }
-
-    if (options.confirmations != null) {
-      assert(Number.isSafeInteger(options.confirmations));
-      assert(options.confirmations >= -1);
-      this.depth = options.confirmations;
-    }
-
-    if (options.depth != null) {
-      assert(Number.isSafeInteger(options.depth));
-      assert(options.depth >= -1);
-      this.depth = options.depth;
-    }
-
-    if (options.hardFee != null) {
-      assert(Number.isSafeInteger(options.hardFee));
-      assert(options.hardFee >= -1);
-      this.hardFee = options.hardFee;
-    }
-
-    if (options.rate != null) {
-      assert(Number.isSafeInteger(options.rate));
-      assert(options.rate >= 0);
-      this.rate = options.rate;
-    }
-
-    if (options.maxFee != null) {
-      assert(Number.isSafeInteger(options.maxFee));
-      assert(options.maxFee >= -1);
-      this.maxFee = options.maxFee;
-    }
-
-    if (options.round != null) {
-      assert(typeof options.round === 'boolean');
-      this.round = options.round;
-    }
-
-    if (options.coinbaseMaturity != null) {
-      assert((options.coinbaseMaturity >>> 0) === options.coinbaseMaturity);
-      this.coinbaseMaturity = options.coinbaseMaturity;
-    }
-
-    if (options.changeAddress) {
-      const addr = options.changeAddress;
-      if (typeof addr === 'string') {
-        this.changeAddress = Address.fromString(addr);
-      } else {
-        assert(addr instanceof Address);
-        this.changeAddress = addr;
-      }
-    }
-
-    if (options.estimate) {
-      assert(typeof options.estimate === 'function');
-      this.estimate = options.estimate;
-    }
-
-    if (options.inputs) {
-      assert(Array.isArray(options.inputs));
-
-      const lastIndex = this.inputs.size;
-      for (let i = 0; i &lt; options.inputs.length; i++) {
-        const prevout = options.inputs[i];
-        assert(prevout &amp;&amp; typeof prevout === 'object');
-        const {hash, index} = prevout;
-        this.inputs.set(Outpoint.toKey(hash, index), lastIndex + i);
-      }
-    }
-
-    return this;
-  }
-
-  /**
-   * Attempt to inject existing inputs.
-   * @private
-   */
-
-  injectInputs() {
-    if (this.tx.inputs.length > 0) {
-      for (let i = 0; i &lt; this.tx.inputs.length; i++) {
-        const {prevout} = this.tx.inputs[i];
-        this.inputs.set(prevout.toKey(), i);
-      }
-    }
-  }
-
-  /**
-   * Initialize the selector with coins to select from.
-   * @param {Coin[]} coins
-   */
-
-  init(coins) {
-    this.coins = coins.slice();
-    this.outputValue = this.tx.getOutputValue();
-    this.index = 0;
-    this.chosen = [];
-    this.change = 0;
-    this.fee = CoinSelector.MIN_FEE;
-    this.tx.inputs.length = 0;
-
-    switch (this.selection) {
-      case 'all':
-      case 'random':
-        this.coins.sort(sortRandom);
-        break;
-      case 'age':
-        this.coins.sort(sortAge);
-        break;
-      case 'value':
-        this.coins.sort(sortValue);
-        break;
-      default:
-        throw new FundingError(`Bad selection type: ${this.selection}.`);
-    }
-  }
-
-  /**
-   * Calculate total value required.
-   * @returns {AmountValue}
-   */
-
-  total() {
-    if (this.subtractFee)
-      return this.outputValue;
-    return this.outputValue + this.fee;
-  }
-
-  /**
-   * Test whether the selector has
-   * completely funded the transaction.
-   * @returns {Boolean}
-   */
-
-  isFull() {
-    return this.tx.getInputValue() >= this.total();
-  }
-
-  /**
-   * Test whether a coin is spendable
-   * with regards to the options.
-   * @param {Coin} coin
-   * @returns {Boolean}
-   */
-
-  isSpendable(coin) {
-    if (this.tx.view.hasEntry(coin))
-      return false;
-
-    if (coin.covenant.isNonspendable())
-      return false;
-
-    if (this.height === -1)
-      return true;
-
-    if (coin.coinbase) {
-      if (coin.height === -1)
-        return false;
-
-      if (this.height + 1 &lt; coin.height + this.coinbaseMaturity)
-        return false;
-
-      return true;
-    }
-
-    if (this.depth === -1)
-      return true;
-
-    const depth = coin.getDepth(this.height);
-
-    if (depth &lt; this.depth)
-      return false;
-
-    return true;
-  }
-
-  /**
-   * Get the current fee based on a size.
-   * @param {Number} size
-   * @returns {AmountValue}
-   */
-
-  getFee(size) {
-    // This is mostly here for testing.
-    // i.e. A fee rounded to the nearest
-    // kb is easier to predict ahead of time.
-    if (this.round)
-      return policy.getRoundFee(size, this.rate);
-
-    return policy.getMinFee(size, this.rate);
-  }
-
-  /**
-   * Fund the transaction with more
-   * coins if the `output value + fee`
-   * total was updated.
-   */
-
-  fund() {
-    // Ensure all preferred inputs first.
-    this.resolveInputCoins();
-
-    if (this.isFull())
-      return;
-
-    while (this.index &lt; this.coins.length) {
-      const coin = this.coins[this.index++];
-
-      if (!this.isSpendable(coin))
-        continue;
-
-      this.tx.addCoin(coin);
-      this.chosen.push(coin);
-
-      if (this.selection === 'all')
-        continue;
-
-      if (this.isFull())
-        break;
-    }
-  }
-
-  /**
-   * Initiate selection from `coins`.
-   * @param {Coin[]} coins
-   * @returns {Promise&lt;CoinSelector>}
-   */
-
-  async select(coins) {
-    this.init(coins);
-
-    if (this.hardFee !== -1) {
-      this.selectHard();
-    } else {
-      // This is potentially asynchronous:
-      // it may invoke the size estimator
-      // required for redeem scripts (we
-      // may be calling out to a wallet
-      // or something similar).
-      await this.selectEstimate();
-    }
-
-    if (!this.isFull()) {
-      // Still failing to get enough funds.
-      throw new FundingError(
-        'Not enough funds.',
-        this.tx.getInputValue(),
-        this.total());
-    }
-
-    // How much money is left after filling outputs.
-    this.change = this.tx.getInputValue() - this.total();
-
-    return this;
-  }
-
-  /**
-   * Initialize selection based on size estimate.
-   */
-
-  async selectEstimate() {
-    // Set minimum fee and do
-    // an initial round of funding.
-    this.fee = CoinSelector.MIN_FEE;
-    this.fund();
-
-    // Add dummy output for change.
-    const change = new Output();
-
-    if (this.changeAddress) {
-      change.address = this.changeAddress;
-    } else {
-      // In case we don't have a change address,
-      // we use a fake p2pkh output to gauge size.
-      change.address.fromPubkeyhash(Buffer.allocUnsafe(20));
-    }
-
-    this.tx.outputs.push(change);
-
-    // Keep recalculating the fee and funding
-    // until we reach some sort of equilibrium.
-    do {
-      const size = await this.tx.estimateSize(this.estimate);
-
-      this.fee = this.getFee(size);
-
-      if (this.maxFee > 0 &amp;&amp; this.fee > this.maxFee)
-        throw new FundingError('Fee is too high.');
-
-      // Failed to get enough funds, add more coins.
-      if (!this.isFull())
-        this.fund();
-    } while (!this.isFull() &amp;&amp; this.index &lt; this.coins.length);
-  }
-
-  /**
-   * Initiate selection based on a hard fee.
-   */
-
-  selectHard() {
-    this.fee = this.hardFee;
-    this.fund();
-  }
-
-  resolveInputCoins() {
-    if (this.inputs.size === 0)
-      return;
-
-    const coins = [];
-
-    for (let i = 0 ; i &lt; this.inputs.size; i++) {
-      coins.push(null);
-    }
-
-    // first resolve from coinview if possible.
-    for (const key of this.inputs.keys()) {
-      const prevout = Outpoint.fromKey(key);
-
-      if (this.view.hasEntry(prevout)) {
-        const coinEntry = this.view.getEntry(prevout);
-        const i = this.inputs.get(key);
-
-        if (i != null) {
-          assert(!coins[i]);
-          coins[i] = coinEntry.toCoin(prevout);
-          this.inputs.delete(key);
-        }
-      }
-    }
-
-    // Now try to resolve from the passed coins array.
-    if (this.inputs.size > 0) {
-      for (const coin of this.coins) {
-        const {hash, index} = coin;
-        const key = Outpoint.toKey(hash, index);
-        const i = this.inputs.get(key);
-
-        if (i != null) {
-          assert(!coins[i]);
-          coins[i] = coin;
-          this.inputs.delete(key);
-        }
-      }
-    }
-
-    if (this.inputs.size > 0)
-      throw new Error('Could not resolve preferred inputs.');
-
-    for (const coin of coins) {
-      this.tx.addCoin(coin);
-      this.chosen.push(coin);
-    }
-  }
-}
-
-/**
- * Default fee rate
- * for coin selection.
- * @const {Amount}
- * @default
- */
-
-CoinSelector.FEE_RATE = 10000;
-
-/**
- * Minimum fee to start with
- * during coin selection.
- * @const {Amount}
- * @default
- */
-
-CoinSelector.MIN_FEE = 10000;
-
-/**
- * Funding Error
- * An error thrown from the coin selector.
- * @ignore
- * @extends Error
- * @property {String} message - Error message.
- * @property {Amount} availableFunds
- * @property {Amount} requiredFunds
- */
-
-class FundingError extends Error {
-  /**
-   * Create a funding error.
-   * @constructor
-   * @param {String} msg
-   * @param {AmountValue} [available]
-   * @param {AmountValue} [required]
-   */
-
-  constructor(msg, available, required) {
-    super();
-
-    this.type = 'FundingError';
-    this.message = msg;
-    this.availableFunds = -1;
-    this.requiredFunds = -1;
-
-    if (available != null) {
-      this.message += ` (available=${Amount.coin(available)},`;
-      this.message += ` required=${Amount.coin(required)})`;
-      this.availableFunds = available;
-      this.requiredFunds = required;
-    }
-
-    if (Error.captureStackTrace)
-      Error.captureStackTrace(this, FundingError);
-  }
-}
-
 /*
  * Helpers
  */
 
-function sortAge(a, b) {
-  a = a.height === -1 ? 0x7fffffff : a.height;
-  b = b.height === -1 ? 0x7fffffff : b.height;
-  return a - b;
-}
-
-function sortRandom(a, b) {
-  return Math.random() > 0.5 ? 1 : -1;
-}
-
-function sortValue(a, b) {
-  if (a.height === -1 &amp;&amp; b.height !== -1)
-    return 1;
-
-  if (a.height !== -1 &amp;&amp; b.height === -1)
-    return -1;
-
-  return b.value - a.value;
-}
+/**
+ * @param {Input} a
+ * @param {Input} b
+ * @returns {Number}
+ */
 
 function sortInputs(a, b) {
   return a.compare(b);
 }
+
+/**
+ * @param {Output} a
+ * @param {Output} b
+ * @returns {Number}
+ */
 
 function sortOutputs(a, b) {
   return a.compare(b);
@@ -1970,12 +1516,9 @@ function sortLinked(a, b) {
  * Expose
  */
 
-exports = MTX;
-exports.MTX = MTX;
-exports.Selector = CoinSelector;
-exports.FundingError = FundingError;
+MTX.MTX = MTX;
 
-module.exports = exports;
+module.exports = MTX;
 </code></pre>
         </article>
     </section>
@@ -1986,13 +1529,13 @@ module.exports = exports;
 </div>
 
 <nav>
-    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-blockchain.html">blockchain</a></li><li><a href="module-blockchain_common.html">blockchain/common</a></li><li><a href="module-blockstore.html">blockstore</a></li><li><a href="module-blockstore_common.html">blockstore/common</a></li><li><a href="module-blockstore_records.html">blockstore/records</a></li><li><a href="module-client.html">client</a></li><li><a href="module-coins.html">coins</a></li><li><a href="module-covenants.html">covenants</a></li><li><a href="module-dns_common.html">dns/common</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-hd.html">hd</a></li><li><a href="module-hsd.html">hsd</a></li><li><a href="module-mempool.html">mempool</a></li><li><a href="module-mining.html">mining</a></li><li><a href="module-mining_common.html">mining/common</a></li><li><a href="module-net.html">net</a></li><li><a href="module-net_bip152.html">net/bip152</a></li><li><a href="module-net_common.html">net/common</a></li><li><a href="module-net_packets.html">net/packets</a></li><li><a href="module-node.html">node</a></li><li><a href="module-primitives.html">primitives</a></li><li><a href="module-protocol.html">protocol</a></li><li><a href="module-protocol_consensus.html">protocol/consensus</a></li><li><a href="module-protocol_errors.html">protocol/errors</a></li><li><a href="module-protocol_networks.html">protocol/networks</a></li><li><a href="module-protocol_policy.html">protocol/policy</a></li><li><a href="module-script.html">script</a></li><li><a href="module-script_common.html">script/common</a></li><li><a href="module-ui.html">ui</a></li><li><a href="module-utils.html">utils</a></li><li><a href="module-utils_util.html">utils/util</a></li><li><a href="module-wallet.html">wallet</a></li><li><a href="module-wallet_common.html">wallet/common</a></li><li><a href="module-wallet_plugin.html">wallet/plugin</a></li><li><a href="module-wallet_records.html">wallet/records</a></li><li><a href="module-workers.html">workers</a></li><li><a href="module-workers_jobs.html">workers/jobs</a></li><li><a href="module-workers_packets.html">workers/packets</a></li></ul><h3>Classes</h3><ul><li><a href="AirdropKey.html">AirdropKey</a></li><li><a href="AirdropProof.html">AirdropProof</a></li><li><a href="BidReveal.html">BidReveal</a></li><li><a href="BitField.html">BitField</a></li><li><a href="BitView.html">BitView</a></li><li><a href="BlindBid.html">BlindBid</a></li><li><a href="BlindValue.html">BlindValue</a></li><li><a href="BlockProof.html">BlockProof</a></li><li><a href="Brontide.html">Brontide</a></li><li><a href="BrontideStream.html">BrontideStream</a></li><li><a href="ChainFlags.html">ChainFlags</a></li><li><a href="ChainState.html">ChainState</a></li><li><a href="CipherState.html">CipherState</a></li><li><a href="Claim.html">Claim</a></li><li><a href="ContractState.html">ContractState</a></li><li><a href="DetailsMember.html">DetailsMember</a></li><li><a href="DS.html">DS</a></li><li><a href="Field.html">Field</a></li><li><a href="GLUE4.html">GLUE4</a></li><li><a href="GLUE6.html">GLUE6</a></li><li><a href="HandshakeState.html">HandshakeState</a></li><li><a href="HashList.html">HashList</a></li><li><a href="LockedUp.html">LockedUp</a></li><li><a href="MigrateAccountLookahead.html">MigrateAccountLookahead</a></li><li><a href="MigrateBidRevealEntries.html">MigrateBidRevealEntries</a></li><li><a href="MigrateBlockStore.html">MigrateBlockStore</a></li><li><a href="MigrateChainState.html">MigrateChainState</a></li><li><a href="MigrateChangeAddress.html">MigrateChangeAddress</a></li><li><a href="MigrateMigrations.html">MigrateMigrations</a></li><li><a href="MigrateTreeState.html">MigrateTreeState</a></li><li><a href="MigrateTXCountTimeIndex.html">MigrateTXCountTimeIndex</a></li><li><a href="MigrateTXDBBalances.html">MigrateTXDBBalances</a></li><li><a href="module.migrations.MigrationState.html">MigrationState</a></li><li><a href="module-blockchain.Chain.html">Chain</a></li><li><a href="module-blockchain.ChainDB.html">ChainDB</a></li><li><a href="module-blockchain.ChainEntry.html">ChainEntry</a></li><li><a href="module-blockchain.ChainMigrator.html">ChainMigrator</a></li><li><a href="module-blockchain.ChainMigratorOptions.html">ChainMigratorOptions</a></li><li><a href="module-blockchain.ChainOptions.html">ChainOptions</a></li><li><a href="module-blockchain.DeploymentState.html">DeploymentState</a></li><li><a href="module-blockchain.WalletMigrationResult.html">WalletMigrationResult</a></li><li><a href="module-blockchain.WalletMigrator.html">WalletMigrator</a></li><li><a href="module-blockstore.AbstractBatch.html">AbstractBatch</a></li><li><a href="module-blockstore.AbstractBlockStore.html">AbstractBlockStore</a></li><li><a href="module-blockstore.FileBatch.html">FileBatch</a></li><li><a href="module-blockstore.LevelBatch.html">LevelBatch</a></li><li><a href="module-blockstore_records-BlockRecord.html">BlockRecord</a></li><li><a href="module-blockstore_records-FileRecord.html">FileRecord</a></li><li><a href="module-blockstore_FileBlockStore.html">blockstore:FileBlockStore</a></li><li><a href="module-blockstore_LevelBlockStore.html">blockstore:LevelBlockStore</a></li><li><a href="module-client.NodeClient.html">NodeClient</a></li><li><a href="module-client.WalletClient.html">WalletClient</a></li><li><a href="module-coins.CoinEntry.html">CoinEntry</a></li><li><a href="module-coins.Coins.html">Coins</a></li><li><a href="module-coins.CoinView.html">CoinView</a></li><li><a href="module-coins.UndoCoins.html">UndoCoins</a></li><li><a href="module-currency.Amount.html">Amount</a></li><li><a href="module-errors-CriticalError.html">CriticalError</a></li><li><a href="module-hd.Mnemonic.html">Mnemonic</a></li><li><a href="module-hd.PrivateKey.html">PrivateKey</a></li><li><a href="module-hd.PublicKey.html">PublicKey</a></li><li><a href="module-http.HTTPOptions.html">HTTPOptions</a></li><li><a href="module-http.RPC.html">RPC</a></li><li><a href="module-http.Server.html">Server</a></li><li><a href="module-http.TransactionOptions.html">TransactionOptions</a></li><li><a href="module-mempool.AirdropEntry.html">AirdropEntry</a></li><li><a href="module-mempool.ClaimEntry.html">ClaimEntry</a></li><li><a href="module-mempool.ConfirmStats.html">ConfirmStats</a></li><li><a href="module-mempool.Mempool.html">Mempool</a></li><li><a href="module-mempool.MempoolEntry.html">MempoolEntry</a></li><li><a href="module-mempool.MempoolOptions.html">MempoolOptions</a></li><li><a href="module-mempool.PolicyEstimator.html">PolicyEstimator</a></li><li><a href="module-migrations.AbstractMigration.html">AbstractMigration</a></li><li><a href="module-migrations.MigrationResult.html">MigrationResult</a></li><li><a href="module-migrations.Migrator.html">Migrator</a></li><li><a href="module-mining.BlockAirdrop.html">BlockAirdrop</a></li><li><a href="module-mining.BlockClaim.html">BlockClaim</a></li><li><a href="module-mining.BlockEntry.html">BlockEntry</a></li><li><a href="module-mining.BlockTemplate.html">BlockTemplate</a></li><li><a href="module-mining.CPUMiner.html">CPUMiner</a></li><li><a href="module-mining.Miner.html">Miner</a></li><li><a href="module-mining.MinerOptions.html">MinerOptions</a></li><li><a href="module-net.BroadcastItem.html">BroadcastItem</a></li><li><a href="module-net.Framer.html">Framer</a></li><li><a href="module-net.HostEntry.html">HostEntry</a></li><li><a href="module-net.HostList.html">HostList</a></li><li><a href="module-net.HostListOptions.html">HostListOptions</a></li><li><a href="module-net.LocalAddress.html">LocalAddress</a></li><li><a href="module-net.NetAddress.html">NetAddress</a></li><li><a href="module-net.Parser.html">Parser</a></li><li><a href="module-net.Peer.html">Peer</a></li><li><a href="module-net.PeerList.html">PeerList</a></li><li><a href="module-net.PeerOptions.html">PeerOptions</a></li><li><a href="module-net.Pool.html">Pool</a></li><li><a href="module-net.PoolOptions.html">PoolOptions</a></li><li><a href="module-net_bip152-CompactBlock.html">CompactBlock</a></li><li><a href="module-net_bip152-TXRequest.html">TXRequest</a></li><li><a href="module-net_bip152-TXResponse.html">TXResponse</a></li><li><a href="module-net_packets-AddrPacket.html">AddrPacket</a></li><li><a href="module-net_packets-AirdropPacket.html">AirdropPacket</a></li><li><a href="module-net_packets-BlockPacket.html">BlockPacket</a></li><li><a href="module-net_packets-BlockTxnPacket.html">BlockTxnPacket</a></li><li><a href="module-net_packets-ClaimPacket.html">ClaimPacket</a></li><li><a href="module-net_packets-CmpctBlockPacket.html">CmpctBlockPacket</a></li><li><a href="module-net_packets-FeeFilterPacket.html">FeeFilterPacket</a></li><li><a href="module-net_packets-FilterAddPacket.html">FilterAddPacket</a></li><li><a href="module-net_packets-FilterClearPacket.html">FilterClearPacket</a></li><li><a href="module-net_packets-FilterLoadPacket.html">FilterLoadPacket</a></li><li><a href="module-net_packets-GetAddrPacket.html">GetAddrPacket</a></li><li><a href="module-net_packets-GetBlocksPacket.html">GetBlocksPacket</a></li><li><a href="module-net_packets-GetBlockTxnPacket.html">GetBlockTxnPacket</a></li><li><a href="module-net_packets-GetDataPacket.html">GetDataPacket</a></li><li><a href="module-net_packets-GetHeadersPacket.html">GetHeadersPacket</a></li><li><a href="module-net_packets-GetProofPacket.html">GetProofPacket</a></li><li><a href="module-net_packets-HeadersPacket.html">HeadersPacket</a></li><li><a href="module-net_packets-InvPacket.html">InvPacket</a></li><li><a href="module-net_packets-MempoolPacket.html">MempoolPacket</a></li><li><a href="module-net_packets-MerkleBlockPacket.html">MerkleBlockPacket</a></li><li><a href="module-net_packets-NotFoundPacket.html">NotFoundPacket</a></li><li><a href="module-net_packets-Packet.html">Packet</a></li><li><a href="module-net_packets-PingPacket.html">PingPacket</a></li><li><a href="module-net_packets-PongPacket.html">PongPacket</a></li><li><a href="module-net_packets-ProofPacket.html">ProofPacket</a></li><li><a href="module-net_packets-RejectPacket.html">RejectPacket</a></li><li><a href="module-net_packets-SendCmpctPacket.html">SendCmpctPacket</a></li><li><a href="module-net_packets-SendHeadersPacket.html">SendHeadersPacket</a></li><li><a href="module-net_packets-TXPacket.html">TXPacket</a></li><li><a href="module-net_packets-UnknownPacket.html">UnknownPacket</a></li><li><a href="module-net_packets-VerackPacket.html">VerackPacket</a></li><li><a href="module-net_packets-VersionPacket.html">VersionPacket</a></li><li><a href="module-node.FullNode.html">FullNode</a></li><li><a href="module-node.Node.html">Node</a></li><li><a href="module-node.NodeClient.html">NodeClient</a></li><li><a href="module-node.NullClient.html">NullClient</a></li><li><a href="module-node.SPVNode.html">SPVNode</a></li><li><a href="module-primitives.AbstractBlock.html">AbstractBlock</a></li><li><a href="module-primitives.Address.html">Address</a></li><li><a href="module-primitives.Block.html">Block</a></li><li><a href="module-primitives.Coin.html">Coin</a></li><li><a href="module-primitives.CoinSelector.html">CoinSelector</a></li><li><a href="module-primitives.Covenant.html">Covenant</a></li><li><a href="module-primitives.Headers.html">Headers</a></li><li><a href="module-primitives.Input.html">Input</a></li><li><a href="module-primitives.InvItem.html">InvItem</a></li><li><a href="module-primitives.KeyRing.html">KeyRing</a></li><li><a href="module-primitives.MemBlock.html">MemBlock</a></li><li><a href="module-primitives.MerkleBlock.html">MerkleBlock</a></li><li><a href="module-primitives.MTX.html">MTX</a></li><li><a href="module-primitives.Outpoint.html">Outpoint</a></li><li><a href="module-primitives.Output.html">Output</a></li><li><a href="module-primitives.TX.html">TX</a></li><li><a href="module-primitives.TXMeta.html">TXMeta</a></li><li><a href="module-protocol.Network.html">Network</a></li><li><a href="module-protocol.TimeData.html">TimeData</a></li><li><a href="module-protocol_errors-VerifyError.html">VerifyError</a></li><li><a href="module-script.Opcode.html">Opcode</a></li><li><a href="module-script.Script.html">Script</a></li><li><a href="module-script.ScriptError.html">ScriptError</a></li><li><a href="module-script.ScriptNum.html">ScriptNum</a></li><li><a href="module-script.SigCache.html">SigCache</a></li><li><a href="module-script.Stack.html">Stack</a></li><li><a href="module-script.Witness.html">Witness</a></li><li><a href="module-ui.URI.html">URI</a></li><li><a href="module-wallet.Account.html">Account</a></li><li><a href="module-wallet.Balance.html">Balance</a></li><li><a href="module-wallet.BlockRecord.html">BlockRecord</a></li><li><a href="module-wallet.Credit.html">Credit</a></li><li><a href="module-wallet.Details.html">Details</a></li><li><a href="module-wallet.HTTP.html">HTTP</a></li><li><a href="module-wallet.MasterKey.html">MasterKey</a></li><li><a href="module-wallet.Path.html">Path</a></li><li><a href="module-wallet.Paths.html">Paths</a></li><li><a href="module-wallet.RPC.html">RPC</a></li><li><a href="module-wallet.TXDB.html">TXDB</a></li><li><a href="module-wallet.Wallet.html">Wallet</a></li><li><a href="module-wallet.WalletCoinView.html">WalletCoinView</a></li><li><a href="module-wallet.WalletKey.html">WalletKey</a></li><li><a href="module-wallet.WalletMigratorOptions.html">WalletMigratorOptions</a></li><li><a href="module-wallet.WalletOptions.html">WalletOptions</a></li><li><a href="module-wallet_plugin-Plugin.html">Plugin</a></li><li><a href="module-wallet_records-BlockMeta.html">BlockMeta</a></li><li><a href="module-wallet_records-ChainState.html">ChainState</a></li><li><a href="module-wallet_records-MapRecord.html">MapRecord</a></li><li><a href="module-wallet_records-TXRecord.html">TXRecord</a></li><li><a href="module-workers.Framer.html">Framer</a></li><li><a href="module-workers.Master.html">Master</a></li><li><a href="module-workers.Parent.html">Parent</a></li><li><a href="module-workers.Parser.html">Parser</a></li><li><a href="module-workers.Worker.html">Worker</a></li><li><a href="module-workers.WorkerPool.html">WorkerPool</a></li><li><a href="module-workers_packets-CheckInputPacket.html">CheckInputPacket</a></li><li><a href="module-workers_packets-CheckInputResultPacket.html">CheckInputResultPacket</a></li><li><a href="module-workers_packets-CheckPacket.html">CheckPacket</a></li><li><a href="module-workers_packets-CheckResultPacket.html">CheckResultPacket</a></li><li><a href="module-workers_packets-ECSignPacket.html">ECSignPacket</a></li><li><a href="module-workers_packets-ECSignResultPacket.html">ECSignResultPacket</a></li><li><a href="module-workers_packets-ECVerifyPacket.html">ECVerifyPacket</a></li><li><a href="module-workers_packets-ECVerifyResultPacket.html">ECVerifyResultPacket</a></li><li><a href="module-workers_packets-EnvPacket.html">EnvPacket</a></li><li><a href="module-workers_packets-ErrorPacket.html">ErrorPacket</a></li><li><a href="module-workers_packets-ErrorResultPacket.html">ErrorResultPacket</a></li><li><a href="module-workers_packets-EventPacket.html">EventPacket</a></li><li><a href="module-workers_packets-LogPacket.html">LogPacket</a></li><li><a href="module-workers_packets-MinePacket.html">MinePacket</a></li><li><a href="module-workers_packets-MineResultPacket.html">MineResultPacket</a></li><li><a href="module-workers_packets-Packet.html">Packet</a></li><li><a href="module-workers_packets-ScryptPacket.html">ScryptPacket</a></li><li><a href="module-workers_packets-ScryptResultPacket.html">ScryptResultPacket</a></li><li><a href="module-workers_packets-SignInputPacket.html">SignInputPacket</a></li><li><a href="module-workers_packets-SignInputResultPacket.html">SignInputResultPacket</a></li><li><a href="module-workers_packets-SignPacket.html">SignPacket</a></li><li><a href="module-workers_packets-SignResultPacket.html">SignResultPacket</a></li><li><a href="NameDelta.html">NameDelta</a></li><li><a href="NameState.html">NameState</a></li><li><a href="NS.html">NS</a></li><li><a href="Ownership.html">Ownership</a></li><li><a href="Proof.html">Proof</a></li><li><a href="ProofData.html">ProofData</a></li><li><a href="RecursiveServer.html">RecursiveServer</a></li><li><a href="Reserved.html">Reserved</a></li><li><a href="Resource.html">Resource</a></li><li><a href="RootCache.html">RootCache</a></li><li><a href="RootServer.html">RootServer</a></li><li><a href="Seeder.html">Seeder</a></li><li><a href="SlidingWindow.html">SlidingWindow</a></li><li><a href="StateCache.html">StateCache</a></li><li><a href="SymmetricState.html">SymmetricState</a></li><li><a href="SYNTH4.html">SYNTH4</a></li><li><a href="SYNTH6.html">SYNTH6</a></li><li><a href="TXCount.html">TXCount</a></li><li><a href="TXT.html">TXT</a></li><li><a href="Wallet.html">Wallet</a></li><li><a href="WalletDB.html">WalletDB</a></li><li><a href="WalletNode.html">WalletNode</a></li></ul><h3>Global</h3><ul><li><a href="global.html#bindExit">bindExit</a></li><li><a href="global.html#checksig">checksig</a></li><li><a href="global.html#decode">decode</a></li><li><a href="global.html#encode">encode</a></li><li><a href="global.html#fromFloat">fromFloat</a></li><li><a href="global.html#fromU32">fromU32</a></li><li><a href="global.html#groupKey">groupKey</a></li><li><a href="global.html#insert">insert</a></li><li><a href="global.html#listenExit">listenExit</a></li><li><a href="global.html#migrationLayout">migrationLayout</a></li><li><a href="global.html#oldLayout">oldLayout</a></li><li><a href="global.html#opCache">opCache</a></li><li><a href="global.html#ownership">ownership</a></li><li><a href="global.html#remove">remove</a></li><li><a href="global.html#search">search</a></li><li><a href="global.html#splice">splice</a></li><li><a href="global.html#toFloat">toFloat</a></li><li><a href="global.html#toString">toString</a></li><li><a href="global.html#validateKey">validateKey</a></li><li><a href="global.html#validateSignature">validateSignature</a></li></ul>
+    <h2><a href="index.html">Home</a></h2><h3>Modules</h3><ul><li><a href="module-blockchain.html">blockchain</a></li><li><a href="module-blockchain_common.html">blockchain/common</a></li><li><a href="module-blockstore.html">blockstore</a></li><li><a href="module-blockstore_common.html">blockstore/common</a></li><li><a href="module-blockstore_records.html">blockstore/records</a></li><li><a href="module-client.html">client</a></li><li><a href="module-coins.html">coins</a></li><li><a href="module-covenants.html">covenants</a></li><li><a href="module-dns_common.html">dns/common</a></li><li><a href="module-errors.html">errors</a></li><li><a href="module-hd.html">hd</a></li><li><a href="module-hsd.html">hsd</a></li><li><a href="module-mempool.html">mempool</a></li><li><a href="module-mining.html">mining</a></li><li><a href="module-mining_common.html">mining/common</a></li><li><a href="module-net.html">net</a></li><li><a href="module-net_bip152.html">net/bip152</a></li><li><a href="module-net_common.html">net/common</a></li><li><a href="module-net_packets.html">net/packets</a></li><li><a href="module-node.html">node</a></li><li><a href="module-primitives.html">primitives</a></li><li><a href="module-protocol.html">protocol</a></li><li><a href="module-protocol_consensus.html">protocol/consensus</a></li><li><a href="module-protocol_errors.html">protocol/errors</a></li><li><a href="module-protocol_networks.html">protocol/networks</a></li><li><a href="module-protocol_policy.html">protocol/policy</a></li><li><a href="module-script.html">script</a></li><li><a href="module-script_common.html">script/common</a></li><li><a href="module-ui.html">ui</a></li><li><a href="module-utils.html">utils</a></li><li><a href="module-utils_util.html">utils/util</a></li><li><a href="module-wallet.html">wallet</a></li><li><a href="module-wallet_common.html">wallet/common</a></li><li><a href="module-wallet_plugin.html">wallet/plugin</a></li><li><a href="module-wallet_records.html">wallet/records</a></li><li><a href="module-workers.html">workers</a></li><li><a href="module-workers_jobs.html">workers/jobs</a></li><li><a href="module-workers_packets.html">workers/packets</a></li></ul><h3>Classes</h3><ul><li><a href="AirdropKey.html">AirdropKey</a></li><li><a href="AirdropProof.html">AirdropProof</a></li><li><a href="BidReveal.html">BidReveal</a></li><li><a href="BitField.html">BitField</a></li><li><a href="BitView.html">BitView</a></li><li><a href="BlindBid.html">BlindBid</a></li><li><a href="BlindValue.html">BlindValue</a></li><li><a href="BlockProof.html">BlockProof</a></li><li><a href="Brontide.html">Brontide</a></li><li><a href="BrontideStream.html">BrontideStream</a></li><li><a href="ChainFlags.html">ChainFlags</a></li><li><a href="ChainState.html">ChainState</a></li><li><a href="CipherState.html">CipherState</a></li><li><a href="Claim.html">Claim</a></li><li><a href="ContractState.html">ContractState</a></li><li><a href="DetailsMember.html">DetailsMember</a></li><li><a href="DS.html">DS</a></li><li><a href="Field.html">Field</a></li><li><a href="GLUE4.html">GLUE4</a></li><li><a href="GLUE6.html">GLUE6</a></li><li><a href="HandshakeState.html">HandshakeState</a></li><li><a href="HashList.html">HashList</a></li><li><a href="LockedUp.html">LockedUp</a></li><li><a href="MigrateAccountLookahead.html">MigrateAccountLookahead</a></li><li><a href="MigrateBidRevealEntries.html">MigrateBidRevealEntries</a></li><li><a href="MigrateBlockStore.html">MigrateBlockStore</a></li><li><a href="MigrateChainState.html">MigrateChainState</a></li><li><a href="MigrateChangeAddress.html">MigrateChangeAddress</a></li><li><a href="MigrateCoinSelection.html">MigrateCoinSelection</a></li><li><a href="MigrateMigrations.html">MigrateMigrations</a></li><li><a href="MigrateMigrationStateV1.html">MigrateMigrationStateV1</a></li><li><a href="MigrateTreeState.html">MigrateTreeState</a></li><li><a href="MigrateTXCountTimeIndex.html">MigrateTXCountTimeIndex</a></li><li><a href="MigrateTXDBBalances.html">MigrateTXDBBalances</a></li><li><a href="global.html#MigrationContext">MigrationContext</a></li><li><a href="module.migrations.MigrationState.html">MigrationState</a></li><li><a href="module-blockchain.Chain.html">Chain</a></li><li><a href="module-blockchain.ChainDB.html">ChainDB</a></li><li><a href="module-blockchain.ChainEntry.html">ChainEntry</a></li><li><a href="module-blockchain.ChainMigrator.html">ChainMigrator</a></li><li><a href="module-blockchain.ChainMigratorOptions.html">ChainMigratorOptions</a></li><li><a href="module-blockchain.ChainOptions.html">ChainOptions</a></li><li><a href="module-blockchain.DeploymentState.html">DeploymentState</a></li><li><a href="module-blockchain.WalletMigrationContext.html">WalletMigrationContext</a></li><li><a href="module-blockchain.WalletMigrationResult.html">WalletMigrationResult</a></li><li><a href="module-blockchain.WalletMigrator.html">WalletMigrator</a></li><li><a href="module-blockstore.AbstractBatch.html">AbstractBatch</a></li><li><a href="module-blockstore.AbstractBlockStore.html">AbstractBlockStore</a></li><li><a href="module-blockstore.FileBatch.html">FileBatch</a></li><li><a href="module-blockstore.LevelBatch.html">LevelBatch</a></li><li><a href="module-blockstore_records-BlockRecord.html">BlockRecord</a></li><li><a href="module-blockstore_records-FileRecord.html">FileRecord</a></li><li><a href="module-blockstore_FileBlockStore.html">blockstore:FileBlockStore</a></li><li><a href="module-blockstore_LevelBlockStore.html">blockstore:LevelBlockStore</a></li><li><a href="module-client.NodeClient.html">NodeClient</a></li><li><a href="module-client.WalletClient.html">WalletClient</a></li><li><a href="module-coins.CoinEntry.html">CoinEntry</a></li><li><a href="module-coins.Coins.html">Coins</a></li><li><a href="module-coins.CoinView.html">CoinView</a></li><li><a href="module-coins.UndoCoins.html">UndoCoins</a></li><li><a href="module-currency.Amount.html">Amount</a></li><li><a href="module-errors-CriticalError.html">CriticalError</a></li><li><a href="module-hd.Mnemonic.html">Mnemonic</a></li><li><a href="module-hd.PrivateKey.html">PrivateKey</a></li><li><a href="module-hd.PublicKey.html">PublicKey</a></li><li><a href="module-http.HTTPOptions.html">HTTPOptions</a></li><li><a href="module-http.RPC.html">RPC</a></li><li><a href="module-http.Server.html">Server</a></li><li><a href="module-http.TransactionOptions.html">TransactionOptions</a></li><li><a href="module-mempool.AirdropEntry.html">AirdropEntry</a></li><li><a href="module-mempool.ClaimEntry.html">ClaimEntry</a></li><li><a href="module-mempool.ConfirmStats.html">ConfirmStats</a></li><li><a href="module-mempool.Mempool.html">Mempool</a></li><li><a href="module-mempool.MempoolEntry.html">MempoolEntry</a></li><li><a href="module-mempool.MempoolOptions.html">MempoolOptions</a></li><li><a href="module-mempool.PolicyEstimator.html">PolicyEstimator</a></li><li><a href="module-migrations.AbstractMigration.html">AbstractMigration</a></li><li><a href="module-migrations.MigrationResult.html">MigrationResult</a></li><li><a href="module-migrations.Migrator.html">Migrator</a></li><li><a href="module-mining.BlockAirdrop.html">BlockAirdrop</a></li><li><a href="module-mining.BlockClaim.html">BlockClaim</a></li><li><a href="module-mining.BlockEntry.html">BlockEntry</a></li><li><a href="module-mining.BlockTemplate.html">BlockTemplate</a></li><li><a href="module-mining.CPUMiner.html">CPUMiner</a></li><li><a href="module-mining.Miner.html">Miner</a></li><li><a href="module-mining.MinerOptions.html">MinerOptions</a></li><li><a href="module-net.BroadcastItem.html">BroadcastItem</a></li><li><a href="module-net.Framer.html">Framer</a></li><li><a href="module-net.HostEntry.html">HostEntry</a></li><li><a href="module-net.HostList.html">HostList</a></li><li><a href="module-net.HostListOptions.html">HostListOptions</a></li><li><a href="module-net.LocalAddress.html">LocalAddress</a></li><li><a href="module-net.NetAddress.html">NetAddress</a></li><li><a href="module-net.Parser.html">Parser</a></li><li><a href="module-net.Peer.html">Peer</a></li><li><a href="module-net.PeerList.html">PeerList</a></li><li><a href="module-net.PeerOptions.html">PeerOptions</a></li><li><a href="module-net.Pool.html">Pool</a></li><li><a href="module-net.PoolOptions.html">PoolOptions</a></li><li><a href="module-net_bip152-CompactBlock.html">CompactBlock</a></li><li><a href="module-net_bip152-TXRequest.html">TXRequest</a></li><li><a href="module-net_bip152-TXResponse.html">TXResponse</a></li><li><a href="module-net_packets-AddrPacket.html">AddrPacket</a></li><li><a href="module-net_packets-AirdropPacket.html">AirdropPacket</a></li><li><a href="module-net_packets-BlockPacket.html">BlockPacket</a></li><li><a href="module-net_packets-BlockTxnPacket.html">BlockTxnPacket</a></li><li><a href="module-net_packets-ClaimPacket.html">ClaimPacket</a></li><li><a href="module-net_packets-CmpctBlockPacket.html">CmpctBlockPacket</a></li><li><a href="module-net_packets-FeeFilterPacket.html">FeeFilterPacket</a></li><li><a href="module-net_packets-FilterAddPacket.html">FilterAddPacket</a></li><li><a href="module-net_packets-FilterClearPacket.html">FilterClearPacket</a></li><li><a href="module-net_packets-FilterLoadPacket.html">FilterLoadPacket</a></li><li><a href="module-net_packets-GetAddrPacket.html">GetAddrPacket</a></li><li><a href="module-net_packets-GetBlocksPacket.html">GetBlocksPacket</a></li><li><a href="module-net_packets-GetBlockTxnPacket.html">GetBlockTxnPacket</a></li><li><a href="module-net_packets-GetDataPacket.html">GetDataPacket</a></li><li><a href="module-net_packets-GetHeadersPacket.html">GetHeadersPacket</a></li><li><a href="module-net_packets-GetProofPacket.html">GetProofPacket</a></li><li><a href="module-net_packets-HeadersPacket.html">HeadersPacket</a></li><li><a href="module-net_packets-InvPacket.html">InvPacket</a></li><li><a href="module-net_packets-MempoolPacket.html">MempoolPacket</a></li><li><a href="module-net_packets-MerkleBlockPacket.html">MerkleBlockPacket</a></li><li><a href="module-net_packets-NotFoundPacket.html">NotFoundPacket</a></li><li><a href="module-net_packets-Packet.html">Packet</a></li><li><a href="module-net_packets-PingPacket.html">PingPacket</a></li><li><a href="module-net_packets-PongPacket.html">PongPacket</a></li><li><a href="module-net_packets-ProofPacket.html">ProofPacket</a></li><li><a href="module-net_packets-RejectPacket.html">RejectPacket</a></li><li><a href="module-net_packets-SendCmpctPacket.html">SendCmpctPacket</a></li><li><a href="module-net_packets-SendHeadersPacket.html">SendHeadersPacket</a></li><li><a href="module-net_packets-TXPacket.html">TXPacket</a></li><li><a href="module-net_packets-UnknownPacket.html">UnknownPacket</a></li><li><a href="module-net_packets-VerackPacket.html">VerackPacket</a></li><li><a href="module-net_packets-VersionPacket.html">VersionPacket</a></li><li><a href="module-node.FullNode.html">FullNode</a></li><li><a href="module-node.Node.html">Node</a></li><li><a href="module-node.NodeClient.html">NodeClient</a></li><li><a href="module-node.NullClient.html">NullClient</a></li><li><a href="module-node.SPVNode.html">SPVNode</a></li><li><a href="module-primitives.AbstractBlock.html">AbstractBlock</a></li><li><a href="module-primitives.Address.html">Address</a></li><li><a href="module-primitives.Block.html">Block</a></li><li><a href="module-primitives.Coin.html">Coin</a></li><li><a href="module-primitives.Covenant.html">Covenant</a></li><li><a href="module-primitives.Headers.html">Headers</a></li><li><a href="module-primitives.Input.html">Input</a></li><li><a href="module-primitives.InvItem.html">InvItem</a></li><li><a href="module-primitives.KeyRing.html">KeyRing</a></li><li><a href="module-primitives.MemBlock.html">MemBlock</a></li><li><a href="module-primitives.MerkleBlock.html">MerkleBlock</a></li><li><a href="module-primitives.MTX.html">MTX</a></li><li><a href="module-primitives.Outpoint.html">Outpoint</a></li><li><a href="module-primitives.Output.html">Output</a></li><li><a href="module-primitives.TX.html">TX</a></li><li><a href="module-primitives.TXMeta.html">TXMeta</a></li><li><a href="module-protocol.Network.html">Network</a></li><li><a href="module-protocol.TimeData.html">TimeData</a></li><li><a href="module-protocol_errors-VerifyError.html">VerifyError</a></li><li><a href="module-script.Opcode.html">Opcode</a></li><li><a href="module-script.Script.html">Script</a></li><li><a href="module-script.ScriptError.html">ScriptError</a></li><li><a href="module-script.ScriptNum.html">ScriptNum</a></li><li><a href="module-script.SigCache.html">SigCache</a></li><li><a href="module-script.Stack.html">Stack</a></li><li><a href="module-script.Witness.html">Witness</a></li><li><a href="module-ui.URI.html">URI</a></li><li><a href="module-utils.CoinSelector.html">CoinSelector</a></li><li><a href="module-utils.CoinSource.html">CoinSource</a></li><li><a href="module-wallet.Account.html">Account</a></li><li><a href="module-wallet.Balance.html">Balance</a></li><li><a href="module-wallet.BlockRecord.html">BlockRecord</a></li><li><a href="module-wallet.CoinSource.html">CoinSource</a></li><li><a href="module-wallet.Credit.html">Credit</a></li><li><a href="module-wallet.Details.html">Details</a></li><li><a href="module-wallet.HTTP.html">HTTP</a></li><li><a href="module-wallet.MasterKey.html">MasterKey</a></li><li><a href="module-wallet.Path.html">Path</a></li><li><a href="module-wallet.Paths.html">Paths</a></li><li><a href="module-wallet.RPC.html">RPC</a></li><li><a href="module-wallet.TXDB.html">TXDB</a></li><li><a href="module-wallet.Wallet.html">Wallet</a></li><li><a href="module-wallet.WalletCoinView.html">WalletCoinView</a></li><li><a href="module-wallet.WalletKey.html">WalletKey</a></li><li><a href="module-wallet.WalletMigratorOptions.html">WalletMigratorOptions</a></li><li><a href="module-wallet.WalletOptions.html">WalletOptions</a></li><li><a href="module-wallet_plugin-Plugin.html">Plugin</a></li><li><a href="module-wallet_records-BlockMeta.html">BlockMeta</a></li><li><a href="module-wallet_records-ChainState.html">ChainState</a></li><li><a href="module-wallet_records-MapRecord.html">MapRecord</a></li><li><a href="module-wallet_records-TXRecord.html">TXRecord</a></li><li><a href="module-workers.Framer.html">Framer</a></li><li><a href="module-workers.Master.html">Master</a></li><li><a href="module-workers.Parent.html">Parent</a></li><li><a href="module-workers.Parser.html">Parser</a></li><li><a href="module-workers.Worker.html">Worker</a></li><li><a href="module-workers.WorkerPool.html">WorkerPool</a></li><li><a href="module-workers_packets-CheckInputPacket.html">CheckInputPacket</a></li><li><a href="module-workers_packets-CheckInputResultPacket.html">CheckInputResultPacket</a></li><li><a href="module-workers_packets-CheckPacket.html">CheckPacket</a></li><li><a href="module-workers_packets-CheckResultPacket.html">CheckResultPacket</a></li><li><a href="module-workers_packets-ECSignPacket.html">ECSignPacket</a></li><li><a href="module-workers_packets-ECSignResultPacket.html">ECSignResultPacket</a></li><li><a href="module-workers_packets-ECVerifyPacket.html">ECVerifyPacket</a></li><li><a href="module-workers_packets-ECVerifyResultPacket.html">ECVerifyResultPacket</a></li><li><a href="module-workers_packets-EnvPacket.html">EnvPacket</a></li><li><a href="module-workers_packets-ErrorPacket.html">ErrorPacket</a></li><li><a href="module-workers_packets-ErrorResultPacket.html">ErrorResultPacket</a></li><li><a href="module-workers_packets-EventPacket.html">EventPacket</a></li><li><a href="module-workers_packets-LogPacket.html">LogPacket</a></li><li><a href="module-workers_packets-MinePacket.html">MinePacket</a></li><li><a href="module-workers_packets-MineResultPacket.html">MineResultPacket</a></li><li><a href="module-workers_packets-Packet.html">Packet</a></li><li><a href="module-workers_packets-ScryptPacket.html">ScryptPacket</a></li><li><a href="module-workers_packets-ScryptResultPacket.html">ScryptResultPacket</a></li><li><a href="module-workers_packets-SignInputPacket.html">SignInputPacket</a></li><li><a href="module-workers_packets-SignInputResultPacket.html">SignInputResultPacket</a></li><li><a href="module-workers_packets-SignPacket.html">SignPacket</a></li><li><a href="module-workers_packets-SignResultPacket.html">SignResultPacket</a></li><li><a href="NameDelta.html">NameDelta</a></li><li><a href="NameState.html">NameState</a></li><li><a href="NS.html">NS</a></li><li><a href="Ownership.html">Ownership</a></li><li><a href="Proof.html">Proof</a></li><li><a href="ProofData.html">ProofData</a></li><li><a href="RecursiveServer.html">RecursiveServer</a></li><li><a href="Reserved.html">Reserved</a></li><li><a href="Resource.html">Resource</a></li><li><a href="RootCache.html">RootCache</a></li><li><a href="RootServer.html">RootServer</a></li><li><a href="Seeder.html">Seeder</a></li><li><a href="SlidingWindow.html">SlidingWindow</a></li><li><a href="StateCache.html">StateCache</a></li><li><a href="SymmetricState.html">SymmetricState</a></li><li><a href="SYNTH4.html">SYNTH4</a></li><li><a href="SYNTH6.html">SYNTH6</a></li><li><a href="TXCount.html">TXCount</a></li><li><a href="TXT.html">TXT</a></li><li><a href="Wallet.html">Wallet</a></li><li><a href="WalletDB.html">WalletDB</a></li><li><a href="WalletNode.html">WalletNode</a></li></ul><h3>Global</h3><ul><li><a href="global.html#bindExit">bindExit</a></li><li><a href="global.html#checksig">checksig</a></li><li><a href="global.html#decode">decode</a></li><li><a href="global.html#encode">encode</a></li><li><a href="global.html#fromFloat">fromFloat</a></li><li><a href="global.html#fromString">fromString</a></li><li><a href="global.html#fromU32">fromU32</a></li><li><a href="global.html#groupKey">groupKey</a></li><li><a href="global.html#insert">insert</a></li><li><a href="global.html#listenExit">listenExit</a></li><li><a href="global.html#migrationLayout">migrationLayout</a></li><li><a href="global.html#oldLayout">oldLayout</a></li><li><a href="global.html#opCache">opCache</a></li><li><a href="global.html#ownership">ownership</a></li><li><a href="global.html#readKey">readKey</a></li><li><a href="global.html#remove">remove</a></li><li><a href="global.html#search">search</a></li><li><a href="global.html#shuffle">shuffle</a></li><li><a href="global.html#sortAge">sortAge</a></li><li><a href="global.html#sortInputs">sortInputs</a></li><li><a href="global.html#sortOutputs">sortOutputs</a></li><li><a href="global.html#sortValue">sortValue</a></li><li><a href="global.html#splice">splice</a></li><li><a href="global.html#toFloat">toFloat</a></li><li><a href="global.html#toString">toString</a></li><li><a href="global.html#types">types</a></li><li><a href="global.html#validateKey">validateKey</a></li><li><a href="global.html#validateSignature">validateSignature</a></li><li><a href="global.html#writeKey">writeKey</a></li></ul>
 </nav>
 
 <br class="clear">
 
 <footer>
-    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 1.1.5</a> on Fri Dec 27 2024 12:30:25 GMT+0000 (Coordinated Universal Time)
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 1.1.5</a> on Wed Jun 25 2025 14:45:22 GMT+0000 (Coordinated Universal Time)
 </footer>
 
 <script> prettyPrint(); </script>
