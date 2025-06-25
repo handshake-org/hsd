@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v8.0.0
+
 **When upgrading to this version of hsd, you must pass `--chain-migrate=4`
 and `--wallet-migrate=7` when you run it for the first time.**
 
