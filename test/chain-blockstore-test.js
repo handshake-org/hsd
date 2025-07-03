@@ -1,7 +1,7 @@
 'use strict';
 
 const assert = require('bsert');
-const {BloomFilter} = require('@handshake-org/bfilter');
+const {BloomFilter} = require('bfilter');
 const Network = require('../lib/protocol/network');
 const {FileBlockStore, LevelBlockStore} = require('../lib/blockstore');
 const Chain = require('../lib/blockchain/chain');

@@ -20,3 +20,4 @@ package-lock.json
 test/
 webpack.*.js
 yarn.lock
+eslint.config.cjs

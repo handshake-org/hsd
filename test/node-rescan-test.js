@@ -2,7 +2,7 @@
 
 const assert = require('bsert');
 const {BufferSet} = require('buffer-map');
-const {BloomFilter} = require('@handshake-org/bfilter');
+const {BloomFilter} = require('bfilter');
 const TX = require('../lib/primitives/tx');
 const nodeCommon = require('../lib/blockchain/common');
 const {scanActions} = nodeCommon;
