@@ -84,7 +84,7 @@ async function sendTweet(status) {
       }
     };
 
-    const req = https.request((options, res => {
+    const req = https.request(options, (res) => {
       let data = '';
       res.on('data', chunk => (data += chunk));
       res.on('end', () => {
@@ -102,7 +102,7 @@ async function sendTweet(status) {
           reject(new Error(errMsg));
         }
       });
-    }));
+    });
 
     req.on('error', err => reject(err));
     req.write(body);
