@@ -1,3 +1,5 @@
+'use strict';
+
 const https = require('https');
 const crypto = require('crypto');
 
@@ -34,7 +36,7 @@ async function sendTweet(status) {
     // Create parameter string (sorted by key)
     const paramString = Object.keys(params)
       .sort()
-      .map(key => 
+      .map(key =>
         `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`
       )
       .join('&');
@@ -82,7 +84,7 @@ async function sendTweet(status) {
       }
     };
 
-    const req = https.request(options, res => {
+    const req = https.request((options, res => {
       let data = '';
       res.on('data', chunk => (data += chunk));
       res.on('end', () => {
@@ -90,7 +92,7 @@ async function sendTweet(status) {
           resolve(JSON.parse(data));
         } else {
           let errMsg = 'Twitter API error: '
-           + `${res.statusCode} ${res.statusMessage}`
+           + `${res.statusCode} ${res.statusMessage}`;
           try {
             const errJson = JSON.parse(data);
             errMsg += `\n${JSON.stringify(errJson)}`;
@@ -100,7 +102,7 @@ async function sendTweet(status) {
           reject(new Error(errMsg));
         }
       });
-    });
+    }));
 
     req.on('error', err => reject(err));
     req.write(body);
@@ -124,7 +126,7 @@ async function main() {
     } else {
       const pkg = require('../package.json');
       const version = pkg.version;
-      const releaseUrl = 'https://github.com/handshake-org' + 
+      const releaseUrl = 'https://github.com/handshake-org' +
       `/hsd/releases/tag/v${version}`;
       status = `🚀 New release! hsd v${version} is out now.
 Check it out: ${releaseUrl}`;
