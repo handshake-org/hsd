@@ -6,11 +6,7 @@ const consumerSecret = process.env.TWITTER_CONSUMER_SECRET;
 const accessToken = process.env.TWITTER_ACCESS_TOKEN;
 const accessTokenSecret = process.env.TWITTER_ACCESS_TOKEN_SECRET;
 
-
 async function sendTweet(status) {
-  // Twitter API v2 requires Bearer Token (OAuth 2.0) or OAuth 1.0a user context.
-  // We'll use OAuth 1.0a user context, constructing the Authorization header manually.
-
   return new Promise((resolve, reject) => {
     const method = 'POST';
     const url = 'https://api.twitter.com/2/tweets';
@@ -38,7 +34,9 @@ async function sendTweet(status) {
     // Create parameter string (sorted by key)
     const paramString = Object.keys(params)
       .sort()
-      .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`)
+      .map(key => 
+        `${encodeURIComponent(key)}=${encodeURIComponent(params[key])}`
+      )
       .join('&');
 
     // Signature base string
@@ -91,7 +89,8 @@ async function sendTweet(status) {
         if (res.statusCode >= 200 && res.statusCode < 300) {
           resolve(JSON.parse(data));
         } else {
-          let errMsg = `Twitter API error: ${res.statusCode} ${res.statusMessage}`;
+          let errMsg = 'Twitter API error: '
+           + `${res.statusCode} ${res.statusMessage}`
           try {
             const errJson = JSON.parse(data);
             errMsg += `\n${JSON.stringify(errJson)}`;
@@ -112,7 +111,9 @@ async function sendTweet(status) {
 async function main() {
   if (!consumerKey || !consumerSecret || !accessToken || !accessTokenSecret) {
     console.error('Error: Twitter API credentials are not set.');
-    console.error('Please set TWITTER_CONSUMER_KEY, TWITTER_CONSUMER_SECRET, TWITTER_ACCESS_TOKEN, and TWITTER_ACCESS_TOKEN_SECRET environment variables.');
+    console.error('Please set TWITTER_CONSUMER_KEY, '
+      + 'TWITTER_CONSUMER_SECRET, TWITTER_ACCESS_TOKEN, '
+      + 'and TWITTER_ACCESS_TOKEN_SECRET environment variables.');
     process.exit(1);
   }
 
@@ -123,8 +124,10 @@ async function main() {
     } else {
       const pkg = require('../package.json');
       const version = pkg.version;
-      const releaseUrl = `https://github.com/handshake-org/hsd/releases/tag/v${version}`;
-      status = `🚀 New release! hsd v${version} is out now. Check it out: ${releaseUrl}`;
+      const releaseUrl = 'https://github.com/handshake-org' + 
+      `/hsd/releases/tag/v${version}`;
+      status = `🚀 New release! hsd v${version} is out now.
+Check it out: ${releaseUrl}`;
     }
     await sendTweet(status);
     console.log('Tweet sent successfully!');
