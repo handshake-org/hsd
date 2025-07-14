@@ -565,8 +565,8 @@ describe('Wallet Balance', function() {
     const {nextAddr} = getAheadAddr(account, ahead);
 
     await primary.sendBatch([
-      ['OPEN', name1],
-      ['OPEN', name2]
+      { type: 'OPEN', args: [name1] },
+      { type: 'OPEN', args: [name2] }
     ]);
     await mineBlocks(openingPeriod);
 
@@ -574,8 +574,8 @@ describe('Wallet Balance', function() {
 
     // all three bids are there.
     const bidMTX = await wallet.createBatch([
-      ['BID', name1, BID_AMOUNT_1, BLIND_AMOUNT_1],
-      ['BID', name2, BID_AMOUNT_2, BLIND_AMOUNT_2]
+      { type: 'BID', args: [name1, BID_AMOUNT_1, BLIND_AMOUNT_1] },
+      { type: 'BID', args: [name2, BID_AMOUNT_2, BLIND_AMOUNT_2] }
     ], txOpts);
 
     assert.strictEqual(bidMTX.outputs[0].covenant.type, types.BID);
@@ -604,16 +604,16 @@ describe('Wallet Balance', function() {
     await primary.sendReveal(name2);
 
     await wallet.sendBatch([
-      ['REVEAL', name1],
-      ['REVEAL', name2]
+      { type: 'REVEAL', args: [name1] },
+      { type: 'REVEAL', args: [name2] }
     ], txOpts);
 
     await mineBlocks(revealPeriod);
 
     if (register !== false) {
       await wallet.sendBatch([
-        ['UPDATE', name1, EMPTY_RS],
-        ['UPDATE', name2, EMPTY_RS]
+        { type: 'UPDATE', args: [name1, EMPTY_RS] },
+        { type: 'UPDATE', args: [name2, EMPTY_RS] }
       ], {
         hardFee: HARD_FEE
       });
@@ -1019,8 +1019,8 @@ describe('Wallet Balance', function() {
       const txOpts = { hardFee: HARD_FEE };
 
       const bidMTX = await wallet.createBatch([
-        ['BID', name, BID_AMOUNT_1, BLIND_AMOUNT_1],
-        ['BID', name, BID_AMOUNT_2, BLIND_AMOUNT_2]
+        { type: 'BID', args: [name, BID_AMOUNT_1, BLIND_AMOUNT_1] },
+        { type: 'BID', args: [name, BID_AMOUNT_2, BLIND_AMOUNT_2] }
       ], txOpts);
 
       assert.strictEqual(bidMTX.outputs[0].covenant.type, types.BID);
@@ -1112,8 +1112,8 @@ describe('Wallet Balance', function() {
       const txOpts = { hardFee: HARD_FEE };
 
       const bidMTX = await primary.createBatch([
-        ['BID', name, BID_AMOUNT_1, BLIND_AMOUNT_1],
-        ['BID', name, BID_AMOUNT_2, BLIND_AMOUNT_2]
+        { type: 'BID', args: [name, BID_AMOUNT_1, BLIND_AMOUNT_1] },
+        { type: 'BID', args: [name, BID_AMOUNT_2, BLIND_AMOUNT_2] }
       ], txOpts);
 
       assert.strictEqual(bidMTX.outputs[0].covenant.type, types.BID);
@@ -1209,8 +1209,8 @@ describe('Wallet Balance', function() {
       const addr2 = getAheadAddr(altAccount, ahead);
 
       const bidMTX = await wallet.createBatch([
-        ['BID', name, BID_AMOUNT_1, BLIND_AMOUNT_1],
-        ['BID', name, BID_AMOUNT_2, BLIND_AMOUNT_2]
+        { type: 'BID', args: [name, BID_AMOUNT_1, BLIND_AMOUNT_1] },
+        { type: 'BID', args: [name, BID_AMOUNT_2, BLIND_AMOUNT_2] }
       ], txOpts);
 
       assert.strictEqual(bidMTX.outputs[0].covenant.type, types.BID);
@@ -1394,8 +1394,8 @@ describe('Wallet Balance', function() {
       await mineBlocks(openingPeriod);
 
       const bidMTX = await clone.createBatch([
-        ['BID', name, BID_AMOUNT_1, BLIND_AMOUNT_1],
-        ['BID', name, BID_AMOUNT_2, BLIND_AMOUNT_2]
+        { type: 'BID', args: [name, BID_AMOUNT_1, BLIND_AMOUNT_1] },
+        { type: 'BID', args: [name, BID_AMOUNT_2, BLIND_AMOUNT_2] }
       ], txOpts);
 
       assert.strictEqual(bidMTX.outputs[0].covenant.type, types.BID);
@@ -1511,8 +1511,8 @@ describe('Wallet Balance', function() {
       await mineBlocks(openingPeriod);
 
       await wallet.sendBatch([
-        ['BID', name, BID_AMOUNT_1, BLIND_AMOUNT_1],
-        ['BID', name, BID_AMOUNT_2, BLIND_AMOUNT_2]
+        { type: 'BID', args: [name, BID_AMOUNT_1, BLIND_AMOUNT_1] },
+        { type: 'BID', args: [name, BID_AMOUNT_2, BLIND_AMOUNT_2] }
       ], txOpts);
       await mineBlocks(biddingPeriod);
     };
@@ -1738,8 +1738,8 @@ describe('Wallet Balance', function() {
       await primary.sendOpen(name, false);
       await mineBlocks(openingPeriod);
       await primary.sendBatch([
-        ['BID', name, BID_AMOUNT_1, BLIND_AMOUNT_1],
-        ['BID', name, BID_AMOUNT_2, BLIND_AMOUNT_2]
+        { type: 'BID', args: [name, BID_AMOUNT_1, BLIND_AMOUNT_1] },
+        { type: 'BID', args: [name, BID_AMOUNT_2, BLIND_AMOUNT_2] }
       ]);
       await mineBlocks(biddingPeriod);
     };
@@ -1840,8 +1840,8 @@ describe('Wallet Balance', function() {
       const addr1 = getAheadAddr(cloneAccount, ahead);
 
       await primary.sendBatch([
-        ['OPEN', name1],
-        ['OPEN', name2]
+        { type: 'OPEN', args: [name1] },
+        { type: 'OPEN', args: [name2] }
       ]);
       await mineBlocks(openingPeriod);
 
@@ -1853,8 +1853,8 @@ describe('Wallet Balance', function() {
 
       // all three bids are there.
       const bidMTX = await clone.createBatch([
-        ['BID', name1, BID_AMOUNT_1, BLIND_AMOUNT_1],
-        ['BID', name2, BID_AMOUNT_2, BLIND_AMOUNT_2]
+        { type: 'BID', args: [name1, BID_AMOUNT_1, BLIND_AMOUNT_1] },
+        { type: 'BID', args: [name2, BID_AMOUNT_2, BLIND_AMOUNT_2] }
       ], txOpts);
 
       assert.strictEqual(bidMTX.outputs[0].covenant.type, types.BID);
@@ -1873,8 +1873,8 @@ describe('Wallet Balance', function() {
       await primary.sendReveal(name2);
 
       await clone.sendBatch([
-        ['REVEAL', name1],
-        ['REVEAL', name2]
+        { type: 'REVEAL', args: [name1] },
+        { type: 'REVEAL', args: [name2] }
       ], txOpts);
 
       await mineBlocks(revealPeriod + 1);
@@ -1882,8 +1882,8 @@ describe('Wallet Balance', function() {
 
     const sendRedeems = async (wallet, clone, ahead) => {
       await clone.sendBatch([
-        ['REDEEM', name1],
-        ['REDEEM', name2]
+        { type: 'REDEEM', args: [name1] },
+        { type: 'REDEEM', args: [name2] }
       ], {
         hardFee: HARD_FEE
       });
@@ -1984,8 +1984,8 @@ describe('Wallet Balance', function() {
 
     const sendRedeems = async (wallet, clone, ahead) => {
       await clone.sendBatch([
-        ['UPDATE', name1, EMPTY_RS],
-        ['UPDATE', name2, EMPTY_RS]
+        { type: 'UPDATE', args: [name1, EMPTY_RS] },
+        { type: 'UPDATE', args: [name2, EMPTY_RS] }
       ], {
         hardFee: HARD_FEE
       });
@@ -2124,8 +2124,8 @@ describe('Wallet Balance', function() {
 
     const sendUpdates = async (wallet, clone) => {
       await clone.sendBatch([
-        ['UPDATE', name1, EMPTY_RS],
-        ['UPDATE', name2, EMPTY_RS]
+        { type: 'UPDATE', args: [name1, EMPTY_RS] },
+        { type: 'UPDATE', args: [name2, EMPTY_RS] }
       ], {
         hardFee: HARD_FEE
       });
@@ -2165,8 +2165,8 @@ describe('Wallet Balance', function() {
 
     const sendRevokes = async (wallet, clone) => {
       await clone.sendBatch([
-        ['REVOKE', name1],
-        ['REVOKE', name2]
+        { type: 'REVOKE', args: [name1] },
+        { type: 'REVOKE', args: [name2] }
       ], {
         hardFee: HARD_FEE
       });
@@ -2205,8 +2205,8 @@ describe('Wallet Balance', function() {
     const sendRenews = async (wallet, clone) => {
       await mineBlocks(treeInterval);
       await clone.sendBatch([
-        ['RENEW', name1],
-        ['RENEW', name2]
+        { type: 'RENEW', args: [name1] },
+        { type: 'RENEW', args: [name2] }
       ], {
         hardFee: HARD_FEE
       });
@@ -2244,8 +2244,8 @@ describe('Wallet Balance', function() {
 
     const sendTransfers = async (wallet, clone) => {
       await clone.sendBatch([
-        ['TRANSFER', name1, await primary.receiveAddress()],
-        ['TRANSFER', name2, await primary.receiveAddress()]
+        { type: 'TRANSFER', args: [name1, await primary.receiveAddress()] },
+        { type: 'TRANSFER', args: [name2, await primary.receiveAddress()] }
       ], {
         hardFee: HARD_FEE
       });
@@ -2281,8 +2281,8 @@ describe('Wallet Balance', function() {
       name2 = names[1];
 
       await clone.sendBatch([
-        ['TRANSFER', name1, await primary.receiveAddress()],
-        ['TRANSFER', name2, await primary.receiveAddress()]
+        { type: 'TRANSFER', args: [name1, await primary.receiveAddress()] },
+        { type: 'TRANSFER', args: [name2, await primary.receiveAddress()] }
       ], {
         hardFee: HARD_FEE
       });
@@ -2292,8 +2292,8 @@ describe('Wallet Balance', function() {
 
     const sendFinalizes = async (wallet, clone) => {
       await clone.sendBatch([
-        ['FINALIZE', name1],
-        ['FINALIZE', name2]
+        { type: 'FINALIZE', args: [name1] },
+        { type: 'FINALIZE', args: [name2] }
       ], {
         hardFee: HARD_FEE
       });
@@ -2383,8 +2383,8 @@ describe('Wallet Balance', function() {
       name2 = names[1];
 
       await clone.sendBatch([
-        ['TRANSFER', name1, recv],
-        ['TRANSFER', name2, nextAddr]
+        { type: 'TRANSFER', args: [name1, recv] },
+        { type: 'TRANSFER', args: [name2, nextAddr] }
       ], {
         hardFee: HARD_FEE
       });
@@ -2394,8 +2394,8 @@ describe('Wallet Balance', function() {
 
     const sendFinalizes = async (wallet, clone) => {
       await clone.sendBatch([
-        ['FINALIZE', name1],
-        ['FINALIZE', name2]
+        { type: 'FINALIZE', args: [name1] },
+        { type: 'FINALIZE', args: [name2] }
       ], {
         hardFee: HARD_FEE
       });
