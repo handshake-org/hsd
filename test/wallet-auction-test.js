@@ -698,9 +698,9 @@ describe('Wallet Auction', function() {
     it('should create multiple OPENs with options', async () => {
       const mtx = await wallet.createBatch(
         [
-          ['OPEN', name1],
-          ['OPEN', name2],
-          ['OPEN', name3]
+          { type: 'OPEN', args: [name1] },
+          { type: 'OPEN', args: [name2] },
+          { type: 'OPEN', args: [name3] }
         ],
         {
           hardFee
@@ -730,9 +730,9 @@ describe('Wallet Auction', function() {
       await assert.rejects(
         wallet.sendBatch(
           [
-            ['OPEN', 'google'],
-            ['OPEN', name2],
-            ['OPEN', name3]
+            { type: 'OPEN', args: ['google'] },
+            { type: 'OPEN', args: [name2] },
+            { type: 'OPEN', args: [name3] }
           ]
         ),
         {message: 'Name is reserved: google.'}
@@ -743,9 +743,9 @@ describe('Wallet Auction', function() {
       await assert.rejects(
         wallet.sendBatch(
           [
-            ['OPEN', name1],
-            ['OPEN', name1],
-            ['OPEN', name3]
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name3] }
           ]
         ),
          {message: 'Duplicate name with exclusive action.'}
@@ -756,9 +756,9 @@ describe('Wallet Auction', function() {
       await assert.rejects(
         wallet.sendBatch(
           [
-            ['OPEN', name1],
-            ['OPEN', name1],
-            ['OPEN', name3]
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name3] }
           ]
         ),
          {message: 'Duplicate name with exclusive action.'}
@@ -769,9 +769,9 @@ describe('Wallet Auction', function() {
       await assert.rejects(
         wallet.sendBatch(
           [
-            ['BID', name1, 1, 1],
-            ['OPEN', name2],
-            ['OPEN', name3]
+            { type: 'BID', args: [name1, 1, 1] },
+            { type: 'OPEN', args: [name2] },
+            { type: 'OPEN', args: [name3] }
           ]
         ),
         {message: `Name has not reached the bidding phase yet: ${name1}.`}
@@ -782,9 +782,9 @@ describe('Wallet Auction', function() {
       await assert.rejects(
         wallet.sendBatch(
           [
-            ['BID', name1, 21000000],
-            ['OPEN', name2],
-            ['OPEN', name3]
+            { type: 'BID', args: [name1, 21000000] },
+            { type: 'OPEN', args: [name2] },
+            { type: 'OPEN', args: [name3] }
           ]
         ),
         {message: 'Bad arguments for BID.'}
@@ -795,7 +795,7 @@ describe('Wallet Auction', function() {
       await assert.rejects(
         wallet.sendBatch(
           [
-            ['REVEAL']
+            { type: 'REVEAL' }
           ]
         ),
         {message: 'Nothing to do.'}
@@ -806,7 +806,7 @@ describe('Wallet Auction', function() {
       await assert.rejects(
         wallet.sendBatch(
           [
-            ['REDEEM']
+            { type: 'REDEEM' }
           ]
         ),
         {message: 'Nothing to do.'}
@@ -818,10 +818,10 @@ describe('Wallet Auction', function() {
       await assert.rejects(
         wallet.sendBatch(
           [
-            ['OPEN', name1],
-            ['OPEN', name1],
-            ['OPEN', name3],
-            ['NONE', addr, 1]
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name3] },
+            { type: 'NONE', args: [addr, 1] }
           ]
         ),
          {message: 'Output is dust.'}
@@ -832,10 +832,10 @@ describe('Wallet Auction', function() {
       await assert.rejects(
         wallet.sendBatch(
           [
-            ['OPEN', name1],
-            ['OPEN', name1],
-            ['OPEN', name3],
-            ['open', name4]
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name3] },
+            { type: 'open', args: [name4] }
           ]
         ),
          {message: 'Unknown action type: open'}
@@ -847,10 +847,10 @@ describe('Wallet Auction', function() {
       it('3 OPENs and 1 NONE', async () => {
         const tx = await wallet.sendBatch(
           [
-            ['OPEN', name1],
-            ['OPEN', name2],
-            ['OPEN', name3],
-            ['NONE', addr, 10000]
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name2] },
+            { type: 'OPEN', args: [name3] },
+            { type: 'NONE', args: [addr, 10000] }
           ]
         );
 
@@ -861,10 +861,10 @@ describe('Wallet Auction', function() {
       it('4 BIDs', async () => {
         const tx = await wallet.sendBatch(
           [
-            ['BID', name1, 10000, 20000],
-            ['BID', name1, 10001, 20000], // self-snipe!
-            ['BID', name2, 30000, 40000],
-            ['BID', name3, 50000, 60000]
+            { type: 'BID', args: [name1, 10000, 20000] },
+            { type: 'BID', args: [name1, 10001, 20000] }, // self-snipe!
+            { type: 'BID', args: [name2, 30000, 40000] },
+            { type: 'BID', args: [name3, 50000, 60000] }
           ]
         );
 
@@ -876,7 +876,7 @@ describe('Wallet Auction', function() {
         // Don't send this one
         const revealAll = await wallet.createBatch(
           [
-            ['REVEAL']
+            { type: 'REVEAL' }
           ]
         );
 
@@ -892,8 +892,8 @@ describe('Wallet Auction', function() {
       it('2 REVEALs then 1 REVEAL', async () => {
         const tx = await wallet.sendBatch(
           [
-            ['REVEAL', name1],
-            ['REVEAL', name2]
+            { type: 'REVEAL', args: [name1] },
+            { type: 'REVEAL', args: [name2] }
           ]
         );
 
@@ -903,7 +903,7 @@ describe('Wallet Auction', function() {
         // because names are being revealed individually.
         await wallet.sendBatch(
           [
-            ['REVEAL', name3]
+            { type: 'REVEAL', args: [name3] }
           ]
         );
         await mineBlocks(revealPeriod);
@@ -913,7 +913,7 @@ describe('Wallet Auction', function() {
         // Don't send this one
         const redeemAll = await wallet.createBatch(
           [
-            ['REDEEM']
+            { type: 'REDEEM' }
           ]
         );
 
@@ -930,11 +930,11 @@ describe('Wallet Auction', function() {
         // Complete all 4 bids win and/or lose in one TX
         const batch1 = await wallet.sendBatch(
           [
-            ['OPEN', name4],
-            ['REDEEM', name1],
-            ['UPDATE', name1, res1],
-            ['UPDATE', name2, res2],
-            ['UPDATE', name3, res3]
+            { type: 'OPEN', args: [name4] },
+            { type: 'REDEEM', args: [name1] },
+            { type: 'UPDATE', args: [name1, res1] },
+            { type: 'UPDATE', args: [name2, res2] },
+            { type: 'UPDATE', args: [name3, res3] }
           ]
         );
 
@@ -955,10 +955,10 @@ describe('Wallet Auction', function() {
         });
         const tx = await wallet.sendBatch(
           [
-            ['TRANSFER', name1, nullAddr],
-            ['TRANSFER', name2, nullAddr],
-            ['TRANSFER', name3, nullAddr],
-            ['BID', name4, 70000, 80000]
+            { type: 'TRANSFER', args: [name1, nullAddr] },
+            { type: 'TRANSFER', args: [name2, nullAddr] },
+            { type: 'TRANSFER', args: [name3, nullAddr] },
+            { type: 'BID', args: [name4, 70000, 80000] }
           ]
         );
 
@@ -974,10 +974,10 @@ describe('Wallet Auction', function() {
       it('1 FINALIZE, 1 CANCEL, 1 REVOKE and 1 REVEAL', async () => {
         const tx = await wallet.sendBatch(
           [
-            ['FINALIZE', name1],
-            ['CANCEL', name2],
-            ['REVOKE', name3],
-            ['REVEAL', name4]
+            { type: 'FINALIZE', args: [name1] },
+            { type: 'CANCEL', args: [name2] },
+            { type: 'REVOKE', args: [name3] },
+            { type: 'REVEAL', args: [name4] }
           ]
         );
 
@@ -992,8 +992,8 @@ describe('Wallet Auction', function() {
       it('1 revoked name re-OPEN and 1 REGISTER', async () => {
         const batch2 = await wallet.sendBatch(
           [
-            ['OPEN', name3], // and the cycle begins again...
-            ['UPDATE', name4, res4]
+            { type: 'OPEN', args: [name3] }, // and the cycle begins again...
+            { type: 'UPDATE', args: [name4, res4] }
           ]
         );
 
@@ -1010,7 +1010,7 @@ describe('Wallet Auction', function() {
         const actions = [];
         for (let i = 0; i < 10; i++) {
           const addr = Address.fromProgram(0, Buffer.alloc(20, i + 1));
-          actions.push(['NONE', addr, 10000]);
+          actions.push({ type: 'NONE', args: [addr, 10000] });
         }
 
         const batch = await wallet.sendBatch(actions, {hardFee: 1000});
@@ -1058,8 +1058,8 @@ describe('Wallet Auction', function() {
       it('2 RENEW', async () => {
         await wallet.sendBatch(
           [
-            ['RENEW', name2],
-            ['RENEW', name4]
+            { type: 'RENEW', args: [name2] },
+            { type: 'RENEW', args: [name4] }
           ]
         );
 
@@ -1130,14 +1130,16 @@ describe('Wallet Auction', function() {
 
       it('should OPEN', async () => {
         name = rules.grindName(4, chain.height, network);
-        await wallet.sendBatch([['OPEN', name]]);
+        await wallet.sendBatch([
+          { type: 'OPEN', args: [name] }
+        ]);
         await mineBlocks(treeInterval + 1);
       });
 
       it('should not batch too many BIDs', async () => {
         const batch = [];
         for (let i = 201; i > 0; i--)
-          batch.push(['BID', name, i * 1000, i * 1000]);
+          batch.push({ type: 'BID', args: [name, i * 1000, i * 1000] });
 
         await assert.rejects(
           wallet.sendBatch(batch),
@@ -1148,19 +1150,19 @@ describe('Wallet Auction', function() {
       it('should batch BIDs', async () => {
         let batch = [];
         for (let i = 200; i > 0; i--)
-          batch.push(['BID', name, i * 1000, i * 1000]);
+          batch.push({ type: 'BID', args: [name, i * 1000, i * 1000] });
         await wallet.sendBatch(batch);
         batch = [];
         for (let i = 200; i > 0; i--)
-          batch.push(['BID', name, i * 1001, i * 1001]);
+          batch.push({ type: 'BID', args: [name, i * 1001, i * 1001] });
         await wallet.sendBatch(batch);
         batch = [];
         for (let i = 200; i > 0; i--)
-          batch.push(['BID', name, i * 1002, i * 1002]);
+          batch.push({ type: 'BID', args: [name, i * 1002, i * 1002] });
         await wallet.sendBatch(batch);
         batch = [];
         for (let i = 150; i > 0; i--)
-          batch.push(['BID', name, i * 1003, i * 1003]);
+          batch.push({ type: 'BID', args: [name, i * 1003, i * 1003] });
         await wallet.sendBatch(batch);
 
         await mineBlocks(biddingPeriod);
@@ -1175,7 +1177,7 @@ describe('Wallet Auction', function() {
 
       it('should create batch just under weight limit', async () => {
         // Start with the batch we would normally make
-        const mtx = await wallet.createBatch([['REVEAL']]);
+        const mtx = await wallet.createBatch([{ type: 'REVEAL' }]);
 
         // Find a spendable coin
         const coins = await wallet.getCoins();
@@ -1213,12 +1215,12 @@ describe('Wallet Auction', function() {
 
       it('should REVEAL all in several batches', async () => {
         let reveals = 0;
-        const mtx1 = await wallet.createBatch([['REVEAL']]);
+        const mtx1 = await wallet.createBatch([{ type: 'REVEAL' }]);
         assert(mtx1.changeIndex >= 0);
         reveals += mtx1.outputs.length - 1;
         await wdb.addTX(mtx1.toTX());
 
-        const mtx2 = await wallet.createBatch([['REVEAL']]);
+        const mtx2 = await wallet.createBatch([{ type: 'REVEAL' }]);
         assert(mtx2.changeIndex >= 0);
         reveals += mtx2.outputs.length - 1;
         await wdb.addTX(mtx2.toTX());
@@ -1239,12 +1241,12 @@ describe('Wallet Auction', function() {
 
       it('should REDEEM all in several batches', async () => {
         let reveals = 0;
-        const mtx1 = await wallet.createBatch([['REDEEM']]);
+        const mtx1 = await wallet.createBatch([{ type: 'REDEEM' }]);
         assert(mtx1.changeIndex >= 0);
         reveals += mtx1.outputs.length - 1;
         await wdb.addTX(mtx1.toTX());
 
-        const mtx2 = await wallet.createBatch([['REDEEM']]);
+        const mtx2 = await wallet.createBatch([{ type: 'REDEEM' }]);
         assert(mtx2.changeIndex >= 0);
         reveals += mtx2.outputs.length - 1;
         await wdb.addTX(mtx2.toTX());
@@ -1292,7 +1294,7 @@ describe('Wallet Auction', function() {
       it('should not batch too many OPENs', async () => {
         const batch = [];
         for (let i = 0; i < consensus.MAX_BLOCK_OPENS + 1; i++)
-          batch.push(['OPEN', names[i]]);
+          batch.push({ type: 'OPEN', args: [names[i]] });
 
         await assert.rejects(
           wallet.createBatch(batch),
@@ -1305,7 +1307,7 @@ describe('Wallet Auction', function() {
         for (let i = 1; i <= 8; i++) {
           const batch = [];
           for (let j = 1; j <= 100; j++) {
-            batch.push(['OPEN', names[count++]]);
+            batch.push({ type: 'OPEN', args: [names[count++]] });
           }
           await wallet.sendBatch(batch);
           await mineBlocks(1);
@@ -1319,8 +1321,8 @@ describe('Wallet Auction', function() {
           const batch = [];
           for (let j = 1; j <= 100; j++) {
             batch.push(
-              ['BID', names[count], 10000, 10000],
-              ['BID', names[count++], 10000, 10000]
+              { type: 'BID', args: [names[count], 10000, 10000]},
+              { type: 'BID', args: [names[count++], 10000, 10000]}
             );
           }
           await wallet.sendBatch(batch);
@@ -1334,7 +1336,12 @@ describe('Wallet Auction', function() {
         let reveals = 0;
         for (;;) {
           try {
-            const tx = await wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW'], ['FINALIZE']]);
+            const tx = await wallet.sendBatch([
+              { type: 'REVEAL' },
+              { type: 'REDEEM' },
+              { type: 'RENEW' },
+              { type: 'FINALIZE' }
+            ]);
             reveals += tx.outputs.length - 1; // Don't count change output
           } catch (e) {
             assert.strictEqual(e.message, 'Nothing to do.');
@@ -1351,7 +1358,13 @@ describe('Wallet Auction', function() {
         let redeems = 0;
         for (;;) {
           try {
-            const tx = await wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW'], ['FINALIZE']]);
+            const tx = await wallet.sendBatch([
+              { type: 'REVEAL' },
+              { type: 'REDEEM' },
+              { type: 'RENEW' },
+              { type: 'FINALIZE' }
+            ]);
+
             redeems += tx.outputs.length - 1; // Don't count change output
           } catch (e) {
             assert.strictEqual(e.message, 'Nothing to do.');
@@ -1367,7 +1380,7 @@ describe('Wallet Auction', function() {
         for (let i = 1; i <= 8; i++) {
           const batch = [];
           for (let j = 1; j <= 100; j++) {
-            batch.push(['UPDATE', names[count++], new Resource()]);
+            batch.push({ type: 'UPDATE', args: [names[count++], new Resource()]});
           }
           await wallet.sendBatch(batch);
           await mineBlocks(1);
@@ -1390,7 +1403,7 @@ describe('Wallet Auction', function() {
       it('should not batch too many UPDATEs', async () => {
         const batch = [];
         for (let i = 0; i < consensus.MAX_BLOCK_UPDATES + 1; i++)
-          batch.push(['UPDATE', names[i], new Resource()]);
+          batch.push({ type: 'UPDATE', args: [names[i], new Resource()]});
 
         await assert.rejects(
           wallet.createBatch(batch),
@@ -1406,7 +1419,12 @@ describe('Wallet Auction', function() {
         );
 
         await assert.rejects(
-          wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW'], ['FINALIZE']]),
+          wallet.sendBatch([
+            { type: 'REVEAL' },
+            { type: 'REDEEM' },
+            { type: 'RENEW' },
+            { type: 'FINALIZE' }
+          ]),
           {message: 'Nothing to do.'}
         );
       });
@@ -1414,7 +1432,7 @@ describe('Wallet Auction', function() {
       it('should not batch too many RENEWs', async () => {
         const batch = [];
         for (let i = 0; i < consensus.MAX_BLOCK_RENEWALS + 1; i++)
-          batch.push(['RENEW', names[i]]);
+          batch.push({ type: 'RENEW', args: [names[i]]});
 
         await assert.rejects(
           wallet.createBatch(batch),
@@ -1427,7 +1445,12 @@ describe('Wallet Auction', function() {
 
         let renewals = 0;
         for (;;) {
-          const tx = await wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW'], ['FINALIZE']]);
+          const tx = await wallet.sendBatch([
+            { type: 'REVEAL' },
+            { type: 'REDEEM' },
+            { type: 'RENEW' },
+            { type: 'FINALIZE' }
+          ]);
           await mineBlocks(1);
 
           if (!renewals) {
@@ -1446,7 +1469,7 @@ describe('Wallet Auction', function() {
       it('should not batch too many TRANSFERs', async () => {
         const batch = [];
         for (const name of names)
-          batch.push(['TRANSFER', name, new Address()]);
+          batch.push({ type: 'TRANSFER', args: [name, new Address()]});
 
         await assert.rejects(
           wallet.createBatch(batch),
@@ -1460,7 +1483,7 @@ describe('Wallet Auction', function() {
         for (let i = 1; i <= 8; i++) {
           const batch = [];
           for (let j = 1; j <= 100; j++) {
-            batch.push(['TRANSFER', names[count++], addr]);
+            batch.push({ type: 'TRANSFER', args: [names[count++], addr]});
           }
           await wallet.sendBatch(batch);
           await mineBlocks(1);
@@ -1471,7 +1494,12 @@ describe('Wallet Auction', function() {
         await mineBlocks(network.names.lockupPeriod - 9);
 
         await assert.rejects(
-          wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW'], ['FINALIZE']]),
+          wallet.sendBatch([
+            { type: 'REVEAL' },
+            { type: 'REDEEM' },
+            { type: 'RENEW' },
+            { type: 'FINALIZE' }
+          ]),
           {message: 'Nothing to do.'}
         );
       });
@@ -1481,7 +1509,12 @@ describe('Wallet Auction', function() {
 
         let finalizes = 0;
         for (;;) {
-          const tx = await wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW'], ['FINALIZE']]);
+          const tx = await wallet.sendBatch([
+            { type: 'REVEAL' },
+            { type: 'REDEEM' },
+            { type: 'RENEW' },
+            { type: 'FINALIZE' }
+          ]);
           await mineBlocks(1);
 
           finalizes += tx.outputs.length - 1; // Don't count change output
@@ -1493,7 +1526,12 @@ describe('Wallet Auction', function() {
 
       it('should have nothing to do', async () => {
         await assert.rejects(
-          wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW'], ['FINALIZE']]),
+          wallet.sendBatch([
+            { type: 'REVEAL' },
+            { type: 'REDEEM' },
+            { type: 'RENEW' },
+            { type: 'FINALIZE' }
+          ]),
           {message: 'Nothing to do.'}
         );
       });

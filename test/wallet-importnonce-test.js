@@ -75,8 +75,8 @@ describe('Wallet Import Nonce', function () {
 
   it('should bid with sendbatch', async () => {
     const batch = [
-      ['BID', NAME, BIDS[1].value, BIDS[1].lockup],
-      ['BID', NAME, BIDS[2].value, BIDS[2].lockup]
+      { type: 'BID', args: [NAME, BIDS[1].value, BIDS[1].lockup]},
+      { type: 'BID', args: [NAME, BIDS[2].value, BIDS[2].lockup]}
     ];
 
     const bidTx = await walletA.sendBatch(batch);
