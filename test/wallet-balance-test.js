@@ -573,7 +573,7 @@ describe('Wallet Balance', function() {
     const txOpts = { hardFee: HARD_FEE };
 
     // all three bids are there.
-    const bidMTX = await wallet.createBatch([
+    const {mtx: bidMTX} = await wallet.createBatch([
       { type: 'BID', args: [name1, BID_AMOUNT_1, BLIND_AMOUNT_1] },
       { type: 'BID', args: [name2, BID_AMOUNT_2, BLIND_AMOUNT_2] }
     ], txOpts);
@@ -1018,7 +1018,7 @@ describe('Wallet Balance', function() {
       const {nextAddr} = getAheadAddr(account, ahead);
       const txOpts = { hardFee: HARD_FEE };
 
-      const bidMTX = await wallet.createBatch([
+      const {mtx: bidMTX} = await wallet.createBatch([
         { type: 'BID', args: [name, BID_AMOUNT_1, BLIND_AMOUNT_1] },
         { type: 'BID', args: [name, BID_AMOUNT_2, BLIND_AMOUNT_2] }
       ], txOpts);
@@ -1111,7 +1111,7 @@ describe('Wallet Balance', function() {
       const {nextAddr} = getAheadAddr(account, ahead);
       const txOpts = { hardFee: HARD_FEE };
 
-      const bidMTX = await primary.createBatch([
+      const {mtx: bidMTX} = await primary.createBatch([
         { type: 'BID', args: [name, BID_AMOUNT_1, BLIND_AMOUNT_1] },
         { type: 'BID', args: [name, BID_AMOUNT_2, BLIND_AMOUNT_2] }
       ], txOpts);
@@ -1208,7 +1208,7 @@ describe('Wallet Balance', function() {
       const addr1 = getAheadAddr(altAccount, -altAccount.lookahead);
       const addr2 = getAheadAddr(altAccount, ahead);
 
-      const bidMTX = await wallet.createBatch([
+      const {mtx: bidMTX} = await wallet.createBatch([
         { type: 'BID', args: [name, BID_AMOUNT_1, BLIND_AMOUNT_1] },
         { type: 'BID', args: [name, BID_AMOUNT_2, BLIND_AMOUNT_2] }
       ], txOpts);
@@ -1393,7 +1393,7 @@ describe('Wallet Balance', function() {
       await primary.sendOpen(name, false);
       await mineBlocks(openingPeriod);
 
-      const bidMTX = await clone.createBatch([
+      const {mtx: bidMTX} = await clone.createBatch([
         { type: 'BID', args: [name, BID_AMOUNT_1, BLIND_AMOUNT_1] },
         { type: 'BID', args: [name, BID_AMOUNT_2, BLIND_AMOUNT_2] }
       ], txOpts);
@@ -1852,7 +1852,7 @@ describe('Wallet Balance', function() {
       const txOpts = { hardFee: HARD_FEE };
 
       // all three bids are there.
-      const bidMTX = await clone.createBatch([
+      const {mtx: bidMTX} = await clone.createBatch([
         { type: 'BID', args: [name1, BID_AMOUNT_1, BLIND_AMOUNT_1] },
         { type: 'BID', args: [name2, BID_AMOUNT_2, BLIND_AMOUNT_2] }
       ], txOpts);

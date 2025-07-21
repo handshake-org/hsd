@@ -79,7 +79,7 @@ describe('Wallet Import Nonce', function () {
       { type: 'BID', args: [NAME, BIDS[2].value, BIDS[2].lockup]}
     ];
 
-    const bidTx = await walletA.sendBatch(batch);
+    const {tx: bidTx} = await walletA.sendBatch(batch);
 
     // Save address for importnonce later
     for (const output of bidTx.outputs) {
