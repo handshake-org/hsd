@@ -17,6 +17,8 @@ const Covenant = require('../lib/primitives/covenant');
 const {Resource} = require('../lib/dns/resource');
 const {forEvent} = require('./util/common');
 
+/** @typedef {import('../lib/wallet/wallet')} Wallet */
+
 const network = Network.get('regtest');
 const {
   treeInterval,
@@ -637,13 +639,16 @@ describe('Wallet Auction', function() {
   });
 
   describe('Batch TXs', function() {
-    let wallet, receive;
+    /** @type {Wallet} */
+    let wallet;
+    let receive;
     const hardFee = 12345;
 
     const name1 = rules.grindName(3, 0, network);
     const name2 = rules.grindName(4, 0, network);
     const name3 = rules.grindName(5, 0, network);
     const name4 = rules.grindName(6, 0, network);
+    const name5 = rules.grindName(7, 0, network);
 
     const res1 = Resource.fromJSON({records: [{type: 'TXT', txt: ['one']}]});
     const res2 = Resource.fromJSON({records: [{type: 'TXT', txt: ['two']}]});
@@ -696,11 +701,11 @@ describe('Wallet Auction', function() {
     });
 
     it('should create multiple OPENs with options', async () => {
-      const mtx = await wallet.createBatch(
+      const {mtx, errors} = await wallet.createBatch(
         [
-          ['OPEN', name1],
-          ['OPEN', name2],
-          ['OPEN', name3]
+          { type: 'OPEN', args: [name1] },
+          { type: 'OPEN', args: [name2] },
+          { type: 'OPEN', args: [name3] }
         ],
         {
           hardFee
@@ -708,8 +713,9 @@ describe('Wallet Auction', function() {
       );
 
       assert(uniqueAddrs(mtx));
-
+      assert.strictEqual(errors.length, 0);
       assert.strictEqual(mtx.outputs.length, 4);
+
       let opens = 0;
       for (const output of mtx.outputs) {
         if (output.covenant.type === rules.types.OPEN)
@@ -730,23 +736,71 @@ describe('Wallet Auction', function() {
       await assert.rejects(
         wallet.sendBatch(
           [
-            ['OPEN', 'google'],
-            ['OPEN', name2],
-            ['OPEN', name3]
+            { type: 'OPEN', args: ['google'] },
+            { type: 'OPEN', args: [name2] },
+            { type: 'OPEN', args: [name3] }
           ]
         ),
         {message: 'Name is reserved: google.'}
       );
     });
 
+    it('should fail if one action is invalid: OPEN reserved (partial)', async () => {
+      const {mtx, errors} = await wallet.createBatch([
+        { type: 'OPEN', args: ['google'], id: 'google-id' },
+        { type: 'OPEN', args: [name2] },
+        { type: 'OPEN', args: [name3] }
+      ], {
+        partialFailure: true
+      });
+
+      assert.strictEqual(errors.length, 1);
+      assert.deepStrictEqual(errors[0], {
+        id: 'google-id',
+        type: 'OPEN',
+        message: 'Name is reserved: google.',
+        error: new Error('Name is reserved: google.')
+      });
+
+      assert.strictEqual(mtx.outputs.length, 3);
+    });
+
     it('should fail if one action is invalid: OPEN duplicated', async () => {
       await assert.rejects(
         wallet.sendBatch(
           [
-            ['OPEN', name1],
-            ['OPEN', name1],
-            ['OPEN', name3]
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name3] }
           ]
+        ),
+         {message: 'Duplicate name with exclusive action.'}
+       );
+
+      await assert.rejects(
+        wallet.sendBatch(
+          [
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name3] }
+          ], {
+            partialFailure: true
+          }
+        ),
+         {message: 'Duplicate name with exclusive action.'}
+       );
+    });
+
+    it('should fail if one action is invalid: OPEN duplicated (partial)', async () => {
+      await assert.rejects(
+        wallet.sendBatch(
+          [
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name3] }
+          ], {
+            partialFailure: true
+          }
         ),
          {message: 'Duplicate name with exclusive action.'}
        );
@@ -756,10 +810,25 @@ describe('Wallet Auction', function() {
       await assert.rejects(
         wallet.sendBatch(
           [
-            ['OPEN', name1],
-            ['OPEN', name1],
-            ['OPEN', name3]
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name3] }
           ]
+        ),
+         {message: 'Duplicate name with exclusive action.'}
+       );
+    });
+
+    it('should fail if one action is invalid: REVEAL before bid (partial)', async () => {
+      await assert.rejects(
+        wallet.sendBatch(
+          [
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name3] }
+          ], {
+            partialFailure: true
+          }
         ),
          {message: 'Duplicate name with exclusive action.'}
        );
@@ -769,33 +838,74 @@ describe('Wallet Auction', function() {
       await assert.rejects(
         wallet.sendBatch(
           [
-            ['BID', name1, 1, 1],
-            ['OPEN', name2],
-            ['OPEN', name3]
+            { type: 'BID', args: [name1, 1, 1] },
+            { type: 'OPEN', args: [name2] },
+            { type: 'OPEN', args: [name3] }
           ]
         ),
         {message: `Name has not reached the bidding phase yet: ${name1}.`}
       );
     });
 
+    it('should fail if one action is invalid: BID early (partial)', async () => {
+      const {mtx, errors} = await wallet.createBatch( [
+        { type: 'BID', args: [name1, 1, 1], id: name1 },
+        { type: 'OPEN', args: [name2] },
+        { type: 'OPEN', args: [name3] }
+      ], {
+          partialFailure: true
+      });
+
+      assert.strictEqual(errors.length, 1);
+      assert.deepStrictEqual(errors[0], {
+        id: name1,
+        type: 'BID',
+        message: `Name has not reached the bidding phase yet: ${name1}.`,
+        error: new Error(`Name has not reached the bidding phase yet: ${name1}.`)
+      });
+
+      assert.strictEqual(mtx.outputs.length, 3);
+    });
+
     it('should fail if one action is invalid: wrong arguments', async () => {
       await assert.rejects(
         wallet.sendBatch(
           [
-            ['BID', name1, 21000000],
-            ['OPEN', name2],
-            ['OPEN', name3]
+            { type: 'BID', args: [name1, 21000000] },
+            { type: 'OPEN', args: [name2] },
+            { type: 'OPEN', args: [name3] }
           ]
         ),
         {message: 'Bad arguments for BID.'}
       );
     });
 
+    it('should fail if one action is invalid: wrong arguments (partial)', async () => {
+      const {mtx, errors} = await wallet.createBatch([
+        { type: 'BID', args: [name1, 21000000] },
+        { type: 'OPEN', args: [name2] },
+        { type: 'OPEN', args: [name3] }
+      ], {
+        partialFailure: true
+      });
+
+      assert.strictEqual(errors.length, 1);
+      assert.strictEqual(errors[0].error.message, 'Bad arguments for BID.');
+      delete errors[0].error;
+
+      assert.deepStrictEqual(errors[0], {
+        id: null,
+        type: 'BID',
+        message: 'Bad arguments for BID.'
+      });
+      assert.strictEqual(mtx.outputs.length, 3);
+    });
+
     it('should fail if one action is invalid: REVEAL all before bid', async () => {
       await assert.rejects(
         wallet.sendBatch(
           [
-            ['REVEAL']
+            { type: 'REVEAL' }
           ]
         ),
         {message: 'Nothing to do.'}
@@ -806,7 +916,7 @@ describe('Wallet Auction', function() {
       await assert.rejects(
         wallet.sendBatch(
           [
-            ['REDEEM']
+            { type: 'REDEEM' }
           ]
         ),
         {message: 'Nothing to do.'}
@@ -818,69 +928,125 @@ describe('Wallet Auction', function() {
       await assert.rejects(
         wallet.sendBatch(
           [
-            ['OPEN', name1],
-            ['OPEN', name1],
-            ['OPEN', name3],
-            ['NONE', addr, 1]
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name3] },
+            { type: 'NONE', args: [addr, 1] }
           ]
         ),
          {message: 'Output is dust.'}
        );
     });
 
+    it('should fail if one action is invalid: NONE below dust (partial)', async () => {
+      const addr = Address.fromProgram(0, Buffer.alloc(20, 0x01)).toString('regtest');
+      const {mtx, errors} = await wallet.createBatch(
+        [
+          { type: 'OPEN', args: [name1] },
+          { type: 'OPEN', args: [name3] },
+          { type: 'NONE', args: [addr, 1] }
+        ],
+        {
+          partialFailure: true
+        }
+      );
+
+      assert.strictEqual(errors.length, 1);
+      assert.deepStrictEqual(errors[0], {
+        id: null,
+        type: 'NONE',
+        message: 'Output is dust.',
+        error: new Error('Output is dust.')
+      });
+
+      assert.strictEqual(mtx.outputs.length, 3);
+    });
+
     it('should fail if one action is invalid: unknown action', async () => {
       await assert.rejects(
         wallet.sendBatch(
           [
-            ['OPEN', name1],
-            ['OPEN', name1],
-            ['OPEN', name3],
-            ['open', name4]
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name3] },
+            { type: 'open', args: [name4] }
           ]
         ),
          {message: 'Unknown action type: open'}
        );
     });
 
+    it('should fail if one action is invalid: unknown action (partial)', async () => {
+      const {mtx, errors} = await wallet.createBatch([
+        { type: 'OPEN', args: [name1] },
+        { type: 'OPEN', args: [name3] },
+        { type: 'open', args: [name4] }
+      ], {
+        partialFailure: true
+      });
+
+      assert.strictEqual(errors.length, 1);
+      assert.deepStrictEqual(errors[0], {
+        id: null,
+        type: 'open',
+        message: 'Unknown action type: open',
+        error: new Error('Unknown action type: open')
+      });
+
+      assert.strictEqual(mtx.outputs.length, 3);
+    });
+
     describe('Complete auction and diverse-action batches', function() {
       const addr = Address.fromProgram(0, Buffer.alloc(20, 0x01)).toString('regtest');
+
       it('3 OPENs and 1 NONE', async () => {
-        const tx = await wallet.sendBatch(
+        const {tx, errors} = await wallet.sendBatch(
           [
-            ['OPEN', name1],
-            ['OPEN', name2],
-            ['OPEN', name3],
-            ['NONE', addr, 10000]
+            { type: 'OPEN', args: [name1] },
+            { type: 'OPEN', args: [name2] },
+            { type: 'OPEN', args: [name3] },
+            { type: 'NONE', args: [addr, 10000] }
           ]
         );
 
         assert(uniqueAddrs(tx));
+        assert.strictEqual(errors.length, 0);
         await mineBlocks(treeInterval + 1);
       });
 
       it('4 BIDs', async () => {
-        const tx = await wallet.sendBatch(
+        const {tx, errors} = await wallet.sendBatch(
           [
-            ['BID', name1, 10000, 20000],
-            ['BID', name1, 10001, 20000], // self-snipe!
-            ['BID', name2, 30000, 40000],
-            ['BID', name3, 50000, 60000]
-          ]
+            { type: 'BID', args: [name1, 10000, 20000] },
+            { type: 'BID', args: [name1, 10001, 20000] }, // self-snipe!
+            { type: 'BID', args: [name2, 30000, 40000] },
+            { type: 'BID', args: [name3, 50000, 60000] },
+            // Handle failed index increments.
+            { type: 'BID', args: ['random', -100, -1]},
+            { type: 'BID', args: ['random', -100, -1]},
+            { type: 'BID', args: ['random', -100]},
+            { type: 'OPEN', args: [name5]}
+          ], {
+            partialFailure: true
+          }
         );
 
         assert(uniqueAddrs(tx));
+        assert.strictEqual(errors.length, 3);
         await mineBlocks(biddingPeriod);
       });
 
       it('REVEAL all', async () => {
         // Don't send this one
-        const revealAll = await wallet.createBatch(
+        const {mtx: revealAll, errors} = await wallet.createBatch(
           [
-            ['REVEAL']
+            { type: 'REVEAL' }
           ]
         );
 
         assert.strictEqual(revealAll.outputs.length, 5);
+        assert.strictEqual(errors.length, 0);
+
         let reveals = 0;
         for (const output of revealAll.outputs) {
           if (output.covenant.type === rules.types.REVEAL)
@@ -890,20 +1056,21 @@ describe('Wallet Auction', function() {
       });
 
       it('2 REVEALs then 1 REVEAL', async () => {
-        const tx = await wallet.sendBatch(
+        const {tx, errors} = await wallet.sendBatch(
           [
-            ['REVEAL', name1],
-            ['REVEAL', name2]
+            { type: 'REVEAL', args: [name1] },
+            { type: 'REVEAL', args: [name2] }
           ]
         );
 
         assert(uniqueAddrs(tx));
+        assert.strictEqual(errors.length, 0);
 
         // No "could not resolve preferred inputs" error
         // because names are being revealed individually.
         await wallet.sendBatch(
           [
-            ['REVEAL', name3]
+            { type: 'REVEAL', args: [name3] }
           ]
         );
         await mineBlocks(revealPeriod);
@@ -911,13 +1078,15 @@ describe('Wallet Auction', function() {
 
       it('REDEEM all', async () => {
         // Don't send this one
-        const redeemAll = await wallet.createBatch(
+        const {mtx: redeemAll, errors} = await wallet.createBatch(
           [
-            ['REDEEM']
+            { type: 'REDEEM' }
           ]
         );
 
         assert.strictEqual(redeemAll.outputs.length, 2);
+        assert.strictEqual(errors.length, 0);
+
         let redeems = 0;
         for (const output of redeemAll.outputs) {
           if (output.covenant.type === rules.types.REDEEM)
@@ -928,17 +1097,18 @@ describe('Wallet Auction', function() {
 
       it('3 REGISTERs, 1 REDEEM and 1 OPEN', async () => {
         // Complete all 4 bids win and/or lose in one TX
-        const batch1 = await wallet.sendBatch(
+        const {tx: batch1, errors} = await wallet.sendBatch(
           [
-            ['OPEN', name4],
-            ['REDEEM', name1],
-            ['UPDATE', name1, res1],
-            ['UPDATE', name2, res2],
-            ['UPDATE', name3, res3]
+            { type: 'OPEN', args: [name4] },
+            { type: 'REDEEM', args: [name1] },
+            { type: 'UPDATE', args: [name1, res1] },
+            { type: 'UPDATE', args: [name2, res2] },
+            { type: 'UPDATE', args: [name3, res3] }
           ]
         );
 
         assert(uniqueAddrs(batch1));
+        assert.strictEqual(errors.length, 0);
 
         // Unlinked covenant (OPEN) was listed first but
         // should be sorted last with the change output (NONE).
@@ -953,16 +1123,18 @@ describe('Wallet Auction', function() {
           version: 31,
           hash: Buffer.from([1, 2, 3])
         });
-        const tx = await wallet.sendBatch(
+
+        const {tx, errors} = await wallet.sendBatch(
           [
-            ['TRANSFER', name1, nullAddr],
-            ['TRANSFER', name2, nullAddr],
-            ['TRANSFER', name3, nullAddr],
-            ['BID', name4, 70000, 80000]
+            { type: 'TRANSFER', args: [name1, nullAddr] },
+            { type: 'TRANSFER', args: [name2, nullAddr] },
+            { type: 'TRANSFER', args: [name3, nullAddr] },
+            { type: 'BID', args: [name4, 70000, 80000] }
           ]
         );
 
         assert(uniqueAddrs(tx));
+        assert.strictEqual(errors.length, 0);
 
         // True for regtest but not mainnet,
         // should allow both REVEAL and FINALIZE
@@ -972,16 +1144,17 @@ describe('Wallet Auction', function() {
       });
 
       it('1 FINALIZE, 1 CANCEL, 1 REVOKE and 1 REVEAL', async () => {
-        const tx = await wallet.sendBatch(
+        const {tx, errors} = await wallet.sendBatch(
           [
-            ['FINALIZE', name1],
-            ['CANCEL', name2],
-            ['REVOKE', name3],
-            ['REVEAL', name4]
+            { type: 'FINALIZE', args: [name1] },
+            { type: 'CANCEL', args: [name2] },
+            { type: 'REVOKE', args: [name3] },
+            { type: 'REVEAL', args: [name4] }
           ]
         );
 
         assert(uniqueAddrs(tx));
+        assert.strictEqual(errors.length, 0);
 
         // Should allow for both REGISTER and re-open revoked name
         assert(auctionMaturity > revealPeriod);
@@ -990,14 +1163,15 @@ describe('Wallet Auction', function() {
       });
 
       it('1 revoked name re-OPEN and 1 REGISTER', async () => {
-        const batch2 = await wallet.sendBatch(
+        const {tx: batch2, errors} = await wallet.sendBatch(
           [
-            ['OPEN', name3], // and the cycle begins again...
-            ['UPDATE', name4, res4]
+            { type: 'OPEN', args: [name3] }, // and the cycle begins again...
+            { type: 'UPDATE', args: [name4, res4] }
           ]
         );
 
         assert(uniqueAddrs(batch2));
+        assert.strictEqual(errors.length, 0);
 
         // Linked covenant (UPDATE) was listed last but should be sorted first.
         assert.strictEqual(batch2.outputs[0].covenant.type, rules.types.REGISTER);
@@ -1010,12 +1184,13 @@ describe('Wallet Auction', function() {
         const actions = [];
         for (let i = 0; i < 10; i++) {
           const addr = Address.fromProgram(0, Buffer.alloc(20, i + 1));
-          actions.push(['NONE', addr, 10000]);
+          actions.push({ type: 'NONE', args: [addr, 10000] });
         }
 
-        const batch = await wallet.sendBatch(actions, {hardFee: 1000});
+        const {tx: batch, errors} = await wallet.sendBatch(actions, {hardFee: 1000});
 
         assert.strictEqual(batch.outputs.length, 11);
+        assert.strictEqual(errors.length, 0);
 
         // Mine to some other wallet so reward doesn't affect our balance
         receive = new Address();
@@ -1056,12 +1231,14 @@ describe('Wallet Auction', function() {
       });
 
       it('2 RENEW', async () => {
-        await wallet.sendBatch(
+        const {errors} = await wallet.sendBatch(
           [
-            ['RENEW', name2],
-            ['RENEW', name4]
+            { type: 'RENEW', args: [name2] },
+            { type: 'RENEW', args: [name4] }
           ]
         );
+
+        assert.strictEqual(errors.length, 0);
 
         await mineBlocks(1);
         const ns1 = await chain.db.getNameStateByName(name1);
@@ -1094,14 +1271,16 @@ describe('Wallet Auction', function() {
 
         const wtxs = await wallet.toDetails(txs);
         for (const wtx of wtxs) {
-          for (const output of wtx.outputs)
+          for (const output of wtx.outputs) {
             if (   output.path
                 && output.path.account === 0
                 && output.path.branch === 0  // receive
             ) {
               addrIndexes[output.path.index]++;
             }
+          }
         }
+
         // Ensure every receive address was used at least once
         assert(addrIndexes.indexOf(0) === -1);
       });
@@ -1130,14 +1309,16 @@ describe('Wallet Auction', function() {
 
       it('should OPEN', async () => {
         name = rules.grindName(4, chain.height, network);
-        await wallet.sendBatch([['OPEN', name]]);
+        await wallet.sendBatch([
+          { type: 'OPEN', args: [name] }
+        ]);
         await mineBlocks(treeInterval + 1);
       });
 
       it('should not batch too many BIDs', async () => {
         const batch = [];
         for (let i = 201; i > 0; i--)
-          batch.push(['BID', name, i * 1000, i * 1000]);
+          batch.push({ type: 'BID', args: [name, i * 1000, i * 1000] });
 
         await assert.rejects(
           wallet.sendBatch(batch),
@@ -1148,19 +1329,19 @@ describe('Wallet Auction', function() {
       it('should batch BIDs', async () => {
         let batch = [];
         for (let i = 200; i > 0; i--)
-          batch.push(['BID', name, i * 1000, i * 1000]);
+          batch.push({ type: 'BID', args: [name, i * 1000, i * 1000] });
         await wallet.sendBatch(batch);
         batch = [];
         for (let i = 200; i > 0; i--)
-          batch.push(['BID', name, i * 1001, i * 1001]);
+          batch.push({ type: 'BID', args: [name, i * 1001, i * 1001] });
         await wallet.sendBatch(batch);
         batch = [];
         for (let i = 200; i > 0; i--)
-          batch.push(['BID', name, i * 1002, i * 1002]);
+          batch.push({ type: 'BID', args: [name, i * 1002, i * 1002] });
         await wallet.sendBatch(batch);
         batch = [];
         for (let i = 150; i > 0; i--)
-          batch.push(['BID', name, i * 1003, i * 1003]);
+          batch.push({ type: 'BID', args: [name, i * 1003, i * 1003] });
         await wallet.sendBatch(batch);
 
         await mineBlocks(biddingPeriod);
@@ -1175,7 +1356,7 @@ describe('Wallet Auction', function() {
 
       it('should create batch just under weight limit', async () => {
         // Start with the batch we would normally make
-        const mtx = await wallet.createBatch([['REVEAL']]);
+        const {mtx} = await wallet.createBatch([{ type: 'REVEAL' }]);
 
         // Find a spendable coin
         const coins = await wallet.getCoins();
@@ -1213,12 +1394,12 @@ describe('Wallet Auction', function() {
 
       it('should REVEAL all in several batches', async () => {
         let reveals = 0;
-        const mtx1 = await wallet.createBatch([['REVEAL']]);
+        const {mtx: mtx1} = await wallet.createBatch([{ type: 'REVEAL' }]);
         assert(mtx1.changeIndex >= 0);
         reveals += mtx1.outputs.length - 1;
         await wdb.addTX(mtx1.toTX());
 
-        const mtx2 = await wallet.createBatch([['REVEAL']]);
+        const {mtx: mtx2} = await wallet.createBatch([{ type: 'REVEAL' }]);
         assert(mtx2.changeIndex >= 0);
         reveals += mtx2.outputs.length - 1;
         await wdb.addTX(mtx2.toTX());
@@ -1239,12 +1420,12 @@ describe('Wallet Auction', function() {
 
       it('should REDEEM all in several batches', async () => {
         let reveals = 0;
-        const mtx1 = await wallet.createBatch([['REDEEM']]);
+        const {mtx: mtx1} = await wallet.createBatch([{ type: 'REDEEM' }]);
         assert(mtx1.changeIndex >= 0);
         reveals += mtx1.outputs.length - 1;
         await wdb.addTX(mtx1.toTX());
 
-        const mtx2 = await wallet.createBatch([['REDEEM']]);
+        const {mtx: mtx2} = await wallet.createBatch([{ type: 'REDEEM' }]);
         assert(mtx2.changeIndex >= 0);
         reveals += mtx2.outputs.length - 1;
         await wdb.addTX(mtx2.toTX());
@@ -1292,7 +1473,7 @@ describe('Wallet Auction', function() {
       it('should not batch too many OPENs', async () => {
         const batch = [];
         for (let i = 0; i < consensus.MAX_BLOCK_OPENS + 1; i++)
-          batch.push(['OPEN', names[i]]);
+          batch.push({ type: 'OPEN', args: [names[i]] });
 
         await assert.rejects(
           wallet.createBatch(batch),
@@ -1305,7 +1486,7 @@ describe('Wallet Auction', function() {
         for (let i = 1; i <= 8; i++) {
           const batch = [];
           for (let j = 1; j <= 100; j++) {
-            batch.push(['OPEN', names[count++]]);
+            batch.push({ type: 'OPEN', args: [names[count++]] });
           }
           await wallet.sendBatch(batch);
           await mineBlocks(1);
@@ -1319,8 +1500,8 @@ describe('Wallet Auction', function() {
           const batch = [];
           for (let j = 1; j <= 100; j++) {
             batch.push(
-              ['BID', names[count], 10000, 10000],
-              ['BID', names[count++], 10000, 10000]
+              { type: 'BID', args: [names[count], 10000, 10000]},
+              { type: 'BID', args: [names[count++], 10000, 10000]}
             );
           }
           await wallet.sendBatch(batch);
@@ -1334,7 +1515,12 @@ describe('Wallet Auction', function() {
         let reveals = 0;
         for (;;) {
           try {
-            const tx = await wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW'], ['FINALIZE']]);
+            const {tx} = await wallet.sendBatch([
+              { type: 'REVEAL' },
+              { type: 'REDEEM' },
+              { type: 'RENEW' },
+              { type: 'FINALIZE' }
+            ]);
             reveals += tx.outputs.length - 1; // Don't count change output
           } catch (e) {
             assert.strictEqual(e.message, 'Nothing to do.');
@@ -1351,7 +1537,13 @@ describe('Wallet Auction', function() {
         let redeems = 0;
         for (;;) {
           try {
-            const tx = await wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW'], ['FINALIZE']]);
+            const {tx} = await wallet.sendBatch([
+              { type: 'REVEAL' },
+              { type: 'REDEEM' },
+              { type: 'RENEW' },
+              { type: 'FINALIZE' }
+            ]);
+
             redeems += tx.outputs.length - 1; // Don't count change output
           } catch (e) {
             assert.strictEqual(e.message, 'Nothing to do.');
@@ -1367,7 +1559,7 @@ describe('Wallet Auction', function() {
         for (let i = 1; i <= 8; i++) {
           const batch = [];
           for (let j = 1; j <= 100; j++) {
-            batch.push(['UPDATE', names[count++], new Resource()]);
+            batch.push({ type: 'UPDATE', args: [names[count++], new Resource()]});
           }
           await wallet.sendBatch(batch);
           await mineBlocks(1);
@@ -1390,7 +1582,7 @@ describe('Wallet Auction', function() {
       it('should not batch too many UPDATEs', async () => {
         const batch = [];
         for (let i = 0; i < consensus.MAX_BLOCK_UPDATES + 1; i++)
-          batch.push(['UPDATE', names[i], new Resource()]);
+          batch.push({ type: 'UPDATE', args: [names[i], new Resource()]});
 
         await assert.rejects(
           wallet.createBatch(batch),
@@ -1406,7 +1598,12 @@ describe('Wallet Auction', function() {
         );
 
         await assert.rejects(
-          wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW'], ['FINALIZE']]),
+          wallet.sendBatch([
+            { type: 'REVEAL' },
+            { type: 'REDEEM' },
+            { type: 'RENEW' },
+            { type: 'FINALIZE' }
+          ]),
           {message: 'Nothing to do.'}
         );
       });
@@ -1414,7 +1611,7 @@ describe('Wallet Auction', function() {
       it('should not batch too many RENEWs', async () => {
         const batch = [];
         for (let i = 0; i < consensus.MAX_BLOCK_RENEWALS + 1; i++)
-          batch.push(['RENEW', names[i]]);
+          batch.push({ type: 'RENEW', args: [names[i]]});
 
         await assert.rejects(
           wallet.createBatch(batch),
@@ -1427,7 +1624,12 @@ describe('Wallet Auction', function() {
 
         let renewals = 0;
         for (;;) {
-          const tx = await wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW'], ['FINALIZE']]);
+          const {tx} = await wallet.sendBatch([
+            { type: 'REVEAL' },
+            { type: 'REDEEM' },
+            { type: 'RENEW' },
+            { type: 'FINALIZE' }
+          ]);
           await mineBlocks(1);
 
           if (!renewals) {
@@ -1446,7 +1648,7 @@ describe('Wallet Auction', function() {
       it('should not batch too many TRANSFERs', async () => {
         const batch = [];
         for (const name of names)
-          batch.push(['TRANSFER', name, new Address()]);
+          batch.push({ type: 'TRANSFER', args: [name, new Address()]});
 
         await assert.rejects(
           wallet.createBatch(batch),
@@ -1460,7 +1662,7 @@ describe('Wallet Auction', function() {
         for (let i = 1; i <= 8; i++) {
           const batch = [];
           for (let j = 1; j <= 100; j++) {
-            batch.push(['TRANSFER', names[count++], addr]);
+            batch.push({ type: 'TRANSFER', args: [names[count++], addr]});
           }
           await wallet.sendBatch(batch);
           await mineBlocks(1);
@@ -1471,7 +1673,12 @@ describe('Wallet Auction', function() {
         await mineBlocks(network.names.lockupPeriod - 9);
 
         await assert.rejects(
-          wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW'], ['FINALIZE']]),
+          wallet.sendBatch([
+            { type: 'REVEAL' },
+            { type: 'REDEEM' },
+            { type: 'RENEW' },
+            { type: 'FINALIZE' }
+          ]),
           {message: 'Nothing to do.'}
         );
       });
@@ -1481,7 +1688,12 @@ describe('Wallet Auction', function() {
 
         let finalizes = 0;
         for (;;) {
-          const tx = await wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW'], ['FINALIZE']]);
+          const {tx} = await wallet.sendBatch([
+            { type: 'REVEAL' },
+            { type: 'REDEEM' },
+            { type: 'RENEW' },
+            { type: 'FINALIZE' }
+          ]);
           await mineBlocks(1);
 
           finalizes += tx.outputs.length - 1; // Don't count change output
@@ -1493,7 +1705,12 @@ describe('Wallet Auction', function() {
 
       it('should have nothing to do', async () => {
         await assert.rejects(
-          wallet.sendBatch([['REVEAL'], ['REDEEM'], ['RENEW'], ['FINALIZE']]),
+          wallet.sendBatch([
+            { type: 'REVEAL' },
+            { type: 'REDEEM' },
+            { type: 'RENEW' },
+            { type: 'FINALIZE' }
+          ]),
           {message: 'Nothing to do.'}
         );
       });
