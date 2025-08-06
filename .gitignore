@@ -4,3 +4,5 @@ docker_data/
 docs/reference/
 node_modules/
 npm-debug.log
+coverage/
+.nyc_output/
