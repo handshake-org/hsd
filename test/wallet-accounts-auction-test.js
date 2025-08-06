@@ -5,7 +5,7 @@ const Network = require('../lib/protocol/network');
 const FullNode = require('../lib/node/fullnode');
 const Address = require('../lib/primitives/address');
 const rules = require('../lib/covenants/rules');
-const Resource = require('../lib/dns/resource');
+const {Resource} = require('../lib/dns/resource');
 const WalletClient = require('../lib/client/wallet');
 
 const network = Network.get('regtest');
@@ -129,20 +129,20 @@ describe('Multiple accounts participating in same auction', function() {
   });
 
   describe('UPDATE', function() {
-    const aliceResource = Resource.Resource.fromJSON({
+    const aliceResource = Resource.fromJSON({
       records: [
         {
           type: 'TXT',
           txt: ['ALICE']
         }
-      ]});
-    const bobResource = Resource.Resource.fromJSON({
+      ]}).encode();
+    const bobResource = Resource.fromJSON({
       records: [
         {
           type: 'TXT',
           txt: ['BOB']
         }
-      ]});
+      ]}).encode();
 
     it('should advance auction to REGISTER phase', async () => {
       await mineBlocks(network.names.revealPeriod);

@@ -167,7 +167,7 @@ describe('Reserved Name Claims', function() {
     const resource = Resource.fromJSON({
       records: [{type: 'TXT', txt: ['#CooperationGood']}]
     });
-    const register = await wallet.sendUpdate('cloudflare', resource);
+    const register = await wallet.sendUpdate('cloudflare', resource.encode());
     check();
     await mineBlocks(1);
     check();

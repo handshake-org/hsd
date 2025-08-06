@@ -58,6 +58,8 @@ const wdb = new WalletDB({
   workers: workers
 });
 
+const EMPTY_RESOURCE = (new Resource()).encode();
+
 describe('Wallet Auction', function() {
   let wallet, wallet2;
 
@@ -499,14 +501,17 @@ describe('Wallet Auction', function() {
     });
 
     it('should REGISTER and fail duplicate register', async () => {
-      const register1 = await wallet.sendUpdate(name1, Resource.fromString('name1.1'));
+      const res1 = Resource.fromString('name1.1').encode();
+      const register1 = await wallet.sendUpdate(name1, res1);
       assert(register1);
-      const register2 = await wallet.sendUpdate(name2, Resource.fromString('name2.1'));
+      const res2 = Resource.fromString('name2.1').encode();
+      const register2 = await wallet.sendUpdate(name2, res2);
       assert(register2);
 
       let err;
       try {
-        await wallet.sendUpdate(name1, Resource.fromString('hello'));
+        const res = Resource.fromString('hello').encode();
+        await wallet.sendUpdate(name1, res);
       } catch (e) {
         err = e;
       }
@@ -517,19 +522,22 @@ describe('Wallet Auction', function() {
       await mineBlock([register1, register2]);
 
       // This becomes update.
-      const update = await wallet.sendUpdate(name2, Resource.fromString('name2.2'));
+      const res22 = Resource.fromString('name2.2').encode();
+      const update = await wallet.sendUpdate(name2, res22);
       assert(update);
 
       await mineBlock([update]);
     });
 
     it('should UPDATE and fail duplicate UPDATE', async () => {
-      const update = await wallet.sendUpdate(name1, Resource.fromString('name1.2'));
+      const res = Resource.fromString('name1.2').encode();
+      const update = await wallet.sendUpdate(name1, res);
       assert(update);
 
       let err = null;
       try {
-        await wallet.sendUpdate(name1, Resource.fromString('name1.3'));
+        const res = Resource.fromString('name1.3').encode();
+        await wallet.sendUpdate(name1, res);
       } catch (e) {
         err = e;
       }
@@ -650,10 +658,10 @@ describe('Wallet Auction', function() {
     const name4 = rules.grindName(6, 0, network);
     const name5 = rules.grindName(7, 0, network);
 
-    const res1 = Resource.fromJSON({records: [{type: 'TXT', txt: ['one']}]});
-    const res2 = Resource.fromJSON({records: [{type: 'TXT', txt: ['two']}]});
-    const res3 = Resource.fromJSON({records: [{type: 'TXT', txt: ['three']}]});
-    const res4 = Resource.fromJSON({records: [{type: 'TXT', txt: ['four']}]});
+    const res1 = Resource.fromJSON({records: [{type: 'TXT', txt: ['one']}]}).encode();
+    const res2 = Resource.fromJSON({records: [{type: 'TXT', txt: ['two']}]}).encode();
+    const res3 = Resource.fromJSON({records: [{type: 'TXT', txt: ['three']}]}).encode();
+    const res4 = Resource.fromJSON({records: [{type: 'TXT', txt: ['four']}]}).encode();
 
     const mempool = [];
     wdb.send = (tx) => {
@@ -1207,10 +1215,10 @@ describe('Wallet Auction', function() {
         const ns3 = await chain.db.getNameStateByName(name3);
         const ns4 = await chain.db.getNameStateByName(name4);
 
-        assert.bufferEqual(ns1.data, res1.encode());
-        assert.bufferEqual(ns2.data, res2.encode());
+        assert.bufferEqual(ns1.data, res1);
+        assert.bufferEqual(ns2.data, res2);
         assert.bufferEqual(ns3.data, Buffer.from([])); // revoked name data is cleared
-        assert.bufferEqual(ns4.data, res4.encode());
+        assert.bufferEqual(ns4.data, res4);
 
         const coin1 = await wallet.getCoin(ns1.owner.hash, ns1.owner.index);
         assert(!coin1); // name was transferred out of wallet
@@ -1556,10 +1564,11 @@ describe('Wallet Auction', function() {
 
       it('should send batches of REGISTERs', async () => {
         let count = 0;
+
         for (let i = 1; i <= 8; i++) {
           const batch = [];
           for (let j = 1; j <= 100; j++) {
-            batch.push({ type: 'UPDATE', args: [names[count++], new Resource()]});
+            batch.push({ type: 'UPDATE', args: [names[count++], EMPTY_RESOURCE]});
           }
           await wallet.sendBatch(batch);
           await mineBlocks(1);
@@ -1582,7 +1591,7 @@ describe('Wallet Auction', function() {
       it('should not batch too many UPDATEs', async () => {
         const batch = [];
         for (let i = 0; i < consensus.MAX_BLOCK_UPDATES + 1; i++)
-          batch.push({ type: 'UPDATE', args: [names[i], new Resource()]});
+          batch.push({ type: 'UPDATE', args: [names[i], EMPTY_RESOURCE]});
 
         await assert.rejects(
           wallet.createBatch(batch),

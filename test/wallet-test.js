@@ -2400,7 +2400,7 @@ describe('Wallet', function() {
       // Advance to close
       wdb.height += network.names.revealPeriod;
 
-      const resource = Resource.fromJSON({records: []});
+      const resource = Resource.fromJSON({records: []}).encode();
       const register = await wallet.sendUpdate(name, resource, {hardFee: fee});
       uTXCount++;
 
@@ -2779,7 +2779,7 @@ describe('Wallet', function() {
       // Advance to close
       wdb.height += network.names.revealPeriod;
 
-      const resource = Resource.fromJSON({records: []});
+      const resource = Resource.fromJSON({records: []}).encode();
       const register = await wallet.createUpdate(name, resource, {hardFee: fee});
 
       // Check
@@ -3174,7 +3174,7 @@ describe('Wallet', function() {
         records: [{type: 'NS', ns: 'ns1.easyhandshake.com.'}]
       });
 
-      update = await wallet.sendUpdate('cloudflare', records);
+      update = await wallet.sendUpdate('cloudflare', records.encode());
       const entry = nextEntry(wdb);
       await wdb.addBlock(entry, [update]);
 
@@ -3558,7 +3558,7 @@ describe('Wallet', function() {
 
     it('should send and confirm REGISTER', async () => {
       const resource = Resource.fromJSON({ records: [] });
-      const register = await wallet.sendUpdate(name, resource, {
+      const register = await wallet.sendUpdate(name, resource.encode(), {
         hardFee: fee
       });
       uTXCount++;
