@@ -122,16 +122,13 @@ describe('SPV', function() {
       await mineBlocks(biddingPeriod);
       await wallet.sendReveal(name);
       await mineBlocks(revealPeriod);
-      await wallet.sendUpdate(
-        name,
-        Resource.fromJSON(
-          {
-            records: [
-              {type: 'NS', ns: 'one.'}
-            ]
-          }
-        )
-      );
+      const res = Resource.fromJSON({
+        records: [
+          {type: 'NS', ns: 'one.'}
+        ]
+      });
+
+      await wallet.sendUpdate(name, res.encode());
       await mineBlocks(treeInterval + SAFE_ROOT);
     });
 
@@ -166,16 +163,13 @@ describe('SPV', function() {
     });
 
     it('should update name data', async () => {
-      await wallet.sendUpdate(
-        name,
-        Resource.fromJSON(
-          {
-            records: [
-              {type: 'NS', ns: 'two.'}
-            ]
-          }
-        )
-      );
+      const res = Resource.fromJSON({
+        records: [
+          {type: 'NS', ns: 'two.'}
+        ]
+      });
+
+      await wallet.sendUpdate(name, res.encode());
       await mineBlocks(treeInterval + SAFE_ROOT);
     });
 

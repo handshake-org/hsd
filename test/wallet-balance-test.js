@@ -112,7 +112,7 @@ const FINAL_PRICE_2 = 2e5; // less then 1e6/4 (2.5e5)
 // const BLIND_ONLY_3 = BLIND_AMOUNT_3 - BID_AMOUNT_3;
 
 // Empty resource
-const EMPTY_RS = Resource.fromJSON({ records: [] });
+const EMPTY_RS = Resource.fromJSON({ records: [] }).encode();
 
 /*
  * Wallet helpers
