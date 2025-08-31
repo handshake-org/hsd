@@ -127,7 +127,7 @@ describe('Anyone-can-renew address', function() {
     const resource = Resource.fromJSON({
       records: [{type: 'TXT', txt: ['This name is ANYONE-CAN-RENEW']}]
     });
-    await alice.sendUpdate(name, resource);
+    await alice.sendUpdate(name, resource.encode());
     await mineBlocks(network.names.treeInterval);
 
     ns = await node.getNameStatus(nameHash);

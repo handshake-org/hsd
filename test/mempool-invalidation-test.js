@@ -321,7 +321,8 @@ describe('Mempool Invalidation', function() {
 
       assert.strictEqual(await getNameState(name), states.CLOSED);
 
-      await wallet.sendUpdate(name, Resource.fromJSON({ records: [] }));
+      const res = Resource.fromJSON({ records: [] });
+      await wallet.sendUpdate(name, res.encode());
 
       for (let i = 0; i < network.names.renewalWindow - 2; i++)
         await mineBlock(node);

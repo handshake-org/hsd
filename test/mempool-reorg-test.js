@@ -41,9 +41,11 @@ describe('Mempool Covenant Reorg', function () {
 
   let counter = 0;
   function makeResource() {
-    return Resource.fromJSON({
+    const res =  Resource.fromJSON({
       records: [{type: 'TXT', txt: [`${counter++}`]}]
     });
+
+    return res.encode();
   }
 
   it('should fund wallet and win name', async () => {

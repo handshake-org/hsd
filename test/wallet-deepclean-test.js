@@ -4,7 +4,7 @@ const assert = require('bsert');
 const Network = require('../lib/protocol/network');
 const FullNode = require('../lib/node/fullnode');
 const Address = require('../lib/primitives/address');
-const Resource = require('../lib/dns/resource');
+const {Resource} = require('../lib/dns/resource');
 
 const network = Network.get('regtest');
 
@@ -93,7 +93,7 @@ describe('Wallet Deep Clean', function() {
       await w.sendReveal(name, {account: 0});
       await mineBlocks(network.names.revealPeriod);
 
-      const res = Resource.Resource.fromJSON({
+      const res = Resource.fromJSON({
         records: [
           {
             type: 'TXT',
@@ -102,7 +102,7 @@ describe('Wallet Deep Clean', function() {
         ]
       });
 
-      await w.sendUpdate(name, res, {account: 0});
+      await w.sendUpdate(name, res.encode(), {account: 0});
       await w.sendRedeem(name, {account: 0});
       await mineBlocks(network.names.treeInterval);
     }

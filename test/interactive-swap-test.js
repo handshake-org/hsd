@@ -113,7 +113,7 @@ describe('Interactive name swap', function() {
     const resource = Resource.fromJSON({
       records: [{type: 'TXT', txt: ['Contact Alice to buy this name!']}]
     });
-    await alice.sendUpdate(name, resource);
+    await alice.sendUpdate(name, resource.encode());
     await mineBlocks(network.names.treeInterval);
   });
 
@@ -292,7 +292,7 @@ describe('Interactive name swap', function() {
     const resource = Resource.fromJSON({
       records: [{type: 'TXT', txt: ['Thanks Alice! --Bob']}]
     });
-    await bob.sendUpdate(name, resource);
+    await bob.sendUpdate(name, resource.encode());
     await mineBlocks(network.names.treeInterval);
     const actual = await node.chain.db.getNameState(nameHash);
     assert.bufferEqual(resource.encode(), actual.data);
