@@ -54,6 +54,17 @@ describe('RPC', function() {
       assert.strictEqual(info.blocks, 0);
       assert.strictEqual(info.headers, 0);
       assert.strictEqual(info.pruned, false);
+
+      // Check new size fields
+      assert(typeof info.size_on_disk === 'number');
+      assert(info.size_on_disk >= 0);
+      assert(info.sizes);
+      assert(typeof info.sizes.blockchain === 'number');
+      assert(typeof info.sizes.tree === 'number');
+      assert(typeof info.sizes.total === 'number');
+      assert(info.sizes.blockchain >= 0);
+      assert(info.sizes.tree >= 0);
+      assert(info.sizes.total >= 0);
     });
   });
 
