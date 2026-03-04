@@ -14,9 +14,7 @@ const {
   TYPE_MAP_ROOT,
   TYPE_MAP_EMPTY,
   TYPE_MAP_NS,
-  TYPE_MAP_TXT,
-  TYPE_MAP_A,
-  TYPE_MAP_AAAA
+  TYPE_MAP_TXT
 } = require('../lib/dns/common');
 
 describe('RootServer', function() {
@@ -371,12 +369,6 @@ describe('RootServer DNSSEC', function () {
                         wire.types.NSEC]],
       [TYPE_MAP_TXT,   [wire.types.TXT,
                         wire.types.RRSIG,
-                        wire.types.NSEC]],
-      [TYPE_MAP_A,     [wire.types.A,
-                        wire.types.RRSIG,
-                        wire.types.NSEC]],
-      [TYPE_MAP_AAAA,  [wire.types.AAAA,
-                        wire.types.RRSIG,
                         wire.types.NSEC]]
     ];
     for (const [actual, types] of tests) {
@@ -461,7 +453,7 @@ describe('RootServer DNSSEC', function () {
     assert.strictEqual(set.length, 1);
     const proof = set[0];
 
-    assert.strictEqual(proof.data.typeBitmap, TYPE_MAP_ROOT);
+    assert.bufferEqual(proof.data.typeBitmap, TYPE_MAP_ROOT);
     assert(cover('.', proof.name, proof.data.nextDomain));
     assert(!cover('0.', proof.name, proof.data.nextDomain));
     assert(!cover('aa.', proof.name, proof.data.nextDomain));
@@ -548,7 +540,7 @@ describe('RootServer DNSSEC', function () {
       const proof = set[0];
       // NSEC must be exact match
       assert.strictEqual(qname, proof.name);
-      assert.strictEqual(proof.data.typeBitmap, TYPE_MAP_NS);
+      assert.bufferEqual(proof.data.typeBitmap, TYPE_MAP_NS);
     }
   });
 
@@ -582,7 +574,7 @@ describe('RootServer DNSSEC', function () {
 
       const set = util.extractSet(res.authority, tld, wire.types.NSEC);
       assert.strictEqual(set.length, 1);
-      assert.strictEqual(set[0].data.typeBitmap, TYPE_MAP_NS);
+      assert.bufferEqual(set[0].data.typeBitmap, TYPE_MAP_NS);
     }
   });
 
@@ -612,7 +604,7 @@ describe('RootServer DNSSEC', function () {
       const set = util.extractSet(res.authority, query.name, wire.types.NSEC);
       assert.strictEqual(set.length, 1);
       const proof = set[0];
-      assert.strictEqual(proof.data.typeBitmap, query.bitmap);
+      assert.bufferEqual(proof.data.typeBitmap, query.bitmap);
     }
   });
 
@@ -634,11 +626,20 @@ describe('RootServer DNSSEC', function () {
 
       const set = util.extractSet(res.authority, query.name, wire.types.NSEC);
       assert.strictEqual(set.length, 1);
-      assert.strictEqual(set[0].data.typeBitmap, TYPE_MAP_EMPTY);
+      assert.bufferEqual(set[0].data.typeBitmap, TYPE_MAP_EMPTY);
     }
   });
 
   it('should prove non-existence of a type for _synth records', async () => {
+    // Generate expected bitmaps dynamically
+    const nsecA = new wire.NSECRecord();
+    nsecA.setTypes([wire.types.A, wire.types.RRSIG, wire.types.NSEC]);
+    const TYPE_MAP_A = nsecA.typeBitmap;
+
+    const nsecAAAA = new wire.NSECRecord();
+    nsecAAAA.setTypes([wire.types.AAAA, wire.types.RRSIG, wire.types.NSEC]);
+    const TYPE_MAP_AAAA = nsecAAAA.typeBitmap;
+
     const queries = [
       {name: '_040g208._synth.', type: wire.types.AAAA, bitmap: TYPE_MAP_A},
       {name: '_040g208._synth.', type: wire.types.TXT, bitmap: TYPE_MAP_A},
@@ -656,7 +657,7 @@ describe('RootServer DNSSEC', function () {
       const set = util.extractSet(res.authority, query.name, wire.types.NSEC);
       assert.strictEqual(set.length, 1);
       const proof = set[0];
-      assert.strictEqual(proof.data.typeBitmap, query.bitmap);
+      assert.bufferEqual(proof.data.typeBitmap, query.bitmap);
     }
   });
 });
