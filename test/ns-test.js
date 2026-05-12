@@ -616,6 +616,106 @@ describe('RootServer DNSSEC', function () {
     }
   });
 
+  it('should answer Rerecord A and AAAA for non-delegated names', async () => {
+    const queries = [
+      {
+        name: 'rerecord.',
+        type: wire.types.A,
+        address: '203.0.113.10'
+      },
+      {
+        name: 'rerecord.',
+        type: wire.types.AAAA,
+        address: '2001:db8::10'
+      }
+    ];
+
+    for (const query of queries) {
+      const res = await resolve(query.name, query.type);
+
+      assert(res.aa);
+      assert.strictEqual(res.code, wire.codes.NOERROR);
+      assert.strictEqual(res.answer.length, 2);
+      assert.strictEqual(res.authority.length, 0);
+
+      const [record, sig] = res.answer;
+
+      assert.strictEqual(record.name, query.name);
+      assert.strictEqual(record.type, query.type);
+      assert.strictEqual(record.data.address, query.address);
+      assert.strictEqual(sig.name, query.name);
+      assert.strictEqual(sig.type, wire.types.RRSIG);
+    }
+  });
+
+  it('should prove non-existence with Rerecord NSEC bitmaps', async () => {
+    const expect = new wire.NSECRecord();
+    expect.setTypes([
+      wire.types.A,
+      wire.types.TXT,
+      wire.types.AAAA,
+      wire.types.RRSIG,
+      wire.types.NSEC
+    ]);
+
+    const queries = [
+      {
+        name: 'rerecord.',
+        type: wire.types.MX,
+        bitmap: expect.typeBitmap
+      },
+      {
+        name: 'ipv4only.',
+        type: wire.types.AAAA,
+        bitmap: TYPE_MAP_A
+      },
+      {
+        name: 'ipv6only.',
+        type: wire.types.A,
+        bitmap: TYPE_MAP_AAAA
+      }
+    ];
+
+    for (const query of queries) {
+      const res = await resolve(query.name, query.type);
+
+      assert(res.aa);
+      assert.strictEqual(res.code, wire.codes.NOERROR);
+      assert.strictEqual(res.answer.length, 0);
+      assert(util.hasType(res.authority, wire.types.SOA));
+
+      const set = util.extractSet(res.authority, query.name, wire.types.NSEC);
+      assert.strictEqual(set.length, 1);
+      assert.bufferEqual(set[0].data.typeBitmap, query.bitmap);
+    }
+  });
+
+  it('should keep Rerecord A and AAAA suppressed for delegated names', async () => {
+    const queries = [
+      {name: 'delegated-rerecord.', type: wire.types.A},
+      {name: 'delegated-rerecord.', type: wire.types.AAAA}
+    ];
+
+    for (const query of queries) {
+      const res = await resolve(query.name, query.type);
+
+      assert(!res.aa);
+      assert.strictEqual(res.code, wire.codes.NOERROR);
+      assert.strictEqual(res.answer.length, 0);
+      assert.strictEqual(res.additional.length, 1);
+      assert(util.hasType(res.authority, wire.types.NS));
+
+      const set = util.extractSet(
+        res.authority,
+        query.name,
+        wire.types.NSEC
+      );
+
+      assert.strictEqual(set.length, 1);
+      assert.bufferEqual(set[0].data.typeBitmap, TYPE_MAP_NS);
+    }
+  });
+
   // Synth records:
   it('should prove _synth as an empty non-terminal', async () => {
     const queries = [

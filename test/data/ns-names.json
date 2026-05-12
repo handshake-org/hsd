@@ -54,5 +54,68 @@
   {
     "name": "empty-name",
     "records": []
+  },
+  "f5ea10ff07667949a79230c5b20e19aff98ab9d27ee98f35cfe406880f6b1366":
+  {
+    "name": "rerecord",
+    "records": [
+      {
+        "type": "TXT",
+        "txt": [
+          "legacy first"
+        ]
+      },
+      {
+        "type": "A",
+        "address": "203.0.113.10"
+      },
+      {
+        "type": "AAAA",
+        "address": "2001:db8::10"
+      }
+    ]
+  },
+  "d580437ae2664dfbf82d19511fd0902818822579c55a669cbf742ce79b071a4f":
+  {
+    "name": "ipv4only",
+    "records": [
+      {
+        "type": "A",
+        "address": "203.0.113.4"
+      }
+    ]
+  },
+  "9f77ebfe673a8a476ebf06d27f98dd0866a5e8692d7e046d30606ac9a543040b":
+  {
+    "name": "ipv6only",
+    "records": [
+      {
+        "type": "AAAA",
+        "address": "2001:db8::6"
+      }
+    ]
+  },
+  "df0674ac78305e4f80d49b6751097c99133d0374e9043af4f01c668e6654a42e":
+  {
+    "name": "delegated-rerecord",
+    "records": [
+      {
+        "type": "NS",
+        "ns": "ns1.delegated-rerecord."
+      },
+      {
+        "type": "GLUE4",
+        "ns": "ns1.delegated-rerecord.",
+        "address": "127.0.0.1"
+      },
+      {
+        "type": "A",
+        "address": "203.0.113.11"
+      },
+      {
+        "type": "AAAA",
+        "address": "2001:db8::11"
+      }
+    ]
   }
 }
