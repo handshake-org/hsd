@@ -137,6 +137,141 @@ describe('Resource', function() {
     assert.strictEqual(sig.name, 'hns.');
   });
 
+  it('should return A and AAAA from root zone if NS is not present', () => {
+    const res1 = Resource.fromJSON({
+      records: [
+        {
+          type: 'TXT',
+          txt: ['legacy first']
+        },
+        {
+          type: 'A',
+          address: '203.0.113.10'
+        },
+        {
+          type: 'AAAA',
+          address: '2001:0db8::0010'
+        }
+      ]
+    });
+
+    const res2 = Resource.decode(res1.encode());
+
+    assert.deepStrictEqual(res2.toJSON(), {
+      records: [
+        {
+          type: 'TXT',
+          txt: ['legacy first']
+        },
+        {
+          type: 'A',
+          address: '203.0.113.10'
+        },
+        {
+          type: 'AAAA',
+          address: '2001:db8::10'
+        }
+      ]
+    });
+
+    const msg4 = res2.toDNS('hns.', types.A);
+    const msg6 = res2.toDNS('hns.', types.AAAA);
+
+    assert(msg4.aa);
+    assert(msg6.aa);
+    assert(msg4.answer.length === 2);
+    assert(msg6.answer.length === 2);
+
+    const [a, sig4] = msg4.answer;
+    const [aaaa, sig6] = msg6.answer;
+
+    assert.strictEqual(a.type, types.A);
+    assert.strictEqual(a.name, 'hns.');
+    assert.strictEqual(a.data.address, '203.0.113.10');
+    assert.strictEqual(sig4.type, types.RRSIG);
+    assert.strictEqual(sig4.name, 'hns.');
+
+    assert.strictEqual(aaaa.type, types.AAAA);
+    assert.strictEqual(aaaa.name, 'hns.');
+    assert.strictEqual(aaaa.data.address, '2001:db8::10');
+    assert.strictEqual(sig6.type, types.RRSIG);
+    assert.strictEqual(sig6.name, 'hns.');
+
+    const nx = res2.toDNS('hns.', types.MX);
+    const proof = nx.authority[0];
+    const expect = new wire.NSECRecord();
+
+    expect.setTypes([types.A, types.TXT, types.AAAA, types.RRSIG, types.NSEC]);
+
+    assert(nx.aa);
+    assert.strictEqual(nx.answer.length, 0);
+    assert.strictEqual(proof.type, types.NSEC);
+    assert.bufferEqual(proof.data.typeBitmap, expect.typeBitmap);
+  });
+
+  it('should not return A and AAAA from root zone if NS is present', () => {
+    const res = Resource.fromJSON({
+      records: [
+        {
+          type: 'NS',
+          ns: 'ns1.hns.'
+        },
+        {
+          type: 'A',
+          address: '203.0.113.10'
+        },
+        {
+          type: 'AAAA',
+          address: '2001:db8::10'
+        }
+      ]
+    });
+
+    const msg4 = res.toDNS('hns.', types.A);
+    const msg6 = res.toDNS('hns.', types.AAAA);
+
+    assert(!msg4.aa);
+    assert(!msg6.aa);
+    assert(msg4.answer.length === 0);
+    assert(msg6.answer.length === 0);
+    assert(msg4.authority.length > 0);
+    assert(msg6.authority.length > 0);
+  });
+
+  it('should preserve known records before unknown record types', () => {
+    const res1 = Resource.fromJSON({
+      records: [
+        {
+          type: 'TXT',
+          txt: ['legacy first']
+        },
+        {
+          type: 'A',
+          address: '203.0.113.10'
+        }
+      ]
+    });
+
+    const raw = res1.encode();
+    const legacy = Buffer.from(raw);
+    const aTypeOffset = 1 + 1 + 1 + 1 + 'legacy first'.length;
+
+    // Simulate an older decoder that does not know A/AAAA yet.
+    assert.strictEqual(legacy[aTypeOffset], 7);
+    legacy[aTypeOffset] = 255;
+
+    const res2 = Resource.decode(legacy);
+
+    assert.deepStrictEqual(res2.toJSON(), {
+      records: [
+        {
+          type: 'TXT',
+          txt: ['legacy first']
+        }
+      ]
+    });
+  });
+
   it('should synthesize an answer', () => {
     const res = Resource.fromJSON(json);
     const msg = res.toDNS('hns.', types.DS);
