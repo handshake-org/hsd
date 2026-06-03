@@ -6,6 +6,7 @@ HSD
   - [Configuration](https://hsd-dev.org/guides/config.html)
   - [Release process](./release-process.md)
   - [Release files](./release-files.md)
+  - [Resource v1 direct-resolution proposal](./resource-v1-direct-resolution.md)
 
 ## External Links
   - [Documentation repository](https://github.com/handshake-org/handshake-org.github.io)
