@@ -17,9 +17,11 @@
     "wallet"
   ],
   "engines": {
-    "node": ">=14.0.0"
+    "node": ">=16.0.0"
   },
   "dependencies": {
+    "@hpke/core": "1.9.0",
+    "@hpke/dhkem-x25519": "1.8.0",
     "bfilter": "~2.4.0",
     "bcfg": "~0.2.2",
     "bcrypto": "~5.5.2",

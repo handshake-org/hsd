@@ -1,0 +1,106 @@
+{
+  "version": 1,
+  "byte_order": "little-endian packet integers; DNS network byte order",
+  "temporary_service_bit": "0x40000000",
+  "temporary_request_packet": "0xf0",
+  "temporary_response_packet": "0xf1",
+  "request_id": "0x0102030405060708",
+  "maximum_query_bytes": 4096,
+  "maximum_response_bytes": 65535,
+  "statuses": {
+    "OK": 0,
+    "REFUSED": 1,
+    "UNSUPPORTED": 2,
+    "BUSY": 3,
+    "INVALID_QUERY": 4,
+    "RESOLVER_UNAVAILABLE": 5,
+    "TIMEOUT": 6,
+    "INTERNAL_ERROR": 7
+  },
+  "fixtures": [
+    {
+      "file": "request-basic.hex",
+      "description": "basic request",
+      "valid": true,
+      "wire_bytes": 52,
+      "sha256": "d38597681c22abdb6c7ab72454658f5c0a07ff74fb53d5ce72e81b922f23e520"
+    },
+    {
+      "file": "response-ok.hex",
+      "description": "successful response with an untrusted AD bit",
+      "valid": true,
+      "wire_bytes": 69,
+      "sha256": "63d59820b3a078f214ff6870d9322443c6131a84be4b53ebc1b35b7f36746048"
+    },
+    {
+      "file": "response-error.hex",
+      "description": "BUSY transport response",
+      "valid": true,
+      "wire_bytes": 11,
+      "sha256": "37b13837928fca8d3a1427f7c2ef6bf7917fad052a88515a4f25c7e25ff2e27c"
+    },
+    {
+      "file": "request-max.hex",
+      "description": "maximum legal request",
+      "valid": true,
+      "wire_bytes": 4106,
+      "sha256": "2dc036004171fc77651a1732363e8260bba636d98d5a2678b744d4e579fa5bef"
+    },
+    {
+      "file": "response-max.hex",
+      "description": "maximum legal response",
+      "valid": true,
+      "wire_bytes": 65546,
+      "sha256": "0a6bbf5e85b49a03f3914d12a4eb54e2c51bf18e6e9c757334025b4090f30d12"
+    },
+    {
+      "file": "request-max-qname.hex",
+      "description": "maximum 255-byte DNS name",
+      "valid": true,
+      "wire_bytes": 292,
+      "sha256": "b971391700b4b12aaf9521bccf78c0ca2738be81d8a97b03eedbd8ce1d0530b2"
+    },
+    {
+      "file": "malformed-length.hex",
+      "description": "declared request body is longer than packet",
+      "valid": false,
+      "wire_bytes": 52,
+      "sha256": "203d58767d89c396b85ef71398c186043006dcd0d42e6f381638eee30e69cbac"
+    },
+    {
+      "file": "trailing-bytes.hex",
+      "description": "packet data after declared request body",
+      "valid": false,
+      "wire_bytes": 53,
+      "sha256": "cebc2f53063ff1e8ec35d3529fa038690793735086833ac895fa314e1baebec9"
+    },
+    {
+      "file": "unknown-status.hex",
+      "description": "unknown response transport status",
+      "valid": false,
+      "wire_bytes": 11,
+      "sha256": "6f763985eab74de92fe521f52ce882451a366d759b1e10f9a6e381d2c2d117fa"
+    },
+    {
+      "file": "oversized-request.hex",
+      "description": "declared request exceeds limit before allocation",
+      "valid": false,
+      "wire_bytes": 10,
+      "sha256": "0d8b7866de6682bcfa9e9ad6c215225965d959b241a20ab9b48e26808b61bcdc"
+    },
+    {
+      "file": "oversized-response.hex",
+      "description": "response exceeds the maximum packet body",
+      "valid": false,
+      "wire_bytes": 65547,
+      "sha256": "deb7812c42fa0d8617e19d7a7d6d36524bc9c2c67da7f9d4bf61b7b6482cc3b5"
+    },
+    {
+      "file": "zero-request-id.hex",
+      "description": "zero request identifier",
+      "valid": false,
+      "wire_bytes": 11,
+      "sha256": "5c66e18d8148d655710b2cee7313aa7110611b3ac663abb3771abd1baa9394f3"
+    }
+  ]
+}
