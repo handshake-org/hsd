@@ -1,0 +1,114 @@
+{
+  "schema": 2,
+  "network": "regtest",
+  "assignment": {
+    "rendezvousServiceBit": "0x4000000",
+    "relayServiceBit": "0x8000000",
+    "packetType": "0xf3"
+  },
+  "topology": {
+    "fullNodes": 8,
+    "relays": 2,
+    "rendezvousNodes": 4,
+    "endpointListeners": 0,
+    "outerTransport": "authenticated Handshake Brontide",
+    "innerTransport": "end-to-end authenticated Handshake Brontide"
+  },
+  "discovery": {
+    "bootstrapRendezvous": 1,
+    "endpointKnownRendezvous": 4,
+    "requesterKnownRendezvous": 4,
+    "sampledRecords": 1,
+    "sampledEndpointFound": true,
+    "iterativeLookupLiveNodes": 3
+  },
+  "replication": {
+    "requestedCopies": 4,
+    "initialStoredCopies": 4,
+    "refreshedStoredCopies": 4,
+    "survivingStores": [
+      1,
+      1,
+      1
+    ],
+    "rendezvousFailureRecovered": true
+  },
+  "lifecycle": {
+    "initialSequence": 1,
+    "refreshedSequence": 2,
+    "renewedTickets": 2,
+    "oldTicketsWithdrawn": 2,
+    "staleRouteStillReturned": true,
+    "disconnectedReservationInvalidated": true,
+    "staleTicketRejected": true
+  },
+  "failover": {
+    "firstRelayStopped": true,
+    "failedCandidates": 1,
+    "selectedRelay": "03664a4d9746167b043a17cd9b9f2211f92ef37992b2025cc3d4570b302150d94a",
+    "selectedSecondRelay": true
+  },
+  "innerPeer": {
+    "profile": "HNS_NODE_V1",
+    "actualHsdPeerObjects": true,
+    "versionVerack": true,
+    "endpointAuthenticated": true,
+    "requesterAuthenticated": true
+  },
+  "blockTraffic": {
+    "hash": "6d2615113467bbee7a6ed2215e28b81f2e0210a2a383b5854fd2105d086cdb9e",
+    "endpointHeight": 1,
+    "requesterHeight": 1,
+    "controlNodeHeights": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "deliveredOnlyByInnerPeer": true,
+    "latencyMs": 3020
+  },
+  "saturation": {
+    "pingPackets": 1000,
+    "relayFrames": 8043,
+    "relayBytes": 107461,
+    "schedulerFlushes": 17,
+    "maximumQueuedBytes": 44129,
+    "queueLimitBytes": 65536,
+    "relayDrops": 0,
+    "controlReservationLatencyMs": 3082,
+    "admissionRequests": 72,
+    "admissionAccepted": 64,
+    "admissionRateLimited": 8
+  },
+  "relayView": {
+    "plaintextBlockHashObserved": false,
+    "transcriptSHA256": "36257106017f1ef8693af71b67fa59bc568bfefb6a32dc09fcee745b42641712"
+  },
+  "observedOpcodes": {
+    "RESERVE": 3,
+    "OFFER": 5,
+    "CONFIRM": 5,
+    "CONFIRMED": 8,
+    "FINDNODE": 18,
+    "NODES": 18,
+    "PUTROUTE": 8,
+    "PUTRESULT": 8,
+    "SAMPLEROUTES": 3,
+    "ROUTES": 73,
+    "RENEW": 2,
+    "WITHDRAW": 3,
+    "GETROUTE": 78,
+    "ERROR": 9,
+    "OPEN": 2,
+    "INCOMING": 1,
+    "ACCEPT": 1,
+    "OPENED": 1,
+    "DATA": 16086,
+    "WINDOW": 16086,
+    "CLOSE": 1
+  },
+  "result": "pass"
+}
